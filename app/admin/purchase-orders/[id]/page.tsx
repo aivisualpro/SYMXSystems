@@ -669,71 +669,87 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
 
                     <Separator className="bg-border/30 relative z-10" />
 
-                    {/* Row 2: Supplier Location */}
-                    <div className="space-y-1 relative z-10">
-                        <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Supplier Location</p>
-                        <div className="flex items-center gap-2">
-                            <MapPin className="h-3.5 w-3.5 text-primary" />
-                            <p className="text-xs font-bold uppercase">{supplierLocations[ship.supplierLocation] || ship.supplierLocation || '-'}</p>
+                    {/* Row 2: Supplier Info Grid */}
+                    <div className="grid grid-cols-3 gap-2 bg-muted/30 dark:bg-foreground/5 rounded-2xl p-3 border border-border/50 relative z-10">
+                        <div className="flex flex-col items-center gap-1 text-center">
+                            <MapPin className="h-4 w-4 text-primary/60" />
+                            <p className="text-[10px] font-black text-foreground truncate w-full px-1" title={supplierLocations[ship.supplierLocation] || ship.supplierLocation}>
+                                {supplierLocations[ship.supplierLocation] || ship.supplierLocation || '-'}
+                            </p>
+                            <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Supplier Loc</p>
+                        </div>
+                        <div className="flex flex-col items-center gap-1 text-center border-x border-border/50">
+                            <Hash className="h-4 w-4 text-primary" />
+                            <p className="text-[11px] font-black text-primary truncate w-full px-1">
+                                {ship.supplierPO || '-'}
+                            </p>
+                            <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Supplier PO</p>
+                        </div>
+                        <div className="flex flex-col items-center gap-1 text-center">
+                            <Calendar className="h-4 w-4 text-primary/60" />
+                            <p className="text-[11px] font-black text-foreground">
+                                {formatDate(ship.supplierPoDate)}
+                            </p>
+                            <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">PO Date</p>
                         </div>
                     </div>
 
-                    {/* Row 3: Supplier PO | PO Date */}
-                    <div className="grid grid-cols-2 gap-4 relative z-10">
-                        <div className="space-y-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Supplier PO</p>
-                            <p className="text-xs font-bold uppercase">{ship.supplierPO || '-'}</p>
+                    {/* Row 3: Logistics Grid */}
+                    <div className="grid grid-cols-3 gap-2 bg-muted/30 dark:bg-foreground/5 rounded-2xl p-3 border border-border/50 relative z-10">
+                        <div className="flex flex-col items-center gap-1 text-center">
+                            <Truck className="h-4 w-4 text-primary/60" />
+                            <p className="text-[10px] font-black text-foreground truncate w-full px-1" title={ship.carrier}>
+                                {ship.carrier || '-'}
+                            </p>
+                            <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Carrier</p>
                         </div>
-                        <div className="space-y-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">PO Date</p>
-                            <p className="text-xs font-bold uppercase">{formatDate(ship.supplierPoDate)}</p>
+                        <div className="flex flex-col items-center gap-1 text-center border-x border-border/50">
+                            <Tag className="h-4 w-4 text-primary" />
+                            <p className="text-[11px] font-black text-primary truncate w-full px-1" title={ship.carrierBookingRef}>
+                                {ship.carrierBookingRef || '-'}
+                            </p>
+                            <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Booking Ref</p>
                         </div>
-                    </div>
-
-                    {/* Row 4: Carrier | Booking Ref */}
-                    <div className="grid grid-cols-2 gap-4 relative z-10">
-                        <div className="space-y-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Carrier</p>
-                            <div className="flex items-center gap-2">
-                                <Truck className="h-3.5 w-3.5 text-primary/70" />
-                                <p className="text-xs font-bold uppercase">{ship.carrier || '-'}</p>
-                            </div>
-                        </div>
-                         <div className="space-y-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Booking Ref</p>
-                            <p className="text-xs font-bold uppercase">{ship.carrierBookingRef || '-'}</p>
+                        <div className="flex flex-col items-center gap-1 text-center">
+                            <Box className="h-4 w-4 text-primary/60" />
+                            <p className="text-[11px] font-black text-foreground truncate w-full px-1" title={ship.vessellTrip}>
+                                {ship.vessellTrip || '-'}
+                            </p>
+                            <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Vessel / Trip</p>
                         </div>
                     </div>
 
-                    {/* Row 5: Vessel Trip | Port Lading | Port Entry */}
-                    <div className="grid grid-cols-3 gap-4 relative z-10">
-                        <div className="space-y-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Vessel / Trip</p>
-                            <p className="text-xs font-bold uppercase truncate">{ship.vessellTrip || '-'}</p>
+                    {/* Row 4: Journey & Timeline */}
+                    <div className="grid grid-cols-5 gap-0 bg-muted/30 dark:bg-foreground/5 rounded-2xl p-2 border border-border/50 relative z-10 mt-2">
+                        {/* Port of Lading */}
+                        <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                            <MapPin className="h-3.5 w-3.5 text-primary/60" />
+                            <p className="text-[9px] font-black text-foreground truncate w-full" title={ship.portOfLading}>{ship.portOfLading || '-'}</p>
+                            <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Lading</p>
                         </div>
-                        <div className="space-y-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Port of Lading</p>
-                            <p className="text-xs font-bold uppercase truncate">{ship.portOfLading || '-'}</p>
+                        {/* Port of Entry */}
+                        <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                            <MapPin className="h-3.5 w-3.5 text-primary/60" />
+                            <p className="text-[9px] font-black text-foreground truncate w-full" title={ship.portOfEntryShipTo}>{ship.portOfEntryShipTo || '-'}</p>
+                            <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Entry</p>
                         </div>
-                        <div className="space-y-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Port of Entry</p>
-                            <p className="text-xs font-bold uppercase truncate">{ship.portOfEntryShipTo || '-'}</p>
+                        {/* Landing Date */}
+                        <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                            <Calendar className="h-3.5 w-3.5 text-primary/60" />
+                            <p className="text-[9px] font-black text-foreground truncate w-full">{formatDate(ship.dateOfLanding)}</p>
+                            <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Landing</p>
                         </div>
-                    </div>
-
-                    {/* Row 6: Landing | ETA | Updated ETA */}
-                    <div className="grid grid-cols-3 gap-4 relative z-10">
-                        <div className="space-y-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Date of Landing</p>
-                            <p className="text-xs font-bold uppercase">{formatDate(ship.dateOfLanding)}</p>
+                        {/* ETA */}
+                        <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                            <Calendar className="h-3.5 w-3.5 text-primary/60" />
+                            <p className="text-[9px] font-black text-foreground truncate w-full">{formatDate(ship.ETA)}</p>
+                            <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">ETA</p>
                         </div>
-                        <div className="space-y-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">ETA</p>
-                            <p className="text-xs font-bold uppercase">{formatDate(ship.ETA)}</p>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Updated ETA</p>
-                            <p className="text-xs font-bold uppercase text-primary">{formatDate(ship.updatedETA)}</p>
+                         {/* Updated ETA */}
+                        <div className="flex flex-col items-center gap-1 text-center px-1">
+                            <Calendar className="h-3.5 w-3.5 text-primary" />
+                            <p className="text-[9px] font-black text-primary truncate w-full">{formatDate(ship.updatedETA)}</p>
+                            <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Upd ETA</p>
                         </div>
                     </div>
 
