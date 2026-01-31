@@ -245,33 +245,39 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
       }
   };
 
-  const handleDeleteCPO = async (cpoId: string, idx: number) => {
-    if (!confirm("Are you sure you want to delete this Customer PO? All associated shipping records will be lost.")) return;
-    
-    // Optimistic
-    const oldPO = po;
-    if(po) {
-        const newCPOs = [...po.customerPO];
-        newCPOs.splice(idx, 1);
-        setPO({ ...po, customerPO: newCPOs });
-    }
+  const handleDeleteCPO = (cpoId: string, idx: number) => {
+    toast("Delete Customer PO?", {
+        description: "All associated shipping records will be lost.",
+        action: {
+            label: "Delete",
+            onClick: async () => {
+                // Optimistic
+                const oldPO = po;
+                if(po) {
+                    const newCPOs = [...po.customerPO];
+                    newCPOs.splice(idx, 1);
+                    setPO({ ...po, customerPO: newCPOs });
+                }
 
-    try {
-        const response = await fetch(`/api/admin/purchase-orders/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                $pull: { customerPO: { _id: cpoId } } 
-            })
-        });
+                try {
+                    const response = await fetch(`/api/admin/purchase-orders/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            $pull: { customerPO: { _id: cpoId } } 
+                        })
+                    });
 
-        if (!response.ok) throw new Error("Failed to delete");
-        toast.success("Customer PO deleted");
-        fetchPO(); // Refresh to ensure sync
-    } catch (e) {
-        setPO(oldPO);
-        toast.error("Error deleting Customer PO");
-    }
+                    if (!response.ok) throw new Error("Failed to delete");
+                    toast.success("Customer PO deleted");
+                    fetchPO(); 
+                } catch (e) {
+                    setPO(oldPO);
+                    toast.error("Error deleting Customer PO");
+                }
+            }
+        }
+    });
   };
 
   const handleSaveCPO = async (e: React.FormEvent) => {
@@ -318,35 +324,41 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
     }
   };
 
-  const handleDeleteShipping = async (shipId: string, cpoIdx: number, shipIdx: number) => {
-     if (!confirm("Are you sure you want to delete this shipping record?")) return;
+  const handleDeleteShipping = (shipId: string, cpoIdx: number, shipIdx: number) => {
+     toast("Delete Shipping Record?", {
+         description: "This action cannot be undone.",
+         action: {
+             label: "Delete",
+             onClick: async () => {
+                 // Optimistic
+                 const oldPO = po;
+                 if(po) {
+                     const newCPOs = [...po.customerPO];
+                     if(newCPOs[cpoIdx]?.shipping) {
+                         newCPOs[cpoIdx].shipping.splice(shipIdx, 1);
+                         setPO({ ...po, customerPO: newCPOs });
+                     }
+                 }
 
-     // Optimistic
-     const oldPO = po;
-     if(po) {
-         const newCPOs = [...po.customerPO];
-         if(newCPOs[cpoIdx]?.shipping) {
-             newCPOs[cpoIdx].shipping.splice(shipIdx, 1);
-             setPO({ ...po, customerPO: newCPOs });
+                 try {
+                     const response = await fetch(`/api/admin/purchase-orders/${id}`, {
+                         method: 'PUT',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ 
+                             $pull: { [`customerPO.${cpoIdx}.shipping`]: { _id: shipId } } 
+                         })
+                     });
+
+                     if (!response.ok) throw new Error("Failed to delete shipping");
+                     toast.success("Shipping deleted");
+                     fetchPO();
+                 } catch (e) {
+                     setPO(oldPO);
+                     toast.error("Error deleting shipping");
+                 }
+             }
          }
-     }
-
-     try {
-         const response = await fetch(`/api/admin/purchase-orders/${id}`, {
-             method: 'PUT',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ 
-                 $pull: { [`customerPO.${cpoIdx}.shipping`]: { _id: shipId } } 
-             })
-         });
-
-         if (!response.ok) throw new Error("Failed to delete shipping");
-         toast.success("Shipping deleted");
-         fetchPO();
-     } catch (e) {
-         setPO(oldPO);
-         toast.error("Error deleting shipping");
-     }
+     });
   };
 
   const handleSaveShipping = async (e: React.FormEvent) => {
@@ -360,7 +372,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
       if (!editingShipping) formattedData.status = 'Ordered'; // Default status for new
       
       // Numbers
-      ['drums', 'pallets', 'gallons'].forEach(k => {
+      ['drums', 'pallets', 'gallons', 'netWeightKG', 'grossWeightKG', 'invValue', 'estTrumpDuties', 'feesAmount', 'estimatedDuties'].forEach(k => {
           if (formattedData[k]) formattedData[k] = Number(formattedData[k]);
       });
 
@@ -540,7 +552,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
                           <p className="text-[9px] font-black uppercase text-muted-foreground tracking-[0.2em] opacity-70">Requested</p>
                           <div className="flex items-center gap-1.5">
                             <Calendar className="h-3 w-3 text-primary" />
-                            <p className="text-[11px] font-bold text-primary">{formatDate(cpo.requestedDeliveryDate)}</p>
+                            <p className="text-[11px] font-bold text-foreground">{formatDate(cpo.requestedDeliveryDate)}</p>
                           </div>
                         </div>
                       </div>
@@ -554,7 +566,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
                         </div>
                         <div className="flex flex-col items-center gap-1 border-x border-border/50">
                            <Truck className="h-4 w-4 text-primary" />
-                           <p className="text-[11px] font-black text-primary">{cpo.qtyReceived || 0}</p>
+                            <p className="text-[11px] font-black text-foreground">{cpo.qtyReceived || 0}</p>
                            <p className="text-[8px] font-black uppercase text-muted-foreground/60">Received</p>
                         </div>
                         <div className="flex flex-col items-center gap-1">
@@ -650,9 +662,29 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
                       alt="bg" 
                       className="absolute inset-0 w-full h-full object-cover opacity-[0.10] mix-blend-multiply dark:mix-blend-overlay group-hover:scale-110 transition-all duration-1000 pointer-events-none"
                     />
+
+                    {/* Actions: Edit/Delete (Top Right) */}
+                    <div className="absolute top-5 right-5 z-20 flex items-center gap-1">
+                        <Button 
+                            size="icon" 
+                            variant="ghost" 
+                            className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                            onClick={() => setEditingShipping({ cpoIdx: ship._cpoIdx, shipIdx: ship._shipIdx, data: ship })}
+                        >
+                            <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button 
+                            size="icon" 
+                            variant="ghost" 
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleDeleteShipping(ship._id, ship._cpoIdx, ship._shipIdx)}
+                        >
+                            <Trash className="h-3 w-3" />
+                        </Button>
+                    </div>
                     
-                    {/* Row 1: VBID | Container | BOL */}
-                    <div className="grid grid-cols-3 gap-4 relative z-10">
+                    {/* Row 1: VBID | Container | BOL | Status */}
+                    <div className="grid grid-cols-4 gap-4 relative z-10">
                         <div className="space-y-1">
                             <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">VBID</p>
                             <p className="text-sm font-bold">{ship.svbid || po.vbpoNo}</p>
@@ -663,7 +695,11 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
                         </div>
                         <div className="space-y-1">
                             <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">BOL Number</p>
-                            <p className="text-sm font-bold uppercase text-primary">{ship.BOLNumber || '-'}</p>
+                            <p className="text-sm font-bold uppercase">{ship.BOLNumber || '-'}</p>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Status</p>
+                            <p className="text-sm font-bold uppercase">{ship.status || 'Active'}</p>
                         </div>
                     </div>
 
@@ -680,7 +716,7 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
                         </div>
                         <div className="flex flex-col items-center gap-1 text-center border-x border-border/50">
                             <Hash className="h-4 w-4 text-primary" />
-                            <p className="text-[11px] font-black text-primary truncate w-full px-1">
+                            <p className="text-[11px] font-black text-foreground truncate w-full px-1">
                                 {ship.supplierPO || '-'}
                             </p>
                             <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Supplier PO</p>
@@ -694,203 +730,251 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
                         </div>
                     </div>
 
-                    {/* Row 3: Logistics Grid */}
-                    <div className="grid grid-cols-3 gap-2 bg-muted/30 dark:bg-foreground/5 rounded-2xl p-3 border border-border/50 relative z-10">
-                        <div className="flex flex-col items-center gap-1 text-center">
-                            <Truck className="h-4 w-4 text-primary/60" />
-                            <p className="text-[10px] font-black text-foreground truncate w-full px-1" title={ship.carrier}>
-                                {ship.carrier || '-'}
-                            </p>
-                            <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Carrier</p>
-                        </div>
-                        <div className="flex flex-col items-center gap-1 text-center border-x border-border/50">
-                            <Tag className="h-4 w-4 text-primary" />
-                            <p className="text-[11px] font-black text-primary truncate w-full px-1" title={ship.carrierBookingRef}>
-                                {ship.carrierBookingRef || '-'}
-                            </p>
-                            <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Booking Ref</p>
-                        </div>
-                        <div className="flex flex-col items-center gap-1 text-center">
-                            <Box className="h-4 w-4 text-primary/60" />
-                            <p className="text-[11px] font-black text-foreground truncate w-full px-1" title={ship.vessellTrip}>
-                                {ship.vessellTrip || '-'}
-                            </p>
-                            <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Vessel / Trip</p>
-                        </div>
-                    </div>
-
-                    {/* Row 4: Journey & Timeline */}
-                    <div className="grid grid-cols-5 gap-0 bg-muted/30 dark:bg-foreground/5 rounded-2xl p-2 border border-border/50 relative z-10 mt-2">
-                        {/* Port of Lading */}
-                        <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
-                            <MapPin className="h-3.5 w-3.5 text-primary/60" />
-                            <p className="text-[9px] font-black text-foreground truncate w-full" title={ship.portOfLading}>{ship.portOfLading || '-'}</p>
-                            <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Lading</p>
-                        </div>
-                        {/* Port of Entry */}
-                        <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
-                            <MapPin className="h-3.5 w-3.5 text-primary/60" />
-                            <p className="text-[9px] font-black text-foreground truncate w-full" title={ship.portOfEntryShipTo}>{ship.portOfEntryShipTo || '-'}</p>
-                            <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Entry</p>
-                        </div>
-                        {/* Landing Date */}
-                        <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
-                            <Calendar className="h-3.5 w-3.5 text-primary/60" />
-                            <p className="text-[9px] font-black text-foreground truncate w-full">{formatDate(ship.dateOfLanding)}</p>
-                            <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Landing</p>
-                        </div>
-                        {/* ETA */}
-                        <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
-                            <Calendar className="h-3.5 w-3.5 text-primary/60" />
-                            <p className="text-[9px] font-black text-foreground truncate w-full">{formatDate(ship.ETA)}</p>
-                            <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">ETA</p>
-                        </div>
-                         {/* Updated ETA */}
-                        <div className="flex flex-col items-center gap-1 text-center px-1">
-                            <Calendar className="h-3.5 w-3.5 text-primary" />
-                            <p className="text-[9px] font-black text-primary truncate w-full">{formatDate(ship.updatedETA)}</p>
-                            <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Upd ETA</p>
-                        </div>
-                    </div>
-
-                    <Separator className="bg-border/30 relative z-10" />
-
-                    {/* Row 7: Product | Drums | Pallets | Gallons */}
-                    <div className="grid grid-cols-4 gap-2 relative z-10">
-                        <div className="space-y-1 col-span-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Product</p>
-                            <p className="text-xs font-bold uppercase truncate" title={products[ship.product] || ship.product}>
-                                {products[ship.product] || ship.product || '-'}
-                            </p>
-                        </div>
-                        <div className="space-y-1 text-center border-l border-border/30 pl-2">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Drums</p>
-                            <p className="text-xs font-bold">{ship.drums || 0}</p>
-                        </div>
-                        <div className="space-y-1 text-center border-l border-border/30 pl-2">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Pallets</p>
-                            <p className="text-xs font-bold">{ship.pallets || 0}</p>
-                        </div>
-                        <div className="space-y-1 text-center border-l border-border/30 pl-2">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Gallons</p>
-                            <p className="text-xs font-bold">{ship.gallons || 0}</p>
-                        </div>
-                    </div>
-                    
-                    {/* Row 8: Values & Weights */}
-                    <div className="grid grid-cols-5 gap-2 relative z-10 bg-muted/20 p-2 rounded-lg">
-                        <div className="space-y-1">
-                            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Inv Value</p>
-                            <p className="text-[10px] font-bold">${ship.invValue || 0}</p>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Est. Duties</p>
-                            <p className="text-[10px] font-bold">${ship.estTrumpDuties || 0}</p>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Net KG</p>
-                            <p className="text-[10px] font-bold">{ship.netWeightKG || 0}</p>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Gross KG</p>
-                            <p className="text-[10px] font-bold">{ship.grossWeightKG || 0}</p>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest opacity-70">Tico VB</p>
-                            <p className="text-[10px] font-bold truncate">{ship.ticoVB || '-'}</p>
-                        </div>
-                    </div>
-
-                    {/* Row 9: Arrival & Genset */}
-                    <div className="grid grid-cols-4 gap-4 items-center relative z-10 px-1">
-                        <div className="flex flex-col gap-1.5">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground">Arrival Notice</p>
-                            <Switch 
-                                checked={!!ship.isArrivalNotice} 
-                                onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isArrivalNotice', v)}
-                                className="scale-75 origin-left data-[state=checked]:bg-primary" 
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground">Genset Req</p>
-                            <Switch 
-                                checked={!!ship.isGensetRequired} 
-                                onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isGensetRequired', v)}
-                                className="scale-75 origin-left data-[state=checked]:bg-primary" 
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground">Genset Inv</p>
-                            <p className="text-[10px] font-bold truncate">{ship.gensetInv || '-'}</p>
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground">Genset Emailed</p>
-                            <Switch 
-                                checked={!!ship.gensetEmailed} 
-                                onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'gensetEmailed', v)}
-                                className="scale-75 origin-left data-[state=checked]:bg-primary" 
-                            />
-                        </div>
-                    </div>
-
-                    <Separator className="bg-border/30 relative z-10" />
-
-                    {/* Row 10: Fees & DO */}
-                    <div className="grid grid-cols-4 gap-4 items-center relative z-10 px-1">
-                        <div className="flex flex-col gap-1.5">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground">Collect Fees</p>
-                            <Switch 
-                                checked={!!ship.isCollectFeesPaid} 
-                                onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isCollectFeesPaid', v)}
-                                className="scale-75 origin-left data-[state=checked]:bg-primary" 
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground">Amount</p>
-                            <p className="text-[10px] font-bold">${ship.feesAmount || 0}</p>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground">Est Duties</p>
-                            <p className="text-[10px] font-bold">${ship.estimatedDuties || 0}</p>
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                            <p className="text-[9px] font-black uppercase text-muted-foreground">DO Created</p>
-                            <Switch 
-                                checked={!!ship.isDOCreated} 
-                                onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isDOCreated', v)}
-                                className="scale-75 origin-left data-[state=checked]:bg-primary" 
-                            />
-                        </div>
-                    </div>
-
-                    {/* Row 11: Documents 1 */}
-                    <div className="grid grid-cols-5 gap-2 items-center relative z-10 px-1">
-                        {[{l: 'Sup Inv', k: 'isSupplierInvoice'}, {l: 'Man Sec ISF', k: 'isManufacturerSecurityISF'}, {l: 'VB ISF', k: 'isVidaBuddiesISFFiling'}, {l: 'Pack List', k: 'isPackingList'}, {l: 'Cert Analysis', k: 'isCertificateOfAnalysis'}].map((item, i) => (
-                            <div key={i} className="flex flex-col gap-1.5">
-                                <p className="text-[8px] font-black uppercase text-muted-foreground truncate cursor-help" title={item.l}>{item.l}</p>
-                                <Switch 
-                                    checked={!!ship[item.k]} 
-                                    onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, item.k, v)}
-                                    className="scale-75 origin-left data-[state=checked]:bg-primary" 
-                                />
+                    {/* Row 3 & 4: Logistics & Timeline */}
+                    <div className="bg-muted/30 dark:bg-foreground/5 rounded-2xl border border-border/50 relative z-10 flex flex-col">
+                        <div className="grid grid-cols-3 gap-2 p-3">
+                            <div className="flex flex-col items-center gap-1 text-center">
+                                <Truck className="h-4 w-4 text-primary/60" />
+                                <p className="text-[10px] font-black text-foreground truncate w-full px-1" title={ship.carrier}>
+                                    {ship.carrier || '-'}
+                                </p>
+                                <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Carrier</p>
                             </div>
-                        ))}
+                            <div className="flex flex-col items-center gap-1 text-center border-x border-border/50">
+                                <Tag className="h-4 w-4 text-primary" />
+                                <p className="text-[11px] font-black text-foreground truncate w-full px-1" title={ship.carrierBookingRef}>
+                                    {ship.carrierBookingRef || '-'}
+                                </p>
+                                <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Booking Ref</p>
+                            </div>
+                            <div className="flex flex-col items-center gap-1 text-center">
+                                <Box className="h-4 w-4 text-primary/60" />
+                                <p className="text-[11px] font-black text-foreground truncate w-full px-1" title={ship.vessellTrip}>
+                                    {ship.vessellTrip || '-'}
+                                </p>
+                                <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Vessel / Trip</p>
+                            </div>
+                        </div>
+
+                        <Separator className="bg-border/30" />
+
+                        <div className="grid grid-cols-5 gap-0 p-2">
+                            <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                                <MapPin className="h-3.5 w-3.5 text-primary/60" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full" title={ship.portOfLading}>{ship.portOfLading || '-'}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Lading</p>
+                            </div>
+                            <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                                <MapPin className="h-3.5 w-3.5 text-primary/60" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full" title={ship.portOfEntryShipTo}>{ship.portOfEntryShipTo || '-'}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Entry</p>
+                            </div>
+                            <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                                <Calendar className="h-3.5 w-3.5 text-primary/60" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full">{formatDate(ship.dateOfLanding)}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Landing</p>
+                            </div>
+                            <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                                <Calendar className="h-3.5 w-3.5 text-primary/60" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full">{formatDate(ship.ETA)}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">ETA</p>
+                            </div>
+                            <div className="flex flex-col items-center gap-1 text-center px-1">
+                                <Calendar className="h-3.5 w-3.5 text-primary" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full">{formatDate(ship.updatedETA)}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Upd ETA</p>
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Row 12: Documents 2 & Status */}
-                    <div className="space-y-4 relative z-10 px-1 pt-2">
-                        <div className="grid grid-cols-4 gap-4">
-                            <div className="flex flex-col gap-1.5"><p className="text-[8px] font-black uppercase text-muted-foreground">Cert Origin</p><Switch checked={!!ship.isCertificateOfOrigin} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isCertificateOfOrigin', v)} className="scale-75 origin-left data-[state=checked]:bg-primary" /></div>
-                            <div className="flex flex-col gap-1.5"><p className="text-[8px] font-black uppercase text-muted-foreground">Bill of Lading</p><Switch checked={!!ship.IsBillOfLading || !!ship.isBillOfLading} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'IsBillOfLading', v)} className="scale-75 origin-left data-[state=checked]:bg-primary" /></div>
-                            <div className="flex flex-col gap-1.5"><p className="text-[8px] font-black uppercase text-muted-foreground">Docs to Broker</p><Switch checked={!!ship.isAllDocumentsProvidedToCustomsBroker} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isAllDocumentsProvidedToCustomsBroker', v)} className="scale-75 origin-left data-[state=checked]:bg-primary" /></div>
-                            <div className="flex flex-col gap-1.5"><p className="text-[8px] font-black uppercase text-muted-foreground">Customs Stat</p><Switch checked={!!ship.isCustomsStatus} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isCustomsStatus', v)} className="scale-75 origin-left data-[state=checked]:bg-primary" /></div>
+                    <Separator className="bg-border/30 relative z-10" />
+
+                    {/* Row 4: Cargo & Financials Card */}
+                    <div className="bg-muted/30 dark:bg-foreground/5 rounded-2xl border border-border/50 relative z-10 flex flex-col mt-4">
+                         {/* Row 1: Product Info */}
+                         <div className="grid grid-cols-5 gap-0 p-2">
+                            {/* Product (Wider) */}
+                            <div className="col-span-2 flex flex-col items-center justify-center text-center border-r border-border/50 px-2 py-1">
+                                <p className="text-[10px] font-black text-foreground whitespace-normal break-words leading-tight" title={products[ship.product] || ship.product}>
+                                    {products[ship.product] || ship.product || '-'}
+                                </p>
+                            </div>
+                            {/* Drums */}
+                            <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                                <Box className="h-3.5 w-3.5 text-primary/60" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full">{ship.drums || 0}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Drums</p>
+                            </div>
+                             {/* Pallets */}
+                             <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                                <Box className="h-3.5 w-3.5 text-primary/60" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full">{ship.pallets || 0}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Pallets</p>
+                            </div>
+                             {/* Gallons */}
+                             <div className="flex flex-col items-center gap-1 text-center px-1">
+                                <Box className="h-3.5 w-3.5 text-primary/60" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full">{ship.gallons || 0}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Gallons</p>
+                            </div>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
-                            <div className="flex flex-col gap-1.5"><p className="text-[8px] font-black uppercase text-muted-foreground">Drayage Asg</p><Switch checked={!!ship.IsDrayageAssigned} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'IsDrayageAssigned', v)} className="scale-75 origin-left data-[state=checked]:bg-primary" /></div>
-                            <div className="flex flex-col gap-1"><p className="text-[8px] font-black uppercase text-muted-foreground">Trucker Notif</p><p className="text-[9px] font-bold">{formatDate(ship.truckerNotifiedDate)}</p></div>
-                            <div className="flex flex-col gap-1.5"><p className="text-[8px] font-black uppercase text-muted-foreground">Trucker DO</p><Switch checked={!!ship.isTruckerReceivedDeliveryOrder} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isTruckerReceivedDeliveryOrder', v)} className="scale-75 origin-left data-[state=checked]:bg-primary" /></div>
-                            <div className="flex flex-col gap-1"><p className="text-[8px] font-black uppercase text-muted-foreground">Status</p><p className="text-[9px] font-bold text-primary uppercase">{ship.status || 'Active'}</p></div>
+
+                        <Separator className="bg-border/30" />
+
+                        {/* Row 2: Values & Weights */}
+                        <div className="grid grid-cols-5 gap-0 p-2">
+                            {/* Inv Value */}
+                            <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                                <Hash className="h-3.5 w-3.5 text-primary/60" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full">${ship.invValue || 0}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Inv Value</p>
+                            </div>
+                            {/* Est. Duties */}
+                            <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                                <Hash className="h-3.5 w-3.5 text-primary/60" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full">${ship.estTrumpDuties || 0}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Est. Duties</p>
+                            </div>
+                            {/* Net KG */}
+                            <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                                <Box className="h-3.5 w-3.5 text-primary/60" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full">{ship.netWeightKG || 0}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Net KG</p>
+                            </div>
+                            {/* Gross KG */}
+                            <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1">
+                                <Box className="h-3.5 w-3.5 text-primary/60" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full">{ship.grossWeightKG || 0}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Gross KG</p>
+                            </div>
+                            {/* Tico VB */}
+                            <div className="flex flex-col items-center gap-1 text-center px-1">
+                                <Tag className="h-3.5 w-3.5 text-primary" />
+                                <p className="text-[9px] font-black text-foreground truncate w-full">{ship.ticoVB || '-'}</p>
+                                <p className="text-[7px] font-black uppercase text-muted-foreground/60 tracking-widest">Tico VB</p>
+                            </div>
                         </div>
+                    </div>
+
+                    {/* Row 5: Logistics & Documentation Master Grid */}
+                    <div className="bg-muted/30 dark:bg-foreground/5 rounded-2xl border border-border/50 relative z-10 flex flex-col mt-4">
+                        
+                        {/* Grid Row 1: Arrival | Genset | Fees */}
+                        <div className="grid grid-cols-5 gap-0 p-2 border-b border-border/30">
+                             {/* Arrival Notice */}
+                             <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Arrival Notice</p>
+                                <Switch checked={!!ship.isArrivalNotice} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isArrivalNotice', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                            {/* Genset Req */}
+                            <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Genset Req</p>
+                                <Switch checked={!!ship.isGensetRequired} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isGensetRequired', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                            {/* Genset Inv */}
+                            <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1 pt-1.5">
+                                <p className="text-[10px] font-bold text-foreground truncate w-full">{ship.gensetInv || '-'}</p>
+                                <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Genset Inv</p>
+                            </div>
+                             {/* Genset Emailed */}
+                             <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Genset Emailed</p>
+                                <Switch checked={!!ship.gensetEmailed} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'gensetEmailed', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                             {/* Collect Fees */}
+                             <div className="flex flex-col items-center gap-1.5 text-center px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Collect Fees</p>
+                                <Switch checked={!!ship.isCollectFeesPaid} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isCollectFeesPaid', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                        </div>
+
+                        {/* Grid Row 2: Financials | DO | Docs A */}
+                        <div className="grid grid-cols-5 gap-0 p-2 border-b border-border/30">
+                            {/* Amount */}
+                            <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1 pt-1.5">
+                                <p className="text-[10px] font-bold text-foreground">${ship.feesAmount || 0}</p>
+                                <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Amount</p>
+                            </div>
+                             {/* Est Duties */}
+                             <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1 pt-1.5">
+                                <p className="text-[10px] font-bold text-foreground">${ship.estimatedDuties || 0}</p>
+                                <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Est Duties</p>
+                            </div>
+                             {/* DO Created */}
+                             <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">DO Created</p>
+                                <Switch checked={!!ship.isDOCreated} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isDOCreated', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                             {/* Sup Inv */}
+                             <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Sup Inv</p>
+                                <Switch checked={!!ship.isSupplierInvoice} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isSupplierInvoice', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                             {/* Man Sec ISF */}
+                             <div className="flex flex-col items-center gap-1.5 text-center px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Man Sec ISF</p>
+                                <Switch checked={!!ship.isManufacturerSecurityISF} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isManufacturerSecurityISF', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                        </div>
+
+                        {/* Grid Row 3: Docs B */}
+                        <div className="grid grid-cols-5 gap-0 p-2 border-b border-border/30">
+                             {/* VB ISF */}
+                             <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">VB ISF</p>
+                                <Switch checked={!!ship.isVidaBuddiesISFFiling} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isVidaBuddiesISFFiling', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                             {/* Pack List */}
+                             <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Pack List</p>
+                                <Switch checked={!!ship.isPackingList} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isPackingList', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                             {/* Cert Analysis */}
+                             <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Cert Analysis</p>
+                                <Switch checked={!!ship.isCertificateOfAnalysis} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isCertificateOfAnalysis', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                             {/* Cert Origin */}
+                             <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Cert Origin</p>
+                                <Switch checked={!!ship.isCertificateOfOrigin} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isCertificateOfOrigin', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                             {/* Bill of Lading */}
+                             <div className="flex flex-col items-center gap-1.5 text-center px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Bill of Lading</p>
+                                <Switch checked={!!ship.IsBillOfLading || !!ship.isBillOfLading} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'IsBillOfLading', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                        </div>
+
+                         {/* Grid Row 4: Final Status & Logistics */}
+                        <div className="grid grid-cols-5 gap-0 p-2">
+                             {/* Docs to Broker */}
+                             <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Docs to Broker</p>
+                                <Switch checked={!!ship.isAllDocumentsProvidedToCustomsBroker} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isAllDocumentsProvidedToCustomsBroker', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                             {/* Customs Stat */}
+                             <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Customs Stat</p>
+                                <Switch checked={!!ship.isCustomsStatus} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isCustomsStatus', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                             {/* Drayage Asg */}
+                             <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Drayage Asg</p>
+                                <Switch checked={!!ship.IsDrayageAssigned} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'IsDrayageAssigned', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                             {/* Trucker Notif */}
+                             <div className="flex flex-col items-center gap-1 text-center border-r border-border/50 px-1 pt-1.5">
+                                <p className="text-[9px] font-bold text-foreground truncate w-full">{formatDate(ship.truckerNotifiedDate)}</p>
+                                <p className="text-[8px] font-black uppercase text-muted-foreground/60 tracking-widest">Trucker Notif</p>
+                            </div>
+                             {/* Trucker DO */}
+                             <div className="flex flex-col items-center gap-1.5 text-center px-1">
+                                <p className="text-[9px] font-black uppercase text-muted-foreground">Trucker DO</p>
+                                <Switch checked={!!ship.isTruckerReceivedDeliveryOrder} onCheckedChange={(v) => updateShippingField(ship._cpoIdx, ship._shipIdx, 'isTruckerReceivedDeliveryOrder', v)} className="scale-75 data-[state=checked]:bg-primary" />
+                            </div>
+                        </div>
+
                     </div>
 
                     {/* Row 13: Meta & Actions */}
@@ -901,26 +985,8 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
                                 <p className="text-[10px] font-bold uppercase">{users[po.createdBy?.toLowerCase()] || po.createdBy || 'System'}</p>
                             </div>
                             
-                            <div className="flex items-center gap-1">
-                                <Button 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                                    onClick={() => setEditingShipping({ cpoIdx: ship._cpoIdx, shipIdx: ship._shipIdx, data: ship })}
-                                >
-                                    <Pencil className="h-3 w-3" />
-                                </Button>
-                                <Button 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                    onClick={() => handleDeleteShipping(ship._id, ship._cpoIdx, ship._shipIdx)}
-                                >
-                                    <Trash className="h-3 w-3" />
-                                </Button>
                             </div>
-                        </div>
-
+                        
                         <div className="flex flex-col items-end max-w-[50%]">
                             <p className="text-[9px] font-black uppercase text-muted-foreground tracking-widest opacity-60">Tracking Log</p>
                             <p className="text-[10px] font-bold uppercase truncate">{ship.updateShipmentTracking || '-'}</p>
@@ -999,7 +1065,13 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
                 </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSaveShipping} className="space-y-4">
-               <div className="grid grid-cols-2 gap-4">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[60vh] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-muted">
+                  
+                  {/* --- Core Info --- */}
+                  <div className="md:col-span-2">
+                     <h4 className="text-xs font-black uppercase text-muted-foreground tracking-widest mb-3 border-b pb-1">Core Information</h4>
+                  </div>
+
                   <div className="space-y-1">
                       <Label>Product</Label>
                        <select name="product" className="w-full border rounded-md h-9 px-3 text-sm bg-background" defaultValue={editingShipping?.data?.product}>
@@ -1010,9 +1082,96 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
                       </select>
                   </div>
                   <div className="space-y-1">
+                      <Label>Status</Label>
+                      <Input name="status" placeholder="e.g. Ordered, Shipped..." defaultValue={editingShipping?.data?.status || 'Ordered'} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>VBID</Label>
+                      <Input name="svbid" placeholder="Auto-generated if empty" defaultValue={editingShipping?.data?.svbid} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Container No</Label>
+                      <Input name="containerNo" placeholder="ABCD1234567" defaultValue={editingShipping?.data?.containerNo} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>BOL Number</Label>
+                      <Input name="BOLNumber" placeholder="Bill of Lading No" defaultValue={editingShipping?.data?.BOLNumber} />
+                  </div>
+                  <div className="space-y-1">
+                       <Label>Tico VB</Label>
+                       <Input name="ticoVB" placeholder="Tico VB ref" defaultValue={editingShipping?.data?.ticoVB} />
+                  </div>
+
+                  {/* --- Supplier --- */}
+                  <div className="md:col-span-2 mt-2">
+                     <h4 className="text-xs font-black uppercase text-muted-foreground tracking-widest mb-3 border-b pb-1">Supplier Details</h4>
+                  </div>
+
+                  <div className="space-y-1">
+                      <Label>Supplier Location</Label>
+                       <select name="supplierLocation" className="w-full border rounded-md h-9 px-3 text-sm bg-background" defaultValue={editingShipping?.data?.supplierLocation}>
+                         <option value="">Select Location</option>
+                         {Object.entries(supplierLocations).map(([id, name]) => (
+                             <option key={id} value={id}>{name}</option>
+                         ))}
+                      </select>
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Supplier PO</Label>
+                      <Input name="supplierPO" placeholder="Supplier Ref" defaultValue={editingShipping?.data?.supplierPO} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Supplier PO Date</Label>
+                      <Input name="supplierPoDate" type="date" defaultValue={editingShipping?.data?.supplierPoDate ? new Date(editingShipping.data.supplierPoDate).toISOString().split('T')[0] : ''} />
+                  </div>
+
+                  {/* --- Logistics --- */}
+                  <div className="md:col-span-2 mt-2">
+                     <h4 className="text-xs font-black uppercase text-muted-foreground tracking-widest mb-3 border-b pb-1">Logistics & Shipping</h4>
+                  </div>
+
+                  <div className="space-y-1">
                       <Label>Carrier</Label>
                       <Input name="carrier" placeholder="Carrier Name" defaultValue={editingShipping?.data?.carrier} />
                   </div>
+                   <div className="space-y-1">
+                      <Label>Booking Ref</Label>
+                      <Input name="carrierBookingRef" placeholder="Booking Ref" defaultValue={editingShipping?.data?.carrierBookingRef} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Vessel / Trip</Label>
+                      <Input name="vessellTrip" placeholder="Vessel Name / Trip No" defaultValue={editingShipping?.data?.vessellTrip} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Port of Lading</Label>
+                      <Input name="portOfLading" placeholder="Port Name" defaultValue={editingShipping?.data?.portOfLading} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Port of Entry</Label>
+                      <Input name="portOfEntryShipTo" placeholder="Port Name" defaultValue={editingShipping?.data?.portOfEntryShipTo} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Landing Date</Label>
+                      <Input name="dateOfLanding" type="date" defaultValue={editingShipping?.data?.dateOfLanding ? new Date(editingShipping.data.dateOfLanding).toISOString().split('T')[0] : ''} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>ETA</Label>
+                      <Input name="ETA" type="date" defaultValue={editingShipping?.data?.ETA ? new Date(editingShipping.data.ETA).toISOString().split('T')[0] : ''} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Updated ETA</Label>
+                      <Input name="updatedETA" type="date" defaultValue={editingShipping?.data?.updatedETA ? new Date(editingShipping.data.updatedETA).toISOString().split('T')[0] : ''} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Trucker Notified</Label>
+                      <Input name="truckerNotifiedDate" type="date" defaultValue={editingShipping?.data?.truckerNotifiedDate ? new Date(editingShipping.data.truckerNotifiedDate).toISOString().split('T')[0] : ''} />
+                  </div>
+
+                   {/* --- Weights & Measures --- */}
+                  <div className="md:col-span-2 mt-2">
+                     <h4 className="text-xs font-black uppercase text-muted-foreground tracking-widest mb-3 border-b pb-1">Weights & Measures</h4>
+                  </div>
+
                    <div className="space-y-1">
                       <Label>Drums</Label>
                       <Input name="drums" type="number" defaultValue={editingShipping?.data?.drums} />
@@ -1026,9 +1185,49 @@ export default function PurchaseOrderDetailPage({ params }: { params: Promise<{ 
                       <Input name="gallons" type="number" defaultValue={editingShipping?.data?.gallons} />
                   </div>
                   <div className="space-y-1">
-                      <Label>Container No</Label>
-                      <Input name="containerNo" placeholder="ABCD1234567" defaultValue={editingShipping?.data?.containerNo} />
+                      <Label>Net Weight (KG)</Label>
+                      <Input name="netWeightKG" type="number" defaultValue={editingShipping?.data?.netWeightKG} />
                   </div>
+                  <div className="space-y-1">
+                      <Label>Gross Weight (KG)</Label>
+                      <Input name="grossWeightKG" type="number" defaultValue={editingShipping?.data?.grossWeightKG} />
+                  </div>
+
+                   {/* --- Financials --- */}
+                  <div className="md:col-span-2 mt-2">
+                     <h4 className="text-xs font-black uppercase text-muted-foreground tracking-widest mb-3 border-b pb-1">Financials</h4>
+                  </div>
+
+                  <div className="space-y-1">
+                      <Label>Invoice Value ($)</Label>
+                      <Input name="invValue" type="number" step="0.01" defaultValue={editingShipping?.data?.invValue} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Fees Amount ($)</Label>
+                      <Input name="feesAmount" type="number" step="0.01" defaultValue={editingShipping?.data?.feesAmount} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Est. Regular Duties ($)</Label>
+                      <Input name="estimatedDuties" type="number" step="0.01" defaultValue={editingShipping?.data?.estimatedDuties} />
+                  </div>
+                  <div className="space-y-1">
+                      <Label>Est. Trump Duties ($)</Label>
+                      <Input name="estTrumpDuties" type="number" step="0.01" defaultValue={editingShipping?.data?.estTrumpDuties} />
+                  </div>
+                   <div className="space-y-1">
+                      <Label>Genset Invoice #</Label>
+                      <Input name="gensetInv" placeholder="Invoice #" defaultValue={editingShipping?.data?.gensetInv} />
+                  </div>
+
+                   {/* --- Other --- */}
+                  <div className="md:col-span-2 mt-2">
+                     <h4 className="text-xs font-black uppercase text-muted-foreground tracking-widest mb-3 border-b pb-1">Tracking Log</h4>
+                  </div>
+                   <div className="md:col-span-2 space-y-1">
+                      <Label>Log Notes</Label>
+                      <Input name="updateShipmentTracking" placeholder="Tracking updates..." defaultValue={editingShipping?.data?.updateShipmentTracking} />
+                  </div>
+
                </div>
                <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => { setAddingShippingToCPO(null); setEditingShipping(null); }}>Cancel</Button>
