@@ -126,7 +126,7 @@ body {
 }
 
 :root {
-  --font-sans: var(--font-inter);
+  --font-sans: var(--font-poppins);
   --header-height: calc(var(--spacing) * 12 + 1px);
 }
 
@@ -208,9 +208,11 @@ body {
   .rounded-sm,
   .rounded-md,
   .rounded-lg,
-  .rounded-xl {
+  .rounded-xl,
+  .rounded-2xl,
+  .rounded-3xl {
     @apply !rounded-none;
-    border-radius: 0;
+    border-radius: 0 !important;
   }
 
   .shadow-xs,

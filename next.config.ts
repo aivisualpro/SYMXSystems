@@ -1,7 +1,6 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
+const nextConfig = {
+  // This single line hides the indicator
+  devIndicators: false,
 };
 
 export default nextConfig;

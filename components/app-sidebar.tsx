@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import {
   IconCamera,
   IconChartBar,
@@ -17,6 +18,14 @@ import {
   IconSearch,
   IconSettings,
   IconUsers,
+  IconUser,
+  IconBuildingStore,
+  IconTruck,
+  IconPackage,
+  IconBuildingWarehouse,
+  IconShoppingCart,
+  IconClipboardList,
+  IconCheckbox,
 } from "@tabler/icons-react";
 
 import { NavDocuments } from "@/components/nav-documents";
@@ -37,7 +46,7 @@ const data = {
   user: {
     name: "shadcn",
     email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
+    avatar: "/icon.png",
   },
   navMain: [
     {
@@ -45,85 +54,12 @@ const data = {
       url: "#",
       icon: IconDashboard,
     },
-    {
-      title: "Lifecycle",
-      url: "#",
-      icon: IconListDetails,
-    },
-    {
-      title: "Analytics",
-      url: "#",
-      icon: IconChartBar,
-    },
-    {
-      title: "Projects",
-      url: "#",
-      icon: IconFolder,
-    },
-    {
-      title: "Team",
-      url: "#",
-      icon: IconUsers,
-    },
-  ],
-  navClouds: [
-    {
-      title: "Capture",
-      icon: IconCamera,
-      isActive: true,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Proposal",
-      icon: IconFileDescription,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Prompts",
-      icon: IconFileAi,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
   ],
   navSecondary: [
     {
       title: "Settings",
-      url: "#",
+      url: "/admin/settings",
       icon: IconSettings,
-    },
-    {
-      title: "Get Help",
-      url: "#",
-      icon: IconHelp,
     },
     {
       title: "Search",
@@ -131,21 +67,50 @@ const data = {
       icon: IconSearch,
     },
   ],
-  documents: [
+  admin: [
     {
-      name: "Data Library",
-      url: "#",
-      icon: IconDatabase,
+      name: "Users",
+      url: "/admin/users",
+      icon: IconUser,
     },
     {
-      name: "Reports",
-      url: "#",
-      icon: IconReport,
+      name: "Customers",
+      url: "/admin/customers",
+      icon: IconBuildingStore,
     },
     {
-      name: "Word Assistant",
-      url: "#",
-      icon: IconFileWord,
+      name: "Suppliers",
+      url: "/admin/suppliers",
+      icon: IconTruck,
+    },
+    {
+      name: "Products",
+      url: "/admin/products",
+      icon: IconPackage,
+    },
+    {
+      name: "Warehouse",
+      url: "/admin/warehouse",
+      icon: IconBuildingWarehouse,
+    },
+  ],
+  management: [
+    {
+      name: "Purchase Orders",
+      url: "/admin/purchase-orders",
+      icon: IconShoppingCart,
+    },
+    {
+      name: "Quality Control",
+      url: "/admin/quality-control",
+      icon: IconCheckbox,
+    },
+  ],
+  reports: [
+    {
+      name: "Andres Tracker",
+      url: "/admin/andres-tracker",
+      icon: IconClipboardList,
     },
   ],
 };
@@ -158,13 +123,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              className="data-[slot=sidebar-menu-button]:!p-1.5"
+              className="data-[slot=sidebar-menu-button]:!p-0 hover:bg-transparent active:bg-transparent"
+              size="lg"
             >
-              <a href="#">
-                <IconInnerShadowTop className="!size-5" />
-                <span className="text-base font-semibold">
-                  Orcish Dashboard
-                </span>
+              <a href="#" className="flex items-center justify-center p-2">
+                <Image
+                  src="/sidebar-logo.png"
+                  alt="Company Logo"
+                  width={150}
+                  height={50}
+                  className="object-contain w-auto h-8 group-data-[collapsible=icon]:hidden"
+                  priority
+                />
+                 <Image
+                  src="/sidebar-logo.png"
+                  alt="Company Logo"
+                  width={40}
+                  height={40}
+                  className="object-contain w-8 h-8 hidden group-data-[collapsible=icon]:block"
+                  priority
+                />
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -172,7 +150,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavDocuments items={data.documents} />
+        <NavDocuments items={data.admin} label="Admin" />
+        <NavDocuments items={data.management} label="Management" />
+        <NavDocuments items={data.reports} label="Reports" />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
