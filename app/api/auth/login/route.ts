@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     // and the original code just checked email.
     
     const userData = {
-      id: user._id,
+      id: user._id.toString(),
       email: user.email,
       name: user.name,
       role: user.AppRole || "Manager",

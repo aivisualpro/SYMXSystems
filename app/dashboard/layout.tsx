@@ -16,9 +16,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (session && session.id) {
     try {
       await connectToDatabase();
-      // Ensure session.id is a valid ObjectId string before query
-      if (session.id.match(/^[0-9a-fA-F]{24}$/)) {
-        const user = await VidaUser.findById(session.id).select('isActive');
+      // Ensure specific string format to prevent injection/cast errors
+      const userId = String(session.id);
+      if (userId.match(/^[0-9a-fA-F]{24}$/)) {
+        const user = await VidaUser.findById(userId).select('isActive');
         if (!user || !user.isActive) {
           await logout();
           redirect("/login");
