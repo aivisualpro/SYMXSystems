@@ -85,6 +85,7 @@ export async function GET(req: NextRequest) {
                 isManufacturerSecurityISF: ship.isManufacturerSecurityISF,
                 ISF: ship.isVidaBuddiesISFFiling ? "Yes" : "No", // Assuming ISF corresponds to this
                 trackingId: ship.updateShipmentTracking,
+                status: ship.status || "",
                 customsStatus: ship.isCustomsStatus ? "Cleared" : "Pending",
                 documentsRequired: ship.isAllDocumentsProvidedToCustomsBroker ? "All Provided" : "Missing",
                 

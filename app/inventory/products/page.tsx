@@ -164,12 +164,13 @@ export default function ProductsPage() {
   ];
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full overflow-hidden">
       <SimpleDataTable
         columns={columns}
         data={data}
         searchKey="name"
         onAdd={openAddSheet}
+        title="Products"
       />
 
       <Dialog open={isSheetOpen} onOpenChange={setIsSheetOpen}>

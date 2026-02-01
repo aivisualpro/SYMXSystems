@@ -168,12 +168,13 @@ export default function WarehousePage() {
   ];
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full overflow-hidden">
       <SimpleDataTable
         columns={columns}
         data={data}
         searchKey="name"
         onAdd={openAddSheet}
+        title="Warehouses"
       />
 
       <Dialog open={isSheetOpen} onOpenChange={setIsSheetOpen}>

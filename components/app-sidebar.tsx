@@ -88,15 +88,22 @@ const data = {
       url: "/admin/suppliers",
       icon: IconTruck,
     },
+  ],
+  inventory: [
+    {
+      name: "Warehouse",
+      url: "/inventory/warehouse",
+      icon: IconBuildingWarehouse,
+    },
     {
       name: "Products",
-      url: "/admin/products",
+      url: "/inventory/products",
       icon: IconPackage,
     },
     {
-      name: "Warehouse",
-      url: "/admin/warehouse",
-      icon: IconBuildingWarehouse,
+      name: "Release Requests",
+      url: "/inventory/release-requests",
+      icon: IconFileDescription,
     },
   ],
   management: [
@@ -185,6 +192,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavDocuments items={data.admin} label="Admin" />
+        <NavDocuments items={data.inventory} label="Inventory" />
         <NavDocuments items={data.management} label="Management" />
         <NavDocuments items={reports} label="Reports" />
         <NavSecondary items={data.navSecondary} className="mt-auto" />

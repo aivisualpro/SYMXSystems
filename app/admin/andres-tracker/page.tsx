@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { 
   ColumnDef, 
@@ -18,7 +19,9 @@ import {
   Search, 
   ArrowLeft,
   LayoutGrid,
-  Table as TableIcon
+  Table as TableIcon,
+  Minimize2,
+  Maximize2
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -79,6 +82,7 @@ interface TrackerRecord {
   documentsRequired: string;
   container: string;
   vbid: string;
+  status: string;
 }
 
 export default function AndresTrackerPage() {
@@ -88,6 +92,16 @@ export default function AndresTrackerPage() {
   const [viewMode, setViewMode] = useState<"table" | "tabs">("table");
   const router = useRouter();
   const { setLeftContent, setRightContent } = useHeaderActions();
+  const [minimizedGroups, setMinimizedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (id: string) => {
+    setMinimizedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
     setLeftContent(
@@ -159,11 +173,26 @@ export default function AndresTrackerPage() {
       String(val).toLowerCase().includes(searchQuery.toLowerCase())
     )
   );
+  
+  const transitData = filteredData.filter(row => 
+    ['on water', 'in_transit', 'in transit'].includes(row.status?.toLowerCase() || "")
+  );
 
   // --- SECTIONED DATA ---
 
   const transitColumns: ColumnDef<TrackerRecord>[] = [
-    { accessorKey: "poNo", header: "VB PO Number" },
+    { 
+      accessorKey: "poNo", 
+      header: "VB PO Number",
+      cell: ({ row }) => (
+        <Link 
+          href={`/admin/purchase-orders/${row.original.poId}`}
+          className="hover:underline text-inherit font-bold"
+        >
+          {row.original.poNo}
+        </Link>
+      )
+    },
     { accessorKey: "customer", header: "Customer" },
     { accessorKey: "customerPONo", header: "Cust PO#" },
     { accessorKey: "qtyOrdered", header: "Qty Ordered" },
@@ -182,7 +211,25 @@ export default function AndresTrackerPage() {
       header: "Estimated Duties",
       cell: ({ row }) => row.original.estimatedDuties ? `$${row.original.estimatedDuties.toLocaleString()}` : "$0"
     },
-    { accessorKey: "customsStatus", header: "Status" },
+    { 
+      accessorKey: "status", 
+      header: "Status",
+      cell: ({ row }) => {
+        const val = row.original.status || "Pending";
+        const isTransit = ['on water', 'in_transit', 'in transit'].includes(val.toLowerCase());
+        const isArrived = ['arrived', 'delivered'].includes(val.toLowerCase());
+        return (
+          <span className={cn(
+            "font-bold uppercase tracking-tighter text-[9px]",
+            isTransit ? "text-blue-600 dark:text-blue-400" : 
+            isArrived ? "text-green-600 dark:text-green-400" : 
+            "text-zinc-500"
+          )}>
+            {val.replace(/_/g, ' ')}
+          </span>
+        );
+      }
+    },
     { accessorKey: "portofEntryShipto", header: "Entry Port" },
   ];
 
@@ -201,7 +248,18 @@ export default function AndresTrackerPage() {
   ];
 
   const customsColumns: ColumnDef<TrackerRecord>[] = [
-    { accessorKey: "poNo", header: "VB PO Number" },
+    { 
+      accessorKey: "poNo", 
+      header: "VB PO Number",
+      cell: ({ row }) => (
+        <Link 
+          href={`/admin/purchase-orders/${row.original.poId}`}
+          className="hover:underline text-inherit font-bold"
+        >
+          {row.original.poNo}
+        </Link>
+      )
+    },
     { accessorKey: "carrierBookingRef", header: "Carrier Booking Ref#" },
     { accessorKey: "BOLNumber", header: "BOL Number" },
     { 
@@ -224,7 +282,18 @@ export default function AndresTrackerPage() {
   ];
 
   const lsbTransitColumns: ColumnDef<TrackerRecord>[] = [
-    { accessorKey: "poNo", header: "VB PO Number" },
+    { 
+      accessorKey: "poNo", 
+      header: "VB PO Number",
+      cell: ({ row }) => (
+        <Link 
+          href={`/admin/purchase-orders/${row.original.poId}`}
+          className="hover:underline text-inherit font-bold"
+        >
+          {row.original.poNo}
+        </Link>
+      )
+    },
     { accessorKey: "customer", header: "Customer" },
     { accessorKey: "customerPONo", header: "Cust PO#" },
     { accessorKey: "qtyOrdered", header: "Qty Ordered" },
@@ -239,7 +308,25 @@ export default function AndresTrackerPage() {
       header: "Updated ETA",
       cell: ({ row }) => row.original.updatedETA ? format(new Date(row.original.updatedETA), "MM/dd/yy") : "-"
     },
-    { accessorKey: "customsStatus", header: "Status" },
+    { 
+        accessorKey: "status", 
+        header: "Status",
+        cell: ({ row }) => {
+          const val = row.original.status || "Pending";
+          const isTransit = ['on water', 'in_transit', 'in transit'].includes(val.toLowerCase());
+          const isArrived = ['arrived', 'delivered'].includes(val.toLowerCase());
+          return (
+            <span className={cn(
+              "font-bold uppercase tracking-tighter text-[9px]",
+              isTransit ? "text-blue-600 dark:text-blue-400" : 
+              isArrived ? "text-green-600 dark:text-green-400" : 
+              "text-zinc-500"
+            )}>
+              {val.replace(/_/g, ' ')}
+            </span>
+          );
+        }
+      },
     { accessorKey: "portofEntryShipto", header: "Entry Port" },
   ];
 
@@ -337,31 +424,37 @@ export default function AndresTrackerPage() {
   };
 
   const UnifiedTableView = () => {
-    // Collect all columns for the giant table
     const allGroups = [
       { 
+        id: 'transit',
         label: "Shipments In-Transit!", 
         columns: transitColumns, 
-        className: "bg-green-100 text-green-900 dark:bg-green-900/30 dark:text-white" 
+        className: "bg-green-100 text-green-900 dark:bg-green-900/10 dark:text-white" 
       },
       { 
+        id: 'inventory',
         label: "Inventory", 
         columns: inventoryColumns, 
-        className: "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-white" 
+        className: "bg-blue-100 text-blue-900 dark:bg-blue-900/10 dark:text-white" 
       },
       { 
+        id: 'customs',
         label: "Customs", 
         columns: customsColumns, 
-        className: "bg-orange-100 text-orange-900 dark:bg-orange-900/30 dark:text-white" 
+        className: "bg-orange-100 text-orange-900 dark:bg-orange-900/10 dark:text-white" 
       },
       { 
+        id: 'lsb',
         label: "LSB Shipments In-Transit", 
         columns: lsbTransitColumns, 
-        className: "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-white" 
+        className: "bg-amber-100 text-amber-900 dark:bg-amber-900/10 dark:text-white" 
       }
     ];
 
-    const getColWidth = (header: any) => {
+    const getColWidth = (header: any, groupId: string, colIdx: number) => {
+      const isMin = minimizedGroups.has(groupId);
+      if (isMin) return colIdx === 0 ? '70px' : '0px';
+      
       const h = String(header);
       const toReduce = [
         "VB PO Number", "Cust PO#", "Qty Ordered", "BOL Number", 
@@ -374,68 +467,120 @@ export default function AndresTrackerPage() {
     };
 
     return (
-      <div className="flex-1 min-h-0 flex flex-col border rounded-3xl bg-white dark:bg-zinc-950 shadow-2xl overflow-hidden h-full">
+      <div className="flex-1 min-h-0 flex flex-col border rounded-3xl bg-white dark:bg-zinc-950 shadow-2xl overflow-hidden h-full relative">
+        <style dangerouslySetInnerHTML={{ __html: `
+          .genie-transition {
+            transition: all 0.8s cubic-bezier(0.25, 1, 0.32, 1);
+          }
+          .vertical-text {
+            writing-mode: vertical-lr;
+            transform: rotate(180deg);
+          }
+        `}} />
         <div className="overflow-auto flex-1 scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-800 h-full">
-          <table className="border-separate border-spacing-0 table-fixed min-w-[3200px] w-max text-sm">
+          <table className="border-separate border-spacing-0 table-fixed w-max text-sm genie-transition">
             <TableHeader className="z-20">
               {/* Top Group Headers */}
               <TableRow className="bg-zinc-100 dark:bg-zinc-900 border-none hover:bg-zinc-100 dark:hover:bg-zinc-900 sticky top-0 z-30">
-                {allGroups.map((group, idx) => (
-                  <TableHead 
-                    key={idx} 
-                    colSpan={group.columns.length} 
-                    className={cn(
-                        "text-center font-black tracking-[0.1em] text-[14px] p-[6px] border-r-2 border-b-2 border-white dark:border-zinc-800 leading-[1.2] align-middle sticky top-0 z-30 bg-zinc-100 dark:bg-zinc-900",
-                        group.className
-                    )}
-                  >
-                    {group.label}
-                  </TableHead>
-                ))}
-              </TableRow>
-              {/* Individual Column Headers */}
-              <TableRow className="bg-zinc-50 dark:bg-zinc-950 border-none hover:bg-zinc-50 dark:hover:bg-zinc-950 sticky top-[32px] z-20">
-                {allGroups.map((group) => 
-                  group.columns.map((col: any, colIdx) => (
+                {allGroups.map((group, idx) => {
+                  const isMin = minimizedGroups.has(group.id);
+                  return (
                     <TableHead 
-                      key={`${group.label}-${colIdx}`} 
-                      style={{ width: getColWidth(col.header) }}
+                      key={group.id} 
+                      colSpan={group.columns.length} 
                       className={cn(
-                          "p-[4px] text-[10px] font-bold tracking-tighter text-zinc-500 dark:text-white border-r border-b border-zinc-200 dark:border-zinc-800 align-middle leading-tight whitespace-normal break-words sticky top-[32px] z-20 bg-zinc-50 dark:bg-zinc-950",
-                          colIdx === group.columns.length - 1 && "border-r-2 border-zinc-300 dark:border-zinc-700"
+                          "text-center font-black tracking-[0.1em] text-[12px] p-0 border-r-2 border-b-2 border-white dark:border-zinc-800 leading-[1.2] align-middle sticky top-0 z-30 genie-transition h-10",
+                          group.className,
+                          isMin && "w-[70px] min-w-[70px] max-w-[70px] border-r-4 border-r-zinc-300 dark:border-r-zinc-700"
                       )}
                     >
-                      {flexRender(col.header, {} as any)}
+                      <div className="relative h-full flex items-center justify-center group/header overflow-visible">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); toggleGroup(group.id); }}
+                          className="absolute left-1.5 top-1/2 -translate-y-1/2 z-50 p-1 rounded-full bg-white/40 dark:bg-black/40 hover:bg-white/80 dark:hover:bg-black/80 transition-all shadow-sm opacity-0 group-hover/header:opacity-100"
+                        >
+                          {isMin ? <Maximize2 className="h-2.5 w-2.5" /> : <Minimize2 className="h-2.5 w-2.5" />}
+                        </button>
+                        <span className={cn(
+                          "genie-transition block truncate px-6",
+                          isMin ? "vertical-text text-[8px] tracking-[0.2em] font-bold h-24 whitespace-nowrap opacity-60" : "scale-100 opacity-100"
+                        )}>
+                          {group.label}
+                        </span>
+                        {isMin && (
+                          <button 
+                            onClick={() => toggleGroup(group.id)}
+                            className="absolute inset-0 z-40 w-full h-full cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                          />
+                        )}
+                      </div>
                     </TableHead>
-                  ))
-                )}
+                  );
+                })}
+              </TableRow>
+              {/* Individual Column Headers */}
+              <TableRow className="bg-zinc-50 dark:bg-zinc-950 border-none hover:bg-zinc-50 dark:hover:bg-zinc-950 sticky top-[40px] z-20">
+                {allGroups.map((group) => {
+                  const isSectionMin = minimizedGroups.has(group.id);
+                  return group.columns.map((col: any, colIdx) => (
+                    <TableHead 
+                      key={`${group.id}-${colIdx}`} 
+                      style={{ 
+                        width: getColWidth(col.header, group.id, colIdx),
+                        minWidth: getColWidth(col.header, group.id, colIdx),
+                        maxWidth: getColWidth(col.header, group.id, colIdx),
+                        opacity: isSectionMin && colIdx > 0 ? 0 : 1,
+                        padding: isSectionMin && colIdx > 0 ? 0 : '4px',
+                        borderRightWidth: isSectionMin && colIdx > 0 ? 0 : (colIdx === group.columns.length - 1 ? 2 : 1),
+                        transitionDelay: isSectionMin ? '0ms' : `${colIdx * 30}ms`,
+                        overflow: 'hidden'
+                      }}
+                      className={cn(
+                          "genie-transition text-[10px] font-bold tracking-tighter text-zinc-500 dark:text-white border-b border-zinc-200 dark:border-zinc-800 align-middle leading-tight whitespace-normal break-words sticky top-[40px] z-20 bg-zinc-50 dark:bg-zinc-950",
+                          isSectionMin && colIdx === 0 && "bg-zinc-100/50 dark:bg-zinc-900/50 text-zinc-400 font-black text-[8px] px-1"
+                      )}
+                    >
+                      {( !isSectionMin || colIdx === 0 ) && flexRender(col.header, {} as any)}
+                    </TableHead>
+                  ));
+                })}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredData.length > 0 ? (
-                filteredData.map((row, rowIdx) => (
+              {transitData.length > 0 ? (
+                transitData.map((row, rowIdx) => (
                   <TableRow key={rowIdx} className="hover:bg-zinc-50/80 dark:hover:bg-zinc-900/50 group transition-colors">
-                    {allGroups.map((group) => 
-                      group.columns.map((col: any, colIdx) => (
+                    {allGroups.map((group) => {
+                      const isSectionMin = minimizedGroups.has(group.id);
+                      return group.columns.map((col: any, colIdx) => (
                         <TableCell 
-                          key={`${rowIdx}-${group.label}-${colIdx}`} 
-                          style={{ width: getColWidth(col.header) }}
+                          key={`${rowIdx}-${group.id}-${colIdx}`} 
+                          style={{ 
+                            width: getColWidth(col.header, group.id, colIdx),
+                            minWidth: getColWidth(col.header, group.id, colIdx),
+                            maxWidth: getColWidth(col.header, group.id, colIdx),
+                            opacity: isSectionMin && colIdx > 0 ? 0 : 1,
+                            padding: isSectionMin && colIdx > 0 ? 0 : '4px',
+                            borderRightWidth: isSectionMin && colIdx > 0 ? 0 : (colIdx === group.columns.length - 1 ? 2 : 1),
+                            transitionDelay: isSectionMin ? '0ms' : `${colIdx * 30}ms`,
+                            overflow: 'hidden'
+                          }}
                           className={cn(
-                            "p-[4px] text-[10px] font-medium border-r border-b border-zinc-200/50 dark:border-zinc-800 transition-all duration-300 align-middle whitespace-normal break-words overflow-visible leading-tight",
-                            colIdx === group.columns.length - 1 && "border-r-2 border-zinc-300 dark:border-zinc-700",
-                            // Dynamic Cell Background Highlights based on group - Theme Aware
-                            group.label === "Shipments In-Transit!" && "bg-green-500/[0.04] dark:bg-green-500/[0.12] text-green-950 dark:text-white",
-                            group.label === "Inventory" && "bg-blue-500/[0.04] dark:bg-blue-500/[0.12] text-blue-950 dark:text-white",
-                            group.label === "Customs" && "bg-orange-500/[0.04] dark:bg-orange-500/[0.12] text-orange-950 dark:text-white",
-                            group.label === "LSB Shipments In-Transit" && "bg-amber-500/[0.04] dark:bg-amber-500/[0.12] text-amber-950 dark:text-white"
+                            "genie-transition text-[10px] font-medium border-b border-zinc-200/50 dark:border-zinc-800 align-middle whitespace-normal break-words leading-tight",
+                            isSectionMin && colIdx === 0 && "border-r-4 border-r-zinc-300 dark:border-r-zinc-700 bg-zinc-50/50 dark:bg-zinc-900/50",
+                            group.label === "Shipments In-Transit!" && !isSectionMin && "bg-green-500/[0.04] dark:bg-green-500/[0.12] text-green-950 dark:text-white",
+                            group.label === "Inventory" && !isSectionMin && "bg-blue-500/[0.04] dark:bg-blue-500/[0.12] text-blue-950 dark:text-white",
+                            group.label === "Customs" && !isSectionMin && "bg-orange-500/[0.04] dark:bg-orange-500/[0.12] text-orange-950 dark:text-white",
+                            group.label === "LSB Shipments In-Transit" && !isSectionMin && "bg-amber-500/[0.04] dark:bg-amber-500/[0.12] text-amber-950 dark:text-white",
+                            isSectionMin && colIdx === 0 && "text-center"
                           )}
                         >
-                          {col.cell 
+                          {( !isSectionMin || colIdx === 0 ) && (col.cell 
                             ? (col.cell as any)({ row: { original: row } }) 
-                            : <span className="block leading-tight">{String((row as any)[col.accessorKey] || "-")}</span>}
+                            : <span className="block leading-tight truncate">{String((row as any)[col.accessorKey] || "-")}</span>)}
                         </TableCell>
-                      ))
-                    )}
+                      ));
+                    })}
                   </TableRow>
                 ))
               ) : (
@@ -538,7 +683,7 @@ export default function AndresTrackerPage() {
 
                 <div className="flex-1 overflow-auto min-h-0 space-y-4">
                     <TabsContent value="transit" className="mt-0 focus-visible:ring-0 h-full">
-                        <TableView columns={transitColumns} data={filteredData} highlightColor="bg-green-500/[0.04] dark:bg-green-500/[0.12] text-green-950 dark:text-white" />
+                        <TableView columns={transitColumns} data={transitData} highlightColor="bg-green-500/[0.04] dark:bg-green-500/[0.12] text-green-950 dark:text-white" />
                     </TabsContent>
                     <TabsContent value="inventory" className="mt-0 focus-visible:ring-0 h-full">
                         <TableView columns={inventoryColumns} data={filteredData} highlightColor="bg-blue-500/[0.04] dark:bg-blue-500/[0.12] text-blue-950 dark:text-white" />
@@ -547,7 +692,7 @@ export default function AndresTrackerPage() {
                         <TableView columns={customsColumns} data={filteredData} highlightColor="bg-orange-500/[0.04] dark:bg-orange-500/[0.12] text-orange-950 dark:text-white" />
                     </TabsContent>
                     <TabsContent value="lsb" className="mt-0 focus-visible:ring-0 h-full">
-                        <TableView columns={lsbTransitColumns} data={filteredData} highlightColor="bg-purple-500/[0.04] dark:bg-purple-500/[0.12] text-purple-950 dark:text-white" />
+                        <TableView columns={lsbTransitColumns} data={transitData} highlightColor="bg-purple-500/[0.04] dark:bg-purple-500/[0.12] text-purple-950 dark:text-white" />
                     </TabsContent>
                 </div>
              </Tabs>
