@@ -40,7 +40,17 @@ export default function LoginPage() {
       }
 
       if (!response.ok) {
-        toast.error(result.error || "Invalid credentials");
+        // Explicitly handle different error scenarios
+        if (response.status === 403) {
+          toast.error(result.error || "Your account is inactive. Please contact your administrator.");
+        } else if (response.status === 401) {
+          toast.error("Invalid email or password. Please check your credentials.");
+        } else if (response.status === 404) {
+           // Should ideally not happen if API uses 401 for not found, but handling just in case
+           toast.error("User not found.");
+        } else {
+          toast.error(result.error || "An error occurred during login.");
+        }
         setIsLoading(false);
         return;
       }
