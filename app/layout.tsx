@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ActiveThemeProvider } from "@/components/active-theme";
+import { Toaster } from "@/components/ui/sonner";
 
 import { Poppins } from "next/font/google";
 
@@ -57,6 +58,7 @@ export default async function RootLayout({
         >
           <ActiveThemeProvider initialTheme={activeThemeValue}>
             {children}
+            <Toaster position="top-center" richColors />
           </ActiveThemeProvider>
         </ThemeProvider>
       </body>
