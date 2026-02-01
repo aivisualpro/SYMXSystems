@@ -132,7 +132,7 @@ export default function UserDetailsPage() {
   if (!user) return null;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-500">
+    <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-500" style={{ zoom: "90%" }}>
       {/* Header Card Refined to match '90% zoom' look at 100% */}
       <div className="relative rounded-3xl overflow-hidden bg-zinc-950 text-white shadow-xl flex flex-col md:flex-row min-h-[340px] border border-primary/10">
          {/* Edit Button - Top Right Corner Icon */}
