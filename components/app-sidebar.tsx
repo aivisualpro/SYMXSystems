@@ -48,13 +48,6 @@ const data = {
     email: "m@example.com",
     avatar: "/icon.png",
   },
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: IconDashboard,
-    },
-  ],
   navSecondary: [
     {
       title: "Settings",
@@ -68,6 +61,11 @@ const data = {
     },
   ],
   admin: [
+    {
+      name: "Dashboard",
+      url: "/dashboard",
+      icon: IconDashboard,
+    },
     {
       name: "Users",
       url: "/admin/users",
@@ -127,7 +125,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               size="lg"
               tooltip="Treetop Dashboard"
             >
-              <a href="/admin/customers" className="flex items-center justify-center p-2">
+              <a href="/admin/customers" className="flex items-center justify-center p-2 group-data-[collapsible=icon]:p-0">
                 <Image
                   src="/sidebar-logo.png"
                   alt="Company Logo"
@@ -150,7 +148,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
         <NavDocuments items={data.admin} label="Admin" />
         <NavDocuments items={data.management} label="Management" />
         <NavDocuments items={data.reports} label="Reports" />

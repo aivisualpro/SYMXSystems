@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,30 +14,47 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Security layer: salt and base64 for browser memory storage
-    const salt = "vida_buddies_secret_salt";
-    const userData = {
-      id: "679e2a44ea73db1789c62981", // Mock admin ID for profile navigation
-      email,
-      name: email.split('@')[0] === 'admin' ? 'Admin User' : email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1),
-      role: "Administrator",
-      avatar: "/logo.png",
-      timestamp: Date.now(),
-      authorized: true
-    };
+    setIsLoading(true);
     
     try {
+      // Logic for dynamic login: Fetch users and find the matching one
+      const response = await fetch("/api/admin/users");
+      const users = await response.json();
+      
+      const foundUser = users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+      
+      if (!foundUser) {
+        toast.error("Invalid credentials or user not found");
+        setIsLoading(false);
+        return;
+      }
+
+      // Security layer: salt and base64 for browser memory storage
+      const salt = "vida_buddies_secret_salt";
+      const userData = {
+        id: foundUser._id,
+        email: foundUser.email,
+        name: foundUser.name,
+        role: foundUser.AppRole || "Manager",
+        avatar: foundUser.profilePicture || "/logo.png",
+        timestamp: Date.now(),
+        authorized: true
+      };
+      
       const encodedSession = btoa(JSON.stringify(userData) + salt);
       sessionStorage.setItem("vb_auth_token", encodedSession);
       
-      // Redirect to dashboard
+      toast.success(`Welcome back, ${foundUser.name}`);
       router.push("/dashboard");
     } catch (err) {
-      console.error("Authentication error");
+      console.error("Authentication error:", err);
+      toast.error("System error. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 

@@ -403,6 +403,7 @@ export function DataTable({
 
   return (
     <Tabs
+      id="dashboard-tabs"
       defaultValue="outline"
       className="w-full flex-col justify-start gap-6"
     >
@@ -667,7 +668,7 @@ function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
         <div className="flex flex-col gap-4 overflow-y-auto px-4 text-sm">
           {!isMobile && (
             <>
-              <ChartContainer config={chartConfig}>
+              <ChartContainer id="table-cell-chart" config={chartConfig}>
                 <AreaChart
                   accessibilityLayer
                   data={chartData}

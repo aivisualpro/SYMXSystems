@@ -101,12 +101,7 @@ export function NavUser({
                   <AvatarFallback className="rounded-lg">VB</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-black uppercase text-[12px] tracking-tight">{user.name}</span>
-                    <span className="px-1.5 py-0.5 bg-blue-500/10 text-blue-500 text-[8px] font-black uppercase rounded border border-blue-500/20 tracking-tighter">
-                       {user.role}
-                    </span>
-                  </div>
+                  <span className="truncate font-black uppercase text-[12px] tracking-tight">{user.role}</span>
                   <span className="text-muted-foreground truncate text-[10px] font-medium leading-none mt-1">
                     {user.email}
                   </span>
