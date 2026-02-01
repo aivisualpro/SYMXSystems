@@ -211,9 +211,34 @@ export default function UsersPage() {
       accessorKey: "isActive",
       header: "Status",
       cell: ({ row }) => (
-        <span className={`px-2 py-1 rounded text-xs ${row.original.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-          {row.original.isActive ? 'Active' : 'Inactive'}
-        </span>
+        <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+           <Switch 
+              checked={row.original.isActive} 
+              onCheckedChange={async (checked) => {
+                 try {
+                    // Optimistic update
+                    const updatedData = data.map(u => 
+                      u._id === row.original._id ? { ...u, isActive: checked } : u
+                    );
+                    setData(updatedData);
+
+                    const response = await fetch(`/api/admin/users/${row.original._id}`, {
+                       method: "PUT",
+                       headers: { "Content-Type": "application/json" },
+                       body: JSON.stringify({ isActive: checked }),
+                    });
+                    
+                    if (!response.ok) {
+                       throw new Error("Failed");
+                    }
+                    toast.success(`User ${checked ? 'activated' : 'deactivated'}`);
+                 } catch (err) {
+                    toast.error("Failed to update status");
+                    fetchUsers(); // Revert on failure
+                 }
+              }}
+           />
+        </div>
       ),
     },
     {
@@ -227,7 +252,6 @@ export default function UsersPage() {
     },
     {
       id: "details",
-      header: "", // Icon only, no header text requested? Or just header "Details" with icon cell? Request: "Details (change this to icon only)" -> Interpreted as icon button.
       cell: ({ row }) => (
         <Button 
           variant="ghost" 
