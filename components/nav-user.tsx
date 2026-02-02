@@ -30,6 +30,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 
+import { Skeleton } from "@/components/ui/skeleton"
+
 export function NavUser({
   user: initialUser,
 }: {
@@ -43,6 +45,7 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const router = useRouter()
+  const [isLoaded, setIsLoaded] = useState(false)
   const [user, setUser] = useState({
     ...initialUser,
     id: "679e2a44ea73db1789c62981", // Fallback ID
@@ -65,6 +68,8 @@ export function NavUser({
         }
       } catch (e) {
         console.error("Failed to fetch session");
+      } finally {
+        setIsLoaded(true)
       }
     };
     fetchSession();
@@ -78,6 +83,21 @@ export function NavUser({
       console.error("Logout failed");
     }
   };
+
+  if (!isLoaded) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <div className="flex items-center gap-2 p-2">
+            <Skeleton className="h-8 w-8 rounded-lg" />
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+            </div>
+          </div>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
+  }
 
   return (
     <SidebarMenu>

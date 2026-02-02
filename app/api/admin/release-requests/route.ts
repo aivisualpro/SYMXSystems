@@ -11,8 +11,13 @@ export async function GET() {
   try {
     await connectToDatabase();
     const requests = await VidaReleaseRequest.find()
-      .populate("product")
       .populate("warehouse")
+      .populate("customer")
+      .populate("requestedBy")
+      .populate({
+         path: 'releaseOrderProducts.product',
+         model: 'VidaProduct'
+      })
       .sort({ createdAt: -1 });
     return NextResponse.json(requests);
   } catch (error: any) {
@@ -26,7 +31,14 @@ export async function POST(request: Request) {
     await connectToDatabase();
     
     const newRequest = await VidaReleaseRequest.create(body);
-    const populated = await newRequest.populate(["product", "warehouse"]);
+    const populated = await VidaReleaseRequest.findById(newRequest._id)
+      .populate("warehouse")
+      .populate("customer")
+      .populate("requestedBy")
+      .populate({
+         path: 'releaseOrderProducts.product',
+         model: 'VidaProduct'
+      });
     
     return NextResponse.json(populated, { status: 201 });
   } catch (error: any) {

@@ -5,13 +5,13 @@ import { SimpleDataTable } from "@/components/admin/simple-data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -22,75 +22,86 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
-import { Pencil, Trash, ClipboardList, Package, Warehouse, Calendar, User, Hash } from "lucide-react";
+import { Pencil, Trash, Plus, X, Calendar, Hash, Truck, MapPin } from "lucide-react";
 import { format } from "date-fns";
+
+interface IReleaseOrderProduct {
+  product: string;
+  qty: number;
+  lotSerial: string;
+}
 
 interface ReleaseRequest {
   _id: string;
   poNo: string;
-  product: any;
-  stockingQty: number;
-  trackingQty: number;
-  location: string;
-  lotNo: string;
-  serial: string;
-  expiryDate?: string;
+  date: string;
   warehouse: any;
+  requestedBy: any;
+  customer: any;
+  contact: string;
+  releaseOrderProducts: IReleaseOrderProduct[];
+  carrier: string;
+  requestedPickupTime?: string;
+  scheduledPickupDate?: string;
+  scheduledPickupTime?: string;
+  instructions?: string;
   createdBy: string;
   createdAt: string;
 }
 
-interface Product {
-  _id: string;
-  vbId: string;
-  name: string;
-}
-
-interface Warehouse {
-  _id: string;
-  name: string;
-}
-
 export default function ReleaseRequestsPage() {
   const [data, setData] = useState<ReleaseRequest[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ReleaseRequest | null>(null);
+  
+  // Search states for dropdowns
   const [productSearch, setProductSearch] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
 
-  const [formData, setFormData] = useState<Partial<ReleaseRequest>>({
+  const defaultFormData: Partial<ReleaseRequest> = {
     poNo: "",
-    product: "",
-    stockingQty: 0,
-    trackingQty: 0,
-    location: "",
-    lotNo: "",
-    serial: "",
-    expiryDate: "",
+    date: new Date().toISOString().split('T')[0],
     warehouse: "",
-    createdBy: "",
-  });
+    requestedBy: "",
+    customer: "",
+    contact: "",
+    releaseOrderProducts: [
+      { product: "", qty: 0, lotSerial: "" },
+      { product: "", qty: 0, lotSerial: "" },
+      { product: "", qty: 0, lotSerial: "" }
+    ],
+    carrier: "",
+    requestedPickupTime: "",
+    scheduledPickupDate: "",
+    scheduledPickupTime: "",
+    instructions: ""
+  };
+
+  const [formData, setFormData] = useState<Partial<ReleaseRequest>>(defaultFormData);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [requestsRes, productsRes, warehousesRes] = await Promise.all([
+      const [requestsRes, productsRes, warehousesRes, customersRes, usersRes] = await Promise.all([
         fetch("/api/admin/release-requests"),
         fetch("/api/admin/products"),
         fetch("/api/admin/warehouse"),
+        fetch("/api/admin/customers"), // Assuming endpoint exists
+        fetch("/api/admin/users"),     // Assuming endpoint exists
       ]);
 
-      const [requests, products, warehouses] = await Promise.all([
-        requestsRes.json(),
-        productsRes.json(),
-        warehousesRes.json(),
-      ]);
-
-      setData(requests);
-      setProducts(products.sort((a: any, b: any) => a.name.localeCompare(b.name)));
-      setWarehouses(warehouses.sort((a: any, b: any) => a.name.localeCompare(b.name)));
+      if (requestsRes.ok) setData(await requestsRes.json());
+      if (productsRes.ok) setProducts((await productsRes.json()).sort((a: any, b: any) => a.name.localeCompare(b.name)));
+      if (warehousesRes.ok) setWarehouses((await warehousesRes.json()).sort((a: any, b: any) => a.name.localeCompare(b.name)));
+      if (customersRes.ok) setCustomers(await customersRes.json());
+      if (usersRes.ok) setUsers(await usersRes.json());
+      
     } catch (error) {
       toast.error("Failed to fetch data");
     } finally {
@@ -110,10 +121,21 @@ export default function ReleaseRequestsPage() {
         : "/api/admin/release-requests";
       const method = editingItem ? "PUT" : "POST";
 
+      const payload = {
+        ...formData,
+        // Filter out empty rows if needed, or keep them to let backend handle validation
+        releaseOrderProducts: formData.releaseOrderProducts?.filter(p => p.product && p.product !== "")
+      };
+
+      if (!payload.releaseOrderProducts || payload.releaseOrderProducts.length === 0) {
+        toast.error("Please add at least one product");
+        return;
+      }
+
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) throw new Error("Failed to save");
@@ -123,6 +145,7 @@ export default function ReleaseRequestsPage() {
       fetchData();
     } catch (error) {
       toast.error("An error occurred while saving");
+      console.error(error);
     }
   };
 
@@ -143,18 +166,7 @@ export default function ReleaseRequestsPage() {
   const openAddDialog = () => {
     setEditingItem(null);
     setProductSearch("");
-    setFormData({
-      poNo: "",
-      product: "",
-      stockingQty: 0,
-      trackingQty: 0,
-      location: "",
-      lotNo: "",
-      serial: "",
-      expiryDate: "",
-      warehouse: "",
-      createdBy: "Adeel Jabbar", // Defaulting for now
-    });
+    setFormData(defaultFormData);
     setIsDialogOpen(true);
   };
 
@@ -163,12 +175,40 @@ export default function ReleaseRequestsPage() {
     setProductSearch("");
     setFormData({
       ...item,
-      product: item.product?._id || item.product,
       warehouse: item.warehouse?._id || item.warehouse,
-      expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString().split('T')[0] : "",
+      requestedBy: item.requestedBy?._id || item.requestedBy,
+      customer: item.customer?._id || item.customer,
+      date: item.date ? new Date(item.date).toISOString().split('T')[0] : "",
+      scheduledPickupDate: item.scheduledPickupDate ? new Date(item.scheduledPickupDate).toISOString().split('T')[0] : "",
+      releaseOrderProducts: item.releaseOrderProducts.length > 0 ? item.releaseOrderProducts : defaultFormData.releaseOrderProducts
     });
     setIsDialogOpen(true);
   };
+
+  // Helper for Product Rows
+  const updateProductRow = (index: number, field: keyof IReleaseOrderProduct, value: any) => {
+    const newRows = [...(formData.releaseOrderProducts || [])];
+    newRows[index] = { ...newRows[index], [field]: value };
+    setFormData({ ...formData, releaseOrderProducts: newRows });
+  };
+
+  const addProductRow = () => {
+    setFormData({
+      ...formData,
+      releaseOrderProducts: [...(formData.releaseOrderProducts || []), { product: "", qty: 0, lotSerial: "" }]
+    });
+  };
+
+  const removeProductRow = (index: number) => {
+    const newRows = [...(formData.releaseOrderProducts || [])];
+    if (newRows.length > 1) {
+        newRows.splice(index, 1);
+        setFormData({ ...formData, releaseOrderProducts: newRows });
+    }
+  };
+
+  // Get selected Customer object to show locations
+  const selectedCustomer = customers.find(c => c._id === formData.customer);
 
   const columns: ColumnDef<ReleaseRequest>[] = [
     {
@@ -176,30 +216,14 @@ export default function ReleaseRequestsPage() {
       header: "PO No",
     },
     {
-      accessorKey: "product.name",
-      header: "Product",
-      cell: ({ row }) => row.original.product?.name || "-",
+      accessorKey: "customer",
+      header: "Customer",
+      cell: ({ row }) => row.original.customer?.name || "-",
     },
     {
-      accessorKey: "trackingQty",
-      header: "Track Qty",
-    },
-    {
-      accessorKey: "location",
-      header: "Location",
-    },
-    {
-      accessorKey: "lotNo",
-      header: "Lot No",
-    },
-    {
-      accessorKey: "serial",
-      header: "Serial",
-    },
-    {
-      accessorKey: "expiryDate",
-      header: "Expiry",
-      cell: ({ row }) => row.original.expiryDate ? format(new Date(row.original.expiryDate), "MM/dd/yy") : "-",
+      accessorKey: "date",
+      header: "Date",
+      cell: ({ row }) => row.original.date ? format(new Date(row.original.date), "MMM dd, yyyy") : "-",
     },
     {
       accessorKey: "warehouse.name",
@@ -207,13 +231,13 @@ export default function ReleaseRequestsPage() {
       cell: ({ row }) => row.original.warehouse?.name || "-",
     },
     {
-      accessorKey: "createdBy",
-      header: "Created By",
+        accessorKey: "products",
+        header: "Items",
+        cell: ({ row }) => row.original.releaseOrderProducts?.length || 0,
     },
     {
-      accessorKey: "createdAt",
-      header: "Created At",
-      cell: ({ row }) => format(new Date(row.original.createdAt), "MMM dd, yyyy"),
+      accessorKey: "createdBy",
+      header: "Created By",
     },
     {
       id: "actions",
@@ -257,163 +281,254 @@ export default function ReleaseRequestsPage() {
       />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Release Request" : "Add Release Request"}</DialogTitle>
-            <DialogDescription>
-              Fill in the details for the inventory release request.
-            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="grid gap-6 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="poNo">PO Number</Label>
-                <div className="relative">
-                  <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="poNo"
-                    className="pl-9"
-                    value={formData.poNo || ""}
-                    onChange={(e) => setFormData({ ...formData, poNo: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-2 col-span-2">
-                <Label>Product</Label>
-                <Select 
-                  value={formData.product} 
-                  onValueChange={(val) => setFormData({ ...formData, product: val })}
-                >
-                  <SelectTrigger className="w-full h-auto min-h-[2.5rem] py-2 whitespace-normal text-left">
-                    <SelectValue placeholder="Select product" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    <div className="p-2 pb-1 sticky top-0 bg-background z-10">
-                      <Input
-                        placeholder="Search products..."
-                        value={productSearch}
-                        onChange={(e) => setProductSearch(e.target.value)}
-                        onKeyDown={(e) => e.stopPropagation()}
-                        className="h-8"
-                      />
+          
+          <form onSubmit={handleSubmit} className="space-y-8 py-4">
+            
+            {/* SECTION 1: General Info */}
+            <div className="space-y-4">
+                <h3 className="font-semibold text-lg flex items-center gap-2"><Hash className="w-4 h-4"/> General Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     {/* Row 1 */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Date</Label>
+                            <Input 
+                                type="date" 
+                                value={formData.date || ""}
+                                onChange={(e) => setFormData({...formData, date: e.target.value})}
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Warehouse</Label>
+                             <Select 
+                                value={formData.warehouse} 
+                                onValueChange={(val) => setFormData({ ...formData, warehouse: val })}
+                                required
+                             >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Warehouse" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {warehouses.map((w) => (
+                                        <SelectItem key={w._id} value={w._id}>{w.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
-                    {products
-                      .filter(p => 
-                        p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
-                        p.vbId.toLowerCase().includes(productSearch.toLowerCase())
-                      )
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((p) => (
-                        <SelectItem key={p._id} value={p._id}>
-                          {p.name} ({p.vbId})
-                        </SelectItem>
-                      ))}
-                    {products.filter(p => 
-                        p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
-                        p.vbId.toLowerCase().includes(productSearch.toLowerCase())
-                      ).length === 0 && (
-                      <div className="p-4 text-center text-sm text-muted-foreground">
-                        No products found
-                      </div>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="stockingQty">Stocking Qty</Label>
-                <Input
-                  id="stockingQty"
-                  type="number"
-                  value={formData.stockingQty || 0}
-                  onChange={(e) => setFormData({ ...formData, stockingQty: Number(e.target.value) })}
-                  required
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="trackingQty">Tracking Qty</Label>
-                <Input
-                  id="trackingQty"
-                  type="number"
-                  value={formData.trackingQty || 0}
-                  onChange={(e) => setFormData({ ...formData, trackingQty: Number(e.target.value) })}
-                  required
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  value={formData.location || ""}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="lotNo">Lot No</Label>
-                <Input
-                  id="lotNo"
-                  value={formData.lotNo || ""}
-                  onChange={(e) => setFormData({ ...formData, lotNo: e.target.value })}
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="serial">Serial</Label>
-                <Input
-                  id="serial"
-                  value={formData.serial || ""}
-                  onChange={(e) => setFormData({ ...formData, serial: e.target.value })}
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="expiryDate">Expiry Date</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="expiryDate"
-                    type="date"
-                    className="pl-9"
-                    value={formData.expiryDate || ""}
-                    onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                  />
+                    {/* Row 2 */}
+                    <div className="grid grid-cols-2 gap-4">
+                         <div className="space-y-2">
+                            <Label>Requested By</Label>
+                             <Select 
+                                value={formData.requestedBy} 
+                                onValueChange={(val) => setFormData({ ...formData, requestedBy: val })}
+                             >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select User" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {users.map((u) => (
+                                        <SelectItem key={u._id} value={u._id}>{u.name || u.email}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                         <div className="space-y-2">
+                            <Label>Customer</Label>
+                             <Select 
+                                value={formData.customer} 
+                                onValueChange={(val) => setFormData({ ...formData, customer: val, contact: "" })}
+                                required
+                             >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Customer" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {customers.map((c) => (
+                                        <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
                 </div>
-              </div>
 
-              <div className="grid gap-2">
-                <Label>Warehouse</Label>
-                <Select 
-                  value={formData.warehouse} 
-                  onValueChange={(val) => setFormData({ ...formData, warehouse: val })}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select warehouse" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {warehouses
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((w) => (
-                        <SelectItem key={w._id} value={w._id}>
-                          {w.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-end justify-end gap-2 pb-0.5">
-                <Button variant="outline" type="button" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">{editingItem ? "Save Changes" : "Submit"}</Button>
-              </div>
+                {/* Row 3 & 4 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label>Contact / Location</Label>
+                        <Select 
+                            value={formData.contact} 
+                            onValueChange={(val) => setFormData({ ...formData, contact: val })}
+                            disabled={!selectedCustomer}
+                         >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select Location" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {selectedCustomer?.location?.map((loc: any, i: number) => (
+                                    <SelectItem key={i} value={loc.locationName || `Loc ${i+1}`}>
+                                        {loc.locationName || loc.fullAddress || "Unknown Location"}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Customer PO #</Label>
+                        <Input 
+                             value={formData.poNo || ""}
+                             onChange={(e) => setFormData({...formData, poNo: e.target.value})}
+                             placeholder="Enter PO Number"
+                             required
+                        />
+                    </div>
+                </div>
             </div>
-            {/* Footer removed to inline buttons */}
+
+            {/* SECTION 2: Products */}
+            <div className="space-y-4">
+                 <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-lg flex items-center gap-2"><Trash className="w-4 h-4"/> Order Details</h3>
+                    <Button type="button" size="sm" variant="outline" onClick={addProductRow}>
+                        <Plus className="w-4 h-4 mr-2" /> Add Product
+                    </Button>
+                 </div>
+                 
+                 <div className="border rounded-md overflow-hidden">
+                    <table className="w-full text-sm">
+                        <thead className="bg-muted/50">
+                            <tr>
+                                <th className="p-3 text-left w-[40%]">Product</th>
+                                <th className="p-3 text-left w-[20%]">Release Qty</th>
+                                <th className="p-3 text-left w-[30%]">Lot / Serial #</th>
+                                <th className="p-3 w-[10%]"></th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {formData.releaseOrderProducts?.map((row, idx) => (
+                                <tr key={idx} className="bg-background">
+                                    <td className="p-2">
+                                         <Select 
+                                            value={row.product} 
+                                            onValueChange={(val) => updateProductRow(idx, 'product', val)}
+                                         >
+                                            <SelectTrigger className="w-full border-none shadow-none h-8">
+                                                <SelectValue placeholder="Search Product..." />
+                                            </SelectTrigger>
+                                            <SelectContent className="max-h-[300px]">
+                                                <div className="p-2 pb-1 sticky top-0 bg-background z-10">
+                                                  <Input
+                                                    placeholder="Filter products..."
+                                                    value={productSearch}
+                                                    onChange={(e) => setProductSearch(e.target.value)}
+                                                    onKeyDown={(e: any) => e.stopPropagation()}
+                                                    className="h-8"
+                                                  />
+                                                </div>
+                                                {products
+                                                  .filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                                                  .map((p) => (
+                                                    <SelectItem key={p._id} value={p._id}>{p.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </td>
+                                    <td className="p-2">
+                                        <Input 
+                                            type="number" 
+                                            value={row.qty}
+                                            onChange={(e) => updateProductRow(idx, 'qty', Number(e.target.value))}
+                                            className="h-8 shadow-none"
+                                        />
+                                    </td>
+                                    <td className="p-2">
+                                        <Input 
+                                            value={row.lotSerial}
+                                            onChange={(e) => updateProductRow(idx, 'lotSerial', e.target.value)}
+                                            className="h-8 shadow-none"
+                                        />
+                                    </td>
+                                    <td className="p-2 text-center">
+                                        <Button 
+                                            type="button" 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
+                                            onClick={() => removeProductRow(idx)}
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </Button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                 </div>
+            </div>
+
+            {/* SECTION 3: Pickup Details */}
+            <div className="space-y-4">
+                 <h3 className="font-semibold text-lg flex items-center gap-2"><Truck className="w-4 h-4"/> Pickup Information</h3>
+                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="space-y-2">
+                         <Label>Carrier</Label>
+                         <Input 
+                            value={formData.carrier || ""}
+                            onChange={(e) => setFormData({...formData, carrier: e.target.value})}
+                            placeholder="Carrier Name"
+                         />
+                      </div>
+                      <div className="space-y-2">
+                         <Label>Requested Date/Time</Label>
+                         <Input 
+                            type="datetime-local" 
+                            value={formData.requestedPickupTime ? new Date(formData.requestedPickupTime).toISOString().slice(0, 16) : ""}
+                            onChange={(e) => setFormData({...formData, requestedPickupTime: e.target.value})}
+                         />
+                      </div>
+                       <div className="space-y-2">
+                         <Label>Confirmed Date</Label>
+                         <Input 
+                            type="date"
+                            value={formData.scheduledPickupDate || ""}
+                            onChange={(e) => setFormData({...formData, scheduledPickupDate: e.target.value})}
+                         />
+                      </div>
+                       <div className="space-y-2">
+                         <Label>Confirmed Time</Label>
+                         <Input 
+                            type="time"
+                            value={formData.scheduledPickupTime || ""}
+                            onChange={(e) => setFormData({...formData, scheduledPickupTime: e.target.value})}
+                         />
+                      </div>
+                 </div>
+            </div>
+
+             {/* SECTION 4: Instructions */}
+            <div className="space-y-4">
+                 <h3 className="font-semibold text-lg flex items-center gap-2"><MapPin className="w-4 h-4"/> Instructions</h3>
+                 <Textarea 
+                    value={formData.instructions || ""}
+                    onChange={(e) => setFormData({...formData, instructions: e.target.value})}
+                    placeholder="Additional delivery or handling instructions..."
+                    className="min-h-[100px]"
+                 />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+                 <Button variant="outline" type="button" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                 <Button type="submit" size="lg" className="min-w-[150px]">
+                    {editingItem ? "Update Request" : "Create Request"}
+                 </Button>
+            </div>
           </form>
         </DialogContent>
       </Dialog>

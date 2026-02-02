@@ -46,6 +46,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-leaflet": "^5.0.0",
+    "react-quill-new": "^3.8.2",
     "recharts": "^3.6.0",
     "resend": "^6.9.1",
     "sonner": "^2.0.7",

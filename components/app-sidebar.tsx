@@ -46,9 +46,9 @@ import {
 
 const data = {
   user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/icon.png",
+    name: "",
+    email: "",
+    avatar: "",
   },
   navSecondary: [
     {
@@ -94,6 +94,11 @@ const data = {
       name: "Warehouse",
       url: "/inventory/warehouse",
       icon: IconBuildingWarehouse,
+    },
+    {
+      name: "Categories",
+      url: "/inventory/categories",
+      icon: IconListDetails,
     },
     {
       name: "Products",
