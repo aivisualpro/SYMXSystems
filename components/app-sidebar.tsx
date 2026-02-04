@@ -1,37 +1,27 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import Image from "next/image";
 import {
-  IconCamera,
-  IconChartBar,
+  IconBell,
+  IconBuildingStore,
+  IconBuildingWarehouse,
+  IconCheckbox,
+  IconClipboardList,
   IconDashboard,
-  IconDatabase,
-  IconFileAi,
   IconFileDescription,
-  IconFileWord,
-  IconFolder,
-  IconHelp,
-  IconInnerShadowTop,
   IconListDetails,
-  IconReport,
+  IconPackage,
+  IconRoute,
   IconSearch,
   IconSettings,
-  IconUsers,
-  IconUser,
-  IconBuildingStore,
-  IconTruck,
-  IconPackage,
-  IconBuildingWarehouse,
   IconShoppingCart,
-  IconClipboardList,
-  IconCheckbox,
-  IconRoute,
-  IconBell,
+  IconTruck,
+  IconUser,
 } from "@tabler/icons-react";
 
 import { NavDocuments } from "@/components/nav-documents";
-import { NavMain } from "@/components/nav-main";
 import { NavSecondary } from "@/components/nav-secondary";
 import { NavUser } from "@/components/nav-user";
 import {
@@ -137,6 +127,16 @@ const data = {
   ],
 };
 
+// Global cache for sidebar data to prevent refetching on navigation
+let sidebarCache: {
+  permissions: any[];
+  isAdmin: boolean;
+  shipmentCount: number;
+  timestamp: number;
+} | null = null;
+
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [reports, setReports] = React.useState(data.reports);
   const [permissions, setPermissions] = React.useState<any[]>([]);
@@ -145,11 +145,32 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   React.useEffect(() => {
     const fetchData = async () => {
+      // Check cache first
+      const now = Date.now();
+      if (sidebarCache && (now - sidebarCache.timestamp) < CACHE_DURATION) {
+        setPermissions(sidebarCache.permissions);
+        setIsAdmin(sidebarCache.isAdmin);
+        if (sidebarCache.shipmentCount > 0) {
+          setReports(prev => prev.map(item => 
+            item.name === "Live Shipments" 
+              ? { ...item, badge: sidebarCache!.shipmentCount } 
+              : item
+          ));
+        }
+        setLoadingPermissions(false);
+        return;
+      }
+
       try {
+        let shipmentCount = 0;
+        let fetchedPermissions: any[] = [];
+        let fetchedIsAdmin = false;
+
         // Fetch Live Shipments Count
         const countRes = await fetch('/api/admin/live-shipments/count');
         if (countRes.ok) {
           const { count } = await countRes.json();
+          shipmentCount = count;
           if (count > 0) {
             setReports(prev => prev.map(item => 
               item.name === "Live Shipments" 
@@ -163,16 +184,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         const permRes = await fetch('/api/user/permissions');
         if (permRes.ok) {
           const data = await permRes.json();
-          setPermissions(data.permissions || []);
-          // Check if Super Admin to bypass? 
-          // The user requirement says "Manager" can't see "Users".
-          // So we rely on the returned permissions list.
-          // If the role is "Super Admin", typically they have all permissions enabled in the DB anyway.
+          fetchedPermissions = data.permissions || [];
+          setPermissions(fetchedPermissions);
           
           if (data.role === 'Super Admin') {
-              setIsAdmin(true);
+            fetchedIsAdmin = true;
+            setIsAdmin(true);
           }
         }
+
+        // Update cache
+        sidebarCache = {
+          permissions: fetchedPermissions,
+          isAdmin: fetchedIsAdmin,
+          shipmentCount,
+          timestamp: Date.now(),
+        };
       } catch (error) {
         console.error("Failed to fetch sidebar data", error);
       } finally {
@@ -221,7 +248,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               size="lg"
               tooltip="Treetop Dashboard"
             >
-              <a href="/admin/customers" className="flex items-center justify-center p-2 group-data-[collapsible=icon]:p-0">
+              <Link href="/admin/customers" className="flex items-center justify-center p-2 group-data-[collapsible=icon]:p-0">
                 <Image
                   src="/sidebar-logo.png"
                   alt="Company Logo"
@@ -238,7 +265,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   className="object-contain w-8 h-8 hidden group-data-[collapsible=icon]:block"
                   priority
                 />
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

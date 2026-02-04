@@ -1,4 +1,5 @@
 import * as React from "react"
+import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { type Icon } from "@tabler/icons-react"
 import {
@@ -30,10 +31,10 @@ export function NavSecondary({
             return (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-                  <a href={item.url}>
+                  <Link href={item.url}>
                     <item.icon />
                     <span>{item.title}</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )

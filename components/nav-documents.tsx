@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   IconDots,
@@ -54,10 +55,10 @@ export function NavDocuments({
               isActive={pathname.startsWith(item.url)}
               tooltip={item.name}
             >
-              <a href={item.url}>
+              <Link href={item.url}>
                 <item.icon />
                 <span>{item.name}</span>
-              </a>
+              </Link>
             </SidebarMenuButton>
             {item.badge !== undefined && (
               <SidebarMenuBadge 
