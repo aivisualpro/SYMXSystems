@@ -72,6 +72,16 @@ export default function RolesSettingsPage() {
     fetchRoles();
   }, []);
 
+  useEffect(() => {
+    setRightContent(
+      <Button onClick={() => setIsCreateOpen(true)}>
+        <Plus className="mr-2 h-4 w-4" />
+        Add Role
+      </Button>
+    );
+    return () => setRightContent(null);
+  }, [setRightContent]);
+
   const handleCreateRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRoleName.trim()) return;
@@ -202,6 +212,10 @@ export default function RolesSettingsPage() {
             <div className="space-y-1">
               <h3 className="text-xl font-semibold">No roles found</h3>
               <p className="text-muted-foreground">Add a new role to manage user permissions.</p>
+              <Button onClick={() => setIsCreateOpen(true)} className="mt-4">
+                <Plus className="mr-2 h-4 w-4" />
+                Create Role
+              </Button>
             </div>
          </div>
       ) : (

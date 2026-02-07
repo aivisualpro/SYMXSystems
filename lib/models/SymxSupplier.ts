@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export interface IVidaCustomerLocation {
+export interface ISymxSupplierLocation {
   vbId: string;
   locationName?: string;
   street?: string;
@@ -10,16 +10,16 @@ export interface IVidaCustomerLocation {
   zip?: string;
   fullAddress?: string;
   website?: string;
-  imageUrl?: string;
+  fdaReg?: string;
 }
 
-export interface IVidaCustomer extends Document {
+export interface ISymxSupplier extends Document {
   vbId: string;
   name: string;
-  location: IVidaCustomerLocation[];
+  location: ISymxSupplierLocation[];
 }
 
-const VidaCustomerLocationSchema: Schema = new Schema({
+const SymxSupplierLocationSchema: Schema = new Schema({
   vbId: { type: String },
   locationName: { type: String },
   street: { type: String },
@@ -29,15 +29,15 @@ const VidaCustomerLocationSchema: Schema = new Schema({
   zip: { type: String },
   fullAddress: { type: String },
   website: { type: String },
-  imageUrl: { type: String },
+  fdaReg: { type: String },
 });
 
-const VidaCustomerSchema: Schema = new Schema({
+const SymxSupplierSchema: Schema = new Schema({
   vbId: { type: String, required: true, unique: true },
   name: { type: String, required: true },
-  location: [VidaCustomerLocationSchema],
+  location: [SymxSupplierLocationSchema],
 });
 
-const VidaCustomer: Model<IVidaCustomer> = mongoose.models.VidaCustomer || mongoose.model<IVidaCustomer>('VidaCustomer', VidaCustomerSchema);
+const SymxSupplier: Model<ISymxSupplier> = mongoose.models.SymxSupplier || mongoose.model<ISymxSupplier>('SymxSupplier', SymxSupplierSchema);
 
-export default VidaCustomer;
+export default SymxSupplier;

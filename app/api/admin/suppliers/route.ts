@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaSupplier from "@/lib/models/VidaSupplier";
+import SymxSupplier from "@/lib/models/SymxSupplier";
 
 export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
-    const items = await VidaSupplier.find({});
+    const items = await SymxSupplier.find({});
     return NextResponse.json(items);
   } catch (error) {
     console.error("Error fetching suppliers:", error);
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     await connectToDatabase();
     const body = await req.json();
-    const newItem = await VidaSupplier.create(body);
+    const newItem = await SymxSupplier.create(body);
     return NextResponse.json(newItem);
   } catch (error) {
     console.error("Error creating supplier:", error);

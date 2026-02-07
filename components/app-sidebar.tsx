@@ -5,7 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   IconBell,
-  IconBuildingStore,
+  IconBriefcase,
+
   IconBuildingWarehouse,
   IconCheckbox,
   IconClipboardList,
@@ -19,6 +20,7 @@ import {
   IconShoppingCart,
   IconTruck,
   IconUser,
+  IconUsers,
 } from "@tabler/icons-react";
 
 import { NavDocuments } from "@/components/nav-documents";
@@ -69,9 +71,9 @@ const data = {
       icon: IconUser,
     },
     {
-      name: "Customers",
-      url: "/admin/customers",
-      icon: IconBuildingStore,
+      name: "Employees",
+      url: "/admin/employees",
+      icon: IconUsers,
     },
     {
       name: "Suppliers",
@@ -248,23 +250,25 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               size="lg"
               tooltip="Treetop Dashboard"
             >
-              <Link href="/admin/customers" className="flex items-center justify-center p-2 group-data-[collapsible=icon]:p-0">
-                <Image
-                  src="/sidebar-logo.png"
-                  alt="Company Logo"
-                  width={150}
-                  height={50}
-                  className="object-contain w-auto h-8 group-data-[collapsible=icon]:hidden"
-                  priority
-                />
-                 <Image
-                  src="/sidebar-logo.png"
-                  alt="Company Logo"
-                  width={40}
-                  height={40}
-                  className="object-contain w-8 h-8 hidden group-data-[collapsible=icon]:block"
-                  priority
-                />
+              <Link href="/dashboard" className="flex items-center gap-3 p-2 group-data-[collapsible=icon]:justify-center overflow-hidden">
+                {/* Animated Icon Wrapper */}
+                <div className="relative flex-shrink-0 flex items-center justify-center">
+                   <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse-slow" />
+                   <Image
+                    src="/sidebar-icon.png"
+                    alt="SYMX"
+                    width={40}
+                    height={40}
+                    className="relative object-contain w-9 h-9 transition-transform duration-700 ease-in-out hover:rotate-[360deg] hover:scale-110"
+                    priority
+                  />
+                </div>
+                
+                {/* Text Label - Hidden in collapsed mode */}
+                <div className="flex flex-col group-data-[collapsible=icon]:hidden opacity-100 group-data-[collapsible=icon]:opacity-0 transition-opacity duration-300">
+                  <span className="font-bold text-base tracking-wide text-foreground leading-none">SYMX</span>
+                  <span className="text-[10px] font-medium text-muted-foreground tracking-wider uppercase leading-none mt-1">Systems</span>
+                </div>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

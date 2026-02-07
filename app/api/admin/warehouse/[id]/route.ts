@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaWarehouse from "@/lib/models/VidaWarehouse";
+import SymxWarehouse from "@/lib/models/SymxWarehouse";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     await connectToDatabase();
     const body = await req.json();
-    const updatedItem = await VidaWarehouse.findByIdAndUpdate(id, body, { new: true });
+    const updatedItem = await SymxWarehouse.findByIdAndUpdate(id, body, { new: true });
     if (!updatedItem) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
@@ -22,7 +22,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     const { id } = await params;
     await connectToDatabase();
-    const deletedItem = await VidaWarehouse.findByIdAndDelete(id);
+    const deletedItem = await SymxWarehouse.findByIdAndDelete(id);
     if (!deletedItem) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }

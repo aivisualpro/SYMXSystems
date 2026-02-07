@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export interface IVidaProduct extends Document {
+export interface ISymxProduct extends Document {
   vbId: string;
   name: string;
   description?: string;
@@ -23,13 +23,13 @@ export interface IVidaProduct extends Document {
   updatedAt?: Date;
 }
 
-const VidaProductSchema: Schema = new Schema({
+const SymxProductSchema: Schema = new Schema({
   vbId: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   description: { type: String },
   category: { type: String },
   subcategory: { type: String },
-  relatedProducts: [{ type: Schema.Types.ObjectId, ref: 'VidaProduct' }],
+  relatedProducts: [{ type: Schema.Types.ObjectId, ref: 'SymxProduct' }],
   tags: [String],
   costPrice: { type: Number },
   salePrice: { type: Number },
@@ -45,6 +45,6 @@ const VidaProductSchema: Schema = new Schema({
   sNo: { type: String }
 }, { timestamps: true });
 
-const VidaProduct: Model<IVidaProduct> = mongoose.models.VidaProduct || mongoose.model<IVidaProduct>('VidaProduct', VidaProductSchema);
+const SymxProduct: Model<ISymxProduct> = mongoose.models.SymxProduct || mongoose.model<ISymxProduct>('SymxProduct', SymxProductSchema);
 
-export default VidaProduct;
+export default SymxProduct;

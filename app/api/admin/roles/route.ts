@@ -1,18 +1,18 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaAppRole from "@/lib/models/VidaAppRole";
+import SymxAppRole from "@/lib/models/SymxAppRole";
 
-import VidaUser from "@/lib/models/VidaUser";
+import SymxUser from "@/lib/models/SymxUser";
 
 export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
     // Sort items by name by default
-    const roles = await VidaAppRole.find({}).sort({ name: 1 }).lean();
+    const roles = await SymxAppRole.find({}).sort({ name: 1 }).lean();
     
     // Aggregate user counts
-    const userCounts = await VidaUser.aggregate([
+    const userCounts = await SymxUser.aggregate([
       { $group: { _id: "$AppRole", count: { $sum: 1 } } }
     ]);
 
@@ -40,12 +40,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Check for duplicate
-    const existing = await VidaAppRole.findOne({ name: body.name });
+    const existing = await SymxAppRole.findOne({ name: body.name });
     if (existing) {
        return NextResponse.json({ error: "Role already exists" }, { status: 409 });
     }
 
-    const newItem = await VidaAppRole.create(body);
+    const newItem = await SymxAppRole.create(body);
     return NextResponse.json(newItem);
   } catch (error) {
     console.error("Error creating role:", error);

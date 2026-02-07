@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaProduct from "@/lib/models/VidaProduct";
+import SymxProduct from "@/lib/models/SymxProduct";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     await connectToDatabase();
     
-    const product = await VidaProduct.findById(id).populate('relatedProducts', 'name primaryImage salePrice');
+    const product = await SymxProduct.findById(id).populate('relatedProducts', 'name primaryImage salePrice');
     
     if (!product) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
@@ -25,7 +25,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     await connectToDatabase();
     const body = await req.json();
-    const updatedItem = await VidaProduct.findByIdAndUpdate(id, body, { new: true });
+    const updatedItem = await SymxProduct.findByIdAndUpdate(id, body, { new: true });
     if (!updatedItem) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
@@ -40,7 +40,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     const { id } = await params;
     await connectToDatabase();
-    const deletedItem = await VidaProduct.findByIdAndDelete(id);
+    const deletedItem = await SymxProduct.findByIdAndDelete(id);
     if (!deletedItem) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }

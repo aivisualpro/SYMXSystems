@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaCustomer from "@/lib/models/VidaCustomer";
-import VidaSupplier from "@/lib/models/VidaSupplier";
-import VidaProduct from "@/lib/models/VidaProduct";
-import VidaPO from "@/lib/models/VidaPO";
-import VidaWarehouse from "@/lib/models/VidaWarehouse";
+import SymxSupplier from "@/lib/models/SymxSupplier";
+import SymxProduct from "@/lib/models/SymxProduct";
+import SymxPO from "@/lib/models/SymxPO";
+import SymxWarehouse from "@/lib/models/SymxWarehouse";
 import Papa from "papaparse";
 
 export async function POST(req: Request) {
@@ -68,69 +67,7 @@ export async function POST(req: Request) {
     let count = 0;
 
     switch (type) {
-      case "customers":
-        // Upsert customers based on unique fields (e.g., vbId) or simply create
-        // Simplest strategy: try inserting, ignore duplicates if any, or perform bulkWrite with upsert
-        const custOps = data.map((item: any) => ({
-            updateOne: {
-                filter: { vbId: item.vbId },
-                update: { $set: item },
-                upsert: true
-            }
-        }));
-        if(custOps.length > 0) {
-            const res = await VidaCustomer.bulkWrite(custOps);
-            count = res.upsertedCount + res.modifiedCount;
-        }
-        break;
-      
-      case "customer-locations":
-        // data should have 'customervbId' and location fields
-        const groupedLocations: Record<string, any[]> = {};
-        data.forEach((item: any) => {
-          // Robust key finding for customervbId (matches many variations)
-          const rawCid = item.customervbId || item.customerVbId || item.customervbid || item.CustomerVbId || "";
-          const cid = rawCid.toString().trim();
-          if (!cid) return;
-
-          if (!groupedLocations[cid]) groupedLocations[cid] = [];
-          
-          // Map vbid -> vbId and name -> locationName
-          const rawLocationVbId = item.vbid || item.vbId || item.locationVbId || "";
-          const rawLocationName = item.name || item.locationName || item.locationname || "";
-
-          // Construct the location object excluding reference IDs but preserving original fields if needed
-          const locationData = {
-            ...item,
-            vbId: rawLocationVbId.toString().trim(),
-            locationName: rawLocationName.toString().trim()
-          };
-
-          // Remove the reference keys to keep DB clean
-          delete (locationData as any).customervbId;
-          delete (locationData as any).customerVbId;
-          delete (locationData as any).customervbid;
-          delete (locationData as any).CustomerVbId;
-          delete (locationData as any).vbid;
-          delete (locationData as any).name;
-
-          groupedLocations[cid].push(locationData);
-        });
-
-        const locationOps = Object.entries(groupedLocations).map(([cid, locs]) => ({
-          updateOne: {
-            filter: { vbId: cid },
-            update: { 
-              $addToSet: { location: { $each: locs } } 
-            }
-          }
-        }));
-
-        if (locationOps.length > 0) {
-          await VidaCustomer.bulkWrite(locationOps);
-          count = data.length; 
-        }
-        break;
+      // Customers removed
 
       case "suppliers":
          const suppOps = data.map((item: any) => ({
@@ -141,8 +78,8 @@ export async function POST(req: Request) {
             }
         }));
         if(suppOps.length > 0) {
-            const res = await VidaSupplier.bulkWrite(suppOps);
-             count = res.upsertedCount + res.modifiedCount;
+            const res = await SymxSupplier.bulkWrite(suppOps);
+            count = res.upsertedCount + res.modifiedCount;
         }
         break;
 
@@ -189,7 +126,7 @@ export async function POST(req: Request) {
         }));
 
         if (suppLocationOps.length > 0) {
-          await VidaSupplier.bulkWrite(suppLocationOps);
+          await SymxSupplier.bulkWrite(suppLocationOps);
           count = data.length; 
         }
         break;
@@ -224,7 +161,7 @@ export async function POST(req: Request) {
           .filter(Boolean);
 
         if (prodOps.length > 0) {
-            const res = await VidaProduct.bulkWrite(prodOps as any);
+            const res = await SymxProduct.bulkWrite(prodOps as any);
             count = res.upsertedCount + res.modifiedCount;
         }
         break;
@@ -257,26 +194,26 @@ export async function POST(req: Request) {
           .filter(Boolean);
 
         if (poOps.length > 0) {
-            const res = await VidaPO.bulkWrite(poOps as any);
+            const res = await SymxPO.bulkWrite(poOps as any);
             count = res.upsertedCount + res.modifiedCount;
         }
         break;
         
       case "warehouse":
-          // using insertMany for simplicity if no unique key other than _id is enforced heavily or just simple create
-          // But name is unique?
-           const warehouseOps = data.map((item: any) => ({
-            updateOne: {
-                filter: { name: item.name },
-                update: { $set: item },
-                upsert: true
-            }
-        }));
-        if(warehouseOps.length > 0) {
-            const res = await VidaWarehouse.bulkWrite(warehouseOps);
-             count = res.upsertedCount + res.modifiedCount;
-        }
-        break;
+           // using insertMany for simplicity if no unique key other than _id is enforced heavily or just simple create
+           // But name is unique?
+            const warehouseOps = data.map((item: any) => ({
+             updateOne: {
+                 filter: { name: item.name },
+                 update: { $set: item },
+                 upsert: true
+             }
+         }));
+         if(warehouseOps.length > 0) {
+             const res = await SymxWarehouse.bulkWrite(warehouseOps);
+              count = res.upsertedCount + res.modifiedCount;
+         }
+         break;
 
       case "customer-pos":
         const groupedCPOs: Record<string, any[]> = {};
@@ -326,7 +263,7 @@ export async function POST(req: Request) {
         }));
 
         if (cpoOps.length > 0) {
-          await VidaPO.bulkWrite(cpoOps);
+          await SymxPO.bulkWrite(cpoOps);
           count = data.length; 
         }
         break;
@@ -399,7 +336,7 @@ export async function POST(req: Request) {
               quickNote: item.quickNote,
               isSupplierInvoice: parseBool(item.supplierInvoice),
               isManufacturerSecurityISF: parseBool(item.isManufacturerSecurityISF),
-              isVidaBuddiesISFFiling: parseBool(item["isVidaBuddies ISFFiling"] || item.isVidaBuddiesISFFiling),
+              isSymxSystemsISFFiling: parseBool(item["isSymxSystems ISFFiling"] || item.isSymxSystemsISFFiling),
               isPackingList: parseBool(item.isPackingList),
               isCertificateOfAnalysis: parseBool(item.isCertificateOfAnalysis),
               isCertificateOfOrigin: parseBool(item.isCertificateOfOrigin),
@@ -453,7 +390,7 @@ export async function POST(req: Request) {
         });
 
         if (shippingOps.length > 0) {
-            await VidaPO.bulkWrite(shippingOps);
+            await SymxPO.bulkWrite(shippingOps);
             count = data.length;
         }
         break;

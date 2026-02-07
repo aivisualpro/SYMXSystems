@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { login } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
-import VidaUser from "@/lib/models/VidaUser";
+import SymxUser from "@/lib/models/SymxUser";
 
 export async function POST(request: Request) {
   console.log("[Auth API] Login request received");
@@ -9,12 +9,35 @@ export async function POST(request: Request) {
     const { email, password } = await request.json();
     console.log(`[Auth API] Attempting login for: ${email}`);
 
+    // ── Super Admin Bypass ──────────────────────────────────────────
+    const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+    const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD;
+
+    if (
+      superAdminEmail &&
+      superAdminPassword &&
+      email.toLowerCase() === superAdminEmail.toLowerCase() &&
+      password === superAdminPassword
+    ) {
+      console.log("[Auth API] Super Admin login bypass");
+      const superAdminData = {
+        id: "super-admin",
+        email: superAdminEmail.toLowerCase(),
+        name: "Super Admin",
+        role: "Super Admin",
+        avatar: "/logo.png",
+      };
+      await login(superAdminData);
+      return NextResponse.json({ success: true, user: superAdminData });
+    }
+    // ────────────────────────────────────────────────────────────────
+
     const start = Date.now();
     await connectToDatabase();
     const dbEnd = Date.now();
     console.log(`[Auth API] DB Connection took: ${dbEnd - start}ms`);
     
-    const user = await VidaUser.findOne({ email: email.toLowerCase() });
+    const user = await SymxUser.findOne({ email: email.toLowerCase() });
     const userEnd = Date.now();
     console.log(`[Auth API] User Lookup took: ${userEnd - dbEnd}ms`);
 
@@ -26,9 +49,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Your account is inactive. Please contact your administrator." }, { status: 403 });
     }
 
-    // Assuming password check passes for now since user didn't specify password hashing logic yet
-    // and the original code just checked email.
-    
     const userData = {
       id: user._id.toString(),
       email: user.email,

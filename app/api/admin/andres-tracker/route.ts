@@ -1,24 +1,22 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaPO from "@/lib/models/VidaPO";
-import VidaCustomer from "@/lib/models/VidaCustomer";
-import VidaSupplier from "@/lib/models/VidaSupplier";
-import VidaProduct from "@/lib/models/VidaProduct";
+import SymxPO from "@/lib/models/SymxPO";
+import SymxSupplier from "@/lib/models/SymxSupplier";
+import SymxProduct from "@/lib/models/SymxProduct";
 
 export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
     
     // Fetch all reference data in parallel
-    const [pos, customers, suppliers, products] = await Promise.all([
-      VidaPO.find({}),
-      VidaCustomer.find({}),
-      VidaSupplier.find({}),
-      VidaProduct.find({})
+    const [pos, suppliers, products] = await Promise.all([
+      SymxPO.find({}),
+      SymxSupplier.find({}),
+      SymxProduct.find({})
     ]);
 
     // Build lookup maps
-    const customerMap = new Map(customers.map(c => [c.vbId, c.name]));
     const productMap = new Map(products.map(p => [p.vbId, p.name]));
     
     // Build supplier location map
@@ -47,13 +45,13 @@ export async function GET(req: NextRequest) {
                 cpoId: cpo._id,
                 shipId: ship._id,
                 
-                // VidaPO data
+                // SymxPO data
                 vbpoNo: po.vbpoNo,
                 orderType: po.orderType,
                 
                 // CustomerPO data
                 poNo: cpo.poNo,
-                customer: cpo.customer ? (customerMap.get(cpo.customer) || cpo.customer) : "", 
+                customer: cpo.customer, // Removed lookup map
                 customerLocation: cpo.customerLocation,
                 customerPONo: cpo.customerPONo,
                 qtyOrdered: cpo.qtyOrdered,
@@ -83,7 +81,7 @@ export async function GET(req: NextRequest) {
                 // Customs fields
                 carrierBookingRef: ship.carrierBookingRef,
                 isManufacturerSecurityISF: ship.isManufacturerSecurityISF,
-                ISF: ship.isVidaBuddiesISFFiling ? "Yes" : "No", // Assuming ISF corresponds to this
+                ISF: ship.isSymxSystemsISFFiling ? "Yes" : "No", // Assuming ISF corresponds to this
                 trackingId: ship.updateShipmentTracking,
                 status: ship.status || "",
                 customsStatus: ship.isCustomsStatus ? "Cleared" : "Pending",

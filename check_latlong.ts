@@ -1,10 +1,10 @@
 import connectToDatabase from './lib/db';
-import VidaPO from './lib/models/VidaPO';
+import SymxPO from './lib/models/SymxPO';
 
 async function check() {
   await connectToDatabase();
   
-  const allInTransitStats = await VidaPO.aggregate([
+  const allInTransitStats = await SymxPO.aggregate([
     { $unwind: "$customerPO" },
     { $unwind: "$customerPO.shipping" },
     { 

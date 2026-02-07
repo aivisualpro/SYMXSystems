@@ -1,13 +1,13 @@
 
 import connectToDatabase from "@/lib/db";
-import VidaPO from "@/lib/models/VidaPO";
+import SymxPO from "@/lib/models/SymxPO";
 import { LiveShipmentsTable } from "@/components/admin/live-shipments-table";
 
 export default async function Page() {
   await connectToDatabase();
   
   // Aggregate to find all containers in Customer POs
-  const rawShipments = await VidaPO.find(
+  const rawShipments = await SymxPO.find(
     { "customerPO.shipping.containerNo": { $exists: true, $nin: ["", "TBD", "tbd"] } },
     { "customerPO.shipping": 1, "customerPO.customer": 1, "customerPO.customerPONo": 1, "customerPO.poNo": 1, "vbpoNo": 1 }
   ).lean();

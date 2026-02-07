@@ -1,7 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
-import VidaPO from '@/lib/models/VidaPO';
+import SymxPO from '@/lib/models/SymxPO';
 import { refreshContainerTracking } from '@/lib/shipment-refresh';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     await connectToDatabase();
 
     // Find all unique containers that are either IN_TRANSIT or PLANNED
-    const results = await VidaPO.aggregate([
+    const results = await SymxPO.aggregate([
       { $unwind: "$customerPO" },
       { $unwind: "$customerPO.shipping" },
       { 

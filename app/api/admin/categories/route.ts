@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaCategory from "@/lib/models/VidaCategory";
+import SymxCategory from "@/lib/models/SymxCategory";
 
 export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
-    const items = await VidaCategory.find({});
+    const items = await SymxCategory.find({});
     return NextResponse.json(items);
   } catch (error) {
     console.error("Error fetching categories:", error);
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     await connectToDatabase();
     const body = await req.json();
-    const newItem = await VidaCategory.create(body);
+    const newItem = await SymxCategory.create(body);
     return NextResponse.json(newItem);
   } catch (error) {
     console.error("Error creating category:", error);

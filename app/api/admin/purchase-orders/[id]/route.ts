@@ -1,7 +1,7 @@
 
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaPO from "@/lib/models/VidaPO";
+import SymxPO from "@/lib/models/SymxPO";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -11,7 +11,7 @@ export async function GET(req: Request, { params }: RouteParams) {
   try {
     await connectToDatabase();
     const { id } = await params;
-    const item = await VidaPO.findById(id);
+    const item = await SymxPO.findById(id);
 
     if (!item) {
       return NextResponse.json(
@@ -35,7 +35,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
     await connectToDatabase();
     const { id } = await params;
     const data = await req.json();
-    const updatedItem = await VidaPO.findByIdAndUpdate(id, data, {
+    const updatedItem = await SymxPO.findByIdAndUpdate(id, data, {
       new: true,
       runValidators: true,
     });
@@ -61,7 +61,7 @@ export async function DELETE(req: Request, { params }: RouteParams) {
   try {
     await connectToDatabase();
     const { id } = await params;
-    const deletedItem = await VidaPO.findByIdAndDelete(id);
+    const deletedItem = await SymxPO.findByIdAndDelete(id);
 
     if (!deletedItem) {
       return NextResponse.json(

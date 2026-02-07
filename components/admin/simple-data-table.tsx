@@ -42,6 +42,7 @@ interface SimpleDataTableProps<TData, TValue> {
   showColumnToggle?: boolean;
   title?: string;
   loading?: boolean;
+  initialColumnVisibility?: VisibilityState;
 }
 
 export function SimpleDataTable<TData, TValue>({
@@ -53,13 +54,14 @@ export function SimpleDataTable<TData, TValue>({
   showColumnToggle = true,
   title,
   loading,
+  initialColumnVisibility = {},
 }: SimpleDataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
   );
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+    React.useState<VisibilityState>(initialColumnVisibility);
   const [rowSelection, setRowSelection] = React.useState({});
 
   const table = useReactTable({

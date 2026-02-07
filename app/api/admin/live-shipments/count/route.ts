@@ -1,13 +1,13 @@
 
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
-import VidaPO from '@/lib/models/VidaPO';
+import SymxPO from '@/lib/models/SymxPO';
 
 export async function GET() {
   try {
     await connectToDatabase();
 
-    const results = await VidaPO.aggregate([
+    const results = await SymxPO.aggregate([
       { $unwind: "$customerPO" },
       { $unwind: "$customerPO.shipping" },
       { 

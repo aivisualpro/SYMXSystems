@@ -5,7 +5,7 @@ import { HeaderActionsProvider } from "@/components/providers/header-actions-pro
 import { cookies } from "next/headers";
 import { getSession, logout } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
-import VidaUser from "@/lib/models/VidaUser";
+import SymxUser from "@/lib/models/SymxUser";
 import { redirect } from "next/navigation";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +17,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       await connectToDatabase();
       const userId = String(session.id);
       if (userId.match(/^[0-9a-fA-F]{24}$/)) {
-        const user = await VidaUser.findById(userId).select('isActive');
+        const user = await SymxUser.findById(userId).select('isActive');
         if (!user || !user.isActive) {
           await logout();
           redirect("/login");

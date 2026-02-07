@@ -3,7 +3,7 @@ const { connect } = require('mongoose');
 const mongoose = require('mongoose');
 
 // Define minimal schema to query
-const VidaPOSchema = new mongoose.Schema({
+const SymxPOSchema = new mongoose.Schema({
   vbpoNo: String,
   customerPO: [{
     shipping: [{
@@ -15,14 +15,14 @@ const VidaPOSchema = new mongoose.Schema({
   }]
 }, { strict: false });
 
-const VidaPO = mongoose.models.VidaPO || mongoose.model('VidaPO', VidaPOSchema);
+const SymxPO = mongoose.models.SymxPO || mongoose.model('SymxPO', SymxPOSchema);
 
 async function inspect() {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log("Connected to DB");
 
-    const pos = await VidaPO.find({ 
+    const pos = await SymxPO.find({ 
         $or: [
             { "customerPO.shipping.svbid": "VB409-1-1" },
             { "customerPO.shipping.containerNo": "HLBU9775101" }

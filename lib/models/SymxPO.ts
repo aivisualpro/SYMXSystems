@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export interface IVidaPOShipping {
+export interface ISymxPOShipping {
   _id?: string;
   spoNo?: string;
   svbid?: string;
@@ -40,7 +40,7 @@ export interface IVidaPOShipping {
   quickNote?: string;
   isSupplierInvoice?: boolean;
   isManufacturerSecurityISF?: boolean;
-  isVidaBuddiesISFFiling?: boolean;
+  isSymxSystemsISFFiling?: boolean;
   isPackingList?: boolean;
   isCertificateOfAnalysis?: boolean;
   isCertificateOfOrigin?: boolean;
@@ -94,7 +94,7 @@ export interface IShippingTrackingRecord {
   timestamp: Date;
 }
 
-export interface IVidaPOCustomerPO {
+export interface ISymxPOCustomerPO {
   _id?: string;
   poNo?: string;
   customer?: string;
@@ -106,20 +106,20 @@ export interface IVidaPOCustomerPO {
   qtyReceived?: number;
   UOM?: string;
   warehouse?: string;
-  shipping: IVidaPOShipping[];
+  shipping: ISymxPOShipping[];
 }
 
-export interface IVidaPO extends Document {
+export interface ISymxPO extends Document {
   vbpoNo: string;
   orderType: string;
   date: Date;
   category: string;
   createdBy: string;
   createdAt: Date;
-  customerPO: IVidaPOCustomerPO[];
+  customerPO: ISymxPOCustomerPO[];
 }
 
-const VidaPOShippingSchema: Schema = new Schema({
+const SymxPOShippingSchema: Schema = new Schema({
   spoNo: { type: String },
   svbid: { type: String },
   supplier: { type: String },
@@ -158,7 +158,7 @@ const VidaPOShippingSchema: Schema = new Schema({
   quickNote: { type: String },
   isSupplierInvoice: { type: Boolean },
   isManufacturerSecurityISF: { type: Boolean },
-  isVidaBuddiesISFFiling: { type: Boolean },
+  isSymxSystemsISFFiling: { type: Boolean },
   isPackingList: { type: Boolean },
   isCertificateOfAnalysis: { type: Boolean },
   isCertificateOfOrigin: { type: Boolean },
@@ -211,9 +211,9 @@ const VidaPOShippingSchema: Schema = new Schema({
   }]
 });
 
-const VidaPOCustomerPOSchema: Schema = new Schema({
+const SymxPOCustomerPOSchema: Schema = new Schema({
   poNo: { type: String },
-  customer: { type: String }, // references VidaCustomer ideally, but String for now as per prompt
+  customer: { type: String }, // references SymxCustomer ideally, but String for now as per prompt
   customerLocation: { type: String },
   customerPONo: { type: String },
   customerPODate: { type: Date },
@@ -221,20 +221,20 @@ const VidaPOCustomerPOSchema: Schema = new Schema({
   qtyOrdered: { type: Number },
   qtyReceived: { type: Number },
   UOM: { type: String },
-  warehouse: { type: String }, // references VidaWarehouse
-  shipping: [VidaPOShippingSchema],
+  warehouse: { type: String }, // references SymxWarehouse
+  shipping: [SymxPOShippingSchema],
 });
 
-const VidaPOSchema: Schema = new Schema({
+const SymxPOSchema: Schema = new Schema({
   vbpoNo: { type: String, required: true, unique: true },
   orderType: { type: String },
   date: { type: Date, default: Date.now },
   category: { type: String },
   createdBy: { type: String }, // User ID or Name
   createdAt: { type: Date, default: Date.now },
-  customerPO: [VidaPOCustomerPOSchema],
+  customerPO: [SymxPOCustomerPOSchema],
 });
 
-const VidaPO: Model<IVidaPO> = mongoose.models.VidaPO || mongoose.model<IVidaPO>('VidaPO', VidaPOSchema);
+const SymxPO: Model<ISymxPO> = mongoose.models.SymxPO || mongoose.model<ISymxPO>('SymxPO', SymxPOSchema);
 
-export default VidaPO;
+export default SymxPO;

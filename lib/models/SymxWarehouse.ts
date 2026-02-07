@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export interface IVidaWarehouseContact {
+export interface ISymxWarehouseContact {
   name: string;
   email?: string;
   phone?: string;
@@ -8,13 +8,13 @@ export interface IVidaWarehouseContact {
   isPrimary: boolean;
 }
 
-export interface IVidaWarehouse extends Document {
+export interface ISymxWarehouse extends Document {
   name: string;
   address: string;
-  contacts: IVidaWarehouseContact[];
+  contacts: ISymxWarehouseContact[];
 }
 
-const VidaWarehouseContactSchema: Schema = new Schema({
+const SymxWarehouseContactSchema: Schema = new Schema({
   name: { type: String, required: true },
   email: { type: String },
   phone: { type: String },
@@ -22,12 +22,12 @@ const VidaWarehouseContactSchema: Schema = new Schema({
   isPrimary: { type: Boolean, default: false },
 });
 
-const VidaWarehouseSchema: Schema = new Schema({
+const SymxWarehouseSchema: Schema = new Schema({
   name: { type: String, required: true },
   address: { type: String },
-  contacts: [VidaWarehouseContactSchema],
+  contacts: [SymxWarehouseContactSchema],
 });
 
-const VidaWarehouse: Model<IVidaWarehouse> = mongoose.models.VidaWarehouse || mongoose.model<IVidaWarehouse>('VidaWarehouse', VidaWarehouseSchema);
+const SymxWarehouse: Model<ISymxWarehouse> = mongoose.models.SymxWarehouse || mongoose.model<ISymxWarehouse>('SymxWarehouse', SymxWarehouseSchema);
 
-export default VidaWarehouse;
+export default SymxWarehouse;

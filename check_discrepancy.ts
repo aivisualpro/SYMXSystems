@@ -1,11 +1,11 @@
 import connectToDatabase from './lib/db';
-import VidaPO from './lib/models/VidaPO';
+import SymxPO from './lib/models/SymxPO';
 
 async function check() {
   await connectToDatabase();
   
   // Sidebar logic (Count of unique containers IN_TRANSIT)
-  const sidebarCount = await VidaPO.aggregate([
+  const sidebarCount = await SymxPO.aggregate([
     { $unwind: "$customerPO" },
     { $unwind: "$customerPO.shipping" },
     { 
@@ -19,7 +19,7 @@ async function check() {
   ]);
   
   // Map logic pre-filter (Count of unique containers IN_TRANSIT that HAVE tracking records)
-  const mapCandidates = await VidaPO.aggregate([
+  const mapCandidates = await SymxPO.aggregate([
     { $unwind: "$customerPO" },
     { $unwind: "$customerPO.shipping" },
     { 
@@ -34,7 +34,7 @@ async function check() {
   ]);
 
    // Find the difference
-   const allInTransitV = await VidaPO.aggregate([
+   const allInTransitV = await SymxPO.aggregate([
     { $unwind: "$customerPO" },
     { $unwind: "$customerPO.shipping" },
     { 

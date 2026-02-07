@@ -105,7 +105,7 @@ interface Shipping {
   isDOCreated?: boolean;
   isSupplierInvoice?: boolean;
   isManufacturerSecurityISF?: boolean;
-  isVidaBuddiesISFFiling?: boolean;
+  isSymxSystemsISFFiling?: boolean;
   isPackingList?: boolean;
   isCertificateOfAnalysis?: boolean;
   isCertificateOfOrigin?: boolean;
@@ -1102,7 +1102,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
                              {/* VB ISF */}
                              <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">
                                 <p className="text-[9px] font-black uppercase text-muted-foreground">VB ISF</p>
-                                <Switch checked={!!ship.isVidaBuddiesISFFiling} onCheckedChange={(v) => updateShippingField(ship._poId, ship._cpoIdx, ship._shipIdx, 'isVidaBuddiesISFFiling', v)} className="scale-75 data-[state=checked]:bg-primary cursor-pointer" />
+                                <Switch checked={!!ship.isSymxSystemsISFFiling} onCheckedChange={(v) => updateShippingField(ship._poId, ship._cpoIdx, ship._shipIdx, 'isSymxSystemsISFFiling', v)} className="scale-75 data-[state=checked]:bg-primary cursor-pointer" />
                             </div>
                              {/* Pack List */}
                              <div className="flex flex-col items-center gap-1.5 text-center border-r border-border/50 px-1">

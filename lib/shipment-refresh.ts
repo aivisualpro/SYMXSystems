@@ -1,8 +1,8 @@
 
 import { getSeaRatesTracking } from '@/lib/searates';
 import connectToDatabase from '@/lib/db';
-import VidaPO from '@/lib/models/VidaPO';
-import VidaNotification from '@/lib/models/VidaNotification';
+import SymxPO from '@/lib/models/SymxPO';
+import SymxNotification from '@/lib/models/SymxNotification';
 
 export async function refreshContainerTracking(container: string) {
   if (!container) {
@@ -15,7 +15,7 @@ export async function refreshContainerTracking(container: string) {
   // 2. Connect to DB and find the relevant PO containing this container
   await connectToDatabase();
   
-  const pos = await VidaPO.find({
+  const pos = await SymxPO.find({
     "customerPO.shipping.containerNo": container
   }).lean();
 
@@ -74,7 +74,7 @@ export async function refreshContainerTracking(container: string) {
           }
 
           // Atomic update
-          await VidaPO.updateOne(
+          await SymxPO.updateOne(
             // @ts-ignore
             { _id: po._id, "customerPO.shipping.containerNo": container },
             { 
@@ -90,7 +90,7 @@ export async function refreshContainerTracking(container: string) {
           );
 
           // Create a notification
-          await VidaNotification.create({
+          await SymxNotification.create({
             title: `Shipment Update: ${container}`,
             message: `Status changed to ${newStatus}. Last event: ${data.last_event_status || 'N/A'} at ${data.last_event_location || 'unknown location'}.`,
             type: 'info',

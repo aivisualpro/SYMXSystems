@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaProduct from "@/lib/models/VidaProduct";
+import SymxProduct from "@/lib/models/SymxProduct";
 
 export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
-    const items = await VidaProduct.find({});
+    const items = await SymxProduct.find({});
     return NextResponse.json(items);
   } catch (error) {
     console.error("Error fetching products:", error);
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     await connectToDatabase();
     const body = await req.json();
-    const newItem = await VidaProduct.create(body);
+    const newItem = await SymxProduct.create(body);
     return NextResponse.json(newItem);
   } catch (error) {
     console.error("Error creating product:", error);

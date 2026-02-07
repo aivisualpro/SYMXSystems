@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     const result = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         {
-          folder: "vida-buddies/products",
+          folder: "symx-systems/products",
           resource_type: "auto",
         },
         (error, result) => {

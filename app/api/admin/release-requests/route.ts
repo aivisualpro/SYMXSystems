@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaReleaseRequest from "@/lib/models/VidaReleaseRequest";
-import VidaProduct from "@/lib/models/VidaProduct";
-import VidaWarehouse from "@/lib/models/VidaWarehouse";
+import SymxReleaseRequest from "@/lib/models/SymxReleaseRequest";
+import SymxProduct from "@/lib/models/SymxProduct";
+import SymxWarehouse from "@/lib/models/SymxWarehouse";
 import { getSession } from "@/lib/auth";
 
 // Force dynamic to ensure fresh data
@@ -11,13 +11,13 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     await connectToDatabase();
-    const requests = await VidaReleaseRequest.find()
+    const requests = await SymxReleaseRequest.find()
       .populate("warehouse")
       .populate("customer")
       .populate("requestedBy")
       .populate({
          path: 'releaseOrderProducts.product',
-         model: 'VidaProduct'
+         model: 'SymxProduct'
       })
       .sort({ createdAt: -1 });
     return NextResponse.json(requests);
@@ -40,14 +40,14 @@ export async function POST(request: Request) {
     // Auto-populate createdBy from session
     body.createdBy = session.name || session.email;
 
-    const newRequest = await VidaReleaseRequest.create(body);
-    const populated = await VidaReleaseRequest.findById(newRequest._id)
+    const newRequest = await SymxReleaseRequest.create(body);
+    const populated = await SymxReleaseRequest.findById(newRequest._id)
       .populate("warehouse")
       .populate("customer")
       .populate("requestedBy")
       .populate({
          path: 'releaseOrderProducts.product',
-         model: 'VidaProduct'
+         model: 'SymxProduct'
       });
     
     return NextResponse.json(populated, { status: 201 });

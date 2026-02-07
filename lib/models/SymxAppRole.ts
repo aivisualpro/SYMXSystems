@@ -14,7 +14,7 @@ export interface IPermission {
   fieldScope?: Record<string, boolean>;
 }
 
-export interface IVidaAppRole extends Document {
+export interface ISymxAppRole extends Document {
   name: string;
   description?: string;
   permissions: IPermission[];
@@ -35,7 +35,7 @@ const PermissionSchema = new Schema({
   fieldScope: { type: Map, of: Boolean }
 }, { _id: false });
 
-const VidaAppRoleSchema: Schema = new Schema({
+const SymxAppRoleSchema: Schema = new Schema({
   name: { type: String, required: true, unique: true },
   description: { type: String },
   permissions: [PermissionSchema],
@@ -43,6 +43,6 @@ const VidaAppRoleSchema: Schema = new Schema({
   timestamps: true
 });
 
-const VidaAppRole: Model<IVidaAppRole> = mongoose.models.VidaAppRole || mongoose.model<IVidaAppRole>('VidaAppRole', VidaAppRoleSchema);
+const SymxAppRole: Model<ISymxAppRole> = mongoose.models.SymxAppRole || mongoose.model<ISymxAppRole>('SymxAppRole', SymxAppRoleSchema);
 
-export default VidaAppRole;
+export default SymxAppRole;

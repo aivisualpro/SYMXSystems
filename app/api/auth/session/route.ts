@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession, logout } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
-import VidaUser from "@/lib/models/VidaUser";
+import SymxUser from "@/lib/models/SymxUser";
 
 export async function GET() {
   const session = await getSession();
@@ -9,8 +9,13 @@ export async function GET() {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
 
+  // Super Admin bypass — no DB user to look up
+  if (session.id === "super-admin") {
+    return NextResponse.json({ authenticated: true, user: session });
+  }
+
   await connectToDatabase();
-  const user = await VidaUser.findById(session.id);
+  const user = await SymxUser.findById(session.id);
 
   if (!user || !user.isActive) {
     await logout();

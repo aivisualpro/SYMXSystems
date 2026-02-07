@@ -1,15 +1,13 @@
-import VidaCustomer from './VidaCustomer';
-import VidaSupplier from './VidaSupplier';
-import VidaWarehouse from './VidaWarehouse';
-import VidaProduct from './VidaProduct';
-import VidaPO from './VidaPO';
-import VidaUser from './VidaUser';
+import SymxSupplier from './SymxSupplier';
+import SymxWarehouse from './SymxWarehouse';
+import SymxProduct from './SymxProduct';
+import SymxPO from './SymxPO';
+import SymxUser from './SymxUser';
 
 export {
-  VidaCustomer,
-  VidaSupplier,
-  VidaWarehouse,
-  VidaProduct,
-  VidaPO,
-  VidaUser,
+  SymxSupplier,
+  SymxWarehouse,
+  SymxProduct,
+  SymxPO,
+  SymxUser,
 };

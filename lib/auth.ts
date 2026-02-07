@@ -27,7 +27,7 @@ export async function login(userData: any) {
 
   // Save the session in a cookie
   const cookieStore = await cookies();
-  cookieStore.set("vb_session", session, { 
+  cookieStore.set("symx_session", session, { 
     expires, 
     httpOnly: true, 
     secure: process.env.NODE_ENV === "production", 
@@ -38,11 +38,11 @@ export async function login(userData: any) {
 
 export async function logout() {
   // Destroy the session
-  (await cookies()).set("vb_session", "", { expires: new Date(0), path: '/' });
+  (await cookies()).set("symx_session", "", { expires: new Date(0), path: '/' });
 }
 
 export async function getSession() {
-  const session = (await cookies()).get("vb_session")?.value;
+  const session = (await cookies()).get("symx_session")?.value;
   if (!session) return null;
   try {
     return await decryptLocal(session);
@@ -52,7 +52,7 @@ export async function getSession() {
 }
 
 export async function updateSession(request: NextRequest) {
-  const session = request.cookies.get("vb_session")?.value;
+  const session = request.cookies.get("symx_session")?.value;
   if (!session) return null;
 
   // Refresh the session so it doesn't expire
@@ -60,7 +60,7 @@ export async function updateSession(request: NextRequest) {
   parsed.expires = new Date(Date.now() + 2 * 60 * 60 * 1000);
   const res = NextResponse.next();
   res.cookies.set({
-    name: "vb_session",
+    name: "symx_session",
     value: await encrypt(parsed),
     httpOnly: true,
     expires: parsed.expires,

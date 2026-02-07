@@ -42,6 +42,7 @@ interface User {
   profilePicture?: string;
   signature?: string;
   isOnWebsite?: boolean;
+  location?: string;
 }
 
 export default function UserDetailsPage() {
@@ -137,12 +138,12 @@ export default function UserDetailsPage() {
          </div>
 
          {/* Left Side - Hero Image */}
-         <div className="w-full md:w-2/5 relative bg-zinc-900 min-h-[300px] md:min-h-full">
+         <div className="w-full md:w-2/5 relative bg-zinc-900 min-h-[300px] md:min-h-full p-6 flex items-center justify-center">
             {user.profilePicture ? (
                <img 
                   src={user.profilePicture} 
                   alt={user.name} 
-                  className="absolute inset-0 w-full h-full object-cover opacity-90" 
+                  className="w-full h-full object-cover rounded-2xl opacity-90 shadow-2xl relative z-10" 
                />
             ) : (
                <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
@@ -190,36 +191,56 @@ export default function UserDetailsPage() {
             </div>
 
             {/* Glass Grid */}
-            <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-3.5 grid grid-cols-2 gap-x-5 gap-y-2.5 items-stretch">
-               <div className="space-y-1">
-                  <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
-                     <Mail className="h-3 w-3 text-primary" /> Email
-                  </p>
-                  <p className="text-zinc-200 text-sm font-medium break-all">{user.email}</p>
+            {/* Glass Grid - Refactored for better vertical rhythm */}
+            <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-5 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+               
+               {/* Left Column: Contact & Location */}
+               <div className="space-y-5">
+                  <div className="space-y-1">
+                     <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                        <Mail className="h-3 w-3 text-primary" /> Email
+                     </p>
+                     <p className="text-zinc-200 text-sm font-medium break-all">{user.email}</p>
+                  </div>
+                  
+                  <div className="space-y-1">
+                     <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                        <MapPin className="h-3 w-3 text-primary" /> Address
+                     </p>
+                     <p className="text-zinc-200 text-sm font-medium">{user.address || "Not provided"}</p>
+                  </div>
+
+                  <div className="space-y-1">
+                     <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                        <Globe className="h-3 w-3 text-primary" /> Location
+                     </p>
+                     <p className="text-zinc-200 text-sm font-medium">{user.location || "Not provided"}</p>
+                  </div>
                </div>
-               <div className="space-y-1">
-                  <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
-                     <Phone className="h-3 w-3 text-primary" /> Phone
-                  </p>
-                  <p className="text-zinc-200 text-sm font-medium">{user.phone || "Not provided"}</p>
-               </div>
-               <div className="space-y-1">
-                  <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
-                     <MapPin className="h-3 w-3 text-primary" /> Address
-                  </p>
-                  <p className="text-zinc-200 text-sm font-medium">{user.address || "Not provided"}</p>
-               </div>
-               <div className="space-y-1 flex flex-col">
-                  <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
-                     <PenTool className="h-3 w-3 text-primary" /> Signature
-                  </p>
-                  {user.signature ? (
-                     <div className="bg-white/10 rounded flex-1 flex items-center justify-center px-2 min-h-[32px]">
-                        <img src={user.signature} alt="Signature" className="h-full max-h-8 w-auto object-contain invert brightness-200" />
-                     </div>
-                  ) : (
-                     <p className="text-zinc-600 text-xs italic">Not provided</p>
-                  )}
+
+               {/* Right Column: Phone & Signature */}
+               <div className="space-y-5 h-full flex flex-col">
+                  <div className="space-y-1">
+                     <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                        <Phone className="h-3 w-3 text-primary" /> Phone
+                     </p>
+                     <p className="text-zinc-200 text-sm font-medium">{user.phone || "Not provided"}</p>
+                  </div>
+
+                  <div className="space-y-1 flex flex-col flex-1">
+                     <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                        <PenTool className="h-3 w-3 text-primary" /> Signature
+                     </p>
+                     {user.signature ? (
+                        <div className="bg-white/10 rounded-lg flex-1 flex items-center justify-center p-4 min-h-[100px] border border-white/5">
+                           <img src={user.signature} alt="Signature" className="h-full w-auto max-h-[80px] object-contain invert brightness-200" />
+                        </div>
+                     ) : (
+                        <div className="bg-white/5 rounded-lg flex-1 flex items-center justify-center p-4 min-h-[100px] border border-dashed border-zinc-700">
+                           <p className="text-zinc-600 text-xs italic">Not provided</p>
+                        </div>
+                     )}
+                  </div>
                </div>
             </div>
 

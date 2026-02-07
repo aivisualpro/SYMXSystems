@@ -19,7 +19,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, Trash, User as UserIcon, Mail, Phone, FileText } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash, User as UserIcon, Mail, Phone, FileText, Eye } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,6 +46,7 @@ interface User {
   profilePicture?: string;
   signature?: string;
   isOnWebsite?: boolean;
+  location?: string;
 }
 
 export default function UsersPage() {
@@ -148,16 +149,22 @@ export default function UsersPage() {
     setIsSheetOpen(true);
   };
 
-  const openEditSheet = (item: User) => {
+  const openEditSheet = async (item: User) => {
     setEditingItem(item);
     setIsSheetOpen(true);
+
+    try {
+      const response = await fetch(`/api/admin/users/${item._id}`);
+      if (response.ok) {
+        const detailedUser = await response.json();
+        setEditingItem(detailedUser);
+      }
+    } catch (error) {
+      console.error("Failed to fetch user details", error);
+    }
   };
 
   const columns: ColumnDef<User>[] = [
-    {
-      accessorKey: "serialNo",
-      header: "Sno",
-    },
     {
       id: "profilePicture",
       header: "Image",
@@ -236,30 +243,8 @@ export default function UsersPage() {
       ),
     },
     {
-      accessorKey: "isOnWebsite",
-      header: "On Website",
-      cell: ({ row }) => (
-        <span className={`px-2 py-0.5 rounded text-[10px] font-normal ${row.original.isOnWebsite ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-muted text-muted-foreground'}`}>
-          {row.original.isOnWebsite ? 'On Website' : 'Hidden'}
-        </span>
-      ),
-    },
-    {
-      id: "details",
-      cell: ({ row }) => (
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => router.push(`/admin/users/${row.original._id}`)}
-          className="h-8 w-8 p-0"
-        >
-          <FileText className="h-4 w-4" />
-        </Button>
-      ),
-    },
-    {
       id: "actions",
-      header: "Actions",
+      header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const item = row.original;
         return (
@@ -272,6 +257,9 @@ export default function UsersPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => router.push(`/admin/users/${item._id}`)}>
+                  <Eye className="mr-2 h-4 w-4" /> View
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => openEditSheet(item)}>
                   <Pencil className="mr-2 h-4 w-4" /> Edit
                 </DropdownMenuItem>

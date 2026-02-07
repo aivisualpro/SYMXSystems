@@ -22,6 +22,8 @@ import {
   Lock, 
   Activity, 
   Hash, 
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,6 +42,7 @@ interface User {
   profilePicture?: string;
   signature?: string;
   isOnWebsite?: boolean;
+  location?: string;
 }
 
 interface UserFormProps {
@@ -64,8 +67,33 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
     profilePicture: "",
     signature: "",
     isOnWebsite: false,
+    location: "USA",
     ...initialData,
   });
+  // Sync formData when initialData changes (e.g., after fetching full details)
+  useEffect(() => {
+    if (initialData) {
+      setFormData((prev) => ({
+        ...prev,
+        ...initialData,
+        // Preserve password field if it was being typed, or ensure it doesn't overwrite with undefined
+      }));
+    }
+  }, [initialData]);
+
+  const [showPassword, setShowPassword] = useState(false);
+
+  const generatePassword = () => {
+    const length = 12;
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+    let password = "";
+    for (let i = 0, n = charset.length; i < length; ++i) {
+      password += charset.charAt(Math.floor(Math.random() * n));
+    }
+    setFormData(prev => ({ ...prev, password }));
+    setShowPassword(true);
+    toast.success("Secure password generated");
+  };
 
   const [availableRoles, setAvailableRoles] = useState<{name: string}[]>([]);
 
@@ -202,20 +230,7 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
       <div className="grid grid-cols-3 gap-8 py-4">
         {/* Left Column: 2/3 width */}
         <div className="col-span-2 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="serialNo">Serial No</Label>
-              <div className="relative">
-                <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="serialNo"
-                  className="pl-9"
-                  placeholder="001"
-                  value={formData.serialNo || ""}
-                  onChange={(e) => setFormData({ ...formData, serialNo: e.target.value })}
-                />
-              </div>
-            </div>
+          <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="name">Name</Label>
               <div className="relative">
@@ -230,9 +245,6 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
                 />
               </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
@@ -251,32 +263,64 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
             <div className="grid gap-2">
               <Label htmlFor="designation">Designation</Label>
               <div className="relative">
-                <Briefcase className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="designation"
-                  className="pl-9"
-                  placeholder="e.g. Sales Manager"
-                  value={formData.designation || ""}
-                  onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                />
+                <Briefcase className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground z-10" />
+                <div className="[&>button]:pl-9">
+                  <Select
+                    value={formData.designation}
+                    onValueChange={(value) => setFormData({ ...formData, designation: value })}
+                  >
+                    <SelectTrigger className="pl-9 w-full">
+                      <SelectValue placeholder="Select Designation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Owner">Owner</SelectItem>
+                      <SelectItem value="Manager">Manager</SelectItem>
+                      <SelectItem value="Dispatcher">Dispatcher</SelectItem>
+                      <SelectItem value="Accountant">Accountant</SelectItem>
+                      <SelectItem value="Sales">Sales</SelectItem>
+                      <SelectItem value="Driver">Driver</SelectItem>
+                      <SelectItem value="Staff">Staff</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Button 
+                   type="button" 
+                   variant="ghost" 
+                   size="sm" 
+                   className="h-auto p-0 text-xs text-primary hover:bg-transparent hover:text-primary/80"
+                   onClick={generatePassword}
+                >
+                   Suggest Password
+                </Button>
+              </div>
               <div className="relative">
                 <Lock className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="password"
-                  type="password"
-                  className="pl-9"
+                  type={showPassword ? "text" : "password"}
+                  className="pl-9 pr-9"
                   placeholder={initialData?._id ? "Leave empty to keep" : "******"}
                   value={formData.password || ""}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   required={!initialData?._id}
                 />
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full w-9 px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                    onClick={() => setShowPassword(!showPassword)}
+                >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -372,6 +416,38 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
                 value={formData.address || ""}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="location">Location</Label>
+              <Select
+                value={formData.location || "USA"}
+                onValueChange={(value) => setFormData({ ...formData, location: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USA">USA</SelectItem>
+                  <SelectItem value="Pakistan">Pakistan</SelectItem>
+                  <SelectItem value="Philippines">Philippines</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="serialNo">Serial No</Label>
+              <div className="relative">
+                <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="serialNo"
+                  className="pl-9"
+                  placeholder="001"
+                  value={formData.serialNo || ""}
+                  onChange={(e) => setFormData({ ...formData, serialNo: e.target.value })}
+                />
+              </div>
             </div>
           </div>
 

@@ -39,7 +39,7 @@ import { useHeaderActions } from "@/components/providers/header-actions-provider
 
 // Define the Modules structure based on the Sidebar
 const SYSTEM_MODULES = [
-  { group: "Admin", items: ["Dashboard", "Users", "Customers", "Suppliers", "Notifications", "Settings"] },
+  { group: "Admin", items: ["Dashboard", "Users", "Employees", "Suppliers", "Notifications", "Settings"] },
   { group: "Inventory", items: ["Warehouse", "Categories", "Products", "Release Requests"] },
   { group: "Management", items: ["Purchase Orders", "Quality Control"] },
   { group: "Reports", items: ["Andres Tracker", "Live Shipments"] },
@@ -57,7 +57,7 @@ const PERMISSION_ACTIONS = [
 // field definitions based on Mongoose schemas
 const MODULE_FIELDS: Record<string, string[]> = {
   Users: ["Name", "Email", "Phone", "Address", "Role", "Designation", "Bio Description", "Status", "Profile Picture", "Serial No"],
-  Customers: ["VB ID", "Name", "Locations", "Website", "Image"],
+  Employees: ["EE Code", "First Name", "Last Name", "Email", "Phone", "Address", "Status", "Role", "Hired Date", "Termination Date"],
   Suppliers: ["VB ID", "Name", "Locations", "FDA Registration"],
   Warehouse: ["Name", "Address", "Contacts"],
   Categories: ["Category Name", "Subcategories", "Is On Website"],
@@ -399,7 +399,7 @@ export default function RoleDetailsPage() {
                         
                         <div className="py-4">
                             {/* Mock Fields for demo */}
-                            {['Users', 'Customers', 'Products', 'Suppliers'].includes(selectedModule) ? (
+                            {['Users', 'Employees', 'Products', 'Suppliers'].includes(selectedModule) ? (
                                 <Table>
                                     <TableHeader>
                                         <TableRow>

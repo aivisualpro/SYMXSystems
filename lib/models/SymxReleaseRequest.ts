@@ -6,7 +6,7 @@ export interface IReleaseOrderProduct {
     lotSerial: string;
 }
 
-export interface IVidaReleaseRequest extends Document {
+export interface ISymxReleaseRequest extends Document {
   poNo: string; // Customer PO
   date: Date;
   warehouse: mongoose.Types.ObjectId;
@@ -27,17 +27,17 @@ export interface IVidaReleaseRequest extends Document {
 }
 
 const ReleaseOrderProductSchema = new Schema({
-    product: { type: Schema.Types.ObjectId, ref: 'VidaProduct', required: true },
+    product: { type: Schema.Types.ObjectId, ref: 'SymxProduct', required: true },
     qty: { type: Number, required: true },
     lotSerial: { type: String }
 });
 
-const VidaReleaseRequestSchema: Schema = new Schema({
+const SymxReleaseRequestSchema: Schema = new Schema({
   poNo: { type: String, required: true },
   date: { type: Date, default: Date.now },
-  warehouse: { type: Schema.Types.ObjectId, ref: 'VidaWarehouse', required: true },
-  requestedBy: { type: Schema.Types.ObjectId, ref: 'VidaUser' },
-  customer: { type: Schema.Types.ObjectId, ref: 'VidaCustomer' },
+  warehouse: { type: Schema.Types.ObjectId, ref: 'SymxWarehouse', required: true },
+  requestedBy: { type: Schema.Types.ObjectId, ref: 'SymxUser' },
+  customer: { type: Schema.Types.ObjectId, ref: 'SymxCustomer' },
   contact: { type: String },
 
   releaseOrderProducts: [ReleaseOrderProductSchema],
@@ -52,6 +52,6 @@ const VidaReleaseRequestSchema: Schema = new Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-const VidaReleaseRequest: Model<IVidaReleaseRequest> = mongoose.models.VidaReleaseRequest || mongoose.model<IVidaReleaseRequest>('VidaReleaseRequest', VidaReleaseRequestSchema);
+const SymxReleaseRequest: Model<ISymxReleaseRequest> = mongoose.models.SymxReleaseRequest || mongoose.model<ISymxReleaseRequest>('SymxReleaseRequest', SymxReleaseRequestSchema);
 
-export default VidaReleaseRequest;
+export default SymxReleaseRequest;

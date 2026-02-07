@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 
 import { cookies } from "next/headers";
 import connectToDatabase from "@/lib/db";
-import VidaPO from "@/lib/models/VidaPO";
+import SymxPO from "@/lib/models/SymxPO";
 import ShipmentMapWrapper from "@/components/dashboard/shipment-map-wrapper";
 
 export default async function Page() {
@@ -14,7 +14,7 @@ export default async function Page() {
   const defaultOpen = cookieStore.get("sidebar_state")?.value === "true";
 
   await connectToDatabase();
-  const chartData = await VidaPO.aggregate([
+  const chartData = await SymxPO.aggregate([
     { $unwind: "$customerPO" },
     { $unwind: "$customerPO.shipping" },
     {
@@ -51,7 +51,7 @@ export default async function Page() {
   ]);
 
   // Fetch locations for map
-  const activeShipments = await VidaPO.find(
+  const activeShipments = await SymxPO.find(
     { "customerPO.shipping.shippingTrackingRecords": { $exists: true, $not: { $size: 0 } } },
     { "customerPO.shipping": 1, "vbpoNo": 1 }
   ).lean();
@@ -103,7 +103,7 @@ export default async function Page() {
   });
 
   // Calculate total in-transit for comparison (matching sidebar logic)
-  const sidebarCountResult = await VidaPO.aggregate([
+  const sidebarCountResult = await SymxPO.aggregate([
       { $unwind: "$customerPO" },
       { $unwind: "$customerPO.shipping" },
       { 

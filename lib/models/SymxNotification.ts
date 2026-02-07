@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export interface IVidaNotification extends Document {
+export interface ISymxNotification extends Document {
   title: string;
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';
@@ -10,7 +10,7 @@ export interface IVidaNotification extends Document {
   link?: string; // e.g. /admin/live-shipments
 }
 
-const VidaNotificationSchema: Schema = new Schema({
+const SymxNotificationSchema: Schema = new Schema({
   title: { type: String, required: true },
   message: { type: String, required: true },
   type: { type: String, enum: ['info', 'success', 'warning', 'error'], default: 'info' },
@@ -20,6 +20,6 @@ const VidaNotificationSchema: Schema = new Schema({
   link: { type: String }
 });
 
-const VidaNotification: Model<IVidaNotification> = mongoose.models.VidaNotification || mongoose.model<IVidaNotification>('VidaNotification', VidaNotificationSchema);
+const SymxNotification: Model<ISymxNotification> = mongoose.models.SymxNotification || mongoose.model<ISymxNotification>('SymxNotification', SymxNotificationSchema);
 
-export default VidaNotification;
+export default SymxNotification;

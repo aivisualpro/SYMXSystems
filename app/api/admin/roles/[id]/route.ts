@@ -1,7 +1,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaAppRole from "@/lib/models/VidaAppRole";
+import SymxAppRole from "@/lib/models/SymxAppRole";
 
 export async function GET(
   req: NextRequest,
@@ -14,7 +14,7 @@ export async function GET(
     // To be safe we can await if params is a promise
     const { id } = await params;
 
-    const role = await VidaAppRole.findById(id);
+    const role = await SymxAppRole.findById(id);
     if (!role) {
       return NextResponse.json({ error: "Role not found" }, { status: 404 });
     }
@@ -34,7 +34,7 @@ export async function PUT(
     const { id } = await params;
     const body = await req.json();
 
-    const updatedRole = await VidaAppRole.findByIdAndUpdate(
+    const updatedRole = await SymxAppRole.findByIdAndUpdate(
       id,
       { $set: body },
       { new: true }
@@ -59,7 +59,7 @@ export async function DELETE(
     await connectToDatabase();
     const { id } = await params;
 
-    const deletedRole = await VidaAppRole.findByIdAndDelete(id);
+    const deletedRole = await SymxAppRole.findByIdAndDelete(id);
 
     if (!deletedRole) {
       return NextResponse.json({ error: "Role not found" }, { status: 404 });

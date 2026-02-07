@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export interface IVidaCategory extends Document {
+export interface ISymxCategory extends Document {
   category: string;
   isOnWebsite: boolean;
   subcategories: {
@@ -12,7 +12,7 @@ export interface IVidaCategory extends Document {
   updatedAt?: Date;
 }
 
-const VidaCategorySchema: Schema = new Schema({
+const SymxCategorySchema: Schema = new Schema({
   category: { type: String, required: true, unique: true },
   isOnWebsite: { type: Boolean, default: false },
   subcategories: [{
@@ -23,6 +23,6 @@ const VidaCategorySchema: Schema = new Schema({
   }]
 }, { timestamps: true });
 
-const VidaCategory: Model<IVidaCategory> = mongoose.models.VidaCategory || mongoose.model<IVidaCategory>('VidaCategory', VidaCategorySchema);
+const SymxCategory: Model<ISymxCategory> = mongoose.models.SymxCategory || mongoose.model<ISymxCategory>('SymxCategory', SymxCategorySchema);
 
-export default VidaCategory;
+export default SymxCategory;

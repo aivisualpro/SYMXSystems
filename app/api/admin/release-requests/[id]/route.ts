@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import VidaReleaseRequest from "@/lib/models/VidaReleaseRequest";
+import SymxReleaseRequest from "@/lib/models/SymxReleaseRequest";
 
 export async function GET(
   request: Request,
@@ -9,7 +9,7 @@ export async function GET(
   try {
     await connectToDatabase();
     const { id } = await params;
-    const requestItem = await VidaReleaseRequest.findById(id)
+    const requestItem = await SymxReleaseRequest.findById(id)
       .populate("product")
       .populate("warehouse");
       
@@ -31,7 +31,7 @@ export async function PUT(
     await connectToDatabase();
     const { id } = await params;
     
-    const updated = await VidaReleaseRequest.findByIdAndUpdate(id, body, {
+    const updated = await SymxReleaseRequest.findByIdAndUpdate(id, body, {
       new: true,
       runValidators: true,
     }).populate(["product", "warehouse"]);
@@ -52,7 +52,7 @@ export async function DELETE(
   try {
     await connectToDatabase();
     const { id } = await params;
-    const deleted = await VidaReleaseRequest.findByIdAndDelete(id);
+    const deleted = await SymxReleaseRequest.findByIdAndDelete(id);
     
     if (!deleted) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
