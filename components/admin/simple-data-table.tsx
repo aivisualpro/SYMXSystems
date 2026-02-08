@@ -12,6 +12,8 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
 } from "@tanstack/react-table";
 import { ChevronDown, Plus } from "lucide-react";
 
@@ -43,6 +45,8 @@ interface SimpleDataTableProps<TData, TValue> {
   title?: string;
   loading?: boolean;
   initialColumnVisibility?: VisibilityState;
+  extraActions?: React.ReactNode;
+  enableGlobalFilter?: boolean;
 }
 
 export function SimpleDataTable<TData, TValue>({
@@ -55,6 +59,8 @@ export function SimpleDataTable<TData, TValue>({
   title,
   loading,
   initialColumnVisibility = {},
+  extraActions,
+  enableGlobalFilter = false,
 }: SimpleDataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -63,6 +69,7 @@ export function SimpleDataTable<TData, TValue>({
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>(initialColumnVisibility);
   const [rowSelection, setRowSelection] = React.useState({});
+  const [globalFilter, setGlobalFilter] = React.useState("");
 
   const table = useReactTable({
     data,
@@ -75,11 +82,14 @@ export function SimpleDataTable<TData, TValue>({
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
+    onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn: "auto",
     state: {
       sorting,
       columnFilters,
       columnVisibility,
       rowSelection,
+      globalFilter,
     },
     initialState: {
       pagination: {
@@ -93,7 +103,16 @@ export function SimpleDataTable<TData, TValue>({
   React.useEffect(() => {
     setActions(
       <div className="flex items-center gap-2">
-        {searchKey && (
+        {extraActions}
+        {enableGlobalFilter && (
+          <Input
+            placeholder="Search all fields..."
+            value={globalFilter ?? ""}
+            onChange={(event) => setGlobalFilter(event.target.value)}
+            className="max-w-sm h-8"
+          />
+        )}
+        {searchKey && !enableGlobalFilter && (
           <Input
             placeholder={`Filter by ${searchKey}...`}
             value={
@@ -160,6 +179,9 @@ export function SimpleDataTable<TData, TValue>({
     searchKey,
     onAdd,
     showColumnToggle,
+    extraActions,
+    globalFilter,
+    enableGlobalFilter,
     // Add these dependencies to ensure updates when filters/visibility change
     // eslint-disable-next-line react-hooks/exhaustive-deps
     JSON.stringify(table.getState().columnFilters), 

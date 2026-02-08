@@ -13,6 +13,7 @@ import { ImageUpload } from "@/components/admin/image-upload";
 import { FileUpload } from "@/components/admin/file-upload";
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
 import { Loader2 } from "lucide-react";
+import { formatPhoneNumber } from "@/lib/utils";
 
 type FormEmployee = Omit<Partial<ISymxEmployee>, '_id'> & { _id?: string };
 
@@ -115,7 +116,7 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
                   <Input 
                     id="phoneNumber" 
                     value={formData.phoneNumber || ""} 
-                    onChange={(e) => handleChange("phoneNumber", e.target.value)} 
+                    onChange={(e) => handleChange("phoneNumber", formatPhoneNumber(e.target.value))} 
                   />
                 </div>
 

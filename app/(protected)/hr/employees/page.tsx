@@ -1,15 +1,19 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import * as React from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { SimpleDataTable } from "@/components/admin/simple-data-table";
+import { formatPhoneNumber } from "@/lib/utils";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
 import { MoreHorizontal, Pencil, Trash, User, Eye } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +29,7 @@ export default function EmployeesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [showTerminated, setShowTerminated] = useState(false);
   const router = useRouter();
 
   const fetchEmployees = async () => {
@@ -32,8 +37,12 @@ export default function EmployeesPage() {
     try {
       const response = await fetch("/api/admin/employees");
       if (response.ok) {
-        const employees = await response.json();
-        setData(employees);
+        const employees: ISymxEmployee[] = await response.json();
+        // Sort alphabetically by first name
+        const sorted = [...employees].sort((a, b) => 
+          (a.firstName || "").localeCompare(b.firstName || "")
+        );
+        setData(sorted);
       } else {
         toast.error("Failed to fetch employees");
       }
@@ -126,7 +135,11 @@ export default function EmployeesPage() {
     { accessorKey: "firstName", header: "First Name" },
     { accessorKey: "lastName", header: "Last Name" },
     { accessorKey: "email", header: "Email" },
-    { accessorKey: "phoneNumber", header: "Phone" },
+    { 
+      accessorKey: "phoneNumber", 
+      header: "Phone",
+      cell: ({ row }) => formatPhoneNumber(row.original.phoneNumber || "")
+    },
     { accessorKey: "type", header: "Type" },
     {
       accessorKey: "status",
@@ -278,18 +291,34 @@ export default function EmployeesPage() {
     exitInterviewNotes: false,
   };
 
+  const filteredData = React.useMemo(() => {
+    if (showTerminated) return data;
+    return data.filter(emp => emp.status !== 'Terminated');
+  }, [data, showTerminated]);
+
   return (
     <div className="w-full h-full">
       <SimpleDataTable 
-         data={data} 
+         data={filteredData} 
          columns={columns} 
          title="Employees" 
          onAdd={openAddDialog} 
-         onRowClick={(item) => router.push(`/hr/employees/${item._id}`)}
          loading={loading}
          showColumnToggle={true}
          initialColumnVisibility={initialVisibility}
-         searchKey="email"
+         enableGlobalFilter={true}
+         extraActions={
+           <div className="flex items-center space-x-2 mr-2">
+             <Switch 
+               id="show-terminated" 
+               checked={showTerminated} 
+               onCheckedChange={setShowTerminated}
+             />
+             <Label htmlFor="show-terminated" className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap">
+               Include Terminated
+             </Label>
+           </div>
+         }
       />
       
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

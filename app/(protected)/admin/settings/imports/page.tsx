@@ -239,7 +239,7 @@ export default function ImportsSettingsPage() {
             <Users className="h-8 w-8 text-primary" />
           </div>
           <div className="text-center">
-             <span className="font-semibold text-lg">Import Employees CSV</span>
+             <span className="font-semibold text-lg">Employees</span>
              <p className="text-xs text-muted-foreground mt-1">Updates existing or creates new employees</p>
           </div>
         </Button>

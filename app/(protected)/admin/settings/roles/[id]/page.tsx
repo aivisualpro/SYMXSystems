@@ -20,7 +20,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Save, Loader2, CheckCircle2, Shield, AlertTriangle, Search } from "lucide-react";
+import { 
+  ArrowLeft, 
+  Save, 
+  Loader2, 
+  CheckCircle2, 
+  Shield, 
+  AlertTriangle, 
+  Search, 
+  ChevronDown, 
+  ChevronRight 
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -36,10 +46,28 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { cn } from "@/lib/utils";
 
 // Define the Modules structure based on the Sidebar
-const SYSTEM_MODULES = [
-  { group: "Admin", items: ["Dashboard", "Users", "Employees", "Notifications", "Settings"] },
+const SYSTEM_MODULES: any[] = [
+  { 
+    group: "Application Modules", 
+    items: [
+      { name: "Dashboard" },
+      { name: "Owner", subModules: ["Efficiency Company", "Dropdowns", "General Settings", "Menu", "App Users", "Expenses"] },
+      { name: "Dispatch", subModules: ["Roster", "Performance Dashboard", "Opening", "Attendance", "Repairs", "Loadout", "Time", "Schedule", "Closing", "Contacts", "Verbal Coaching", "Messaging", "Efficiency", "Routes", "Incidents", "Coaching", "Checklist"] },
+      { name: "Scheduling" },
+      { name: "Everyday" },
+      { name: "Fleet" },
+      { name: "HR", subModules: ["Employees", "Employee Performance", "Reimbursement", "Claims Dashboard", "Employee Audit", "HR Tickets", "Timesheet", "Interviews", "Onboarding", "Hired", "Uniforms", "Terminations"] },
+      { name: "Incidents" }, 
+      { name: "Insurance" }, 
+      { name: "Manager", subModules: ["Routes Manager", "Punch Ins Manager", "Punch Ins Import", "RTS Manager", "Rescue Manager", "Driver Efficiency Manager", "Performance Summary", "Scorecard Performance", "Employee Ranking", "HR Tickets Managers", "Notices", "Work Hours Compliance", "Paycom Schedule Export", "Work Summary Tool", "Fleet Summary", "Repairs", "Scorecard History", "Weekly ScoreCard", "Lunch Compliance"] },
+      { name: "Reports", subModules: ["Employee Performance Dashboard"] },
+      { name: "Notifications" }, 
+      { name: "Settings" }
+    ] 
+  },
 ];
 
 const PERMISSION_ACTIONS = [
@@ -57,7 +85,12 @@ const MODULE_FIELDS: Record<string, string[]> = {
   Employees: ["EE Code", "First Name", "Last Name", "Email", "Phone", "Address", "Status", "Role", "Hired Date", "Termination Date"],
   Dashboard: ["Overview Stats", "Recent Activity", "Performance Charts", "Notifications Preview"],
   Settings: ["General Settings", "Roles Management", "Import/Export", "System Config"],
-  Notifications: ["Email Alerts", "System Notifications", "Push Notifications"]
+  Notifications: ["Email Alerts", "System Notifications", "Push Notifications"],
+  Owner: ["Overview", "Vitals", "Reports", "Revenue", "Profitability"],
+  Dispatch: ["Master Feed", "Schedule Board", "Driver View", "Job Tickets"],
+  HR: ["Employee List", "Attendance", "Payroll", "Appraisals"],
+  Manager: ["Weekly Scorecard", "Performance Tracking", "Goal Management"],
+  Reports: ["Financials", "Operational", "Inventory", "Payroll"]
 };
 
 export default function RoleDetailsPage() {
@@ -69,6 +102,13 @@ export default function RoleDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedModule, setSelectedModule] = useState<string>("");
+  const [expandedModules, setExpandedModules] = useState<string[]>([]);
+
+  const toggleExpand = (name: string) => {
+    setExpandedModules(prev => 
+      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+    );
+  };
 
   // Fetch role details
   useEffect(() => {
@@ -273,50 +313,105 @@ export default function RoleDetailsPage() {
               </TableHeader>
               <TableBody>
                 {SYSTEM_MODULES.map((group) => {
-                  // Filter items based on search query
-                  const filteredItems = group.items.filter(item => 
-                    item.toLowerCase().includes(searchQuery.toLowerCase())
-                  );
-
-                  if (filteredItems.length === 0) return null;
-
                   return (
-                  <React.Fragment key={group.group}>
-                    <TableRow className="bg-muted/30 hover:bg-muted/30">
-                      <TableCell colSpan={7} className="font-semibold text-xs text-muted-foreground py-2 uppercase tracking-wider pl-4">
-                        {group.group}
-                      </TableCell>
-                    </TableRow>
-                    {filteredItems.map((moduleName) => {
-                       // Helper to access checking logic efficiently
-                       const perm = getPermission(moduleName);
-                       
-                       return (
-                        <TableRow key={moduleName} className="hover:bg-muted/50">
-                          <TableCell className="font-medium">{moduleName}</TableCell>
-                          {PERMISSION_ACTIONS.map((action) => {
-                             const isEnabled = perm ? perm.actions[action.key] : true;
-                             // Check if view is enabled (default to true if perm missing, matching previous logic)
-                             const isViewEnabled = perm ? perm.actions.view : true;
-                             const isDisabled = action.key !== 'view' && !isViewEnabled;
-                             
-                             return (
-                               <TableCell key={action.key} className="text-center">
-                                 <div className="flex justify-center">
-                                   <Switch 
-                                      checked={isEnabled}
-                                      disabled={isDisabled}
-                                      onCheckedChange={() => handleToggleAction(moduleName, action.key, isEnabled)}
-                                   />
-                                 </div>
-                               </TableCell>
-                             );
-                          })}
-                        </TableRow>
-                       );
-                    })}
-                  </React.Fragment>
-                )})}
+                    <React.Fragment key={group.group}>
+                      {group.items.map((item: any) => {
+                        const moduleName = typeof item === 'string' ? item : item.name;
+                        const subModules = item.subModules || [];
+                        const hasSubModules = subModules.length > 0;
+                        const isExpanded = expandedModules.includes(moduleName);
+                        
+                        // Filter logic
+                        if (searchQuery && !moduleName.toLowerCase().includes(searchQuery.toLowerCase())) {
+                          const hasMatchingChild = subModules.some((sm: string) => sm.toLowerCase().includes(searchQuery.toLowerCase()));
+                          if (!hasMatchingChild) return null;
+                        }
+
+                        const perm = getPermission(moduleName);
+                        const isViewEnabled = perm ? perm.actions.view : true;
+
+                        return (
+                          <React.Fragment key={moduleName}>
+                            {/* Parent Row */}
+                            <TableRow 
+                              className={cn(
+                                "hover:bg-muted/50 transition-colors", 
+                                hasSubModules && isViewEnabled && "cursor-pointer",
+                                hasSubModules && "bg-muted/10"
+                              )}
+                              onClick={() => {
+                                if (hasSubModules && isViewEnabled) toggleExpand(moduleName);
+                              }}
+                            >
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2">
+                                  {hasSubModules && (
+                                    <div className="h-6 w-6 flex items-center justify-center">
+                                      {isExpanded && isViewEnabled ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                    </div>
+                                  )}
+                                  <span className={cn(!hasSubModules && "ml-8")}>{moduleName}</span>
+                                </div>
+                              </TableCell>
+                              
+                              {/* Parent Toggles */}
+                              {PERMISSION_ACTIONS.map((action) => {
+                                if (hasSubModules && action.key !== 'view') {
+                                  return <TableCell key={action.key} className="text-center">-</TableCell>;
+                                }
+
+                                const isEnabled = perm ? perm.actions[action.key] : true;
+                                const isDisabled = action.key !== 'view' && !isViewEnabled;
+                                
+                                return (
+                                  <TableCell key={action.key} className="text-center">
+                                    <div className="flex justify-center">
+                                      <Switch 
+                                         checked={isEnabled}
+                                         disabled={isDisabled}
+                                         onCheckedChange={() => handleToggleAction(moduleName, action.key, isEnabled)}
+                                      />
+                                    </div>
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+
+                            {/* Sub Modules Rows */}
+                            {hasSubModules && isExpanded && isViewEnabled && subModules.map((sm: string) => {
+                               const subPerm = getPermission(sm);
+                               const subIsViewEnabled = subPerm ? subPerm.actions.view : true;
+
+                               return (
+                                 <TableRow key={`${moduleName}-${sm}`} className="bg-muted/5 hover:bg-muted/20">
+                                   <TableCell className="pl-12 text-sm text-muted-foreground">
+                                      {sm}
+                                   </TableCell>
+                                   {PERMISSION_ACTIONS.map((action) => {
+                                      const isEnabled = subPerm ? subPerm.actions[action.key] : true;
+                                      const isDisabled = action.key !== 'view' && !subIsViewEnabled;
+                                      
+                                      return (
+                                        <TableCell key={action.key} className="text-center">
+                                          <div className="flex justify-center scale-90">
+                                            <Switch 
+                                               checked={isEnabled}
+                                               disabled={isDisabled}
+                                               onCheckedChange={() => handleToggleAction(sm, action.key, isEnabled)}
+                                            />
+                                          </div>
+                                        </TableCell>
+                                      );
+                                   })}
+                                 </TableRow>
+                               );
+                            })}
+                          </React.Fragment>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           </ScrollArea>
@@ -333,8 +428,12 @@ export default function RoleDetailsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {SYSTEM_MODULES.flatMap(g => g.items).filter(item => {
-                      const p = getPermission(item);
+                {SYSTEM_MODULES.flatMap(g => g.items).flatMap(item => {
+                    const moduleName = typeof item === 'string' ? item : item.name;
+                    const subModules = item.subModules || [];
+                    return [moduleName, ...subModules];
+                }).filter(moduleName => {
+                      const p = getPermission(moduleName);
                       return p ? p.actions.view : true; 
                   }).map((moduleName) => {
                     const perm = getPermission(moduleName);

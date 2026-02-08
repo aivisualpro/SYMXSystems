@@ -26,15 +26,30 @@ export function NavSecondary({
     <SidebarGroup {...props}>
       <SidebarGroupContent>
         <SidebarMenu>
-          {items.map((item) => {
+          {items.map((item: any) => {
             const isActive = item.url !== "#" && pathname.startsWith(item.url);
+            const content = (
+              <>
+                <item.icon />
+                <span>{item.title}</span>
+              </>
+            );
+
             return (
               <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-                  <Link href={item.url}>
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </Link>
+                <SidebarMenuButton 
+                  asChild={!item.onClick} 
+                  isActive={isActive} 
+                  tooltip={item.title}
+                  onClick={item.onClick}
+                >
+                  {item.onClick ? (
+                    content
+                  ) : (
+                    <Link href={item.url}>
+                      {content}
+                    </Link>
+                  )}
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )

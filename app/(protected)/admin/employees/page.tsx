@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SimpleDataTable } from "@/components/admin/simple-data-table";
+import { formatPhoneNumber } from "@/lib/utils";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -126,7 +127,11 @@ export default function EmployeesPage() {
     { accessorKey: "firstName", header: "First Name" },
     { accessorKey: "lastName", header: "Last Name" },
     { accessorKey: "email", header: "Email" },
-    { accessorKey: "phoneNumber", header: "Phone" },
+    { 
+      accessorKey: "phoneNumber", 
+      header: "Phone",
+      cell: ({ row }) => formatPhoneNumber(row.original.phoneNumber || "")
+    },
     { accessorKey: "type", header: "Type" },
     {
       accessorKey: "status",

@@ -36,7 +36,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
-import { cn } from "@/lib/utils";
+import { cn, formatPhoneNumber } from "@/lib/utils";
 import { format, startOfWeek, addDays } from "date-fns";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { EmployeeForm } from "@/components/admin/employee-form";
@@ -328,7 +328,7 @@ export default function EmployeeDetailPage(props: PageProps) {
                            <Phone className="w-3.5 h-3.5 text-muted-foreground" />
                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Phone</span>
                         </div>
-                        <span className="text-xs font-bold text-foreground">{employee.phoneNumber || "—"}</span>
+                        <span className="text-xs font-bold text-foreground">{formatPhoneNumber(employee.phoneNumber || "")}</span>
                      </div>
                      <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50/30 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-800/30">
                         <div className="flex items-center gap-2">
