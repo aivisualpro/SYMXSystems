@@ -7,18 +7,9 @@ import {
   IconBell,
   IconBriefcase,
 
-  IconBuildingWarehouse,
-  IconCheckbox,
-  IconClipboardList,
   IconDashboard,
-  IconFileDescription,
-  IconListDetails,
-  IconPackage,
-  IconRoute,
   IconSearch,
   IconSettings,
-  IconShoppingCart,
-  IconTruck,
   IconUser,
   IconUsers,
 } from "@tabler/icons-react";
@@ -75,57 +66,6 @@ const data = {
       url: "/admin/employees",
       icon: IconUsers,
     },
-    {
-      name: "Suppliers",
-      url: "/admin/suppliers",
-      icon: IconTruck,
-    },
-  ],
-  inventory: [
-    {
-      name: "Warehouse",
-      url: "/inventory/warehouse",
-      icon: IconBuildingWarehouse,
-    },
-    {
-      name: "Categories",
-      url: "/inventory/categories",
-      icon: IconListDetails,
-    },
-    {
-      name: "Products",
-      url: "/inventory/products",
-      icon: IconPackage,
-    },
-    {
-      name: "Release Requests",
-      url: "/inventory/release-requests",
-      icon: IconFileDescription,
-    },
-  ],
-  management: [
-    {
-      name: "Purchase Orders",
-      url: "/admin/purchase-orders",
-      icon: IconShoppingCart,
-    },
-    {
-      name: "Quality Control",
-      url: "/admin/quality-control",
-      icon: IconCheckbox,
-    },
-  ],
-  reports: [
-    {
-      name: "Andres Tracker",
-      url: "/admin/andres-tracker",
-      icon: IconClipboardList,
-    },
-    {
-      name: "Live Shipments",
-      url: "/admin/live-shipments",
-      icon: IconRoute,
-    },
   ],
 };
 
@@ -133,14 +73,12 @@ const data = {
 let sidebarCache: {
   permissions: any[];
   isAdmin: boolean;
-  shipmentCount: number;
   timestamp: number;
 } | null = null;
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const [reports, setReports] = React.useState(data.reports);
   const [permissions, setPermissions] = React.useState<any[]>([]);
   const [isAdmin, setIsAdmin] = React.useState(false);
   const [loadingPermissions, setLoadingPermissions] = React.useState(true);
@@ -152,35 +90,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       if (sidebarCache && (now - sidebarCache.timestamp) < CACHE_DURATION) {
         setPermissions(sidebarCache.permissions);
         setIsAdmin(sidebarCache.isAdmin);
-        if (sidebarCache.shipmentCount > 0) {
-          setReports(prev => prev.map(item => 
-            item.name === "Live Shipments" 
-              ? { ...item, badge: sidebarCache!.shipmentCount } 
-              : item
-          ));
-        }
         setLoadingPermissions(false);
         return;
       }
 
       try {
-        let shipmentCount = 0;
         let fetchedPermissions: any[] = [];
         let fetchedIsAdmin = false;
-
-        // Fetch Live Shipments Count
-        const countRes = await fetch('/api/admin/live-shipments/count');
-        if (countRes.ok) {
-          const { count } = await countRes.json();
-          shipmentCount = count;
-          if (count > 0) {
-            setReports(prev => prev.map(item => 
-              item.name === "Live Shipments" 
-                ? { ...item, badge: count } 
-                : item
-            ));
-          }
-        }
 
         // Fetch User Permissions
         const permRes = await fetch('/api/user/permissions');
@@ -199,7 +115,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         sidebarCache = {
           permissions: fetchedPermissions,
           isAdmin: fetchedIsAdmin,
-          shipmentCount,
           timestamp: Date.now(),
         };
       } catch (error) {
@@ -234,9 +149,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   };
 
   const filteredAdmin = filterItems(data.admin);
-  const filteredInventory = filterItems(data.inventory);
-  const filteredManagement = filterItems(data.management);
-  const filteredReports = filterItems(reports);
   const filteredSecondary = filterItems(data.navSecondary);
 
   return (
@@ -276,9 +188,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         {filteredAdmin.length > 0 && <NavDocuments items={filteredAdmin} label="Admin" />}
-        {filteredInventory.length > 0 && <NavDocuments items={filteredInventory} label="Inventory" />}
-        {filteredManagement.length > 0 && <NavDocuments items={filteredManagement} label="Management" />}
-        {filteredReports.length > 0 && <NavDocuments items={filteredReports} label="Reports" />}
         {filteredSecondary.length > 0 && <NavSecondary items={filteredSecondary} className="mt-auto" />}
       </SidebarContent>
       <SidebarFooter>

@@ -1,14 +1,21 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { ChevronLeft } from "lucide-react";
 import { ThemeSelector } from "./theme-selector";
 import { ModeSwitcher } from "./mode-switcher";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const router = useRouter();
+  
+  const segments = pathname.split("/").filter(Boolean);
+  const showBackButton = pathname !== "/dashboard" && segments.length > 0;
+
   // Safe consumption of context to avoid crashing if provider is missing
   let headerCtx: {
     actions: import("react").ReactNode;
@@ -56,6 +63,18 @@ export function SiteHeader() {
           orientation="vertical"
           className="mx-2 data-[orientation=vertical]:h-4"
         />
+        
+        {showBackButton && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            onClick={() => router.back()}
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </Button>
+        )}
+
         {headerCtx.leftContent ? (
           headerCtx.leftContent
         ) : (

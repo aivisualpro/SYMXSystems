@@ -26,17 +26,17 @@ interface EmployeeFormProps {
 export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: EmployeeFormProps) {
   const [formData, setFormData] = useState<FormEmployee>(initialData || {
     status: 'Active',
-    sunday: false,
-    monday: false,
-    tuesday: false,
-    wednesday: false,
-    thursday: false,
-    friday: false,
-    saturday: false,
+    sunday: 'OFF',
+    monday: 'OFF',
+    tuesday: 'OFF',
+    wednesday: 'OFF',
+    thursday: 'OFF',
+    friday: 'OFF',
+    saturday: 'OFF',
     finalCheckIssued: false,
     paycomOffboarded: false,
     amazonOffboarded: false,
-    finalCheck: false,
+    eligibility: false,
   });
 
   const handleChange = (field: keyof FormEmployee, value: any) => {
@@ -254,16 +254,26 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
           <TabsContent value="logistics" className="space-y-4">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                <div className="space-y-4">
-                  <Label className="text-base font-semibold">Availability</Label>
-                  <div className="grid grid-cols-2 gap-4">
+                  <Label className="text-base font-semibold">Weekly Availability</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].map((day) => (
-                      <div key={day} className="flex items-center space-x-2">
-                        <Checkbox 
-                          id={day} 
-                          checked={!!formData[day as keyof ISymxEmployee]} 
-                          onCheckedChange={(checked) => handleChange(day as keyof ISymxEmployee, checked)}
-                        />
-                        <Label htmlFor={day} className="capitalize">{day}</Label>
+                      <div key={day} className="flex flex-col gap-1.5 p-3 rounded-xl bg-muted/10 border">
+                        <Label htmlFor={day} className="capitalize text-[10px] font-bold text-muted-foreground">{day}</Label>
+                        <Select 
+                          value={String(formData[day as keyof ISymxEmployee] || 'OFF')} 
+                          onValueChange={(val) => handleChange(day as keyof ISymxEmployee, val)}
+                        >
+                          <SelectTrigger id={day} className="h-9 font-medium">
+                            <SelectValue placeholder="Select Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Route">Route</SelectItem>
+                            <SelectItem value="Assign Schedule">Assign Schedule</SelectItem>
+                            <SelectItem value="OFF">OFF</SelectItem>
+                            <SelectItem value="Open">Open</SelectItem>
+                            <SelectItem value="Close">Close</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     ))}
                   </div>
@@ -412,13 +422,14 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                  <div className="space-y-2">
                     <Label htmlFor="eligibility">Rehire Eligibility</Label>
-                    <Select value={formData.eligibility} onValueChange={(val) => handleChange("eligibility", val)}>
-                       <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                       <SelectContent>
-                         <SelectItem value="Eligible">Eligible</SelectItem>
-                         <SelectItem value="Ineligible">Ineligible</SelectItem>
-                       </SelectContent>
-                    </Select>
+                    <div className="flex items-center space-x-2 mt-2">
+                      <Checkbox 
+                        id="eligibility" 
+                        checked={!!formData.eligibility} 
+                        onCheckedChange={(checked) => handleChange("eligibility", checked)}
+                      />
+                      <Label htmlFor="eligibility">Eligible for Rehire</Label>
+                    </div>
                  </div>
                  <div className="space-y-2">
                     <Label htmlFor="lastDateWorked">Last Date Worked</Label>
@@ -435,14 +446,14 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
                         />
                         <Label htmlFor="finalCheckIssued">Issued</Label>
                        </div>
-                       <div className="flex items-center space-x-2">
-                        <Checkbox 
-                          id="finalCheck" 
-                          checked={formData.finalCheck || false} 
-                          onCheckedChange={(checked) => handleChange("finalCheck", checked)}
-                        />
-                        <Label htmlFor="finalCheck">Final Check Cleared</Label>
-                       </div>
+                        <div className="space-y-2 mt-2">
+                          <Label>Final Check Attachment</Label>
+                          <FileUpload 
+                            value={formData.finalCheck || ""} 
+                            onChange={(url) => handleChange("finalCheck", url)} 
+                            accept=".pdf,image/*"
+                          />
+                        </div>
                     </div>
                  </div>
               </div>

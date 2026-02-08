@@ -38,9 +38,10 @@ const PermissionSchema = new Schema({
 const SymxAppRoleSchema: Schema = new Schema({
   name: { type: String, required: true, unique: true },
   description: { type: String },
-  permissions: [PermissionSchema],
+  permissions: { type: [PermissionSchema], default: [] },
 }, {
-  timestamps: true
+  timestamps: true,
+  bufferCommands: true,
 });
 
 const SymxAppRole: Model<ISymxAppRole> = mongoose.models.SymxAppRole || mongoose.model<ISymxAppRole>('SymxAppRole', SymxAppRoleSchema);

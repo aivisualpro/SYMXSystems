@@ -2,13 +2,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { SimpleDataTable } from "@/components/admin/simple-data-table";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, Trash, User } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash, User, Eye } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +25,7 @@ export default function EmployeesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
+  const router = useRouter();
 
   const fetchEmployees = async () => {
     setLoading(true);
@@ -162,13 +164,13 @@ export default function EmployeesPage() {
     { accessorKey: "ScheduleNotes", header: "Schedule Notes" },
     
     // Availability
-    { accessorKey: "sunday", header: "Sun", cell: ({row}) => row.original.sunday ? "Yes" : "No" },
-    { accessorKey: "monday", header: "Mon", cell: ({row}) => row.original.monday ? "Yes" : "No" },
-    { accessorKey: "tuesday", header: "Tue", cell: ({row}) => row.original.tuesday ? "Yes" : "No" },
-    { accessorKey: "wednesday", header: "Wed", cell: ({row}) => row.original.wednesday ? "Yes" : "No" },
-    { accessorKey: "thursday", header: "Thu", cell: ({row}) => row.original.thursday ? "Yes" : "No" },
-    { accessorKey: "friday", header: "Fri", cell: ({row}) => row.original.friday ? "Yes" : "No" },
-    { accessorKey: "saturday", header: "Sat", cell: ({row}) => row.original.saturday ? "Yes" : "No" },
+    { accessorKey: "sunday", header: "Sun", cell: ({row}) => row.original.sunday || "OFF" },
+    { accessorKey: "monday", header: "Mon", cell: ({row}) => row.original.monday || "OFF" },
+    { accessorKey: "tuesday", header: "Tue", cell: ({row}) => row.original.tuesday || "OFF" },
+    { accessorKey: "wednesday", header: "Wed", cell: ({row}) => row.original.wednesday || "OFF" },
+    { accessorKey: "thursday", header: "Thu", cell: ({row}) => row.original.thursday || "OFF" },
+    { accessorKey: "friday", header: "Fri", cell: ({row}) => row.original.friday || "OFF" },
+    { accessorKey: "saturday", header: "Sat", cell: ({row}) => row.original.saturday || "OFF" },
 
     // Files
     { accessorKey: "offerLetterFile", header: "Offer Letter", cell: ({row}) => <FileLinkCell value={row.original.offerLetterFile} /> },
@@ -178,17 +180,17 @@ export default function EmployeesPage() {
     { accessorKey: "drugTestFile", header: "Drug Test", cell: ({row}) => <FileLinkCell value={row.original.drugTestFile} /> },
 
     // Offboarding
-    { accessorKey: "paycomOffboarded", header: "Paycom Off" },
-    { accessorKey: "amazonOffboarded", header: "Amazon Off" },
-    { accessorKey: "finalCheckIssued", header: "Final Check Issued" },
-    { accessorKey: "finalCheck", header: "Final Check Cleared" },
+    { accessorKey: "paycomOffboarded", header: "Paycom Off", cell: ({row}) => row.original.paycomOffboarded ? "Yes" : "No" },
+    { accessorKey: "amazonOffboarded", header: "Amazon Off", cell: ({row}) => row.original.amazonOffboarded ? "Yes" : "No" },
+    { accessorKey: "finalCheckIssued", header: "Final Check Issued", cell: ({row}) => row.original.finalCheckIssued ? "Yes" : "No" },
+    { accessorKey: "finalCheck", header: "Final Check Cleared", cell: ({row}) => <FileLinkCell value={row.original.finalCheck} /> },
     { accessorKey: "terminationDate", header: "Term Date", cell: ({row}) => row.original.terminationDate ? new Date(row.original.terminationDate).toLocaleDateString() : "" },
     { accessorKey: "terminationReason", header: "Term Reason" },
     { accessorKey: "terminationLetter", header: "Term Letter", cell: ({row}) => <FileLinkCell value={row.original.terminationLetter} /> },
     { accessorKey: "resignationDate", header: "Resign Date", cell: ({row}) => row.original.resignationDate ? new Date(row.original.resignationDate).toLocaleDateString() : "" },
     { accessorKey: "resignationType", header: "Resign Type" },
     { accessorKey: "resignationLetter", header: "Resign Letter", cell: ({row}) => <FileLinkCell value={row.original.resignationLetter} /> },
-    { accessorKey: "eligibility", header: "Eligibility" },
+    { accessorKey: "eligibility", header: "Eligibility", cell: ({row}) => row.original.eligibility ? "Yes" : "No" },
     { accessorKey: "lastDateWorked", header: "Last Worked", cell: ({row}) => row.original.lastDateWorked ? new Date(row.original.lastDateWorked).toLocaleDateString() : "" },
     { accessorKey: "exitInterviewNotes", header: "Exit Notes" },
     
@@ -207,6 +209,9 @@ export default function EmployeesPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => router.push(`/admin/employees/${item._id}`)}>
+                  <Eye className="mr-2 h-4 w-4" /> View Details
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => openEditDialog(item)}>
                   <Pencil className="mr-2 h-4 w-4" /> Edit
                 </DropdownMenuItem>
@@ -274,12 +279,13 @@ export default function EmployeesPage() {
   };
 
   return (
-    <div className="w-full h-full p-6">
+    <div className="w-full h-full">
       <SimpleDataTable 
          data={data} 
          columns={columns} 
          title="Employees" 
          onAdd={openAddDialog} 
+         onRowClick={(item) => router.push(`/admin/employees/${item._id}`)}
          loading={loading}
          showColumnToggle={true}
          initialColumnVisibility={initialVisibility}

@@ -39,10 +39,7 @@ import { useHeaderActions } from "@/components/providers/header-actions-provider
 
 // Define the Modules structure based on the Sidebar
 const SYSTEM_MODULES = [
-  { group: "Admin", items: ["Dashboard", "Users", "Employees", "Suppliers", "Notifications", "Settings"] },
-  { group: "Inventory", items: ["Warehouse", "Categories", "Products", "Release Requests"] },
-  { group: "Management", items: ["Purchase Orders", "Quality Control"] },
-  { group: "Reports", items: ["Andres Tracker", "Live Shipments"] },
+  { group: "Admin", items: ["Dashboard", "Users", "Employees", "Notifications", "Settings"] },
 ];
 
 const PERMISSION_ACTIONS = [
@@ -58,15 +55,6 @@ const PERMISSION_ACTIONS = [
 const MODULE_FIELDS: Record<string, string[]> = {
   Users: ["Name", "Email", "Phone", "Address", "Role", "Designation", "Bio Description", "Status", "Profile Picture", "Serial No"],
   Employees: ["EE Code", "First Name", "Last Name", "Email", "Phone", "Address", "Status", "Role", "Hired Date", "Termination Date"],
-  Suppliers: ["VB ID", "Name", "Locations", "FDA Registration"],
-  Warehouse: ["Name", "Address", "Contacts"],
-  Categories: ["Category Name", "Subcategories", "Is On Website"],
-  Products: ["VB ID", "Name", "Description", "Category", "Subcategory", "Cost Price", "Sale Price", "Tags", "Cover Image", "Primary Image", "Show Case", "Other Info", "Is On Website", "Serial No"],
-  "Release Requests": ["PO Number", "Date", "Warehouse", "Requested By", "Customer", "Contact", "Products", "Carrier", "Pickup Time", "Instructions", "Created By"],
-  "Purchase Orders": ["VB PO Number", "Order Type", "Date", "Category", "Created By", "Customer PO List", "Shipping Details"],
-  "Quality Control": ["Inspection Date", "Inspector", "Status", "Comments", "Result", "Attachments"],
-  "Andres Tracker": ["Tracker ID", "Date", "Status", "Notes", "Assigned To"],
-  "Live Shipments": ["Tracking Number", "Carrier", "Status", "ETA", "Vessel Name", "Port of Lading", "Port of Entry"],
   Dashboard: ["Overview Stats", "Recent Activity", "Performance Charts", "Notifications Preview"],
   Settings: ["General Settings", "Roles Management", "Import/Export", "System Config"],
   Notifications: ["Email Alerts", "System Notifications", "Push Notifications"]

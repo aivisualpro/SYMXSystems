@@ -405,22 +405,21 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="address">Address</Label>
-            <div className="relative">
-              <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="address"
-                className="pl-9"
-                placeholder="123 Main St, City, Country"
-                value={formData.address || ""}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              />
+          <div className="grid grid-cols-12 gap-4">
+            <div className="col-span-6 grid gap-2">
+              <Label htmlFor="address">Address</Label>
+              <div className="relative">
+                <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="address"
+                  className="pl-9"
+                  placeholder="123 Main St, City, Country"
+                  value={formData.address || ""}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                />
+              </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
+            <div className="col-span-3 grid gap-2">
               <Label htmlFor="location">Location</Label>
               <Select
                 value={formData.location || "USA"}
@@ -436,7 +435,7 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
+            <div className="col-span-3 grid gap-2">
               <Label htmlFor="serialNo">Serial No</Label>
               <div className="relative">
                 <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

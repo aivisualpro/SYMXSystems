@@ -32,7 +32,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
   const pathname = usePathname();
 
   return (
-    <div className="flex h-full flex-col space-y-8 md:flex-row md:space-x-12 md:space-y-0">
+    <div className="flex h-full flex-col space-y-8 md:flex-row md:space-x-4 md:space-y-0">
       <aside className="lg:w-1/5">
         <nav
           className={cn(

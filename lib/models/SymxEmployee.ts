@@ -25,13 +25,13 @@ export interface ISymxEmployee extends Document {
   profileImage?: string;
   
   // Schedule availability
-  sunday?: boolean;
-  monday?: boolean;
-  tuesday?: boolean;
-  wednesday?: boolean;
-  thursday?: boolean;
-  friday?: boolean;
-  saturday?: boolean;
+  sunday?: string;
+  monday?: string;
+  tuesday?: string;
+  wednesday?: string;
+  thursday?: string;
+  friday?: string;
+  saturday?: string;
   
   defaultVan1?: string;
   defaultVan2?: string;
@@ -56,11 +56,11 @@ export interface ISymxEmployee extends Document {
   resignationLetter?: string;
   resignationType?: string;
   terminationReason?: string;
-  eligibility?: string;
+  eligibility?: boolean;
   exitInterviewNotes?: string;
   paycomOffboarded?: boolean;
   amazonOffboarded?: boolean;
-  finalCheck?: boolean; // keeping distinct from finalCheckIssued as requested
+  finalCheck?: string; // changed from boolean to string
   lastDateWorked?: Date;
   
   ScheduleNotes?: string;
@@ -89,13 +89,13 @@ const SymxEmployeeSchema: Schema = new Schema({
   motorVehicleReportDate: { type: Date },
   profileImage: { type: String },
 
-  sunday: { type: Boolean, default: false },
-  monday: { type: Boolean, default: false },
-  tuesday: { type: Boolean, default: false },
-  wednesday: { type: Boolean, default: false },
-  thursday: { type: Boolean, default: false },
-  friday: { type: Boolean, default: false },
-  saturday: { type: Boolean, default: false },
+  sunday: { type: String, default: 'OFF' },
+  monday: { type: String, default: 'OFF' },
+  tuesday: { type: String, default: 'OFF' },
+  wednesday: { type: String, default: 'OFF' },
+  thursday: { type: String, default: 'OFF' },
+  friday: { type: String, default: 'OFF' },
+  saturday: { type: String, default: 'OFF' },
 
   defaultVan1: { type: String },
   defaultVan2: { type: String },
@@ -118,11 +118,11 @@ const SymxEmployeeSchema: Schema = new Schema({
   resignationLetter: { type: String },
   resignationType: { type: String },
   terminationReason: { type: String },
-  eligibility: { type: String },
+  eligibility: { type: Boolean, default: false },
   exitInterviewNotes: { type: String },
   paycomOffboarded: { type: Boolean, default: false },
   amazonOffboarded: { type: Boolean, default: false },
-  finalCheck: { type: Boolean, default: false },
+  finalCheck: { type: String },
   lastDateWorked: { type: Date },
 
   ScheduleNotes: { type: String },

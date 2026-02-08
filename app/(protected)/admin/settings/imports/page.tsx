@@ -1,10 +1,8 @@
-
 "use client";
 
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Upload, Users, Truck, Package, ShoppingCart, FileText, MapPin } from "lucide-react";
+import { Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
@@ -19,13 +17,11 @@ import {
 
 export default function ImportsSettingsPage() {
   const [isUploading, setIsUploading] = useState(false);
-  const [currentImportType, setCurrentImportType] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImportClick = (type: string) => {
-    setCurrentImportType(type);
+  const handleImportClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
@@ -33,7 +29,7 @@ export default function ImportsSettingsPage() {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !currentImportType) return;
+    if (!file) return;
 
     if (!file.name.endsWith(".csv")) {
       toast.error("Please select a valid CSV file");
@@ -50,17 +46,25 @@ export default function ImportsSettingsPage() {
       complete: async (results) => {
         const data = results.data;
         const totalRows = data.length;
-        const batchSize = 100;
+        const batchSize = 50;
         let processedCount = 0;
         let totalInserted = 0;
+        let successfulBatches = 0;
 
         try {
+          // Process in batches
           for (let i = 0; i < totalRows; i += batchSize) {
             const batch = data.slice(i, i + batchSize);
-            const currentProgress = Math.round((i / totalRows) * 100);
+            const remaining = totalRows - processedCount;
             
+            // Calculate progress for animation
+            const currentProgress = Math.min(Math.round((processedCount / totalRows) * 100), 99);
             setProgress(currentProgress);
-            setStatusMessage(`Importing ${processedCount} of ${totalRows} records...`);
+            
+            setStatusMessage(`Processing... ${remaining} records remaining`);
+
+            // Artificial delay for visual smoothness if batch is super fast (optional, but good for UX)
+            // await new Promise(r => setTimeout(r, 100));
 
             const response = await fetch("/api/admin/imports", {
               method: "POST",
@@ -68,35 +72,44 @@ export default function ImportsSettingsPage() {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                type: currentImportType,
+                type: "employees",
                 data: batch,
               }),
             });
 
             if (!response.ok) {
               const errorData = await response.json();
-              throw new Error(errorData.error || "Import failed");
+              throw new Error(errorData.error || `Batch ${successfulBatches + 1} failed`);
             }
 
             const result = await response.json();
-            totalInserted += result.count || batch.length;
+            totalInserted += result.count || 0; 
+            // result.count is generic, might be undefined in my API response logic if not set correctly, 
+            // but my API returns `{ count: ... }` so it is fine.
+            
             processedCount += batch.length;
+            successfulBatches++;
           }
 
           setProgress(100);
           setStatusMessage("Import complete!");
-          toast.success(`Successfully imported ${totalInserted} ${currentImportType}(s)`);
+          toast.success(`Successfully processed ${totalRows} records. Updated/Inserted: ${totalInserted}`);
+          
+          // Small delay before closing dialog
+          setTimeout(() => {
+            setIsUploading(false);
+            setProgress(0);
+            setStatusMessage("");
+          }, 1500);
+
         } catch (error: any) {
           console.error("Import error:", error);
           toast.error(error.message || "Failed to import data");
-        } finally {
           setIsUploading(false);
-          setProgress(0);
-          setStatusMessage("");
+        } finally {
           if (fileInputRef.current) {
             fileInputRef.current.value = "";
           }
-          setCurrentImportType(null);
         }
       },
       error: (error) => {
@@ -107,27 +120,8 @@ export default function ImportsSettingsPage() {
     });
   };
 
-  const importOptions = [
-    { name: "Customers", icon: Users, type: "customers" },
-    { name: "Customer Locations", icon: MapPin, type: "customer-locations" },
-    { name: "Suppliers", icon: Truck, type: "suppliers" },
-    { name: "Supplier Locations", icon: MapPin, type: "supplier-locations" },
-    { name: "Products", icon: Package, type: "products" },
-    { name: "Purchase Orders (VB PO)", icon: ShoppingCart, type: "purchase-orders" },
-    { name: "Shippings", icon: Truck, type: "shippings" },
-    { name: "Customer POs", icon: FileText, type: "customer-pos" },
-  ];
-
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium">Imports</h3>
-        <p className="text-sm text-muted-foreground">
-          Import data into the system using CSV files.
-        </p>
-      </div>
-      <Separator />
-      
       <input
         type="file"
         ref={fileInputRef}
@@ -136,38 +130,48 @@ export default function ImportsSettingsPage() {
         onChange={handleFileChange}
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {importOptions.map((option) => (
-          <Button
-            key={option.name}
-            variant="outline"
-            className={cn(
-              "flex h-24 flex-col items-center justify-center gap-2 transition-all hover:bg-accent hover:text-accent-foreground",
-              isUploading && "opacity-50 pointer-events-none"
-            )}
-            onClick={() => handleImportClick(option.type)}
-            disabled={isUploading}
-          >
-            <option.icon className="h-6 w-6" />
-            <span>Import {option.name}</span>
-          </Button>
-        ))}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Button
+          variant="outline"
+          className={cn(
+            "flex h-32 flex-col items-center justify-center gap-4 transition-all hover:bg-accent hover:text-accent-foreground border-dashed border-2",
+            isUploading && "opacity-50 pointer-events-none"
+          )}
+          onClick={handleImportClick}
+          disabled={isUploading}
+        >
+          <div className="p-3 rounded-full bg-primary/10">
+            <Users className="h-8 w-8 text-primary" />
+          </div>
+          <div className="text-center">
+             <span className="font-semibold text-lg">Import Employees CSV</span>
+             <p className="text-xs text-muted-foreground mt-1">Click to upload .csv file</p>
+          </div>
+        </Button>
       </div>
 
       <Dialog open={isUploading} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
-            <DialogTitle>Importing Data</DialogTitle>
+            <DialogTitle>Importing Employees</DialogTitle>
             <DialogDescription>
-              Please wait while your data is being processed. This may take a moment depending on the file size.
+              Please wait while we process your file. Do not close this window.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="flex justify-between text-sm font-medium">
-              <span>{statusMessage}</span>
-              <span>{progress}%</span>
+          <div className="space-y-6 py-4">
+            <div className="flex flex-col gap-2">
+                 <div className="flex justify-between text-sm font-medium">
+                  <span className="text-muted-foreground">Progress</span>
+                  <span>{progress}%</span>
+                </div>
+                <Progress value={progress} className="h-2 w-full transition-all duration-500" />
             </div>
-            <Progress value={progress} className="h-2" />
+            
+             <div className="flex items-center justify-center p-4 bg-muted/50 rounded-lg">
+                <span className="text-sm font-medium animate-pulse">
+                    {statusMessage}
+                </span>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
