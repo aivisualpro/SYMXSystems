@@ -123,9 +123,14 @@ export function ChartAreaInteractive({ data: _externalData }: { data: any[] }) {
   const isMobile = useIsMobile()
   const [timeRange, setTimeRange] = React.useState("3m")
   const [chartView, setChartView] = React.useState<"efficiency" | "cpr" | "volume">("efficiency")
+  const [isMounted, setIsMounted] = React.useState(false)
 
   // Use dummy data
   const dailyData = React.useMemo(() => generateDailyData(), [])
+
+  React.useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   React.useEffect(() => {
     if (isMobile) {
@@ -168,6 +173,26 @@ export function ChartAreaInteractive({ data: _externalData }: { data: any[] }) {
       totalNotDelivered,
     }
   }, [filteredData])
+
+  if (!isMounted) {
+    return (
+      <Card className="@container/card">
+        <CardHeader>
+          <div className="flex flex-col gap-1">
+            <CardTitle className="flex items-baseline gap-2">
+              Efficiency
+              <span className="text-sm font-normal text-muted-foreground">
+                Daily Performance
+              </span>
+            </CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+          <div className="aspect-auto h-[250px] w-full animate-pulse rounded bg-muted" />
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card className="@container/card">
