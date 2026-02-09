@@ -48,6 +48,27 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
+// ── Icon Map: resolves DB string names to actual icon components ────────
+const ICON_MAP: Record<string, any> = {
+  IconDashboard,
+  IconCrown,
+  IconTruckDelivery,
+  IconCalendarTime,
+  IconSun,
+  IconCar,
+  IconUsersGroup,
+  IconAlertTriangle,
+  IconShield,
+  IconTie,
+  IconChartBar,
+  IconBell,
+  IconSettings,
+  IconSearch,
+  IconBriefcase,
+  IconUser,
+  IconUsers,
+};
+
 const data = {
   user: {
     name: "",
@@ -71,6 +92,7 @@ const data = {
       icon: IconSearch,
     },
   ],
+  // Hardcoded fallback — used only when the API hasn't responded yet
   admin: [
     {
       name: "Dashboard",
@@ -116,8 +138,16 @@ const data = {
     },
     {
       name: "Scheduling",
-      url: "#",
+      url: "/scheduling",
       icon: IconCalendarTime,
+      subModules: [
+        { name: "Schedule", url: "#" },
+        { name: "Confirm Schedules", url: "#" },
+        { name: "Work Hour Compliance", url: "#" },
+        { name: "Capacity Planning", url: "#" },
+        { name: "Availability", url: "#" },
+        { name: "Schedule Check", url: "#" },
+      ],
     },
     {
       name: "Everyday",
@@ -180,7 +210,7 @@ const data = {
         { name: "Fleet Summary", url: "#" }, 
         { name: "Repairs", url: "#" }, 
         { name: "Scorecard History", url: "#" }, 
-        { name: "Weekly ScoreCard", url: "/reports/employee-performance-dashboard" }, 
+        { name: "Weekly ScoreCard", url: "/reports/company-performance-dashboard" }, 
         { name: "Lunch Compliance", url: "#" }
       ]
     },
@@ -189,7 +219,7 @@ const data = {
       url: "/reports",
       icon: IconChartBar,
       subModules: [
-        { name: "Employee Performance Dashboard", url: "/reports/employee-performance-dashboard" }
+        { name: "Company Performance Dashboard", url: "/reports/company-performance-dashboard" }
       ]
     },
   ],
@@ -199,6 +229,7 @@ const data = {
 let sidebarCache: {
   permissions: any[];
   isAdmin: boolean;
+  dynamicModules: any[] | null;
   timestamp: number;
 } | null = null;
 
@@ -208,6 +239,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [permissions, setPermissions] = React.useState<any[]>([]);
   const [isAdmin, setIsAdmin] = React.useState(false);
   const [loadingPermissions, setLoadingPermissions] = React.useState(true);
+  const [dynamicModules, setDynamicModules] = React.useState<any[] | null>(null);
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const router = useRouter();
@@ -236,6 +268,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       if (sidebarCache && (now - sidebarCache.timestamp) < CACHE_DURATION) {
         setPermissions(sidebarCache.permissions);
         setIsAdmin(sidebarCache.isAdmin);
+        if (sidebarCache.dynamicModules) setDynamicModules(sidebarCache.dynamicModules);
         setLoadingPermissions(false);
         return;
       }
@@ -243,9 +276,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       try {
         let fetchedPermissions: any[] = [];
         let fetchedIsAdmin = false;
+        let fetchedModules: any[] | null = null;
 
-        // Fetch User Permissions
-        const permRes = await fetch('/api/user/permissions');
+        // Fetch User Permissions + Dynamic Modules in parallel
+        const [permRes, modulesRes] = await Promise.all([
+          fetch('/api/user/permissions'),
+          fetch('/api/admin/modules'),
+        ]);
+
         if (permRes.ok) {
           const data = await permRes.json();
           fetchedPermissions = data.permissions || [];
@@ -257,10 +295,28 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           }
         }
 
+        if (modulesRes.ok) {
+          const modulesData = await modulesRes.json();
+          if (modulesData.modules?.length > 0) {
+            // Map DB modules to sidebar format, resolving icon strings to components
+            fetchedModules = modulesData.modules.map((m: any) => ({
+              name: m.name,
+              url: m.url || "#",
+              icon: ICON_MAP[m.icon] || IconDashboard,
+              subModules: (m.subModules || []).map((sm: any) => ({
+                name: sm.name,
+                url: sm.url || "#",
+              })),
+            }));
+            setDynamicModules(fetchedModules);
+          }
+        }
+
         // Update cache
         sidebarCache = {
           permissions: fetchedPermissions,
           isAdmin: fetchedIsAdmin,
+          dynamicModules: fetchedModules,
           timestamp: Date.now(),
         };
       } catch (error) {
@@ -272,6 +328,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     
     fetchData();
   }, []);
+
+  // Use dynamic modules from DB if available, otherwise fall back to hardcoded
+  const adminItems = dynamicModules || data.admin;
 
   const filterItems = (items: any[], type: 'admin' | 'secondary') => {
     if (loadingPermissions) return [];
@@ -318,7 +377,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }, []);
   };
 
-  const filteredAdmin = filterItems(data.admin, 'admin');
+  const filteredAdmin = filterItems(adminItems, 'admin');
   // Secondary nav usually stays visible or matches its own titles
   const filteredSecondary = data.navSecondary.map(item => 
     item.title === "Search" ? { ...item, onClick: handleSearchClick } : item
@@ -327,7 +386,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // Flattened list for the search dialog
   const allSearchableItems = React.useMemo(() => {
     const items: any[] = [];
-    data.admin.forEach(item => {
+    adminItems.forEach(item => {
       // Add parent
       items.push({ name: item.name, url: item.url, icon: item.icon, type: 'Module' });
       // Add sub-modules
@@ -344,7 +403,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       }
     });
     return items;
-  }, []);
+  }, [adminItems]);
 
   const searchResults = allSearchableItems.filter(item => {
     if (!searchQuery) return false;

@@ -48,8 +48,8 @@ import { toast } from "sonner";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { cn } from "@/lib/utils";
 
-// Define the Modules structure based on the Sidebar
-const SYSTEM_MODULES: any[] = [
+// Hardcoded fallback — used only when the API hasn't responded yet
+const FALLBACK_MODULES: any[] = [
   { 
     group: "Application Modules", 
     items: [
@@ -63,7 +63,7 @@ const SYSTEM_MODULES: any[] = [
       { name: "Incidents" }, 
       { name: "Insurance" }, 
       { name: "Manager", subModules: ["Routes Manager", "Punch Ins Manager", "Punch Ins Import", "RTS Manager", "Rescue Manager", "Driver Efficiency Manager", "Performance Summary", "Scorecard Performance", "Employee Ranking", "HR Tickets Managers", "Notices", "Work Hours Compliance", "Paycom Schedule Export", "Work Summary Tool", "Fleet Summary", "Repairs", "Scorecard History", "Weekly ScoreCard", "Lunch Compliance"] },
-      { name: "Reports", subModules: ["Employee Performance Dashboard"] },
+      { name: "Reports", subModules: ["Company Performance Dashboard"] },
       { name: "Notifications" }, 
       { name: "Settings" }
     ] 
@@ -103,12 +103,42 @@ export default function RoleDetailsPage() {
   const [saving, setSaving] = useState(false);
   const [selectedModule, setSelectedModule] = useState<string>("");
   const [expandedModules, setExpandedModules] = useState<string[]>([]);
+  const [systemModules, setSystemModules] = useState<any[]>(FALLBACK_MODULES);
 
   const toggleExpand = (name: string) => {
     setExpandedModules(prev => 
       prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
     );
   };
+
+  // Fetch dynamic modules from DB
+  useEffect(() => {
+    const fetchModules = async () => {
+      try {
+        const res = await fetch('/api/admin/modules');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.modules?.length > 0) {
+            // Transform DB modules into the SYSTEM_MODULES format
+            const dynamicItems = data.modules.map((m: any) => ({
+              name: m.name,
+              ...(m.subModules?.length > 0 ? { subModules: m.subModules.map((sm: any) => sm.name) } : {}),
+            }));
+            // Add Notifications and Settings (they are nav-secondary, not stored in DB modules)
+            const hasNotifications = dynamicItems.some((i: any) => i.name === "Notifications");
+            const hasSettings = dynamicItems.some((i: any) => i.name === "Settings");
+            if (!hasNotifications) dynamicItems.push({ name: "Notifications" });
+            if (!hasSettings) dynamicItems.push({ name: "Settings" });
+
+            setSystemModules([{ group: "Application Modules", items: dynamicItems }]);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch dynamic modules", error);
+      }
+    };
+    fetchModules();
+  }, []);
 
   // Fetch role details
   useEffect(() => {
@@ -312,7 +342,7 @@ export default function RoleDetailsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {SYSTEM_MODULES.map((group) => {
+                {systemModules.map((group: any) => {
                   return (
                     <React.Fragment key={group.group}>
                       {group.items.map((item: any) => {
@@ -428,7 +458,7 @@ export default function RoleDetailsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {SYSTEM_MODULES.flatMap(g => g.items).flatMap(item => {
+                {systemModules.flatMap((g: any) => g.items).flatMap((item: any) => {
                     const moduleName = typeof item === 'string' ? item : item.name;
                     const subModules = item.subModules || [];
                     return [moduleName, ...subModules];

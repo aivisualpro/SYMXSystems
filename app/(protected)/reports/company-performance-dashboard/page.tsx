@@ -171,7 +171,7 @@ function SectionHeader({ icon: Icon, title, tier, children }: { icon: any; title
 
 // ── Main Component ────────────────────────────────────────────────────────
 export default function EmployeePerformanceDashboard() {
-  const { setRightContent } = useHeaderActions();
+  const { setRightContent, setLeftContent } = useHeaderActions();
   const [weeks, setWeeks] = useState<string[]>([]);
   const [selectedWeek, setSelectedWeek] = useState("");
   const [loading, setLoading] = useState(false);
@@ -185,7 +185,24 @@ export default function EmployeePerformanceDashboard() {
   const [dspMetrics, setDspMetrics] = useState<DspMetrics | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState("scorecard");
+  const [pageTitle, setPageTitle] = useState("Company Performance Dashboard");
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // Fetch dynamic page title from card-config (source of truth for display names)
+  useEffect(() => {
+    fetch("/api/card-config?page=reports")
+      .then(r => r.json())
+      .then(data => {
+        if (data.cards?.length > 0) {
+          // Index 0 is the first card on the reports page (this dashboard)
+          const card = data.cards.find((c: any) => c.index === 0);
+          if (card?.name) {
+            setPageTitle(card.name);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setLoadingWeeks(true);
@@ -214,6 +231,16 @@ export default function EmployeePerformanceDashboard() {
   const generatePDF = () => { setGeneratingPdf(true); setTimeout(() => { window.print(); setGeneratingPdf(false); }, 300); };
 
   const driversWithIssues = drivers.filter(d => d.dsbCount > 0 || d.negativeFeedbackCount > 0 || d.podRejects > 0).length;
+
+  // Set dynamic header title
+  useEffect(() => {
+    setLeftContent(
+      <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+        {pageTitle}
+      </h1>
+    );
+    return () => setLeftContent(null);
+  }, [pageTitle, setLeftContent]);
 
   useEffect(() => {
     setRightContent(
@@ -268,7 +295,7 @@ export default function EmployeePerformanceDashboard() {
         <TabsContent value="scorecard" className="space-y-4 mt-4">
           {sm && <>
             {/* Header Card */}
-            <Card className="overflow-hidden border-0 shadow-lg">
+            <Card className="overflow-hidden border-0 shadow-lg py-0">
               <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-6 text-white">
                 <div className="flex items-center justify-between mb-1">
                   <div>
@@ -289,7 +316,7 @@ export default function EmployeePerformanceDashboard() {
             {/* Two-column layout */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Safety & Compliance */}
-              <Card className="overflow-hidden">
+              <Card className="overflow-hidden py-0">
                 <SectionHeader icon={Shield} title="Safety and Compliance" tier={sm.safety.tier} />
                 <CardContent className="p-0 divide-y divide-border/50">
                   <div className="p-4 space-y-1">
@@ -312,7 +339,7 @@ export default function EmployeePerformanceDashboard() {
               </Card>
 
               {/* Delivery Quality */}
-              <Card className="overflow-hidden">
+              <Card className="overflow-hidden py-0">
                 <SectionHeader icon={Truck} title="Delivery Quality" tier={sm.deliveryQuality.tier} />
                 <CardContent className="p-0 divide-y divide-border/50">
                   <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-1">
@@ -333,7 +360,7 @@ export default function EmployeePerformanceDashboard() {
             </div>
 
             {/* Tier Distribution */}
-            <Card className="overflow-hidden">
+            <Card className="overflow-hidden py-0">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-bold flex items-center gap-2"><Users className="h-4 w-4" />Driver Tier Distribution</h3>
@@ -359,7 +386,7 @@ export default function EmployeePerformanceDashboard() {
             {/* Focus Areas + Tips */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {sm.focusAreas.length > 0 && (
-                <Card className="overflow-hidden border-amber-500/20">
+                <Card className="overflow-hidden border-amber-500/20 py-0">
                   <div className="bg-amber-500/5 border-b border-amber-500/20 p-4 flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-amber-500/10"><AlertTriangle className="h-5 w-5 text-amber-500" /></div>
                     <h3 className="text-base font-bold">Recommended Focus Areas</h3>
@@ -375,7 +402,7 @@ export default function EmployeePerformanceDashboard() {
                   </CardContent>
                 </Card>
               )}
-              <Card className="overflow-hidden border-blue-500/20">
+              <Card className="overflow-hidden border-blue-500/20 py-0">
                 <div className="bg-blue-500/5 border-b border-blue-500/20 p-4 flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-blue-500/10"><Lightbulb className="h-5 w-5 text-blue-500" /></div>
                   <h3 className="text-base font-bold">Current Week Tips</h3>
@@ -396,7 +423,7 @@ export default function EmployeePerformanceDashboard() {
         {/* ═══ TAB 2: DRIVER DETAILS ═══ */}
         <TabsContent value="drivers" className="mt-4">
           {drivers.length > 0 && (
-            <Card><CardContent className="p-0"><div className="overflow-x-auto">
+            <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
               <Table>
                 <TableHeader><TableRow>
                   <TableHead className="w-8">#</TableHead><TableHead className="min-w-[180px]">Name</TableHead>
@@ -438,7 +465,7 @@ export default function EmployeePerformanceDashboard() {
         {/* ═══ TAB 3: POD ═══ */}
         <TabsContent value="pod" className="mt-4">
           {podRows.length > 0 && (
-            <Card><CardContent className="p-0"><div className="overflow-x-auto">
+            <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
               <Table>
                 <TableHeader><TableRow>
                   <TableHead className="w-8">#</TableHead><TableHead className="min-w-[180px]">Name</TableHead>
@@ -479,7 +506,7 @@ export default function EmployeePerformanceDashboard() {
         {/* ═══ TAB 4: CDF ═══ */}
         <TabsContent value="cdf" className="mt-4">
           {cdfRows.length > 0 && (
-            <Card><CardContent className="p-0"><div className="overflow-x-auto">
+            <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
               <Table>
                 <TableHeader><TableRow>
                   <TableHead className="w-8">#</TableHead><TableHead className="min-w-[180px]">Name</TableHead>

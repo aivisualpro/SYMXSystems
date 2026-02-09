@@ -25,17 +25,22 @@ import { toast } from "sonner";
 const DEFAULT_DARK_IMAGE = "/images/dark-default.png";
 const DEFAULT_LIGHT_IMAGE = "/images/light-default.png";
 
-const initialReportsCards = [
-  { name: "Company Performance Dashboard", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "/reports/company-performance-dashboard" },
+const initialSchedulingCards = [
+  { name: "Schedule", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
+  { name: "Confirm Schedules", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
+  { name: "Work Hour Compliance", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
+  { name: "Capacity Planning", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
+  { name: "Availability", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
+  { name: "Schedule Check", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
 ];
 
-export default function ReportsPage() {
+export default function SchedulingPage() {
   const router = useRouter();
-  const [cards, setCards] = useState(initialReportsCards);
+  const [cards, setCards] = useState(initialSchedulingCards);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   
   useEffect(() => {
-    fetch("/api/card-config?page=reports")
+    fetch("/api/card-config?page=scheduling")
       .then(res => res.json())
       .then(data => {
         if (data.cards?.length) {
@@ -149,7 +154,7 @@ export default function ReportsPage() {
       const res = await fetch("/api/card-config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ page: "reports", cards: cardData }),
+        body: JSON.stringify({ page: "scheduling", cards: cardData }),
       });
 
       if (!res.ok) {
@@ -184,6 +189,7 @@ export default function ReportsPage() {
             )}
             onClick={() => card.route && card.route !== "#" && router.push(card.route)}
           >
+            {/* Background Image with Overlay */}
             <div className="absolute inset-0 z-0">
                <Image 
                  src={card.bgDark} 
@@ -201,8 +207,11 @@ export default function ReportsPage() {
                <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-white/40 to-transparent dark:from-black/90 dark:via-black/40 dark:to-transparent" />
             </div>
 
-             <div className="relative z-10 flex flex-col justify-between h-full p-5">
+            {/* Content */}
+            <div className="relative z-10 flex flex-col justify-between h-full p-5">
+                            {/* Top Actions */}
                <div className="flex items-start justify-end">
+                  {/* Edit Button (Super Admin only) */}
                   {isSuperAdmin && (
                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                      <Button 
@@ -218,7 +227,7 @@ export default function ReportsPage() {
                   )}
                </div>
 
-               {/* Glass Effect */}
+               {/* Bottom Info — Glass Effect */}
                <div className="bg-white/15 dark:bg-black/20 backdrop-blur-md rounded-lg px-4 py-3 border border-white/25 dark:border-white/10 shadow-sm">
                   <h3 style={{ fontFamily: "'Lovelo', sans-serif" }} className="text-2xl uppercase tracking-wide drop-shadow-md text-zinc-900 dark:text-white group-hover:text-primary transition-colors duration-300">
                      {card.name}
@@ -229,7 +238,7 @@ export default function ReportsPage() {
                      Coming Soon
                   </Badge>
                )}
-             </div>
+            </div>
             
             <div className="absolute inset-0 border-2 border-transparent group-hover:border-primary/50 rounded-xl transition-colors duration-300 pointer-events-none" />
           </div>

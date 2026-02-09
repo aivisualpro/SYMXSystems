@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxCardConfig from "@/lib/models/SymxCardConfig";
+import SymxAppModule from "@/lib/models/SymxAppModule";
 
 // GET - Fetch card configs for a page
 export async function GET(req: NextRequest) {
@@ -75,6 +76,41 @@ export async function PUT(req: NextRequest) {
       },
       { upsert: true, new: true }
     );
+
+    // ── Sync sub-module names in SymxAppModule ──────────────────────
+    // When a card name changes, update the matching sub-module in the
+    // parent module so that the sidebar, header title, and roles page
+    // all reflect the new display name automatically.
+    try {
+      // Capitalise the page name to match module names (e.g. "reports" → "Reports")
+      const moduleName = page.charAt(0).toUpperCase() + page.slice(1);
+      const parentModule = await SymxAppModule.findOne({ name: moduleName });
+
+      if (parentModule && parentModule.subModules?.length > 0) {
+        let changed = false;
+
+        for (const incoming of mergedCards) {
+          const idx = incoming.index;
+          const newName = incoming.name;
+
+          // Match sub-module by position (card index → sub-module index)
+          if (newName && idx < parentModule.subModules.length) {
+            const currentSubName = (parentModule.subModules[idx] as any).name;
+            if (currentSubName !== newName) {
+              (parentModule.subModules[idx] as any).name = newName;
+              changed = true;
+            }
+          }
+        }
+
+        if (changed) {
+          await parentModule.save();
+        }
+      }
+    } catch (syncErr) {
+      // Non-critical — log but don't fail the card save
+      console.error("Failed to sync sub-module name:", syncErr);
+    }
 
     return NextResponse.json({ success: true, config });
 
