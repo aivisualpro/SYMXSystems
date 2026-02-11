@@ -184,7 +184,7 @@ export default function EmployeePerformanceDashboard() {
   const [avgOverallScore, setAvgOverallScore] = useState(0);
   const [dspMetrics, setDspMetrics] = useState<DspMetrics | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [activeTab, setActiveTab] = useState("scorecard");
+  const [activeTab, setActiveTab] = useState("drivers-tab");
   const [pageTitle, setPageTitle] = useState("Company Performance Dashboard");
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -285,13 +285,25 @@ export default function EmployeePerformanceDashboard() {
       {/* Tab Navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="print:hidden">
         <TabsList>
+          <TabsTrigger value="drivers-tab" className="gap-1.5"><Truck className="h-3.5 w-3.5" />Drivers</TabsTrigger>
           <TabsTrigger value="scorecard" className="gap-1.5"><Target className="h-3.5 w-3.5" />DSP Scorecard</TabsTrigger>
           <TabsTrigger value="drivers" className="gap-1.5"><Users className="h-3.5 w-3.5" />Driver Details</TabsTrigger>
           <TabsTrigger value="pod" className="gap-1.5"><Camera className="h-3.5 w-3.5" />POD Analysis</TabsTrigger>
           <TabsTrigger value="cdf" className="gap-1.5"><MessageSquareWarning className="h-3.5 w-3.5" />CDF Report</TabsTrigger>
         </TabsList>
 
-        {/* ═══ TAB 1: DSP SCORECARD ═══ */}
+        {/* ═══ TAB: DRIVERS ═══ */}
+        <TabsContent value="drivers-tab" className="space-y-4 mt-4">
+          <Card className="overflow-hidden py-0">
+            <CardContent className="py-16 text-center">
+              <Truck className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-lg font-medium">Drivers</p>
+              <p className="text-sm text-muted-foreground mt-1">Driver data will be displayed here.</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ═══ TAB 2: DSP SCORECARD ═══ */}
         <TabsContent value="scorecard" className="space-y-4 mt-4">
           {sm && <>
             {/* Header Card */}
@@ -532,212 +544,6 @@ export default function EmployeePerformanceDashboard() {
         </TabsContent>
       </Tabs>
 
-      {/* ── Accordion Data Tables (All Records) ──────────────────────────── */}
-      {!loading && (drivers.length > 0 || podRows.length > 0 || cdfRows.length > 0) && (
-        <div className="print:hidden space-y-2 mt-6">
-          <h2 className="text-lg font-bold flex items-center gap-2 mb-2">
-            <FileText className="h-4.5 w-4.5" /> All Records
-          </h2>
-          <Accordion
-            type="multiple"
-            defaultValue={[]}
-            className="space-y-3"
-          >
-            {/* ── 1. DSP Delivery Excellence ──────────────────────────────── */}
-            {drivers.length > 0 && (
-              <AccordionItem value="excellence" className="border rounded-lg overflow-hidden">
-                <AccordionTrigger className="px-5 py-3.5 hover:no-underline hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center gap-2">
-                    <Truck className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm font-semibold">Delivery Excellence Performance ({drivers.length})</span>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-8">#</TableHead>
-                          <TableHead className="min-w-[180px]">Name</TableHead>
-                          <TableHead>Transporter ID</TableHead>
-                          <TableHead className="text-right">Delivered</TableHead>
-                          <TableHead className="text-right">FICO</TableHead>
-                          <TableHead className="text-right">Speeding</TableHead>
-                          <TableHead className="text-right">Seatbelt Off</TableHead>
-                          <TableHead className="text-right">Distractions</TableHead>
-                          <TableHead className="text-right">Sign/Signal</TableHead>
-                          <TableHead className="text-right">Following Dist</TableHead>
-                          <TableHead className="text-right">CDF DPMO</TableHead>
-                          <TableHead className="text-right">CED</TableHead>
-                          <TableHead className="text-right">DCR</TableHead>
-                          <TableHead className="text-right">DSB</TableHead>
-                          <TableHead className="text-right">POD</TableHead>
-                          <TableHead className="text-right">PSB</TableHead>
-                          <TableHead className="text-right">Standing</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {drivers.map((driver, idx) => (
-                          <TableRow
-                            key={driver.transporterId}
-                            className={driver.issueCount > 0 ? "bg-red-500/5" : ""}
-                          >
-                            <TableCell className="font-medium">{idx + 1}</TableCell>
-                            <TableCell className="font-medium">{driver.name}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground font-mono">
-                              {driver.transporterId}
-                            </TableCell>
-                            <TableCell className="text-right">{driver.packagesDelivered}</TableCell>
-                            <TableCell className="text-right">
-                              {driver.ficoMetric != null ? driver.ficoMetric : "No Data"}
-                            </TableCell>
-                            <TableCell className="text-right">{driver.speedingEventRate}</TableCell>
-                            <TableCell className="text-right">{driver.seatbeltOffRate}</TableCell>
-                            <TableCell className="text-right">{driver.distractionsRate}</TableCell>
-                            <TableCell className="text-right">{driver.signSignalViolationsRate}</TableCell>
-                            <TableCell className="text-right">{driver.followingDistanceRate}</TableCell>
-                            <TableCell className="text-right">{driver.cdfDpmo}</TableCell>
-                            <TableCell className="text-right">{driver.ced}</TableCell>
-                            <TableCell className="text-right">{driver.dcr}</TableCell>
-                            <TableCell className="text-right">
-                              <span className={driver.dsb > 0 ? "text-red-500 font-bold" : ""}>{driver.dsb}</span>
-                            </TableCell>
-                            <TableCell className="text-right">{driver.pod}</TableCell>
-                            <TableCell className="text-right">{driver.psb}</TableCell>
-                            <TableCell className="text-right">
-                              <TierBadge tier={driver.overallStanding} className="text-[9px]" />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            )}
-
-            {/* ── 2. Photo On Delivery (POD) ──────────────────────────────── */}
-            {podRows.length > 0 && (
-              <AccordionItem value="pod-all" className="border rounded-lg overflow-hidden">
-                <AccordionTrigger className="px-5 py-3.5 hover:no-underline hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center gap-2">
-                    <Camera className="h-4 w-4 text-purple-500" />
-                    <span className="text-sm font-semibold">Photo On Delivery — POD ({podRows.length})</span>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-8">#</TableHead>
-                          <TableHead className="min-w-[180px]">Name</TableHead>
-                          <TableHead>Transporter ID</TableHead>
-                          <TableHead className="text-right">Opportunities</TableHead>
-                          <TableHead className="text-right">Success</TableHead>
-                          <TableHead className="text-right">Bypass</TableHead>
-                          <TableHead className="text-right">Rejects</TableHead>
-                          <TableHead className="text-right">Blurry Photo</TableHead>
-                          <TableHead className="text-right">Human in Pic</TableHead>
-                          <TableHead className="text-right">No Package</TableHead>
-                          <TableHead className="text-right">Pkg in Car</TableHead>
-                          <TableHead className="text-right">Pkg in Hand</TableHead>
-                          <TableHead className="text-right">Pkg Not Visible</TableHead>
-                          <TableHead className="text-right">Pkg Too Close</TableHead>
-                          <TableHead className="text-right">Too Dark</TableHead>
-                          <TableHead className="text-right">Other</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {podRows.map((row, idx) => (
-                          <TableRow
-                            key={row.transporterId}
-                            className={row.rejects > 0 ? "bg-red-500/5" : ""}
-                          >
-                            <TableCell className="font-medium">{idx + 1}</TableCell>
-                            <TableCell className="font-medium">{row.name}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground font-mono">
-                              {row.transporterId}
-                            </TableCell>
-                            <TableCell className="text-right">{row.opportunities}</TableCell>
-                            <TableCell className="text-right">{row.success}</TableCell>
-                            <TableCell className="text-right">{row.bypass}</TableCell>
-                            <TableCell className="text-right">
-                              <span className={row.rejects > 0 ? "text-red-500 font-bold" : ""}>{row.rejects}</span>
-                            </TableCell>
-                            <TableCell className="text-right">{row.blurryPhoto || "—"}</TableCell>
-                            <TableCell className="text-right">{row.humanInThePicture || "—"}</TableCell>
-                            <TableCell className="text-right">{row.noPackageDetected || "—"}</TableCell>
-                            <TableCell className="text-right">{row.packageInCar || "—"}</TableCell>
-                            <TableCell className="text-right">{row.packageInHand || "—"}</TableCell>
-                            <TableCell className="text-right">{row.packageNotClearlyVisible || "—"}</TableCell>
-                            <TableCell className="text-right">{row.packageTooClose || "—"}</TableCell>
-                            <TableCell className="text-right">{row.photoTooDark || "—"}</TableCell>
-                            <TableCell className="text-right">{row.other || "—"}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            )}
-
-            {/* ── 3. Customer Delivery Feedback (CDF) ────────────────────── */}
-            {cdfRows.length > 0 && (
-              <AccordionItem value="cdf-all" className="border rounded-lg overflow-hidden">
-                <AccordionTrigger className="px-5 py-3.5 hover:no-underline hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center gap-2">
-                    <MessageSquareWarning className="h-4 w-4 text-amber-500" />
-                    <span className="text-sm font-semibold">Customer Delivery Feedback — CDF ({cdfRows.length})</span>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-8">#</TableHead>
-                          <TableHead className="min-w-[180px]">Name</TableHead>
-                          <TableHead>Transporter ID</TableHead>
-                          <TableHead className="text-right">CDF DPMO</TableHead>
-                          <TableHead className="text-right">Tier</TableHead>
-                          <TableHead className="text-right">Score</TableHead>
-                          <TableHead className="text-right">Negative Feedback</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {cdfRows.map((row, idx) => (
-                          <TableRow
-                            key={row.transporterId}
-                            className={row.negativeFeedbackCount > 0 ? "bg-red-500/5" : ""}
-                          >
-                            <TableCell className="font-medium">{idx + 1}</TableCell>
-                            <TableCell className="font-medium">{row.name}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground font-mono">
-                              {row.transporterId}
-                            </TableCell>
-                            <TableCell className="text-right">{row.cdfDpmo}</TableCell>
-                            <TableCell className="text-right">
-                              <TierBadge tier={row.cdfDpmoTier} className="text-[9px]" />
-                            </TableCell>
-                            <TableCell className="text-right">{row.cdfDpmoScore}</TableCell>
-                            <TableCell className="text-right">
-                              <span className={row.negativeFeedbackCount > 0 ? "text-red-500 font-bold" : ""}>
-                                {row.negativeFeedbackCount}
-                              </span>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            )}
-          </Accordion>
-        </div>
-      )}
 
       {/* ══ PRINT-ONLY: Weekly Driver Coaching Report ══ */}
       <div ref={reportRef} className="hidden print:block">

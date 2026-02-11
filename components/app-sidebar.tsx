@@ -23,6 +23,7 @@ import {
   IconShield,
   IconTie,
   IconChartBar,
+  IconTarget,
 } from "@tabler/icons-react";
 
 import { NavDocuments } from "@/components/nav-documents";
@@ -61,6 +62,7 @@ const ICON_MAP: Record<string, any> = {
   IconShield,
   IconTie,
   IconChartBar,
+  IconTarget,
   IconBell,
   IconSettings,
   IconSearch,
@@ -210,17 +212,21 @@ const data = {
         { name: "Fleet Summary", url: "#" }, 
         { name: "Repairs", url: "#" }, 
         { name: "Scorecard History", url: "#" }, 
-        { name: "Weekly ScoreCard", url: "/reports/company-performance-dashboard" }, 
+        { name: "Weekly ScoreCard", url: "/scorecard" }, 
         { name: "Lunch Compliance", url: "#" }
       ]
+    },
+    {
+      name: "Scorecard",
+      url: "/scorecard",
+      icon: IconTarget,
+      subModules: []
     },
     {
       name: "Reports",
       url: "/reports",
       icon: IconChartBar,
-      subModules: [
-        { name: "Company Performance Dashboard", url: "/reports/company-performance-dashboard" }
-      ]
+      subModules: []
     },
   ],
 };

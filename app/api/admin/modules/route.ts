@@ -46,12 +46,11 @@ const DEFAULT_MODULES = [
     { name: "Paycom Schedule Export", url: "#" }, { name: "Work Summary Tool", url: "#" },
     { name: "Fleet Summary", url: "#" }, { name: "Repairs", url: "#" },
     { name: "Scorecard History", url: "#" },
-    { name: "Weekly ScoreCard", url: "/reports/company-performance-dashboard" },
+    { name: "Weekly ScoreCard", url: "/scorecard" },
     { name: "Lunch Compliance", url: "#" },
   ]},
-  { name: "Reports", url: "/reports", icon: "IconChartBar", order: 10, subModules: [
-    { name: "Company Performance Dashboard", url: "/reports/company-performance-dashboard" },
-  ]},
+  { name: "Scorecard", url: "/scorecard", icon: "IconTarget", order: 10, subModules: [] },
+  { name: "Reports", url: "/reports", icon: "IconChartBar", order: 11, subModules: [] },
 ];
 
 // GET: Fetch all modules (ordered) — auto-seeds on first request
@@ -94,6 +93,9 @@ export async function GET() {
           if (needsUpdate) {
             await SymxAppModule.updateOne({ _id: (dbMod as any)._id }, { $set: updates });
           }
+        } else {
+          // Module doesn't exist in DB yet — insert it
+          await SymxAppModule.create(defaultMod);
         }
       }
 
@@ -274,18 +276,23 @@ export async function POST(req: NextRequest) {
           { name: "Fleet Summary", url: "#" },
           { name: "Repairs", url: "#" },
           { name: "Scorecard History", url: "#" },
-          { name: "Weekly ScoreCard", url: "/reports/company-performance-dashboard" },
+          { name: "Weekly ScoreCard", url: "/scorecard" },
           { name: "Lunch Compliance", url: "#" },
         ],
+      },
+      {
+        name: "Scorecard",
+        url: "/scorecard",
+        icon: "IconTarget",
+        order: 10,
+        subModules: [],
       },
       {
         name: "Reports",
         url: "/reports",
         icon: "IconChartBar",
-        order: 10,
-        subModules: [
-          { name: "Company Performance Dashboard", url: "/reports/company-performance-dashboard" },
-        ],
+        order: 11,
+        subModules: [],
       },
     ];
 

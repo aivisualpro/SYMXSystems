@@ -6,6 +6,8 @@ import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxDeliveryExcellence from "@/lib/models/SymxDeliveryExcellence";
 import SymxPhotoOnDelivery from "@/lib/models/SymxPhotoOnDelivery";
 import SymxCustomerDeliveryFeedback from "@/lib/models/SymxCustomerDeliveryFeedback";
+import SymxDVICVehicleInspection from "@/lib/models/SymxDVICVehicleInspection";
+import { getISOWeek, getISOWeekYear, parseISO } from "date-fns";
 
 // Helper to sanitize keys (remove whitespace, special chars if needed) - not strictly needed if we map manually
 // But manual mapping is safer for exact matches.
@@ -107,6 +109,36 @@ const cdfHeaderMap: Record<string, string> = {
     "CDF DPMO Score": "cdfDpmoScore",
     "Negative Feedback Count": "negativeFeedbackCount",
 };
+
+const dvicHeaderMap: Record<string, string> = {
+    "start_date": "startDate",
+    "dsp": "dsp",
+    "station": "station",
+    "transporter_id": "transporterId",
+    "transporter_name": "transporterName",
+    "vin": "vin",
+    "fleet_type": "fleetType",
+    "inspection_type": "inspectionType",
+    "inspection_status": "inspectionStatus",
+    "start_time": "startTime",
+    "end_time": "endTime",
+    "duration": "duration",
+};
+
+/**
+ * Convert a date string like "2026-01-25" to ISO week format "2026-W04"
+ */
+function dateToISOWeek(dateStr: string): string | null {
+  try {
+    const date = parseISO(dateStr);
+    if (isNaN(date.getTime())) return null;
+    const weekYear = getISOWeekYear(date);
+    const weekNum = getISOWeek(date);
+    return `${weekYear}-W${weekNum.toString().padStart(2, '0')}`;
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -426,6 +458,83 @@ export async function POST(req: NextRequest) {
             });
         }
         
+        return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+    }
+
+    // ── DVIC Vehicle Inspection Times Import ──
+    else if (type === "dvic-vehicle-inspection") {
+        // 1. Gather Transporter IDs
+        const transporterIds = data
+            .map((row: any) => (row["transporter_id"] || "").toString().trim())
+            .filter((id: string) => id);
+
+        // 2. Fetch Employees
+        const employees = await SymxEmployee.find(
+            { transporterId: { $in: transporterIds } },
+            { _id: 1, transporterId: 1 }
+        ).lean();
+        
+        const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
+
+        // 3. Process Rows — auto-calculate week from start_date
+        const operations = data.map((row: any) => {
+            const transporterId = (row["transporter_id"] || "").toString().trim();
+            const startDate = (row["start_date"] || "").toString().trim();
+
+            if (!transporterId) return null;
+
+            // Auto-calculate week from start_date
+            const autoWeek = startDate ? dateToISOWeek(startDate) : null;
+            if (!autoWeek) return null; // Skip rows without a valid date
+
+            const processedData: any = {
+                week: autoWeek,
+                transporterId,
+            };
+
+            // Map Headers
+            Object.entries(row).forEach(([header, value]) => {
+                const normalizedHeader = header.trim().toLowerCase();
+                // Find matching key in dvicHeaderMap (case-insensitive)
+                const matchKey = Object.keys(dvicHeaderMap).find(k => k.toLowerCase() === normalizedHeader);
+                if (matchKey) {
+                    const schemaKey = dvicHeaderMap[matchKey];
+                    if (value !== undefined && value !== null && value !== "") {
+                        processedData[schemaKey] = value.toString().trim();
+                    }
+                }
+            });
+
+            // Link Employee
+            if (employeeMap.has(transporterId)) {
+                processedData.employeeId = employeeMap.get(transporterId);
+            }
+
+            return {
+                updateOne: {
+                    filter: {
+                        week: processedData.week,
+                        transporterId: processedData.transporterId,
+                        vin: processedData.vin || '',
+                        startTime: processedData.startTime || '',
+                    },
+                    update: { $set: processedData },
+                    upsert: true
+                }
+            };
+        }).filter((op: any): op is NonNullable<typeof op> => op !== null);
+
+        if (operations.length > 0) {
+            const result = await SymxDVICVehicleInspection.bulkWrite(operations);
+            return NextResponse.json({
+                success: true,
+                count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                inserted: result.upsertedCount || 0,
+                updated: result.modifiedCount || 0,
+                matched: result.matchedCount
+            });
+        }
+
         return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
     }
 

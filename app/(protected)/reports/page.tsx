@@ -26,7 +26,8 @@ const DEFAULT_DARK_IMAGE = "/images/dark-default.png";
 const DEFAULT_LIGHT_IMAGE = "/images/light-default.png";
 
 const initialReportsCards = [
-  { name: "Company Performance Dashboard", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "/reports/company-performance-dashboard" },
+  { name: "Company Performance Dashboard", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "/scorecard" },
+  { name: "Driver Scorecard", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "/reports/driver-scorecard" },
 ];
 
 export default function ReportsPage() {

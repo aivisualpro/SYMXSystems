@@ -4,6 +4,7 @@ import connectToDatabase from "@/lib/db";
 import SymxDeliveryExcellence from "@/lib/models/SymxDeliveryExcellence";
 import SymxCustomerDeliveryFeedback from "@/lib/models/SymxCustomerDeliveryFeedback";
 import SymxPhotoOnDelivery from "@/lib/models/SymxPhotoOnDelivery";
+import SymxDVICVehicleInspection from "@/lib/models/SymxDVICVehicleInspection";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tier classification helpers
@@ -96,11 +97,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ weeks });
     }
 
-    // Fetch all 3 data sources for the selected week
-    const [excellence, cdf, pod] = await Promise.all([
+    // Fetch all 4 data sources for the selected week
+    const [excellence, cdf, pod, dvic] = await Promise.all([
       SymxDeliveryExcellence.find({ week }).lean(),
       SymxCustomerDeliveryFeedback.find({ week }).lean(),
       SymxPhotoOnDelivery.find({ week }).lean(),
+      SymxDVICVehicleInspection.find({ week }).lean(),
     ]);
 
     // Build a lookup map by transporterId
@@ -109,6 +111,13 @@ export async function GET(req: NextRequest) {
 
     const podMap = new Map<string, any>();
     pod.forEach((p: any) => podMap.set(p.transporterId, p));
+
+    // DVIC: group inspections per transporter
+    const dvicMap = new Map<string, any[]>();
+    dvic.forEach((d: any) => {
+      if (!dvicMap.has(d.transporterId)) dvicMap.set(d.transporterId, []);
+      dvicMap.get(d.transporterId)!.push(d);
+    });
 
     // Merge data per driver
     const drivers = excellence.map((driver: any) => {
@@ -187,6 +196,32 @@ export async function GET(req: NextRequest) {
         // Scores for sorting
         dsbCount: driver.dsb ?? 0,
         issueCount: (podData.rejects ?? 0) + (cdfData.negativeFeedbackCount ?? 0),
+
+        // DVIC
+        dvicInspections: (dvicMap.get(driver.transporterId) || []).map((d: any) => ({
+          vin: d.vin || "",
+          fleetType: d.fleetType || "",
+          inspectionType: d.inspectionType || "",
+          inspectionStatus: d.inspectionStatus || "",
+          startTime: d.startTime || "",
+          endTime: d.endTime || "",
+          duration: d.duration || "",
+          startDate: d.startDate || "",
+        })),
+        dvicTotalInspections: (dvicMap.get(driver.transporterId) || []).length,
+        dvicRushedCount: (dvicMap.get(driver.transporterId) || []).filter((d: any) => {
+          // Parse duration — consider "rushed" if < 2 minutes
+          const dur = d.duration || "";
+          const match = dur.match(/(\d+)\s*min/i);
+          if (match) return parseInt(match[1]) < 2;
+          // If format is HH:MM:SS
+          const timeParts = dur.split(":");
+          if (timeParts.length >= 2) {
+            const mins = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]);
+            return mins < 2;
+          }
+          return false;
+        }).length,
       };
     });
 
@@ -356,6 +391,20 @@ export async function GET(req: NextRequest) {
     }));
     cdfRows.sort((a: any, b: any) => b.negativeFeedbackCount - a.negativeFeedbackCount || (a.name || "").localeCompare(b.name || ""));
 
+    // DVIC aggregated rows (all inspections for the week)
+    const dvicRows = dvic.map((d: any) => ({
+      transporterId: d.transporterId,
+      transporterName: d.transporterName || "Unknown",
+      vin: d.vin || "",
+      fleetType: d.fleetType || "",
+      inspectionType: d.inspectionType || "",
+      inspectionStatus: d.inspectionStatus || "",
+      startTime: d.startTime || "",
+      endTime: d.endTime || "",
+      duration: d.duration || "",
+      startDate: d.startDate || "",
+    }));
+
     return NextResponse.json({
       week,
       totalDrivers,
@@ -365,6 +414,7 @@ export async function GET(req: NextRequest) {
       drivers,
       podRows,
       cdfRows,
+      dvicRows,
     });
 
   } catch (error) {
