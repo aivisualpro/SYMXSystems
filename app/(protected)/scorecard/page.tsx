@@ -24,12 +24,15 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import SignaturePad from "@/components/ui/signature-pad";
 import {
   Download, FileText, Users, Package, TrendingUp, AlertTriangle,
   Loader2, Shield, Truck, Camera, MessageSquareWarning, Target,
   Lightbulb, ChevronRight, Info, CheckCircle2, XCircle, Eye,
   Upload, Activity, MessageSquare, Search, Check, ClipboardCheck, Hash,
+  Pen, Save,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -202,6 +205,73 @@ export default function EmployeePerformanceDashboard() {
   const [selectedDriver, setSelectedDriver] = useState<DriverData | null>(null);
   const [driverSearch, setDriverSearch] = useState("");
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // ── Remarks & Signatures State ──────────────────────────────────────────
+  const [driverRemarks, setDriverRemarks] = useState("");
+  const [managerRemarks, setManagerRemarks] = useState("");
+  const [driverSignature, setDriverSignature] = useState("");
+  const [managerSignature, setManagerSignature] = useState("");
+  const [driverSigTimestamp, setDriverSigTimestamp] = useState<string | null>(null);
+  const [managerSigTimestamp, setManagerSigTimestamp] = useState<string | null>(null);
+  const [savingRemarks, setSavingRemarks] = useState(false);
+
+
+  // Fetch remarks when driver is selected
+  useEffect(() => {
+    if (!selectedDriver || !selectedWeek) {
+      setDriverRemarks(''); setManagerRemarks('');
+      setDriverSignature(''); setManagerSignature('');
+      setDriverSigTimestamp(null); setManagerSigTimestamp(null);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(`/api/reports/scorecard-remarks?transporterId=${encodeURIComponent(selectedDriver.transporterId)}&week=${encodeURIComponent(selectedWeek)}`);
+        const data = await res.json();
+        if (data.remarks) {
+          setDriverRemarks(data.remarks.driverRemarks || '');
+          setManagerRemarks(data.remarks.managerRemarks || '');
+          setDriverSignature(data.remarks.driverSignature || '');
+          setManagerSignature(data.remarks.managerSignature || '');
+          setDriverSigTimestamp(data.remarks.driverSignatureTimestamp || null);
+          setManagerSigTimestamp(data.remarks.managerSignatureTimestamp || null);
+        } else {
+          setDriverRemarks(''); setManagerRemarks('');
+          setDriverSignature(''); setManagerSignature('');
+          setDriverSigTimestamp(null); setManagerSigTimestamp(null);
+        }
+      } catch { /* silently fail */ }
+    })();
+  }, [selectedDriver, selectedWeek]);
+
+  const saveRemarks = async () => {
+    if (!selectedDriver || !selectedWeek) return;
+    setSavingRemarks(true);
+    try {
+      const res = await fetch('/api/reports/scorecard-remarks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transporterId: selectedDriver.transporterId,
+          week: selectedWeek,
+          driverRemarks,
+          driverSignature,
+          managerRemarks,
+          managerSignature,
+        }),
+      });
+      const data = await res.json();
+      if (data.remarks) {
+        setDriverSigTimestamp(data.remarks.driverSignatureTimestamp || null);
+        setManagerSigTimestamp(data.remarks.managerSignatureTimestamp || null);
+      }
+      toast.success('Remarks saved successfully');
+    } catch {
+      toast.error('Failed to save remarks');
+    } finally {
+      setSavingRemarks(false);
+    }
+  };
 
   // ── Import State ──────────────────────────────────────────────────────────
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -1017,10 +1087,12 @@ export default function EmployeePerformanceDashboard() {
                 {/* Driver identity row */}
                 <div className="flex items-center gap-4 mb-5">
                   {d.profileImage ? (
-                    <Image src={d.profileImage} alt={d.name} width={56} height={56} className="h-14 w-14 rounded-full object-cover shrink-0 shadow-md" />
+                    <div className="h-[60px] w-[60px] rounded-xl bg-gradient-to-br from-[#1a7a8a] to-[#1a5f6a] p-[3px] shrink-0 shadow-md">
+                      <Image src={d.profileImage} alt={d.name} width={56} height={56} className="h-full w-full rounded-[9px] object-cover" />
+                    </div>
                   ) : (
                     <div className={cn(
-                      "h-14 w-14 rounded-full flex items-center justify-center text-lg font-black text-white shrink-0 shadow-md",
+                      "h-[60px] w-[60px] rounded-xl flex items-center justify-center text-lg font-black text-white shrink-0 shadow-md",
                       "bg-gradient-to-br from-[#1a7a8a] to-[#1a5f6a]"
                     )}>
                       {d.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
@@ -1235,6 +1307,82 @@ export default function EmployeePerformanceDashboard() {
                     <span className="font-black">{focusAreas[0].title}:</span>{' '}
                     <span className="text-muted-foreground">{focusAreas[0].tip}</span>
                   </p>
+                </div>
+              </div>
+
+              {/* ── REMARKS & SIGNATURES ── */}
+              <div>
+                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#1a7a8a] to-[#1a5f6a] mx-4 rounded-t-xl">
+                  <h3 className="font-black text-sm text-white">Remarks & Signatures</h3>
+                  <Pen className="h-5 w-5 text-white/70" />
+                </div>
+                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-4 py-4 mb-4 space-y-3">
+
+                  {/* ── Driver Box ── */}
+                  <div className="rounded-xl border-2 border-border/50 overflow-hidden">
+                    <div className="px-4 py-2.5 bg-gradient-to-r from-muted/50 to-muted/30 border-b-2 border-border/40">
+                      <p className="text-[10px] uppercase tracking-widest font-black text-foreground/70 flex items-center gap-2">
+                        <span className="inline-block w-2 h-2 rounded-full bg-[#1a7a8a]"></span>
+                        Driver
+                      </p>
+                    </div>
+                    <div className="p-4 grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Remarks</label>
+                        <Textarea
+                          placeholder="Enter driver remarks..."
+                          className="min-h-[100px] text-xs resize-none border-2 border-border/40 focus:border-[#1a7a8a]/50 transition-colors"
+                          value={driverRemarks}
+                          onChange={(e) => setDriverRemarks(e.target.value)}
+                        />
+                      </div>
+                      <SignaturePad
+                        value={driverSignature}
+                        onChange={setDriverSignature}
+                        height={100}
+                        label="Signature"
+                        timestamp={driverSigTimestamp ? format(new Date(driverSigTimestamp), 'MMM d, yyyy h:mm a') : null}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ── Manager Box ── */}
+                  <div className="rounded-xl border-2 border-border/50 overflow-hidden">
+                    <div className="px-4 py-2.5 bg-gradient-to-r from-muted/50 to-muted/30 border-b-2 border-border/40">
+                      <p className="text-[10px] uppercase tracking-widest font-black text-foreground/70 flex items-center gap-2">
+                        <span className="inline-block w-2 h-2 rounded-full bg-[#1a5f6a]"></span>
+                        Manager
+                      </p>
+                    </div>
+                    <div className="p-4 grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Remarks</label>
+                        <Textarea
+                          placeholder="Enter manager remarks..."
+                          className="min-h-[100px] text-xs resize-none border-2 border-border/40 focus:border-[#1a7a8a]/50 transition-colors"
+                          value={managerRemarks}
+                          onChange={(e) => setManagerRemarks(e.target.value)}
+                        />
+                      </div>
+                      <SignaturePad
+                        value={managerSignature}
+                        onChange={setManagerSignature}
+                        height={100}
+                        label="Signature"
+                        timestamp={managerSigTimestamp ? format(new Date(managerSigTimestamp), 'MMM d, yyyy h:mm a') : null}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Save Button */}
+                  <Button
+                    className="w-full gap-2 bg-gradient-to-r from-[#1a7a8a] to-[#1a5f6a] hover:from-[#1a6a7a] hover:to-[#1a4f5a] text-white"
+                    onClick={saveRemarks}
+                    disabled={savingRemarks}
+                  >
+                    {savingRemarks ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {savingRemarks ? 'Saving...' : 'Save Remarks & Signatures'}
+                  </Button>
                 </div>
               </div>
 
