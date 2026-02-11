@@ -1016,15 +1016,18 @@ export default function EmployeePerformanceDashboard() {
               <div className="px-6 pt-7 pb-5">
                 {/* Driver identity row */}
                 <div className="flex items-center gap-4 mb-5">
-                  <div className={cn(
-                    "h-14 w-14 rounded-full flex items-center justify-center text-lg font-black text-white shrink-0 shadow-md",
-                    "bg-gradient-to-br from-[#1a7a8a] to-[#1a5f6a]"
-                  )}>
-                    {d.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                  </div>
+                  {d.profileImage ? (
+                    <Image src={d.profileImage} alt={d.name} width={56} height={56} className="h-14 w-14 rounded-full object-cover shrink-0 shadow-md" />
+                  ) : (
+                    <div className={cn(
+                      "h-14 w-14 rounded-full flex items-center justify-center text-lg font-black text-white shrink-0 shadow-md",
+                      "bg-gradient-to-br from-[#1a7a8a] to-[#1a5f6a]"
+                    )}>
+                      {d.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    </div>
+                  )}
                   <div className="min-w-0">
                     <h2 className="text-lg font-black tracking-tight truncate">{d.name}</h2>
-                    <p className="text-xs text-muted-foreground font-mono">{d.transporterId}</p>
                   </div>
                 </div>
 
