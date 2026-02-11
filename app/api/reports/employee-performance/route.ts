@@ -5,6 +5,7 @@ import SymxDeliveryExcellence from "@/lib/models/SymxDeliveryExcellence";
 import SymxCustomerDeliveryFeedback from "@/lib/models/SymxCustomerDeliveryFeedback";
 import SymxPhotoOnDelivery from "@/lib/models/SymxPhotoOnDelivery";
 import SymxDVICVehicleInspection from "@/lib/models/SymxDVICVehicleInspection";
+import SymxEmployee from "@/lib/models/SymxEmployee";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tier classification helpers
@@ -97,13 +98,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ weeks });
     }
 
-    // Fetch all 4 data sources for the selected week
-    const [excellence, cdf, pod, dvic] = await Promise.all([
+    // Fetch all 4 data sources for the selected week + employee images
+    const [excellence, cdf, pod, dvic, employees] = await Promise.all([
       SymxDeliveryExcellence.find({ week }).lean(),
       SymxCustomerDeliveryFeedback.find({ week }).lean(),
       SymxPhotoOnDelivery.find({ week }).lean(),
       SymxDVICVehicleInspection.find({ week }).lean(),
+      SymxEmployee.find({ transporterId: { $exists: true, $ne: '' } }, { transporterId: 1, profileImage: 1 }).lean(),
     ]);
+
+    // Employee image map
+    const empImageMap = new Map<string, string>();
+    employees.forEach((e: any) => {
+      if (e.transporterId && e.profileImage) empImageMap.set(e.transporterId, e.profileImage);
+    });
 
     // Build a lookup map by transporterId
     const cdfMap = new Map<string, any>();
@@ -140,6 +148,7 @@ export async function GET(req: NextRequest) {
         // Identity
         name: driver.deliveryAssociate || `${podData.firstName || ""} ${podData.lastName || ""}`.trim() || "Unknown",
         transporterId: driver.transporterId,
+        profileImage: empImageMap.get(driver.transporterId) || null,
 
         // Delivery Excellence metrics
         overallStanding: driver.overallStanding || "N/A",

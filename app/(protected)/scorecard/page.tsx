@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import Image from "next/image";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -37,7 +38,7 @@ import { format } from "date-fns";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface DriverData {
-  name: string; transporterId: string; overallStanding: string; overallScore: number | null;
+  name: string; transporterId: string; profileImage: string | null; overallStanding: string; overallScore: number | null;
   ficoMetric: number | null; ficoTier: string;
   speedingEventRate: number; speedingEventRateTier: string;
   seatbeltOffRate: number; seatbeltOffRateTier: string;
@@ -199,6 +200,7 @@ export default function EmployeePerformanceDashboard() {
   const [activeTab, setActiveTab] = useState("drivers-tab");
   const [pageTitle, setPageTitle] = useState("Scorecard");
   const [selectedDriver, setSelectedDriver] = useState<DriverData | null>(null);
+  const [driverSearch, setDriverSearch] = useState("");
   const reportRef = useRef<HTMLDivElement>(null);
 
   // ── Import State ──────────────────────────────────────────────────────────
@@ -407,6 +409,16 @@ export default function EmployeePerformanceDashboard() {
   useEffect(() => {
     setRightContent(
       <div className="flex items-center gap-3">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search drivers..."
+            className="h-8 w-[180px] pl-8 text-sm"
+            value={driverSearch}
+            onChange={(e) => setDriverSearch(e.target.value)}
+          />
+        </div>
         <Button size="sm" variant="outline" onClick={() => setShowImportDialog(true)} className="gap-2">
           <Upload className="h-4 w-4" /> Import
         </Button>
@@ -473,7 +485,7 @@ export default function EmployeePerformanceDashboard() {
       </div>
     );
     return () => setRightContent(null);
-  }, [selectedWeek, weeks, loadingWeeks, generatingPdf, drivers.length, setRightContent, showImportDialog, weekPopoverOpen, weekSearchInput, headerFilteredWeeks, isCustomWeek]);
+  }, [selectedWeek, weeks, loadingWeeks, generatingPdf, drivers.length, setRightContent, showImportDialog, weekPopoverOpen, weekSearchInput, headerFilteredWeeks, isCustomWeek, driverSearch]);
 
   // Tips based on focus areas
   const currentTips = useMemo(() => {
@@ -632,6 +644,7 @@ export default function EmployeePerformanceDashboard() {
                     </TableHeader>
                     <TableBody>
                       {[...drivers]
+                        .filter(d => !driverSearch || d.name.toLowerCase().includes(driverSearch.toLowerCase()))
                         .sort((a, b) => (b.overallScore ?? 0) - (a.overallScore ?? 0))
                         .map((d, i) => (
                           <TableRow
@@ -641,13 +654,16 @@ export default function EmployeePerformanceDashboard() {
                           >
                             <TableCell className="text-center font-medium text-muted-foreground">{i + 1}</TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-2">
-                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                                  {d.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                </div>
+                              <div className="flex items-center gap-2.5">
+                                {d.profileImage ? (
+                                  <Image src={d.profileImage} alt={d.name} width={32} height={32} className="h-8 w-8 rounded-full object-cover" />
+                                ) : (
+                                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                                    {d.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                  </div>
+                                )}
                                 <div>
                                   <p className="text-sm font-medium leading-none">{d.name}</p>
-                                  <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{d.transporterId}</p>
                                 </div>
                               </div>
                             </TableCell>
