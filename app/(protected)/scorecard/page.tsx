@@ -1331,7 +1331,7 @@ export default function EmployeePerformanceDashboard() {
                         <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Remarks</label>
                         <Textarea
                           placeholder="Enter driver remarks..."
-                          className="min-h-[100px] text-xs resize-none border-2 border-border/40 focus:border-[#1a7a8a]/50 transition-colors"
+                          className="min-h-[100px] text-xs resize-none border-2 border-border/40 focus:border-[#1a7a8a]/50 transition-colors bg-transparent"
                           value={driverRemarks}
                           onChange={(e) => setDriverRemarks(e.target.value)}
                         />
@@ -1359,7 +1359,7 @@ export default function EmployeePerformanceDashboard() {
                         <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Remarks</label>
                         <Textarea
                           placeholder="Enter manager remarks..."
-                          className="min-h-[100px] text-xs resize-none border-2 border-border/40 focus:border-[#1a7a8a]/50 transition-colors"
+                          className="min-h-[100px] text-xs resize-none bg-transparent border-2 border-border/40 focus:border-[#1a7a8a]/50 transition-colors"
                           value={managerRemarks}
                           onChange={(e) => setManagerRemarks(e.target.value)}
                         />
