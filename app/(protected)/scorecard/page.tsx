@@ -32,7 +32,7 @@ import {
   Loader2, Shield, Truck, Camera, MessageSquareWarning, Target,
   Lightbulb, ChevronRight, Info, CheckCircle2, XCircle, Eye,
   Upload, Activity, MessageSquare, Search, Check, ClipboardCheck, Hash,
-  Pen, Save,
+  Pen, Save, Smile,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -732,6 +732,7 @@ export default function EmployeePerformanceDashboard() {
                       <TableRow>
                         <TableHead className="w-10 text-center">#</TableHead>
                         <TableHead className="min-w-[180px]">Driver</TableHead>
+                        <TableHead className="text-center">Deliveries</TableHead>
                         <TableHead className="text-center">Tier</TableHead>
                         <TableHead className="text-center">Rank</TableHead>
                         <TableHead className="text-center">Driving Safety</TableHead>
@@ -764,6 +765,9 @@ export default function EmployeePerformanceDashboard() {
                                   <p className="text-sm font-medium leading-none">{d.name}</p>
                                 </div>
                               </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className="text-sm font-bold tabular-nums">{d.packagesDelivered.toLocaleString()}</span>
                             </TableCell>
                             <TableCell className="text-center"><TierBadge tier={d.overallStanding} /></TableCell>
                             <TableCell className="text-center">
@@ -1164,99 +1168,177 @@ export default function EmployeePerformanceDashboard() {
                   <h3 className="font-black text-sm text-white">Driving Safety</h3>
                   <Shield className="h-5 w-5 text-white/70" />
                 </div>
-                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-4 py-3 mb-4">
+                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-0 py-0 mb-4 overflow-hidden">
                   {/* On-Road Safety Score */}
-                  <div className="flex justify-between items-center py-2 border-b border-border/20">
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15">
                     <span className="text-sm font-bold">On-Road Safety Score</span>
-                    <span className={cn("text-sm font-black", tierCfg.color)}>{d.ficoTier || 'N/A'}</span>
+                    <span className="text-sm font-black">{d.ficoTier || 'N/A'}</span>
                   </div>
-                  {/* FICO Score with gradient bar */}
-                  <div className="py-2 border-b border-border/20">
-                    <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-sm font-semibold">FICO Score</span>
-                      <span className="text-sm font-black tabular-nums">{d.ficoMetric ?? '—'}<span className="text-muted-foreground font-normal text-xs">/850</span></span>
-                    </div>
-                    <div className="h-2.5 rounded-full bg-gradient-to-r from-red-500 via-amber-400 via-yellow-400 to-emerald-500 relative overflow-hidden opacity-80">
-                      <div className="absolute top-0 right-0 h-full bg-muted/80 rounded-r-full transition-all duration-700" style={{ width: `${100 - ficoBarPct}%` }} />
-                    </div>
+                  {/* FICO Score */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: `linear-gradient(270deg, ${(d.ficoMetric ?? 0) >= 800 ? 'rgba(16,185,129,0.15)' : (d.ficoMetric ?? 0) >= 700 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)'} 0%, transparent 60%)` }}>
+                    <span className="text-sm font-bold">FICO Score</span>
+                    <span className="text-sm font-black tabular-nums">
+                      <span className={(d.ficoMetric ?? 0) >= 800 ? 'text-emerald-600' : (d.ficoMetric ?? 0) >= 700 ? 'text-amber-500' : 'text-red-500'}>{d.ficoMetric ?? '—'}</span>
+                      <span className="text-muted-foreground font-normal">/850</span>
+                    </span>
+                  </div>
+                  {/* Proper-Park-Sequence Compliance */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(270deg, rgba(245,158,11,0.12) 0%, transparent 60%)' }}>
+                    <span className="text-sm font-bold">Proper-Park-Sequence Compliance</span>
+                    <span className="text-[10px] font-semibold text-muted-foreground italic">Coming Soon</span>
+                  </div>
+                  {/* Sub-rows */}
+                  <div className="flex justify-between items-center px-4 py-2 pl-7 border-b border-border/10">
+                    <span className="text-sm text-muted-foreground">Did Not Apply Parking Brake</span>
+                    <span className="text-sm font-black tabular-nums text-muted-foreground/50">—</span>
+                  </div>
+                  <div className="flex justify-between items-center px-4 py-2 pl-7 border-b border-border/10">
+                    <span className="text-sm text-muted-foreground">Did Not Shift Gear to Park</span>
+                    <span className="text-sm font-black tabular-nums text-muted-foreground/50">—</span>
+                  </div>
+                  {/* Paw Print Contact Compliance */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(270deg, rgba(16,185,129,0.15) 0%, rgba(16,185,129,0.05) 50%, transparent 100%)' }}>
+                    <span className="text-sm font-bold">Paw Print Contact Compliance</span>
+                    <span className="text-[10px] font-semibold text-muted-foreground italic">Coming Soon</span>
                   </div>
 
                   {/* Events header */}
-                  <p className="text-xs text-muted-foreground pt-3 pb-1 font-medium">Events <span className="text-[10px]">(Per 100 Deliveries)</span></p>
-                  
+                  <div className="px-4 pt-3.5 pb-2 border-b border-border/15">
+                    <span className="text-sm font-black">Events</span>
+                    <span className="text-xs text-muted-foreground ml-1">(Per 100 Deliveries)</span>
+                  </div>
+
                   {/* Event rates with gradient bars */}
-                  {[
-                    { label: 'Distractions', value: d.distractionsRate },
-                    { label: 'Speeding', value: d.speedingEventRate },
-                    { label: 'Seatbelt Off', value: d.seatbeltOffRate },
-                    { label: 'Follow Distance', value: d.followingDistanceRate },
-                    { label: 'Sign/Signal Violations', value: d.signSignalViolationsRate },
-                  ].map((m) => (
-                    <div key={m.label} className="flex justify-between items-center py-2">
-                      <span className="text-sm font-semibold">{m.label}</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 h-2 rounded-full bg-muted/30 overflow-hidden">
-                          <div className={cn("h-full rounded-full transition-all duration-700", rateBarColor(m.value))} style={{ width: `${m.value === 0 ? 0 : rateBarPct(m.value)}%` }} />
+                  {(() => {
+                    const events = [
+                      { label: 'Distractions', value: d.distractionsRate },
+                      { label: 'Speeding', value: d.speedingEventRate },
+                      { label: 'Seatbelt Off', value: d.seatbeltOffRate },
+                      { label: 'Follow Distance', value: d.followingDistanceRate },
+                      { label: 'Sign/Signal Violations', value: d.signSignalViolationsRate },
+                    ];
+                    const getEventColor = (v: number) => {
+                      if (v === 0) return { text: 'text-emerald-500', bg: 'transparent' };
+                      if (v <= 0.3) return { text: 'text-emerald-500', bg: 'linear-gradient(270deg, rgba(16,185,129,0.12) 0%, transparent 60%)' };
+                      if (v <= 0.8) return { text: 'text-amber-500', bg: 'linear-gradient(270deg, rgba(245,158,11,0.18) 0%, rgba(245,158,11,0.05) 50%, transparent 100%)' };
+                      if (v <= 1.5) return { text: 'text-orange-500', bg: 'linear-gradient(270deg, rgba(249,115,22,0.18) 0%, rgba(249,115,22,0.05) 50%, transparent 100%)' };
+                      return { text: 'text-red-500', bg: 'linear-gradient(270deg, rgba(239,68,68,0.20) 0%, rgba(239,68,68,0.06) 50%, transparent 100%)' };
+                    };
+                    return events.map((m, idx) => {
+                      const colors = getEventColor(m.value);
+                      return (
+                        <div key={m.label} className={cn("flex justify-between items-center px-4 py-2.5", idx < events.length - 1 && "border-b border-border/10")} style={{ background: colors.bg }}>
+                          <span className="text-sm font-bold">{m.label}</span>
+                          <span className={cn("text-sm font-black tabular-nums", colors.text)}>{m.value}</span>
                         </div>
-                        <span className={cn("text-sm font-black tabular-nums w-8 text-right", m.value === 0 ? 'text-emerald-500' : m.value <= 0.5 ? 'text-green-500' : m.value <= 1.5 ? 'text-amber-500' : 'text-red-500')}>{m.value}</span>
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    });
+                  })()}
                 </div>
               </div>
 
               {/* ── DELIVERY QUALITY ── */}
               <div>
-                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#1a7a8a] to-[#1a5f6a] mx-4 rounded-t-xl">
+                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#1a8a5a] to-[#1a6a4a] mx-4 rounded-t-xl">
                   <h3 className="font-black text-sm text-white">Delivery Quality</h3>
                   <CheckCircle2 className="h-5 w-5 text-white/70" />
                 </div>
-                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-4 py-3 mb-4">
-                  {[
-                    { label: 'Overall Quality Score', value: d.dcrTier, isTier: true },
-                    { label: 'Completion Rate', value: `${d.dcr}%` },
-                    { label: 'Delivered, Not Received', value: `${d.ced}/${d.packagesDelivered}`, warn: d.ced > 0 },
-                    { label: 'Photo-On-Delivery Acceptance', value: `${podRate}%` },
-                    { label: 'Photo-On-Delivery Rejects', value: `${d.podRejects}/${d.podOpportunities || '—'}`, warn: d.podRejects > 0 },
-                  ].map((m) => (
-                    <div key={m.label} className="flex justify-between items-center py-2 border-b border-border/10 last:border-0">
-                      <span className={cn("text-sm", m.isTier ? 'font-bold' : 'font-semibold')}>{m.label}</span>
-                      <span className={cn("text-sm font-black tabular-nums", m.isTier ? tierCfg.color : m.warn ? 'text-red-500' : '')}>{m.value}</span>
-                    </div>
-                  ))}
+                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-0 py-0 mb-4 overflow-hidden">
+                  {/* Overall Quality Score */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(270deg, rgba(16,185,129,0.15) 0%, rgba(16,185,129,0.05) 60%, transparent 100%)' }}>
+                    <span className="text-sm font-bold">Overall Quality Score</span>
+                    <span className="text-sm font-black text-emerald-600">{d.dcrTier || 'N/A'}</span>
+                  </div>
+                  {/* Completion Rate */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15">
+                    <span className="text-sm font-bold">Completion Rate</span>
+                    <span className="text-sm font-black tabular-nums">{d.dcr}</span>
+                  </div>
+                  {/* Delivered, Not Received */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: d.ced > 0 ? 'linear-gradient(270deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 50%, transparent 100%)' : undefined }}>
+                    <span className="text-sm font-bold">Delivered, Not Received</span>
+                    <span className={cn("text-sm font-black tabular-nums", d.ced > 0 && "text-amber-500")}>
+                      {d.ced}<span className="text-muted-foreground font-normal">/{d.packagesDelivered}</span>
+                    </span>
+                  </div>
+                  {/* Photo-On-Delivery Acceptance */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(270deg, rgba(16,185,129,0.10) 0%, transparent 60%)' }}>
+                    <span className="text-sm font-bold">Photo-On-Delivery Acceptance</span>
+                    <span className="text-sm font-black tabular-nums">{podRate}%</span>
+                  </div>
+                  {/* Photo-On-Delivery Rejects */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15">
+                    <span className="text-sm font-bold">Photo-On-Delivery Rejects</span>
+                    <span className={cn("text-sm font-black tabular-nums", d.podRejects > 0 && "text-amber-500")}>
+                      {d.podRejects}<span className="text-muted-foreground font-normal">/{d.podOpportunities || '—'}</span>
+                    </span>
+                  </div>
                   {/* POD Reject Breakdown */}
                   {d.podRejects > 0 && Object.entries(d.podRejectBreakdown).length > 0 && (
-                    <div className="pl-5 space-y-0.5 pb-2">
-                      {Object.entries(d.podRejectBreakdown).sort(([,a],[,b]) => b - a).map(([reason, count]) => (
-                        <div key={reason} className="flex justify-between text-xs py-0.5 text-muted-foreground">
-                          <span>{reason}</span>
-                          <span className="font-mono font-bold">{count}</span>
+                    <>
+                      {Object.entries(d.podRejectBreakdown).sort(([,a],[,b]) => (b as number) - (a as number)).map(([reason, count]) => (
+                        <div key={reason} className="flex justify-between items-center px-4 py-2 pl-7 border-b border-border/10">
+                          <span className="text-sm text-muted-foreground">{reason}</span>
+                          <span className="text-sm font-black tabular-nums">{count as number}</span>
                         </div>
                       ))}
-                    </div>
+                    </>
                   )}
-                  <div className={cn("flex justify-between items-center py-2 border-t border-border/20")}>
-                    <span className="text-sm font-semibold">Delivery Success Behaviors</span>
-                    <span className={cn("text-sm font-black tabular-nums", d.dsb > 0 ? "text-red-500" : "text-emerald-500")}>{d.dsb}</span>
+                  {/* Delivery Success Behaviors */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: d.dsb > 0 ? 'linear-gradient(270deg, rgba(245,158,11,0.18) 0%, rgba(239,68,68,0.08) 50%, transparent 100%)' : 'linear-gradient(270deg, rgba(16,185,129,0.12) 0%, transparent 60%)' }}>
+                    <span className="text-sm font-bold">Delivery Success Behaviors</span>
+                    <span className={cn("text-sm font-black tabular-nums", d.dsb > 0 ? "text-amber-500" : "text-emerald-500")}>{d.dsb}</span>
+                  </div>
+                  {/* Pickup Success Behaviors */}
+                  <div className="flex justify-between items-center px-4 py-2.5" style={{ background: 'linear-gradient(270deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 50%, transparent 100%)' }}>
+                    <span className="text-sm font-bold">Pickup Success Behaviors</span>
+                    <span className="text-[10px] font-semibold text-muted-foreground italic">Coming Soon</span>
                   </div>
                 </div>
               </div>
 
               {/* ── CUSTOMER FEEDBACK ── */}
               <div>
-                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#1a7a8a] to-[#1a5f6a] mx-4 rounded-t-xl">
+                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#d4950a] to-[#c2860a] mx-4 rounded-t-xl">
                   <h3 className="font-black text-sm text-white">Customer Feedback</h3>
-                  <MessageSquareWarning className="h-5 w-5 text-white/70" />
+                  <Smile className="h-5 w-5 text-white/70" />
                 </div>
-                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-4 py-3 mb-4">
-                  <div className="flex justify-between items-center py-2 border-b border-border/10">
-                    <span className="text-sm font-semibold">CDF DPMO</span>
-                    <span className="text-sm font-black tabular-nums">{d.cdfDpmo}</span>
+                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-0 py-0 mb-4 overflow-hidden">
+                  {/* Overall Feedback Score */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(90deg, rgba(212,149,10,0.12) 0%, rgba(212,149,10,0.05) 100%)' }}>
+                    <span className="text-sm font-bold">Overall Feedback Score</span>
+                    <span className="text-sm font-black text-[#c2860a]">{d.cdfDpmoTier || 'N/A'}</span>
                   </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-sm font-semibold">Negative Feedback Count</span>
-                    <span className={cn("text-sm font-black tabular-nums", d.negativeFeedbackCount > 0 && "text-red-500")}>{d.negativeFeedbackCount}</span>
+                  {/* Negative Feedback Rate */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(90deg, rgba(212,149,10,0.08) 0%, rgba(212,149,10,0.03) 100%)' }}>
+                    <span className="text-sm font-bold">Negative Feedback Rate <span className="font-normal text-muted-foreground">(CDF DPMO)</span></span>
+                    <span className="text-sm font-black tabular-nums text-[#c2860a]">{typeof d.cdfDpmo === 'number' ? d.cdfDpmo.toLocaleString() : d.cdfDpmo}</span>
                   </div>
+                  {/* Deliveries w/ Negative Feedback */}
+                  <div className="flex justify-between items-center px-4 py-2.5 pl-7 border-b border-border/15" style={{ background: 'linear-gradient(90deg, rgba(212,149,10,0.05) 0%, transparent 100%)' }}>
+                    <span className="text-sm text-muted-foreground">Deliveries w/ Negative Feedback</span>
+                    <span className="text-sm font-black tabular-nums">
+                      {d.negativeFeedbackCount}<span className="text-muted-foreground font-normal">/{d.packagesDelivered}</span>
+                    </span>
+                  </div>
+                  {/* Escalation Defects */}
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(270deg, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0.04) 60%, transparent 100%)' }}>
+                    <span className="text-sm font-bold">Escalation Defects</span>
+                    <span className="text-[10px] font-semibold text-muted-foreground italic">Coming Soon</span>
+                  </div>
+
+                  {/* Negative Feedback Breakdown */}
+                  <div className="px-4 pt-3 pb-1">
+                    <p className="text-sm font-black mb-1">Negative Feedback</p>
+                    <p className="text-[10px] text-muted-foreground italic mb-2">Coming Soon</p>
+                  </div>
+                  {['Not Great', 'Did Not Follow Instructions', 'Wrong Address', 'Never Received'].map((label) => (
+                    <div key={label} className="flex justify-between items-center px-4 py-2 pl-7 border-t border-border/10">
+                      <span className="text-sm text-muted-foreground">{label}</span>
+                      <span className="text-sm font-black tabular-nums text-muted-foreground/50">—</span>
+                    </div>
+                  ))}
+                  <div className="h-1" />
                 </div>
               </div>
 
