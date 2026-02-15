@@ -408,6 +408,21 @@ export default function EmployeePerformanceDashboard() {
   // ── Week Selector State (header combo-box) ──────────────────────────────
   const [weekPopoverOpen, setWeekPopoverOpen] = useState(false);
   const [weekSearchInput, setWeekSearchInput] = useState("");
+  const weekInputRef = useRef<HTMLInputElement>(null);
+
+  // Normalize flexible input → standard YYYY-Wxx format
+  const normalizeWeekInput = (raw: string): string | null => {
+    const s = raw.trim().toUpperCase();
+    // Match patterns: 2026-W05, 2026-W5, 2026W05, 2026W5
+    const m = s.match(/^(\d{4})-?W(\d{1,2})$/);
+    if (!m) return null;
+    const year = parseInt(m[1], 10);
+    const wk = parseInt(m[2], 10);
+    if (wk < 1 || wk > 53 || year < 2020 || year > 2099) return null;
+    return `${m[1]}-W${wk.toString().padStart(2, '0')}`;
+  };
+
+  const normalizedWeekInput = normalizeWeekInput(weekSearchInput);
 
   // Combined list: fetched weeks + user-added weeks
   const headerFilteredWeeks = useMemo(() => {
@@ -416,7 +431,7 @@ export default function EmployeePerformanceDashboard() {
     return weeks.filter(w => w.toLowerCase().includes(lower));
   }, [weeks, weekSearchInput]);
 
-  const isCustomWeek = weekSearchInput && /^\d{4}-W\d{2}$/.test(weekSearchInput) && !weeks.includes(weekSearchInput);
+  const isCustomWeek = !!normalizedWeekInput && !weeks.includes(normalizedWeekInput);
 
   const handleSelectHeaderWeek = (week: string) => {
     setSelectedWeek(week);
@@ -425,15 +440,14 @@ export default function EmployeePerformanceDashboard() {
   };
 
   const handleAddCustomWeek = () => {
-    const w = weekSearchInput.trim();
-    if (!/^\d{4}-W\d{2}$/.test(w)) {
-      toast.error("Invalid week format. Use YYYY-Www (e.g. 2026-W05)");
+    if (!normalizedWeekInput) {
+      toast.error("Invalid week format. Use YYYY-Wxx (e.g. 2026-W05)");
       return;
     }
-    if (!weeks.includes(w)) {
-      setWeeks(prev => [w, ...prev]);
+    if (!weeks.includes(normalizedWeekInput)) {
+      setWeeks(prev => [normalizedWeekInput, ...prev].sort().reverse());
     }
-    setSelectedWeek(w);
+    setSelectedWeek(normalizedWeekInput);
     setWeekSearchInput("");
     setWeekPopoverOpen(false);
   };
@@ -504,31 +518,39 @@ export default function EmployeePerformanceDashboard() {
             <ChevronRight className="h-3.5 w-3.5 rotate-90 text-muted-foreground" />
           </Button>
           {weekPopoverOpen && (
-            <div className="absolute right-0 top-full mt-1 z-50 w-[220px] rounded-md border bg-popover text-popover-foreground shadow-md">
+            <div className="absolute right-0 top-full mt-1 z-50 w-[260px] rounded-md border bg-popover text-popover-foreground shadow-md">
               <div className="p-2 border-b">
                 <div className="relative">
                   <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input
+                    ref={weekInputRef}
                     type="text"
-                    placeholder="Search or add week..."
+                    placeholder="Type week e.g. 2026-W06"
                     className="h-8 pl-7 text-sm"
                     value={weekSearchInput}
-                    onChange={(e) => setWeekSearchInput(e.target.value)}
+                    onChange={(e) => setWeekSearchInput(e.target.value.toUpperCase())}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && isCustomWeek) handleAddCustomWeek();
+                      if (e.key === "Enter") {
+                        if (isCustomWeek) handleAddCustomWeek();
+                        else if (normalizedWeekInput && weeks.includes(normalizedWeekInput)) handleSelectHeaderWeek(normalizedWeekInput);
+                      }
                     }}
                     autoFocus
                   />
                 </div>
+                <p className="text-[10px] text-muted-foreground mt-1 px-0.5">Format: YYYY-Wxx (e.g. 2026-W06)</p>
               </div>
               <div className="max-h-[200px] overflow-y-auto">
                 {isCustomWeek && (
                   <div
-                    className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground border-b"
+                    className="flex items-center gap-2 px-3 py-2.5 text-sm cursor-pointer hover:bg-primary/10 border-b bg-primary/5 transition-colors"
                     onClick={handleAddCustomWeek}
                   >
-                    <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">+ Add</span>
-                    <span className="font-medium">{weekSearchInput}</span>
+                    <span className="flex items-center gap-1 text-xs bg-primary/15 text-primary px-2 py-0.5 rounded-full font-semibold">
+                      <Hash className="h-3 w-3" /> Add
+                    </span>
+                    <span className="font-semibold text-primary">{normalizedWeekInput}</span>
+                    <span className="text-[10px] text-muted-foreground ml-auto">↵ Enter</span>
                   </div>
                 )}
                 {headerFilteredWeeks.length > 0 ? headerFilteredWeeks.map(w => (
@@ -541,8 +563,14 @@ export default function EmployeePerformanceDashboard() {
                     {w}
                   </div>
                 )) : (
-                  <div className="py-4 text-center text-xs text-muted-foreground">
-                    {weekSearchInput ? "No matching weeks" : "No weeks available"}
+                  <div className="py-4 px-3 text-center">
+                    <p className="text-xs text-muted-foreground">
+                      {weekSearchInput
+                        ? normalizedWeekInput
+                          ? `"${normalizedWeekInput}" not found — click + Add above`
+                          : "Invalid format — use YYYY-Wxx"
+                        : "No weeks available. Type a week to add it."}
+                    </p>
                   </div>
                 )}
               </div>
@@ -555,7 +583,7 @@ export default function EmployeePerformanceDashboard() {
       </div>
     );
     return () => setRightContent(null);
-  }, [selectedWeek, weeks, loadingWeeks, generatingPdf, drivers.length, setRightContent, showImportDialog, weekPopoverOpen, weekSearchInput, headerFilteredWeeks, isCustomWeek, driverSearch]);
+  }, [selectedWeek, weeks, loadingWeeks, generatingPdf, drivers.length, setRightContent, showImportDialog, weekPopoverOpen, weekSearchInput, headerFilteredWeeks, isCustomWeek, normalizedWeekInput, driverSearch]);
 
   // Tips based on focus areas
   const currentTips = useMemo(() => {
