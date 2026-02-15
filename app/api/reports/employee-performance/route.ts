@@ -219,15 +219,22 @@ export async function GET(req: NextRequest) {
         })),
         dvicTotalInspections: (dvicMap.get(driver.transporterId) || []).length,
         dvicRushedCount: (dvicMap.get(driver.transporterId) || []).filter((d: any) => {
-          // Parse duration — consider "rushed" if < 2 minutes
-          const dur = d.duration || "";
-          const match = dur.match(/(\d+)\s*min/i);
-          if (match) return parseInt(match[1]) < 2;
-          // If format is HH:MM:SS
-          const timeParts = dur.split(":");
+          // Parse duration into seconds — consider "rushed" if < 90 seconds
+          const dur = d.duration;
+          if (dur == null || dur === "") return false;
+          // Plain number (seconds)
+          if (!isNaN(Number(dur))) return Number(dur) < 90;
+          const durStr = String(dur);
+          // "X min" / "X minutes" format → convert to seconds
+          const minMatch = durStr.match(/(\d+(?:\.\d+)?)\s*min/i);
+          if (minMatch) return parseFloat(minMatch[1]) * 60 < 90;
+          // HH:MM:SS or MM:SS format
+          const timeParts = durStr.split(":");
           if (timeParts.length >= 2) {
-            const mins = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]);
-            return mins < 2;
+            const totalSec = timeParts.length === 3
+              ? parseInt(timeParts[0]) * 3600 + parseInt(timeParts[1]) * 60 + parseInt(timeParts[2])
+              : parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]);
+            return totalSec < 90;
           }
           return false;
         }).length,

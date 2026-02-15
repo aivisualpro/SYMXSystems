@@ -1101,7 +1101,7 @@ export default function EmployeePerformanceDashboard() {
 
           // Focus area — pick the weakest metric area
           const focusAreas: { title: string; tip: string }[] = [];
-          if (d.negativeFeedbackCount > 0) focusAreas.push({ title: 'Customer Delivery Feedback', tip: 'Always read the customer notes before executing a delivery! These notes will aid you in the delivery and help to ensure your success. When in doubt, call customer support or call/text the customer for guidance on how they want their package delivered.' });
+          if (d.negativeFeedbackCount > 0) focusAreas.push({ title: 'Customer Delivery Feedback', tip: 'Always read the customer notes before executing a delivery! These notes will aid you in the delivery and help to ensure your success. When in doubt, call customer support or call/text the customer for guidance on how they want their package delivered. Lastly, if you ever interact with a customer directly, smiling and being courteous will generally help your CDF score.' });
           if (d.dsb > 0) focusAreas.push({ title: 'Delivery Success Behaviors', tip: 'Focus on following the correct sequence at every stop — scan, photo, confirm. Skipping steps or rushing through can trigger DSB flags.' });
           if (d.podRejects > 0) focusAreas.push({ title: 'Photo-On-Delivery Quality', tip: 'Make sure your photos clearly show the package at the delivery location. Avoid blurry images, photos that are too close, or images that include people.' });
           if (d.speedingEventRate > 0.5) focusAreas.push({ title: 'Speeding Events', tip: 'Keep an eye on your speed, especially in residential areas and school zones. Reducing your speed will directly improve your FICO score.' });
@@ -1115,12 +1115,12 @@ export default function EmployeePerformanceDashboard() {
                 {/* Driver identity row */}
                 <div className="flex items-center gap-4 mb-5">
                   {d.profileImage ? (
-                    <div className="h-[60px] w-[60px] rounded-xl bg-gradient-to-br from-[#1a7a8a] to-[#1a5f6a] p-[3px] shrink-0 shadow-md">
-                      <Image src={d.profileImage} alt={d.name} width={56} height={56} className="h-full w-full rounded-[9px] object-cover" />
+                    <div className="h-[60px] w-[60px] rounded-full bg-gradient-to-br from-[#1a7a8a] to-[#1a5f6a] p-[2px] shrink-0 shadow-md">
+                      <Image src={d.profileImage} alt={d.name} width={56} height={56} className="h-full w-full rounded-full object-cover" />
                     </div>
                   ) : (
                     <div className={cn(
-                      "h-[60px] w-[60px] rounded-xl flex items-center justify-center text-lg font-black text-white shrink-0 shadow-md",
+                      "h-[60px] w-[60px] rounded-full flex items-center justify-center text-lg font-black text-white shrink-0 shadow-md",
                       "bg-gradient-to-br from-[#1a7a8a] to-[#1a5f6a]"
                     )}>
                       {d.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
@@ -1263,59 +1263,140 @@ export default function EmployeePerformanceDashboard() {
               {/* ── DVIC ── */}
               <div>
                 <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#1a7a8a] to-[#1a5f6a] mx-4 rounded-t-xl">
-                  <h3 className="font-black text-sm text-white">Vehicle Inspection (DVIC)</h3>
+                  <h3 className="font-black text-sm text-white">Vehicle Inspection Times (DVIC)</h3>
                   <ClipboardCheck className="h-5 w-5 text-white/70" />
                 </div>
                 <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-4 py-3 mb-4">
-                  {d.dvicTotalInspections > 0 ? (
-                    <>
-                      <div className="grid grid-cols-2 gap-2 mb-3">
-                        <div className="rounded-lg bg-[#1a7a8a]/5 border border-[#1a7a8a]/15 p-2.5 text-center">
-                          <p className="text-[9px] uppercase tracking-widest text-muted-foreground mb-0.5">Total</p>
-                          <p className="text-lg font-black text-[#1a7a8a] tabular-nums">{d.dvicTotalInspections}</p>
+                  {d.dvicTotalInspections > 0 ? (() => {
+                    // Helper: parse duration to seconds
+                    const parseDurSec = (dur: string | number | undefined): number => {
+                      if (dur == null || dur === "") return 0;
+                      if (!isNaN(Number(dur))) return Number(dur);
+                      const s = String(dur);
+                      const minM = s.match(/(\d+(?:\.\d+)?)\s*min/i);
+                      if (minM) return parseFloat(minM[1]) * 60;
+                      const parts = s.split(":");
+                      if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+                      if (parts.length === 2) return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+                      return 0;
+                    };
+                    // Helper: format seconds to MM:SS
+                    const fmtMMSS = (sec: number): string => {
+                      const m = Math.floor(sec / 60);
+                      const s = Math.round(sec % 60);
+                      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                    };
+                    // Helper: format date to "Day MM/DD"
+                    const fmtDay = (dateStr: string): string => {
+                      if (!dateStr) return '—';
+                      try {
+                        const d = new Date(dateStr + 'T00:00:00');
+                        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                        return `${days[d.getDay()]} ${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')}`;
+                      } catch { return dateStr; }
+                    };
+
+                    const inspections = d.dvicInspections.map((insp, idx) => {
+                      const sec = parseDurSec(insp.duration);
+                      const isRushed = sec > 0 && sec < 90;
+                      return { ...insp, sec, isRushed, idx };
+                    });
+
+                    // Sort by date
+                    inspections.sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+
+                    return (
+                      <>
+                        {/* Rushed Inspections header */}
+                        <div className="flex items-center justify-between py-2 mb-2 border-b border-border/30">
+                          <span className="text-sm font-black">Rushed Inspections</span>
+                          <span className={cn("text-sm font-black tabular-nums", d.dvicRushedCount > 0 ? "text-amber-500" : "text-emerald-500")}>
+                            {d.dvicRushedCount}/{d.dvicTotalInspections}
+                          </span>
                         </div>
-                        <div className={cn("rounded-lg border p-2.5 text-center", d.dvicRushedCount > 0 ? "bg-amber-500/5 border-amber-500/15" : "bg-emerald-500/5 border-emerald-500/15")}>
-                          <p className="text-[9px] uppercase tracking-widest text-muted-foreground mb-0.5">Rushed</p>
-                          <p className={cn("text-lg font-black tabular-nums", d.dvicRushedCount > 0 ? "text-amber-500" : "text-emerald-500")}>{d.dvicRushedCount}</p>
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-border/30 overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="bg-muted/20">
-                              <th className="text-left py-2 px-2 font-bold text-[10px] uppercase tracking-wider text-muted-foreground">Date</th>
-                              <th className="text-left py-2 px-2 font-bold text-[10px] uppercase tracking-wider text-muted-foreground">VIN</th>
-                              <th className="text-left py-2 px-2 font-bold text-[10px] uppercase tracking-wider text-muted-foreground">Status</th>
-                              <th className="text-right py-2 px-2 font-bold text-[10px] uppercase tracking-wider text-muted-foreground">Duration</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border/15">
-                            {d.dvicInspections.map((insp, idx) => (
-                              <tr key={idx} className="hover:bg-muted/10 transition-colors">
-                                <td className="py-2 px-2 text-[11px] font-medium">{insp.startDate || '—'}</td>
-                                <td className="py-2 px-2 font-mono text-[11px] text-muted-foreground">{insp.vin ? `…${insp.vin.slice(-6)}` : '—'}</td>
-                                <td className="py-2 px-2">
+                        {/* All inspections list */}
+                        <div className="space-y-1.5">
+                          {inspections.map((insp) => {
+                            const sec = insp.sec;
+                            const isRushed = insp.isRushed;
+                            // Color tier: < 80 = red, 80-89 = orange, >= 90 = normal
+                            const isRed = sec > 0 && sec < 80;
+                            const isOrange = sec >= 80 && sec < 90;
+                            const statusLower = (insp.inspectionStatus || '').toLowerCase();
+                            const statusColor = statusLower === 'complete' || statusLower === 'passed'
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                              : statusLower === 'incomplete' || statusLower === 'failed'
+                              ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                              : 'bg-muted text-muted-foreground border-border/30';
+                            const statusDot = statusLower === 'complete' || statusLower === 'passed'
+                              ? 'bg-emerald-500'
+                              : statusLower === 'incomplete' || statusLower === 'failed'
+                              ? 'bg-red-500' : 'bg-muted-foreground';
+
+                            // Gradient from right side; red or orange based on severity
+                            const gradientBg = isRed
+                              ? 'linear-gradient(270deg, rgba(239,68,68,0.25) 0%, rgba(239,68,68,0.12) 40%, transparent 100%)'
+                              : isOrange
+                              ? 'linear-gradient(270deg, rgba(245,158,11,0.25) 0%, rgba(245,158,11,0.10) 40%, transparent 100%)'
+                              : '';
+
+                            const durationColor = isRed ? 'text-red-500' : isOrange ? 'text-amber-500' : 'text-foreground';
+
+                            return (
+                              <div
+                                key={insp.idx}
+                                className={cn(
+                                  "relative rounded-lg overflow-hidden transition-colors",
+                                  isRushed ? "" : "hover:bg-muted/20"
+                                )}
+                              >
+                                {/* Gradient bar for rushed — shades from right */}
+                                {isRushed && (
+                                  <div
+                                    className="absolute inset-0 rounded-lg"
+                                    style={{ background: gradientBg }}
+                                  />
+                                )}
+                                {/* Top row: Day + Duration */}
+                                <div className="relative flex items-center justify-between px-3 pt-2 pb-0.5">
+                                  <div className="flex items-center gap-2">
+                                    {isRushed && <AlertTriangle className={cn("h-3 w-3 flex-shrink-0", isRed ? "text-red-500" : "text-amber-500")} />}
+                                    <span className={cn("text-sm font-semibold", isRushed ? "text-foreground" : "text-foreground/80")}>
+                                      {fmtDay(insp.startDate)}
+                                    </span>
+                                  </div>
                                   <span className={cn(
-                                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold",
-                                    insp.inspectionStatus?.toLowerCase() === 'complete' ? 'bg-emerald-500/10 text-emerald-500' :
-                                    insp.inspectionStatus?.toLowerCase() === 'incomplete' ? 'bg-red-500/10 text-red-500' :
-                                    'bg-muted text-muted-foreground'
+                                    "relative text-sm font-black font-mono tabular-nums",
+                                    durationColor
                                   )}>
-                                    <span className={cn("w-1 h-1 rounded-full",
-                                      insp.inspectionStatus?.toLowerCase() === 'complete' ? 'bg-emerald-500' :
-                                      insp.inspectionStatus?.toLowerCase() === 'incomplete' ? 'bg-red-500' : 'bg-muted-foreground'
-                                    )} />
-                                    {insp.inspectionStatus || '—'}
+                                    {sec > 0 ? fmtMMSS(sec) : (insp.duration || '—')}
                                   </span>
-                                </td>
-                                <td className="py-2 px-2 text-right font-mono text-[11px] font-bold">{insp.duration || '—'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </>
-                  ) : (
+                                </div>
+                                {/* Bottom row: VIN, Fleet Type, Status */}
+                                <div className="relative flex items-center gap-2 px-3 pb-2 pt-0.5">
+                                  {isRushed && <span className="w-3 flex-shrink-0" />}
+                                  <span className="text-[11px] font-mono text-muted-foreground" title={insp.vin}>
+                                    {insp.vin ? `VIN …${insp.vin.slice(-6)}` : '—'}
+                                  </span>
+                                  {insp.fleetType && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600 border border-sky-500/20 font-medium">
+                                      {insp.fleetType}
+                                    </span>
+                                  )}
+                                  {insp.inspectionStatus && (
+                                    <span className={cn("inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-semibold", statusColor)}>
+                                      <span className={cn("w-1 h-1 rounded-full", statusDot)} />
+                                      {insp.inspectionStatus}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    );
+                  })() : (
                     <div className="py-6 text-center">
                       <ClipboardCheck className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" />
                       <p className="text-xs text-muted-foreground">No inspections recorded this week</p>
@@ -1330,11 +1411,15 @@ export default function EmployeePerformanceDashboard() {
                   <h3 className="font-black text-sm text-white">Focus Area & Guidance</h3>
                   <Activity className="h-5 w-5 text-white/70" />
                 </div>
-                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-5 py-4 mb-4">
-                  <p className="text-sm leading-relaxed">
-                    <span className="font-black">{focusAreas[0].title}:</span>{' '}
-                    <span className="text-muted-foreground">{focusAreas[0].tip}</span>
-                  </p>
+                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-5 py-4 mb-4 space-y-3">
+                  {focusAreas.map((fa, idx) => (
+                    <div key={idx} className={cn(idx > 0 && "pt-3 border-t border-border/30")}>
+                      <p className="text-sm leading-relaxed">
+                        <span className="font-black">{fa.title}:</span>{' '}
+                        <span className="text-muted-foreground">{fa.tip}</span>
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </div>
 
