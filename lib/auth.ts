@@ -8,21 +8,21 @@ export async function encrypt(payload: any) {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("2h")
+    .setExpirationTime("30d")
     .sign(key);
 }
 
 export async function login(userData: any) {
   // Create the session with minimal data to keep header size small
+  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
   const minimalSession = {
     id: userData.id,
     name: userData.name,
     email: userData.email,
     role: userData.role,
-    expires: new Date(Date.now() + 2 * 60 * 60 * 1000)
+    expires,
   };
 
-  const expires = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours
   const session = await encrypt(minimalSession);
 
   // Save the session in a cookie
@@ -57,7 +57,7 @@ export async function updateSession(request: NextRequest) {
 
   // Refresh the session so it doesn't expire
   const parsed = await decryptLocal(session);
-  parsed.expires = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  parsed.expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
   const res = NextResponse.next();
   res.cookies.set({
     name: "symx_session",

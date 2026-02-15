@@ -9,6 +9,9 @@ export default async function middleware(req: NextRequest) {
   if (
     path.startsWith('/api') || 
     path.startsWith('/_next') || 
+    path === '/sw.js' ||
+    path === '/manifest.json' ||
+    path.startsWith('/icons/') ||
     path.includes('.') ||
     path === '/favicon.ico'
   ) {
@@ -32,5 +35,5 @@ export default async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.png$).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|icons\\/.*|.*\\.png$).*)"],
 };
