@@ -32,7 +32,7 @@ import {
   Loader2, Shield, Truck, Camera, MessageSquareWarning, Target,
   Lightbulb, ChevronRight, Info, CheckCircle2, XCircle, Eye,
   Upload, Activity, MessageSquare, Search, Check, ClipboardCheck, Hash,
-  Pen, Save, Smile,
+  Pen, Save, Smile, X, CalendarDays, FileUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -275,133 +275,143 @@ export default function EmployeePerformanceDashboard() {
 
   // ── Import State ──────────────────────────────────────────────────────────
   const [showImportDialog, setShowImportDialog] = useState(false);
-  const [importType, setImportType] = useState<string>("");
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importStatusMessage, setImportStatusMessage] = useState("");
-  const [showImportWeekSelector, setShowImportWeekSelector] = useState(false);
-  const [importWeek, setImportWeek] = useState<string>("");
-  const [importWeekSearch, setImportWeekSearch] = useState("");
-  const [importFilteredWeeks, setImportFilteredWeeks] = useState<string[]>([]);
-  const importFileRef = useRef<HTMLInputElement>(null);
 
-  // Generate weeks for import dialog (2025-2027)
-  const importAllWeeks = useMemo(() => {
-    const years = [2025, 2026, 2027];
-    const allWeeks: string[] = [];
-    for (const year of years) {
-      for (let i = 1; i <= 53; i++) {
-        allWeeks.push(`${year}-W${i.toString().padStart(2, '0')}`);
-      }
-    }
-    return allWeeks;
-  }, []);
+  // Batch file state — one file per import type
+  const [importFiles, setImportFiles] = useState<Record<string, File | null>>({
+    "delivery-excellence": null,
+    "import-pod": null,
+    "customer-delivery-feedback": null,
+    "dvic-vehicle-inspection": null,
+  });
+  const deFileRef = useRef<HTMLInputElement>(null);
+  const podFileRef = useRef<HTMLInputElement>(null);
+  const cdfFileRef = useRef<HTMLInputElement>(null);
+  const dvicFileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (importWeekSearch) {
-      const lower = importWeekSearch.toLowerCase();
-      setImportFilteredWeeks(importAllWeeks.filter(w => w.toLowerCase().includes(lower)).slice(0, 10));
-    } else {
-      setImportFilteredWeeks(importAllWeeks.filter(w => w.startsWith('2026')).slice(0, 10));
-    }
-  }, [importWeekSearch, importAllWeeks]);
-
-  const handleImportTypeClick = (type: string) => {
-    setImportType(type);
-    if (type === "import-pod" || type === "customer-delivery-feedback") {
-      // Use the week already selected in the header — no extra dialog needed
-      setImportWeek(selectedWeek);
-      setShowImportDialog(false);
-      setTimeout(() => importFileRef.current?.click(), 100);
-    } else {
-      setShowImportDialog(false);
-      setTimeout(() => importFileRef.current?.click(), 100);
-    }
+  const fileRefMap: Record<string, React.RefObject<HTMLInputElement | null>> = {
+    "delivery-excellence": deFileRef,
+    "import-pod": podFileRef,
+    "customer-delivery-feedback": cdfFileRef,
+    "dvic-vehicle-inspection": dvicFileRef,
   };
 
-  const confirmImportWeek = () => {
-    const finalWeek = importWeekSearch.trim();
-    if (!/^\d{4}-W\d{2}$/.test(finalWeek)) {
-      toast.error("Invalid week format. Use YYYY-Www (e.g. 2026-W05)");
-      return;
-    }
-    setImportWeek(finalWeek);
-    setShowImportWeekSelector(false);
-    importFileRef.current?.click();
-  };
-
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportFileAttach = (type: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.name.endsWith(".csv")) { toast.error("Please select a valid CSV file"); return; }
+    setImportFiles(prev => ({ ...prev, [type]: file }));
+  };
+
+  const removeImportFile = (type: string) => {
+    setImportFiles(prev => ({ ...prev, [type]: null }));
+    const ref = fileRefMap[type];
+    if (ref?.current) ref.current.value = "";
+  };
+
+  const attachedFileCount = Object.values(importFiles).filter(Boolean).length;
+
+  // Process a single file type through the import API
+  const processImportFile = async (type: string, file: File): Promise<{ inserted: number; updated: number; total: number }> => {
+    return new Promise((resolve, reject) => {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async (results) => {
+          const data = results.data;
+          const totalRows = data.length;
+          const batchSize = 50;
+          let processedCount = 0;
+          let insertedCount = 0;
+          let updatedCount = 0;
+
+          try {
+            for (let i = 0; i < totalRows; i += batchSize) {
+              const batch = data.slice(i, i + batchSize);
+              const payload: any = { type, data: batch };
+              if (type === 'import-pod' || type === 'customer-delivery-feedback') {
+                payload.week = selectedWeek;
+              }
+
+              const response = await fetch("/api/admin/imports", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Batch failed for ${type}`);
+              }
+
+              const result = await response.json();
+              insertedCount += result.inserted || 0;
+              updatedCount += result.updated || 0;
+              processedCount += batch.length;
+            }
+
+            resolve({ inserted: insertedCount, updated: updatedCount, total: totalRows });
+          } catch (error: any) {
+            reject(error);
+          }
+        },
+        error: () => reject(new Error(`Failed to parse ${file.name}`)),
+      });
+    });
+  };
+
+  const handleBatchImport = async () => {
+    const filesToProcess = Object.entries(importFiles).filter(([, file]) => file !== null) as [string, File][];
+    if (filesToProcess.length === 0) { toast.error("No files attached. Please select at least one CSV."); return; }
 
     setIsImporting(true);
     setImportProgress(0);
-    setImportStatusMessage(`Reading file...`);
+    setShowImportDialog(false);
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        const data = results.data;
-        const totalRows = data.length;
-        const batchSize = 50;
-        let processedCount = 0;
-        let insertedCount = 0;
-        let updatedCount = 0;
+    let totalInserted = 0;
+    let totalUpdated = 0;
+    let totalRecords = 0;
+    const typeLabels: Record<string, string> = {
+      "delivery-excellence": "Delivery Excellence",
+      "import-pod": "Photo On Delivery",
+      "customer-delivery-feedback": "Delivery Feedback",
+      "dvic-vehicle-inspection": "DVIC Inspection",
+    };
 
-        try {
-          for (let i = 0; i < totalRows; i += batchSize) {
-            const batch = data.slice(i, i + batchSize);
-            const remaining = totalRows - processedCount;
-            setImportProgress(Math.min(Math.round((processedCount / totalRows) * 100), 99));
-            setImportStatusMessage(`Processing... ${remaining} records remaining`);
+    try {
+      for (let i = 0; i < filesToProcess.length; i++) {
+        const [type, file] = filesToProcess[i];
+        const label = typeLabels[type] || type;
+        const pct = Math.round(((i) / filesToProcess.length) * 100);
+        setImportProgress(pct);
+        setImportStatusMessage(`Importing ${label}... (${i + 1}/${filesToProcess.length})`);
 
-            const payload: any = { type: importType, data: batch };
-            if (importType === 'import-pod' || importType === 'customer-delivery-feedback') {
-              payload.week = importWeek;
-            }
+        const result = await processImportFile(type, file);
+        totalInserted += result.inserted;
+        totalUpdated += result.updated;
+        totalRecords += result.total;
+      }
 
-            const response = await fetch("/api/admin/imports", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload),
-            });
+      setImportProgress(100);
+      setImportStatusMessage("All imports complete!");
+      toast.success(`Processed ${totalRecords} total records. Added: ${totalInserted}, Updated: ${totalUpdated}`);
 
-            if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(errorData.error || `Batch failed`);
-            }
-
-            const result = await response.json();
-            insertedCount += result.inserted || 0;
-            updatedCount += result.updated || 0;
-            processedCount += batch.length;
-          }
-
-          setImportProgress(100);
-          setImportStatusMessage("Import complete!");
-          toast.success(`Processed ${totalRows} records. Added: ${insertedCount}, Updated: ${updatedCount}`);
-
-          setTimeout(() => {
-            setIsImporting(false);
-            setImportProgress(0);
-            setImportStatusMessage("");
-            if (importFileRef.current) importFileRef.current.value = "";
-            // Refresh scorecard data
-            if (selectedWeek) fetchData(selectedWeek);
-          }, 1500);
-        } catch (error: any) {
-          toast.error(error.message || "Failed to import data");
-          setIsImporting(false);
-          if (importFileRef.current) importFileRef.current.value = "";
-        }
-      },
-      error: () => {
-        toast.error("Failed to parse CSV file");
+      setTimeout(() => {
         setIsImporting(false);
-      },
-    });
+        setImportProgress(0);
+        setImportStatusMessage("");
+        // Reset all files
+        setImportFiles({ "delivery-excellence": null, "import-pod": null, "customer-delivery-feedback": null, "dvic-vehicle-inspection": null });
+        Object.values(fileRefMap).forEach(ref => { if (ref?.current) ref.current.value = ""; });
+        // Refresh scorecard data
+        if (selectedWeek) fetchData(selectedWeek);
+      }, 1500);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to import data");
+      setIsImporting(false);
+    }
   };
 
 
@@ -610,83 +620,158 @@ export default function EmployeePerformanceDashboard() {
 
   return (
     <>
-      {/* Hidden file input for import */}
-      <input type="file" ref={importFileRef} className="hidden" accept=".csv" onChange={handleImportFile} />
+      {/* Hidden file inputs for each import type */}
+      <input type="file" ref={deFileRef} className="hidden" accept=".csv" onChange={handleImportFileAttach("delivery-excellence")} />
+      <input type="file" ref={podFileRef} className="hidden" accept=".csv" onChange={handleImportFileAttach("import-pod")} />
+      <input type="file" ref={cdfFileRef} className="hidden" accept=".csv" onChange={handleImportFileAttach("customer-delivery-feedback")} />
+      <input type="file" ref={dvicFileRef} className="hidden" accept=".csv" onChange={handleImportFileAttach("dvic-vehicle-inspection")} />
 
-      {/* Import Type Selector Dialog */}
-      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
+      {/* Import Dialog — Multi-file batch import */}
+      <Dialog open={showImportDialog} onOpenChange={(open) => {
+        setShowImportDialog(open);
+        if (!open) {
+          // Reset files on close
+          setImportFiles({ "delivery-excellence": null, "import-pod": null, "customer-delivery-feedback": null, "dvic-vehicle-inspection": null });
+          Object.values(fileRefMap).forEach(ref => { if (ref?.current) ref.current.value = ""; });
+        }
+      }}>
+        <DialogContent className="sm:max-w-[540px] gap-0">
+          <DialogHeader className="pb-4">
             <DialogTitle>Import Data</DialogTitle>
-            <DialogDescription>Select the type of data you want to import.</DialogDescription>
+            <DialogDescription>Attach CSV files for each data type, then import all at once.</DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-1 gap-3 py-4">
-            <Button
-              variant="outline"
-              className="flex h-20 items-center justify-start gap-4 px-4 border-dashed border-2 hover:bg-accent hover:text-accent-foreground transition-all"
-              onClick={() => handleImportTypeClick("delivery-excellence")}
+          <div className="grid grid-cols-1 gap-3 py-4 border-t">
+            {/* Delivery Excellence */}
+            <div
+              className={cn(
+                "flex items-center justify-between gap-4 px-4 py-3 rounded-lg border-2 border-dashed transition-all cursor-pointer hover:bg-accent/50",
+                importFiles["delivery-excellence"] ? "border-emerald-500/40 bg-emerald-500/5" : "border-border"
+              )}
+              onClick={() => !importFiles["delivery-excellence"] && deFileRef.current?.click()}
             >
-              <div className="p-2.5 rounded-full bg-emerald-500/10"><Activity className="h-6 w-6 text-emerald-500" /></div>
-              <div className="text-left"><span className="font-semibold">Delivery Excellence</span><p className="text-xs text-muted-foreground mt-0.5">Import DSP metrics matched by Transporter ID</p></div>
-            </Button>
-            <Button
-              variant="outline"
-              className="flex h-20 items-center justify-start gap-4 px-4 border-dashed border-2 hover:bg-accent hover:text-accent-foreground transition-all"
-              onClick={() => handleImportTypeClick("import-pod")}
-            >
-              <div className="p-2.5 rounded-full bg-blue-500/10"><Camera className="h-6 w-6 text-blue-500" /></div>
-              <div className="text-left"><span className="font-semibold">Photo On Delivery</span><p className="text-xs text-muted-foreground mt-0.5">Import POD metrics (select week first)</p></div>
-            </Button>
-            <Button
-              variant="outline"
-              className="flex h-20 items-center justify-start gap-4 px-4 border-dashed border-2 hover:bg-accent hover:text-accent-foreground transition-all"
-              onClick={() => handleImportTypeClick("customer-delivery-feedback")}
-            >
-              <div className="p-2.5 rounded-full bg-violet-500/10"><MessageSquare className="h-6 w-6 text-violet-500" /></div>
-              <div className="text-left"><span className="font-semibold">Delivery Feedback</span><p className="text-xs text-muted-foreground mt-0.5">Import CDF metrics (select week first)</p></div>
-            </Button>
-            <Button
-              variant="outline"
-              className="flex h-20 items-center justify-start gap-4 px-4 border-dashed border-2 hover:bg-accent hover:text-accent-foreground transition-all"
-              onClick={() => handleImportTypeClick("dvic-vehicle-inspection")}
-            >
-              <div className="p-2.5 rounded-full bg-sky-500/10"><ClipboardCheck className="h-6 w-6 text-sky-500" /></div>
-              <div className="text-left"><span className="font-semibold">DVIC Vehicle Inspection</span><p className="text-xs text-muted-foreground mt-0.5">Import inspection times — week auto-detected from dates</p></div>
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-full bg-emerald-500/10"><Activity className="h-5 w-5 text-emerald-500" /></div>
+                <div>
+                  <span className="font-semibold text-sm">Delivery Excellence</span>
+                  {importFiles["delivery-excellence"] ? (
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />{importFiles["delivery-excellence"].name}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-0.5">DSP metrics by Transporter ID</p>
+                  )}
+                </div>
+              </div>
+              {importFiles["delivery-excellence"] ? (
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); removeImportFile("delivery-excellence"); }}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <FileUp className="h-4 w-4 text-muted-foreground shrink-0" />
+              )}
+            </div>
 
-      {/* Week Selector Dialog for POD/CDF */}
-      <Dialog open={showImportWeekSelector} onOpenChange={setShowImportWeekSelector}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Select Week</DialogTitle>
-            <DialogDescription>Choose the week for the data you are importing.</DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input type="text" placeholder="Search or enter week..." className="pl-9" value={importWeekSearch} onChange={(e) => setImportWeekSearch(e.target.value)} />
-            </div>
-            <div className="max-h-[200px] overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-sm">
-              {importWeekSearch && !importAllWeeks.includes(importWeekSearch) && /^\d{4}-W\d{2}$/.test(importWeekSearch) && (
-                <div className="flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground" onClick={() => setImportWeekSearch(importWeekSearch)}>
-                  <Check className={cn("mr-2 h-4 w-4", importWeekSearch === importWeek ? "opacity-100" : "opacity-0")} /> Create &quot;{importWeekSearch}&quot;
-                </div>
+            {/* Photo On Delivery */}
+            <div
+              className={cn(
+                "flex items-center justify-between gap-4 px-4 py-3 rounded-lg border-2 border-dashed transition-all cursor-pointer hover:bg-accent/50",
+                importFiles["import-pod"] ? "border-blue-500/40 bg-blue-500/5" : "border-border"
               )}
-              {importFilteredWeeks.length > 0 ? importFilteredWeeks.map((week) => (
-                <div key={week} className={cn("flex cursor-pointer select-none items-center px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground", importWeekSearch === week && "bg-accent/50")} onClick={() => { setImportWeekSearch(week); setImportWeek(week); }}>
-                  <Check className={cn("mr-2 h-4 w-4", importWeekSearch === week ? "opacity-100" : "opacity-0")} /> {week}
+              onClick={() => !importFiles["import-pod"] && podFileRef.current?.click()}
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-full bg-blue-500/10"><Camera className="h-5 w-5 text-blue-500" /></div>
+                <div>
+                  <span className="font-semibold text-sm">Photo On Delivery</span>
+                  {importFiles["import-pod"] ? (
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />{importFiles["import-pod"].name}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-0.5">POD metrics (uses selected week)</p>
+                  )}
                 </div>
-              )) : (
-                <div className="py-6 text-center text-sm text-muted-foreground">{/^\d{4}-W\d{2}$/.test(importWeekSearch) ? "Click Create above" : "No weeks found"}</div>
+              </div>
+              {importFiles["import-pod"] ? (
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); removeImportFile("import-pod"); }}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <FileUp className="h-4 w-4 text-muted-foreground shrink-0" />
+              )}
+            </div>
+
+            {/* Delivery Feedback */}
+            <div
+              className={cn(
+                "flex items-center justify-between gap-4 px-4 py-3 rounded-lg border-2 border-dashed transition-all cursor-pointer hover:bg-accent/50",
+                importFiles["customer-delivery-feedback"] ? "border-violet-500/40 bg-violet-500/5" : "border-border"
+              )}
+              onClick={() => !importFiles["customer-delivery-feedback"] && cdfFileRef.current?.click()}
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-full bg-violet-500/10"><MessageSquare className="h-5 w-5 text-violet-500" /></div>
+                <div>
+                  <span className="font-semibold text-sm">Delivery Feedback</span>
+                  {importFiles["customer-delivery-feedback"] ? (
+                    <p className="text-xs text-violet-600 dark:text-violet-400 mt-0.5 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />{importFiles["customer-delivery-feedback"].name}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-0.5">CDF metrics (uses selected week)</p>
+                  )}
+                </div>
+              </div>
+              {importFiles["customer-delivery-feedback"] ? (
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); removeImportFile("customer-delivery-feedback"); }}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <FileUp className="h-4 w-4 text-muted-foreground shrink-0" />
+              )}
+            </div>
+
+            {/* DVIC Vehicle Inspection */}
+            <div
+              className={cn(
+                "flex items-center justify-between gap-4 px-4 py-3 rounded-lg border-2 border-dashed transition-all cursor-pointer hover:bg-accent/50",
+                importFiles["dvic-vehicle-inspection"] ? "border-sky-500/40 bg-sky-500/5" : "border-border"
+              )}
+              onClick={() => !importFiles["dvic-vehicle-inspection"] && dvicFileRef.current?.click()}
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-full bg-sky-500/10"><ClipboardCheck className="h-5 w-5 text-sky-500" /></div>
+                <div>
+                  <span className="font-semibold text-sm">DVIC Vehicle Inspection</span>
+                  {importFiles["dvic-vehicle-inspection"] ? (
+                    <p className="text-xs text-sky-600 dark:text-sky-400 mt-0.5 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />{importFiles["dvic-vehicle-inspection"].name}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-0.5">Inspection times — week auto-detected</p>
+                  )}
+                </div>
+              </div>
+              {importFiles["dvic-vehicle-inspection"] ? (
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); removeImportFile("dvic-vehicle-inspection"); }}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <FileUp className="h-4 w-4 text-muted-foreground shrink-0" />
               )}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowImportWeekSelector(false)}>Cancel</Button>
-            <Button onClick={confirmImportWeek}>Continue to Upload</Button>
+
+          {/* Footer — Selected week + Import button */}
+          <DialogFooter className="border-t pt-4 sm:justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CalendarDays className="h-4 w-4" />
+              <span>Week:</span>
+              <Badge variant="secondary" className="font-mono font-bold text-xs">{selectedWeek || "Not selected"}</Badge>
+              {attachedFileCount > 0 && (
+                <span className="text-xs">· {attachedFileCount} file{attachedFileCount > 1 ? 's' : ''} ready</span>
+              )}
+            </div>
+            <Button
+              onClick={handleBatchImport}
+              disabled={attachedFileCount === 0}
+              className="gap-2"
+            >
+              <Upload className="h-4 w-4" />
+              Import {attachedFileCount > 0 ? `(${attachedFileCount})` : "All"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -696,7 +781,7 @@ export default function EmployeePerformanceDashboard() {
         <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Importing Data</DialogTitle>
-            <DialogDescription>Please wait while we process your file. Do not close this window.</DialogDescription>
+            <DialogDescription>Please wait while we process your files. Do not close this window.</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="flex flex-col gap-2">
