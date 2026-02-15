@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
+
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
@@ -278,6 +278,10 @@ export default function EmployeePerformanceDashboard() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importStatusMessage, setImportStatusMessage] = useState("");
+  const [importWeek, setImportWeek] = useState<string>("");
+  const [importWeekPopoverOpen, setImportWeekPopoverOpen] = useState(false);
+  const [importWeekSearchInput, setImportWeekSearchInput] = useState("");
+  const importWeekInputRef = useRef<HTMLInputElement>(null);
 
   // Batch file state — one file per import type
   const [importFiles, setImportFiles] = useState<Record<string, File | null>>({
@@ -332,7 +336,7 @@ export default function EmployeePerformanceDashboard() {
               const batch = data.slice(i, i + batchSize);
               const payload: any = { type, data: batch };
               if (type === 'import-pod' || type === 'customer-delivery-feedback') {
-                payload.week = selectedWeek;
+                payload.week = importWeek;
               }
 
               const response = await fetch("/api/admin/imports", {
@@ -629,7 +633,12 @@ export default function EmployeePerformanceDashboard() {
       {/* Import Dialog — Multi-file batch import */}
       <Dialog open={showImportDialog} onOpenChange={(open) => {
         setShowImportDialog(open);
-        if (!open) {
+        if (open) {
+          // Init import week to header week
+          setImportWeek(selectedWeek);
+          setImportWeekSearchInput("");
+          setImportWeekPopoverOpen(false);
+        } else {
           // Reset files on close
           setImportFiles({ "delivery-excellence": null, "import-pod": null, "customer-delivery-feedback": null, "dvic-vehicle-inspection": null });
           Object.values(fileRefMap).forEach(ref => { if (ref?.current) ref.current.value = ""; });
@@ -754,14 +763,109 @@ export default function EmployeePerformanceDashboard() {
             </div>
           </div>
 
-          {/* Footer — Selected week + Import button */}
+          {/* Footer — Week selector + Import button */}
           <DialogFooter className="border-t pt-4 sm:justify-between">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <CalendarDays className="h-4 w-4" />
-              <span>Week:</span>
-              <Badge variant="secondary" className="font-mono font-bold text-xs">{selectedWeek || "Not selected"}</Badge>
+              <div className="relative">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-[160px] justify-between font-normal gap-1.5"
+                  onClick={() => setImportWeekPopoverOpen(!importWeekPopoverOpen)}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-mono font-bold text-xs">{importWeek || "Select Week"}</span>
+                  </span>
+                  <ChevronRight className="h-3 w-3 rotate-90 text-muted-foreground" />
+                </Button>
+                {importWeekPopoverOpen && (
+                  <div className="absolute left-0 bottom-full mb-1 z-50 w-[340px] rounded-md border bg-popover text-popover-foreground shadow-md">
+                    <div className="p-2 border-b">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                          ref={importWeekInputRef}
+                          type="text"
+                          placeholder="Type week e.g. 2026-W06"
+                          className="h-8 pl-7 text-sm"
+                          value={importWeekSearchInput}
+                          onChange={(e) => setImportWeekSearchInput(e.target.value.toUpperCase())}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const normalized = normalizeWeekInput(importWeekSearchInput);
+                              if (normalized) {
+                                if (!weeks.includes(normalized)) {
+                                  setWeeks(prev => [normalized, ...prev].sort().reverse());
+                                }
+                                setImportWeek(normalized);
+                                setImportWeekSearchInput("");
+                                setImportWeekPopoverOpen(false);
+                              } else {
+                                toast.error("Invalid week format. Use YYYY-Wxx (e.g. 2026-W05)");
+                              }
+                            }
+                          }}
+                          autoFocus
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1 px-0.5">Format: YYYY-Wxx (e.g. 2026-W06)</p>
+                    </div>
+                    <div className="max-h-[160px] overflow-y-auto">
+                      {(() => {
+                        const normalizedImport = normalizeWeekInput(importWeekSearchInput);
+                        const isNewWeek = !!normalizedImport && !weeks.includes(normalizedImport);
+                        const filtered = importWeekSearchInput
+                          ? weeks.filter(w => w.toLowerCase().includes(importWeekSearchInput.toLowerCase()))
+                          : weeks;
+                        return (
+                          <>
+                            {isNewWeek && normalizedImport && (
+                              <div
+                                className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-primary/10 border-b bg-primary/5 transition-colors"
+                                onClick={() => {
+                                  setWeeks(prev => [normalizedImport, ...prev].sort().reverse());
+                                  setImportWeek(normalizedImport);
+                                  setImportWeekSearchInput("");
+                                  setImportWeekPopoverOpen(false);
+                                }}
+                              >
+                                <span className="flex items-center gap-1 text-xs bg-primary/15 text-primary px-2 py-0.5 rounded-full font-semibold">
+                                  <Hash className="h-3 w-3" /> Add
+                                </span>
+                                <span className="font-semibold text-primary">{normalizedImport}</span>
+                                <span className="text-[10px] text-muted-foreground ml-auto">↵ Enter</span>
+                              </div>
+                            )}
+                            {filtered.length > 0 ? filtered.map(w => (
+                              <div
+                                key={w}
+                                className={cn("flex items-center px-3 py-1.5 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground", importWeek === w && "bg-accent/50 font-medium")}
+                                onClick={() => { setImportWeek(w); setImportWeekSearchInput(""); setImportWeekPopoverOpen(false); }}
+                              >
+                                <Check className={cn("mr-2 h-3.5 w-3.5", importWeek === w ? "opacity-100" : "opacity-0")} />
+                                {w}
+                              </div>
+                            )) : (
+                              <div className="py-4 px-3 text-center">
+                                <p className="text-xs text-muted-foreground">
+                                  {importWeekSearchInput
+                                    ? normalizeWeekInput(importWeekSearchInput)
+                                      ? "Click + Add above"
+                                      : "Invalid format — use YYYY-Wxx"
+                                    : "No weeks available"}
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
               {attachedFileCount > 0 && (
-                <span className="text-xs">· {attachedFileCount} file{attachedFileCount > 1 ? 's' : ''} ready</span>
+                <span className="text-xs">· {attachedFileCount} file{attachedFileCount > 1 ? 's' : ''}</span>
               )}
             </div>
             <Button
