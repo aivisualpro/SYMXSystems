@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxScoreCardRemarks from "@/lib/models/SymxScoreCardRemarks";
 
-// GET — Fetch remarks for a specific driver + week
+// GET — Fetch remarks for a specific driver + week, or all signature statuses for a week
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -12,14 +12,33 @@ export async function GET(req: NextRequest) {
   const transporterId = searchParams.get("transporterId");
   const week = searchParams.get("week");
 
-  if (!transporterId || !week) {
-    return NextResponse.json({ error: "Missing transporterId or week" }, { status: 400 });
+  if (!week) {
+    return NextResponse.json({ error: "Missing week" }, { status: 400 });
   }
 
   await connectToDatabase();
 
-  const remarks = await SymxScoreCardRemarks.findOne({ transporterId, week }).lean();
-  return NextResponse.json({ remarks: remarks || null });
+  // If transporterId is specified, return single record (existing behavior)
+  if (transporterId) {
+    const remarks = await SymxScoreCardRemarks.findOne({ transporterId, week }).lean();
+    return NextResponse.json({ remarks: remarks || null });
+  }
+
+  // Otherwise, return all signature statuses for the week (lightweight)
+  const allRemarks = await SymxScoreCardRemarks.find(
+    { week },
+    { transporterId: 1, driverSignature: 1, managerSignature: 1 }
+  ).lean();
+
+  const signatureMap: Record<string, { driverSigned: boolean; managerSigned: boolean }> = {};
+  allRemarks.forEach((r: any) => {
+    signatureMap[r.transporterId] = {
+      driverSigned: !!r.driverSignature,
+      managerSigned: !!r.managerSignature,
+    };
+  });
+
+  return NextResponse.json({ signatureMap });
 }
 
 // PUT — Upsert remarks for a specific driver + week

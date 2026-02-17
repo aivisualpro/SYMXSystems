@@ -282,6 +282,7 @@ export default function EmployeePerformanceDashboard() {
   const [totalDelivered, setTotalDelivered] = useState(0);
   const [avgOverallScore, setAvgOverallScore] = useState(0);
   const [dspMetrics, setDspMetrics] = useState<DspMetrics | null>(null);
+  const [signatureMap, setSignatureMap] = useState<Record<string, { driverSigned: boolean; managerSigned: boolean }>>({});
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState("drivers-tab");
   const [pageTitle, setPageTitle] = useState("Scorecard");
@@ -365,6 +366,14 @@ export default function EmployeePerformanceDashboard() {
         setManagerSigTimestamp(data.remarks.managerSignatureTimestamp || null);
       }
       toast.success('Remarks saved successfully');
+      // Refresh signature map for the table
+      if (selectedWeek) {
+        try {
+          const sigRes = await fetch(`/api/reports/scorecard-remarks?week=${encodeURIComponent(selectedWeek)}`);
+          const sigData = await sigRes.json();
+          setSignatureMap(sigData.signatureMap || {});
+        } catch { /* silently fail */ }
+      }
     } catch {
       toast.error('Failed to save remarks');
     } finally {
@@ -680,6 +689,12 @@ export default function EmployeePerformanceDashboard() {
       setDrivers(data.drivers || []); setPodRows(data.podRows || []); setCdfRows(data.cdfRows || []);
       setTotalDrivers(data.totalDrivers || 0); setTotalDelivered(data.totalDelivered || 0);
       setAvgOverallScore(data.avgOverallScore || 0); setDspMetrics(data.dspMetrics || null);
+      // Fetch signature statuses for this week
+      try {
+        const sigRes = await fetch(`/api/reports/scorecard-remarks?week=${encodeURIComponent(week)}`);
+        const sigData = await sigRes.json();
+        setSignatureMap(sigData.signatureMap || {});
+      } catch { /* silently fail */ }
     } catch { toast.error("Failed to fetch performance data"); }
     finally { setLoading(false); }
   }, []);
@@ -960,6 +975,7 @@ export default function EmployeePerformanceDashboard() {
                       <TableRow>
                         <TableHead className="w-10 text-center">#</TableHead>
                         <TableHead className="min-w-[180px]">Driver</TableHead>
+                        <TableHead className="text-center w-[70px]">Signed</TableHead>
                         <TableHead className="text-center">Deliveries</TableHead>
                         <TableHead className="text-center">Tier</TableHead>
                         <TableHead className="text-center">Rank</TableHead>
@@ -1683,38 +1699,40 @@ export default function EmployeePerformanceDashboard() {
                                     style={{ background: gradientBg }}
                                   />
                                 )}
-                                {/* Top row: Day + Duration */}
-                                <div className="relative flex items-center justify-between px-3 pt-2 pb-0.5">
-                                  <div className="flex items-center gap-2">
-                                    {isRushed && <AlertTriangle className={cn("h-3 w-3 flex-shrink-0", isRed ? "text-red-500" : "text-amber-500")} />}
-                                    <span className={cn("text-sm font-semibold", isRushed ? "text-foreground" : "text-foreground/80")}>
-                                      {fmtDay(insp.startDate)}
-                                    </span>
-                                  </div>
+                                {/* Single inline row: Day | VIN | Fleet | Status | Duration */}
+                                <div className="relative flex items-center px-3 py-2 gap-0">
+                                  {isRushed && <AlertTriangle className={cn("h-3 w-3 flex-shrink-0 mr-1.5", isRed ? "text-red-500" : "text-amber-500")} />}
+                                  <span className={cn("text-xs font-semibold whitespace-nowrap", isRushed ? "text-foreground" : "text-foreground/80")}>
+                                    {fmtDay(insp.startDate)}
+                                  </span>
+                                  <span className="mx-2 text-border/60 select-none">|</span>
+                                  <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap" title={insp.vin}>
+                                    {insp.vin ? `VIN …${insp.vin.slice(-6)}` : '—'}
+                                  </span>
+                                  {insp.fleetType && (
+                                    <>
+                                      <span className="mx-2 text-border/60 select-none">|</span>
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600 border border-sky-500/20 font-medium whitespace-nowrap">
+                                        {insp.fleetType}
+                                      </span>
+                                    </>
+                                  )}
+                                  {insp.inspectionStatus && (
+                                    <>
+                                      <span className="mx-2 text-border/60 select-none">|</span>
+                                      <span className={cn("inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-semibold whitespace-nowrap", statusColor)}>
+                                        <span className={cn("w-1 h-1 rounded-full", statusDot)} />
+                                        {insp.inspectionStatus}
+                                      </span>
+                                    </>
+                                  )}
+                                  <span className="mx-2 text-border/60 select-none">|</span>
                                   <span className={cn(
-                                    "relative text-sm font-black font-mono tabular-nums",
+                                    "text-sm font-black font-mono tabular-nums whitespace-nowrap ml-auto",
                                     durationColor
                                   )}>
                                     {sec > 0 ? fmtMMSS(sec) : (insp.duration || '—')}
                                   </span>
-                                </div>
-                                {/* Bottom row: VIN, Fleet Type, Status */}
-                                <div className="relative flex items-center gap-2 px-3 pb-2 pt-0.5">
-                                  {isRushed && <span className="w-3 flex-shrink-0" />}
-                                  <span className="text-[11px] font-mono text-muted-foreground" title={insp.vin}>
-                                    {insp.vin ? `VIN …${insp.vin.slice(-6)}` : '—'}
-                                  </span>
-                                  {insp.fleetType && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600 border border-sky-500/20 font-medium">
-                                      {insp.fleetType}
-                                    </span>
-                                  )}
-                                  {insp.inspectionStatus && (
-                                    <span className={cn("inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-semibold", statusColor)}>
-                                      <span className={cn("w-1 h-1 rounded-full", statusDot)} />
-                                      {insp.inspectionStatus}
-                                    </span>
-                                  )}
                                 </div>
                               </div>
                             );
