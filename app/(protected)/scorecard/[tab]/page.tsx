@@ -419,7 +419,7 @@ export default function EmployeePerformanceDashboard() {
     }
     (async () => {
       try {
-        const res = await fetch(`/api/reports/scorecard-remarks?transporterId=${encodeURIComponent(selectedDriver.transporterId)}&week=${encodeURIComponent(selectedWeek)}`);
+        const res = await fetch(`/api/scorecard/scorecard-remarks?transporterId=${encodeURIComponent(selectedDriver.transporterId)}&week=${encodeURIComponent(selectedWeek)}`);
         const data = await res.json();
         if (data.remarks) {
           setDriverRemarks(data.remarks.driverRemarks || '');
@@ -441,7 +441,7 @@ export default function EmployeePerformanceDashboard() {
     if (!selectedDriver || !selectedWeek) return;
     setSavingRemarks(true);
     try {
-      const res = await fetch('/api/reports/scorecard-remarks', {
+      const res = await fetch('/api/scorecard/scorecard-remarks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -462,7 +462,7 @@ export default function EmployeePerformanceDashboard() {
       // Refresh signature map for the table
       if (selectedWeek) {
         try {
-          const sigRes = await fetch(`/api/reports/scorecard-remarks?week=${encodeURIComponent(selectedWeek)}`);
+          const sigRes = await fetch(`/api/scorecard/scorecard-remarks?week=${encodeURIComponent(selectedWeek)}`);
           const sigData = await sigRes.json();
           setSignatureMap(sigData.signatureMap || {});
         } catch { /* silently fail */ }
@@ -766,7 +766,7 @@ export default function EmployeePerformanceDashboard() {
 
   useEffect(() => {
     setLoadingWeeks(true);
-    fetch("/api/reports/employee-performance")
+    fetch("/api/scorecard/employee-performance")
       .then(r => r.json())
       .then(data => { setWeeks(data.weeks || []); if (data.weeks?.length > 0) setSelectedWeek(data.weeks[0]); })
       .catch(() => toast.error("Failed to load weeks"))
@@ -777,7 +777,7 @@ export default function EmployeePerformanceDashboard() {
     if (!week) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/reports/employee-performance?week=${encodeURIComponent(week)}`);
+      const res = await fetch(`/api/scorecard/employee-performance?week=${encodeURIComponent(week)}`);
       const data = await res.json();
       setDrivers(data.drivers || []); setPodRows(data.podRows || []); setCdfRows(data.cdfRows || []); setCdfNegativeRows(data.cdfNegativeRows || []);
       setDeliveryExcellenceRows(data.deliveryExcellenceRows || []); setDcrRows(data.dcrRows || []);
@@ -786,7 +786,7 @@ export default function EmployeePerformanceDashboard() {
       setAvgOverallScore(data.avgOverallScore || 0); setDspMetrics(data.dspMetrics || null);
       // Fetch signature statuses for this week
       try {
-        const sigRes = await fetch(`/api/reports/scorecard-remarks?week=${encodeURIComponent(week)}`);
+        const sigRes = await fetch(`/api/scorecard/scorecard-remarks?week=${encodeURIComponent(week)}`);
         const sigData = await sigRes.json();
         setSignatureMap(sigData.signatureMap || {});
       } catch { /* silently fail */ }

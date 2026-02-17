@@ -50,7 +50,6 @@ const DEFAULT_MODULES = [
     { name: "Lunch Compliance", url: "#" },
   ]},
   { name: "Scorecard", url: "/scorecard", icon: "IconTarget", order: 10, subModules: [] },
-  { name: "Reports", url: "/reports", icon: "IconChartBar", order: 11, subModules: [] },
 ];
 
 // GET: Fetch all modules (ordered) — auto-seeds on first request
@@ -98,6 +97,10 @@ export async function GET() {
           await SymxAppModule.create(defaultMod);
         }
       }
+
+      // Clean up removed modules (e.g. Reports)
+      const validNames = DEFAULT_MODULES.map(m => m.name);
+      await SymxAppModule.deleteMany({ name: { $nin: validNames } });
 
       // Re-fetch if any patches were applied
       modules = await SymxAppModule.find({}).sort({ order: 1 }).lean();
@@ -285,13 +288,6 @@ export async function POST(req: NextRequest) {
         url: "/scorecard",
         icon: "IconTarget",
         order: 10,
-        subModules: [],
-      },
-      {
-        name: "Reports",
-        url: "/reports",
-        icon: "IconChartBar",
-        order: 11,
         subModules: [],
       },
     ];

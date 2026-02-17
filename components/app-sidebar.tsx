@@ -222,12 +222,6 @@ const data = {
       icon: IconTarget,
       subModules: []
     },
-    {
-      name: "Reports",
-      url: "/reports",
-      icon: IconChartBar,
-      subModules: []
-    },
   ],
 };
 
