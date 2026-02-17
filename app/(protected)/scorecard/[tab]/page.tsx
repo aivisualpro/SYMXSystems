@@ -33,7 +33,7 @@ import {
   Lightbulb, ChevronRight, Info, CheckCircle2, XCircle, Eye,
   Upload, Activity, MessageSquare, Search, Check, ClipboardCheck, Hash,
   Pen, Save, Smile, X, CalendarDays, FileUp, ShieldAlert,
-  UserCheck, ShieldCheck, Play,
+  UserCheck, ShieldCheck, Play, ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -325,6 +325,8 @@ export default function EmployeePerformanceDashboard() {
   const [selectedDriver, setSelectedDriver] = useState<DriverData | null>(null);
   const [videoDialogUrl, setVideoDialogUrl] = useState<string | null>(null);
   const [driverSearch, setDriverSearch] = useState("");
+  const [sortKey, setSortKey] = useState<string>('nfc');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const reportRef = useRef<HTMLDivElement>(null);
 
   // ── Remarks & Signatures State ──────────────────────────────────────────
@@ -1022,22 +1024,61 @@ export default function EmployeePerformanceDashboard() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-10 text-center">#</TableHead>
-                        <TableHead className="min-w-[180px]">Driver</TableHead>
-                        <TableHead className="text-center w-[70px]">Signed</TableHead>
-                        <TableHead className="text-center">Deliveries</TableHead>
-                        <TableHead className="text-center">Safety</TableHead>
-                        <TableHead className="text-center">DVIC</TableHead>
-                        <TableHead className="text-center">DSB DPMO</TableHead>
-                        <TableHead className="text-center">DCR</TableHead>
-                        <TableHead className="text-center">Overall Score</TableHead>
-                        <TableHead className="text-center">NFC</TableHead>
+                        {[
+                          { key: 'name', label: 'Driver', className: 'min-w-[180px] text-left' },
+                          { key: 'signed', label: 'Signed', className: 'text-center w-[70px]' },
+                          { key: 'deliveries', label: 'Deliveries', className: 'text-center' },
+                          { key: 'dvic', label: 'DVIC', className: 'text-center' },
+                          { key: 'dsbDpmo', label: 'DSB DPMO', className: 'text-center' },
+                          { key: 'dcr', label: 'DCR', className: 'text-center' },
+                          { key: 'overallScore', label: 'Overall Score', className: 'text-center' },
+                          { key: 'nfc', label: 'NFC', className: 'text-center' },
+                          { key: 'safety', label: 'Safety', className: 'text-center' },
+                        ].map(col => (
+                          <TableHead
+                            key={col.key}
+                            className={cn(col.className, "cursor-pointer select-none hover:bg-muted/50 transition-colors")}
+                            onClick={() => {
+                              if (sortKey === col.key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                              else { setSortKey(col.key); setSortDir('desc'); }
+                            }}
+                          >
+                            <span className="inline-flex items-center gap-1">
+                              {col.label}
+                              {sortKey === col.key
+                                ? (sortDir === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />)
+                                : <ArrowUpDown className="h-3 w-3 opacity-30" />
+                              }
+                            </span>
+                          </TableHead>
+                        ))}
                         <TableHead className="text-center w-10">Video</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {[...drivers]
                         .filter(d => !driverSearch || d.name.toLowerCase().includes(driverSearch.toLowerCase()))
-                        .sort((a, b) => (b.overallScore ?? 0) - (a.overallScore ?? 0))
+                        .sort((a, b) => {
+                          const getValue = (d: DriverData): number => {
+                            switch (sortKey) {
+                              case 'name': return 0; // handled separately
+                              case 'signed': return (signatureMap[d.transporterId]?.driverSigned ? 1 : 0) + (signatureMap[d.transporterId]?.managerSigned ? 1 : 0);
+                              case 'deliveries': return d.packagesDelivered;
+                              case 'safety': return d.safetyEventCount;
+                              case 'dvic': return d.dvicRushedCount;
+                              case 'dsbDpmo': return d.qualityDsbDnr?.dsbDpmo ?? -1;
+                              case 'dcr': return d.dcrFromCollection ?? -1;
+                              case 'overallScore': return d.overallScore ?? -1;
+                              case 'nfc': return d.negativeFeedbackCount;
+                              default: return 0;
+                            }
+                          };
+                          if (sortKey === 'name') {
+                            return sortDir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+                          }
+                          const av = getValue(a), bv = getValue(b);
+                          return sortDir === 'asc' ? av - bv : bv - av;
+                        })
                         .map((d, i) => (
                           <TableRow
                             key={d.transporterId}
@@ -1077,28 +1118,11 @@ export default function EmployeePerformanceDashboard() {
                               </div>
                             </TableCell>
                             <TableCell className="text-center">
-                              <span className="text-sm font-bold tabular-nums">{d.packagesDelivered.toLocaleString()}</span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {d.safetyEvents.length > 0 ? (
-                                <a
-                                  href={d.safetyEvents[0].videoLink || '#'}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-blue-500 hover:text-blue-400 transition-colors"
-                                  onClick={(e) => e.stopPropagation()}
-                                  title={`${d.safetyEvents.length} safety event(s)`}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                  <span className="text-xs font-semibold">{d.safetyEvents.length}</span>
-                                </a>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">—</span>
-                              )}
+                              <span className="text-sm tabular-nums">{d.packagesDelivered.toLocaleString()}</span>
                             </TableCell>
                             <TableCell className="text-center">
                               {d.dvicTotalInspections > 0 ? (
-                                <span className="text-sm font-bold tabular-nums">
+                                <span className="text-sm tabular-nums">
                                   <span className={d.dvicRushedCount > 0 ? "text-amber-500" : "text-emerald-500"}>{d.dvicRushedCount}</span>
                                   <span className="text-muted-foreground font-normal">/</span>
                                   <span>{d.dvicTotalInspections}</span>
@@ -1108,25 +1132,32 @@ export default function EmployeePerformanceDashboard() {
                               )}
                             </TableCell>
                             <TableCell className="text-center">
-                              <span className="text-sm font-bold tabular-nums">{d.qualityDsbDnr?.dsbDpmo ?? '—'}</span>
+                              <span className="text-sm tabular-nums">{d.qualityDsbDnr?.dsbDpmo ?? '—'}</span>
                             </TableCell>
                             <TableCell className="text-center">
-                              <span className="text-sm font-bold tabular-nums">{d.dcrFromCollection != null ? `${d.dcrFromCollection}%` : '—'}</span>
+                              <span className="text-sm tabular-nums">{d.dcrFromCollection != null ? `${d.dcrFromCollection}%` : '—'}</span>
                             </TableCell>
                             <TableCell className="text-center">
-                              <span className="text-sm font-bold tabular-nums">{d.overallScore ?? '—'}</span>
+                              <span className="text-sm tabular-nums">{d.overallScore ?? '—'}</span>
                             </TableCell>
                             <TableCell className="text-center">
-                              <span className={cn("text-sm font-bold tabular-nums", d.negativeFeedbackCount > 0 ? "text-red-500" : "")}>{d.negativeFeedbackCount}</span>
+                              <span className={cn("text-sm tabular-nums", d.negativeFeedbackCount > 0 ? "text-red-500" : "")}>{d.negativeFeedbackCount}</span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {d.safetyEvents.length > 0 ? (
+                                <span className="text-xs font-medium">{d.safetyEvents[0].metricSubtype || '—'}</span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
                             </TableCell>
                             <TableCell className="text-center">
                               {d.safetyEvents.length > 0 && d.safetyEvents[0].videoLink ? (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setVideoDialogUrl(d.safetyEvents[0].videoLink); }}
-                                  className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors"
+                                  className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors"
                                   title="Play safety video"
                                 >
-                                  <Play className="h-3.5 w-3.5 fill-current" />
+                                  <Play className="h-3 w-3 fill-current" />
                                 </button>
                               ) : (
                                 <span className="text-xs text-muted-foreground">—</span>

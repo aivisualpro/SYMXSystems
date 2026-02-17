@@ -182,10 +182,26 @@ export async function GET(req: NextRequest) {
       if (d.transporterId) dcrMap.set(d.transporterId, d);
     });
 
-    // Merge data per driver
-    const drivers = excellence.map((driver: any) => {
-      const cdfData = cdfMap.get(driver.transporterId) || {};
-      const podData = podMap.get(driver.transporterId) || {};
+    // Build a unified set of transporterIds from ALL collections
+    const allTransporterIds = new Set<string>();
+    excellence.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
+    cdf.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
+    pod.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
+    dvic.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
+    safetyDfo2.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
+    cdfNegative.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
+    qualityDsbDnr.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
+    dcrData.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
+
+    // Build a lookup map for excellence data
+    const excellenceMap = new Map<string, any>();
+    excellence.forEach((d: any) => { if (d.transporterId) excellenceMap.set(d.transporterId, d); });
+
+    // Merge data per driver (from ALL collections)
+    const drivers = Array.from(allTransporterIds).map((transporterId) => {
+      const driver = excellenceMap.get(transporterId) || {};
+      const cdfData = cdfMap.get(transporterId) || {};
+      const podData = podMap.get(transporterId) || {};
 
       // POD reject breakdown
       const podRejectBreakdown: Record<string, number> = {};
@@ -200,10 +216,17 @@ export async function GET(req: NextRequest) {
       if (podData.other) podRejectBreakdown["Other"] = podData.other;
 
       return {
-        // Identity
-        name: driver.deliveryAssociate || `${podData.firstName || ""} ${podData.lastName || ""}`.trim() || "Unknown",
-        transporterId: driver.transporterId,
-        profileImage: empImageMap.get(driver.transporterId) || null,
+        // Identity — resolve name from whichever collection has it
+        name: driver.deliveryAssociate
+          || cdfData.deliveryAssociate
+          || (podData.firstName ? `${podData.firstName} ${podData.lastName || ""}`.trim() : "")
+          || dcrMap.get(transporterId)?.deliveryAssociate
+          || qualityDsbDnrMap.get(transporterId)?.deliveryAssociate
+          || (safetyMap.get(transporterId) || [])[0]?.deliveryAssociate
+          || (dvicMap.get(transporterId) || [])[0]?.transporterName
+          || "Unknown",
+        transporterId,
+        profileImage: empImageMap.get(transporterId) || null,
 
         // Delivery Excellence metrics
         overallStanding: driver.overallStanding || "N/A",
@@ -262,10 +285,10 @@ export async function GET(req: NextRequest) {
         issueCount: (podData.rejects ?? 0) + (cdfData.negativeFeedbackCount ?? 0),
 
         // DCR from ScoreCard_DCR
-        dcrFromCollection: dcrMap.get(driver.transporterId)?.dcr ?? null,
+        dcrFromCollection: dcrMap.get(transporterId)?.dcr ?? null,
 
         // DVIC
-        dvicInspections: (dvicMap.get(driver.transporterId) || []).map((d: any) => ({
+        dvicInspections: (dvicMap.get(transporterId) || []).map((d: any) => ({
           vin: d.vin || "",
           fleetType: d.fleetType || "",
           inspectionType: d.inspectionType || "",
@@ -275,8 +298,8 @@ export async function GET(req: NextRequest) {
           duration: d.duration || "",
           startDate: d.startDate || "",
         })),
-        dvicTotalInspections: (dvicMap.get(driver.transporterId) || []).length,
-        dvicRushedCount: (dvicMap.get(driver.transporterId) || []).filter((d: any) => {
+        dvicTotalInspections: (dvicMap.get(transporterId) || []).length,
+        dvicRushedCount: (dvicMap.get(transporterId) || []).filter((d: any) => {
           // Parse duration into seconds — consider "rushed" if < 90 seconds
           const dur = d.duration;
           if (dur == null || dur === "") return false;
@@ -298,7 +321,7 @@ export async function GET(req: NextRequest) {
         }).length,
 
         // Safety Dashboard DFO2
-        safetyEvents: (safetyMap.get(driver.transporterId) || []).map((s: any) => ({
+        safetyEvents: (safetyMap.get(transporterId) || []).map((s: any) => ({
           date: s.date || "",
           deliveryAssociate: s.deliveryAssociate || "",
           eventId: s.eventId || "",
@@ -311,10 +334,10 @@ export async function GET(req: NextRequest) {
           videoLink: s.videoLink || "",
           reviewDetails: s.reviewDetails || "",
         })),
-        safetyEventCount: (safetyMap.get(driver.transporterId) || []).length,
+        safetyEventCount: (safetyMap.get(transporterId) || []).length,
 
         // CDF Negative Feedback
-        cdfNegativeRecords: (cdfNegativeMap.get(driver.transporterId) || []).map((c: any) => ({
+        cdfNegativeRecords: (cdfNegativeMap.get(transporterId) || []).map((c: any) => ({
           deliveryGroupId: c.deliveryGroupId || "",
           deliveryAssociateName: c.deliveryAssociateName || "",
           daMishandledPackage: c.daMishandledPackage || "",
@@ -327,11 +350,11 @@ export async function GET(req: NextRequest) {
           trackingId: c.trackingId || "",
           deliveryDate: c.deliveryDate || "",
         })),
-        cdfNegativeCount: (cdfNegativeMap.get(driver.transporterId) || []).length,
+        cdfNegativeCount: (cdfNegativeMap.get(transporterId) || []).length,
 
         // Quality DSB/DNR
         qualityDsbDnr: (() => {
-          const q = qualityDsbDnrMap.get(driver.transporterId);
+          const q = qualityDsbDnrMap.get(transporterId);
           if (!q) return null;
           return {
             dsbCount: q.dsbCount ?? 0,
@@ -349,7 +372,7 @@ export async function GET(req: NextRequest) {
 
         // Customer Delivery Feedback (summary — already partially in CDF section)
         customerDeliveryFeedback: (() => {
-          const c = cdfMap.get(driver.transporterId);
+          const c = cdfMap.get(transporterId);
           if (!c) return null;
           return {
             cdfDpmo: c.cdfDpmo ?? 0,
