@@ -1,5 +1,15 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
+export interface IScoreCardRemarksHistory {
+  action: 'created' | 'updated';
+  changedFields: string[];
+  changedBy: {
+    userId: string;
+    name: string;
+  };
+  changedAt: Date;
+}
+
 export interface ISymxScoreCardRemarks extends Document {
   transporterId: string;
   week: string;
@@ -9,6 +19,9 @@ export interface ISymxScoreCardRemarks extends Document {
   managerRemarks?: string;
   managerSignature?: string;       // base64 data URL of the signature image
   managerSignatureTimestamp?: Date;
+  managerId?: mongoose.Types.ObjectId;
+  managerName?: string;
+  history?: IScoreCardRemarksHistory[];
 }
 
 const SymxScoreCardRemarksSchema: Schema = new Schema({
@@ -20,6 +33,17 @@ const SymxScoreCardRemarksSchema: Schema = new Schema({
   managerRemarks: { type: String, default: '' },
   managerSignature: { type: String, default: '' },
   managerSignatureTimestamp: { type: Date },
+  managerId: { type: Schema.Types.ObjectId, ref: 'SymxUser' },
+  managerName: { type: String, default: '' },
+  history: [{
+    action: { type: String, enum: ['created', 'updated'], required: true },
+    changedFields: [{ type: String }],
+    changedBy: {
+      userId: { type: String, required: true },
+      name: { type: String, required: true },
+    },
+    changedAt: { type: Date, default: Date.now },
+  }],
 }, { timestamps: true, collection: 'SymxScoreCardRemarks' });
 
 // Compound unique index: one record per driver per week

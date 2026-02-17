@@ -185,6 +185,26 @@ function SectionHeader({ icon: Icon, title, tier, children }: { icon: any; title
   );
 }
 
+// Textarea that manages its own local state to avoid re-rendering the entire page on every keystroke.
+// Syncs value to parent onChange on blur.
+function DebouncedTextarea({ value, onChange, ...props }: { value: string; onChange: (val: string) => void } & Omit<React.ComponentProps<typeof Textarea>, 'value' | 'onChange'>) {
+  const [local, setLocal] = useState(value);
+  const latestOnChange = useRef(onChange);
+  latestOnChange.current = onChange;
+
+  // Sync external value changes (e.g. when switching drivers)
+  useEffect(() => { setLocal(value); }, [value]);
+
+  return (
+    <Textarea
+      {...props}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => latestOnChange.current(local)}
+    />
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────
 export default function EmployeePerformanceDashboard() {
   const { setRightContent, setLeftContent } = useHeaderActions();
@@ -214,6 +234,21 @@ export default function EmployeePerformanceDashboard() {
   const [driverSigTimestamp, setDriverSigTimestamp] = useState<string | null>(null);
   const [managerSigTimestamp, setManagerSigTimestamp] = useState<string | null>(null);
   const [savingRemarks, setSavingRemarks] = useState(false);
+  const [loggedInUserName, setLoggedInUserName] = useState("");
+
+  // Fetch logged-in user name
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const res = await fetch("/api/auth/session");
+        if (res.ok) {
+          const { user } = await res.json();
+          if (user?.name) setLoggedInUserName(user.name);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchUser();
+  }, []);
 
 
   // Fetch remarks when driver is selected
@@ -305,8 +340,23 @@ export default function EmployeePerformanceDashboard() {
   const handleImportFileAttach = (type: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.name.endsWith(".csv")) { toast.error("Please select a valid CSV file"); return; }
+    const isValidExt = file.name.endsWith(".csv") || file.name.endsWith(".xlsx");
+    if (!isValidExt) { toast.error("Please select a valid CSV or XLSX file"); return; }
     setImportFiles(prev => ({ ...prev, [type]: file }));
+
+    // Auto-detect week from filename if not already set
+    const detectedWeek = extractWeekFromFilename(file.name);
+    if (detectedWeek) {
+      setImportWeek(prev => {
+        // Only auto-set if importWeek is empty or matches the default (selectedWeek)
+        if (!prev || prev === selectedWeek) return detectedWeek;
+        return prev;
+      });
+      // Add to weeks list if new
+      if (!weeks.includes(detectedWeek)) {
+        setWeeks(prev => [detectedWeek, ...prev].sort().reverse());
+      }
+    }
   };
 
   const removeImportFile = (type: string) => {
@@ -334,10 +384,7 @@ export default function EmployeePerformanceDashboard() {
           try {
             for (let i = 0; i < totalRows; i += batchSize) {
               const batch = data.slice(i, i + batchSize);
-              const payload: any = { type, data: batch };
-              if (type === 'import-pod' || type === 'customer-delivery-feedback') {
-                payload.week = importWeek;
-              }
+              const payload: any = { type, data: batch, week: importWeek };
 
               const response = await fetch("/api/admin/imports", {
                 method: "POST",
@@ -428,12 +475,32 @@ export default function EmployeePerformanceDashboard() {
   const normalizeWeekInput = (raw: string): string | null => {
     const s = raw.trim().toUpperCase();
     // Match patterns: 2026-W05, 2026-W5, 2026W05, 2026W5
-    const m = s.match(/^(\d{4})-?W(\d{1,2})$/);
+    let m = s.match(/^(\d{4})-?W(\d{1,2})$/);
+    // Also match: 2026_week-5, 2026_week-05, 2026-week-5
+    if (!m) m = s.match(/^(\d{4})[_-]WEEK[_-]?(\d{1,2})$/);
     if (!m) return null;
     const year = parseInt(m[1], 10);
     const wk = parseInt(m[2], 10);
     if (wk < 1 || wk > 53 || year < 2020 || year > 2099) return null;
     return `${m[1]}-W${wk.toString().padStart(2, '0')}`;
+  };
+
+  // Extract week from filename — supports various naming patterns
+  const extractWeekFromFilename = (filename: string): string | null => {
+    const s = filename.toUpperCase();
+    // Pattern 1: 2026-W05 or 2026-W5
+    let m = s.match(/(\d{4})-W(\d{1,2})/);
+    if (m) {
+      const wk = parseInt(m[2], 10);
+      if (wk >= 1 && wk <= 53) return `${m[1]}-W${wk.toString().padStart(2, '0')}`;
+    }
+    // Pattern 2: 2026_week-5, 2026_week-05, 2026_WEEK_5
+    m = s.match(/(\d{4})[_-]WEEK[_-]?(\d{1,2})/);
+    if (m) {
+      const wk = parseInt(m[2], 10);
+      if (wk >= 1 && wk <= 53) return `${m[1]}-W${wk.toString().padStart(2, '0')}`;
+    }
+    return null;
   };
 
   const normalizedWeekInput = normalizeWeekInput(weekSearchInput);
@@ -628,7 +695,7 @@ export default function EmployeePerformanceDashboard() {
       <input type="file" ref={deFileRef} className="hidden" accept=".csv" onChange={handleImportFileAttach("delivery-excellence")} />
       <input type="file" ref={podFileRef} className="hidden" accept=".csv" onChange={handleImportFileAttach("import-pod")} />
       <input type="file" ref={cdfFileRef} className="hidden" accept=".csv" onChange={handleImportFileAttach("customer-delivery-feedback")} />
-      <input type="file" ref={dvicFileRef} className="hidden" accept=".csv" onChange={handleImportFileAttach("dvic-vehicle-inspection")} />
+      <input type="file" ref={dvicFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("dvic-vehicle-inspection")} />
 
       {/* Import Dialog — Multi-file batch import */}
       <Dialog open={showImportDialog} onOpenChange={(open) => {
@@ -1321,6 +1388,7 @@ export default function EmployeePerformanceDashboard() {
                   )}
                   <div className="min-w-0">
                     <h2 className="text-lg font-black tracking-tight truncate">{d.name}</h2>
+                    <p className="text-xs text-muted-foreground font-mono mt-0.5">{d.transporterId}</p>
                   </div>
                 </div>
 
@@ -1712,21 +1780,25 @@ export default function EmployeePerformanceDashboard() {
                     </div>
                     <div className="p-4 grid grid-cols-2 gap-4">
                       <div>
+                        <p className="text-xs font-bold text-foreground mb-1">{d.name}</p>
                         <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Remarks</label>
-                        <Textarea
+                        <DebouncedTextarea
                           placeholder="Enter driver remarks..."
                           className="min-h-[100px] text-xs resize-none border-2 border-border/40 focus:border-[#1a7a8a]/50 transition-colors bg-transparent"
                           value={driverRemarks}
-                          onChange={(e) => setDriverRemarks(e.target.value)}
+                          onChange={setDriverRemarks}
                         />
                       </div>
-                      <SignaturePad
-                        value={driverSignature}
-                        onChange={setDriverSignature}
-                        height={100}
-                        label="Signature"
-                        timestamp={driverSigTimestamp ? format(new Date(driverSigTimestamp), 'MMM d, yyyy h:mm a') : null}
-                      />
+                      <div>
+                        <p className="text-xs font-bold text-foreground mb-1">{d.name}</p>
+                        <SignaturePad
+                          value={driverSignature}
+                          onChange={setDriverSignature}
+                          height={100}
+                          label="Signature"
+                          timestamp={driverSigTimestamp ? format(new Date(driverSigTimestamp), 'MMM d, yyyy h:mm a') : null}
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1740,21 +1812,25 @@ export default function EmployeePerformanceDashboard() {
                     </div>
                     <div className="p-4 grid grid-cols-2 gap-4">
                       <div>
+                        <p className="text-xs font-bold text-foreground mb-1">{loggedInUserName || 'Manager'}</p>
                         <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Remarks</label>
-                        <Textarea
+                        <DebouncedTextarea
                           placeholder="Enter manager remarks..."
                           className="min-h-[100px] text-xs resize-none bg-transparent border-2 border-border/40 focus:border-[#1a7a8a]/50 transition-colors"
                           value={managerRemarks}
-                          onChange={(e) => setManagerRemarks(e.target.value)}
+                          onChange={setManagerRemarks}
                         />
                       </div>
-                      <SignaturePad
-                        value={managerSignature}
-                        onChange={setManagerSignature}
-                        height={100}
-                        label="Signature"
-                        timestamp={managerSigTimestamp ? format(new Date(managerSigTimestamp), 'MMM d, yyyy h:mm a') : null}
-                      />
+                      <div>
+                        <p className="text-xs font-bold text-foreground mb-1">{loggedInUserName || 'Manager'}</p>
+                        <SignaturePad
+                          value={managerSignature}
+                          onChange={setManagerSignature}
+                          height={100}
+                          label="Signature"
+                          timestamp={managerSigTimestamp ? format(new Date(managerSigTimestamp), 'MMM d, yyyy h:mm a') : null}
+                        />
+                      </div>
                     </div>
                   </div>
 

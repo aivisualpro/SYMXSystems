@@ -476,19 +476,19 @@ export async function POST(req: NextRequest) {
         
         const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
 
-        // 3. Process Rows — auto-calculate week from start_date
+        // 3. Process Rows — use passed week, fallback to auto-calculate from start_date
         const operations = data.map((row: any) => {
             const transporterId = (row["transporter_id"] || "").toString().trim();
             const startDate = (row["start_date"] || "").toString().trim();
 
             if (!transporterId) return null;
 
-            // Auto-calculate week from start_date
-            const autoWeek = startDate ? dateToISOWeek(startDate) : null;
-            if (!autoWeek) return null; // Skip rows without a valid date
+            // Use the passed week from the frontend (auto-detected from filename), fallback to date-based calculation
+            const recordWeek = week || (startDate ? dateToISOWeek(startDate) : null);
+            if (!recordWeek) return null; // Skip rows without a valid week
 
             const processedData: any = {
-                week: autoWeek,
+                week: recordWeek,
                 transporterId,
             };
 
