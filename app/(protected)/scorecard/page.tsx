@@ -62,6 +62,13 @@ interface DriverData {
   // Safety Dashboard DFO2
   safetyEvents: { date: string; deliveryAssociate: string; eventId: string; dateTime: string; vin: string; programImpact: string; metricType: string; metricSubtype: string; source: string; videoLink: string; reviewDetails: string }[];
   safetyEventCount: number;
+  // CDF Negative Feedback
+  cdfNegativeRecords: { deliveryGroupId: string; deliveryAssociateName: string; daMishandledPackage: string; daWasUnprofessional: string; daDidNotFollowInstructions: string; deliveredToWrongAddress: string; neverReceivedDelivery: string; receivedWrongItem: string; feedbackDetails: string; trackingId: string; deliveryDate: string }[];
+  cdfNegativeCount: number;
+  // Quality DSB/DNR
+  qualityDsbDnr: { dsbCount: number; dsbDpmo: number; attendedDeliveryCount: number; unattendedDeliveryCount: number; simultaneousDeliveries: number; deliveredOver50m: number; incorrectScanUsageAttended: number; incorrectScanUsageUnattended: number; noPodOnDelivery: number; scannedNotDeliveredNotReturned: number } | null;
+  // Customer Delivery Feedback (summary)
+  customerDeliveryFeedback: { cdfDpmo: number; cdfDpmoTier: string; cdfDpmoScore: number; negativeFeedbackCount: number } | null;
 }
 interface PodRow {
   name: string; transporterId: string; opportunities: number; success: number;
@@ -110,6 +117,59 @@ function getTier(tier: string) {
   }
   return { color: "text-muted-foreground", bg: "bg-muted/50", border: "border-border", bar: "bg-muted", pct: 0 };
 }
+
+// ── Metric Info Data ──────────────────────────────────────────────────────
+type MetricInfoEntry = {
+  title: string;
+  description: string;
+  howMeasured?: string;
+};
+
+const METRIC_INFO: Record<string, MetricInfoEntry> = {
+  'fico-score': {
+    title: 'FICO SCORE',
+    description: 'Safe driving is based on your driving activity. Repeated fast acceleration, braking, cornering, cell phone distractions, and speeding decreases your FICO. Take more time to accelerate, brake and safely drive around corners. Reduce distractions by keeping your eyes on the road ahead.',
+  },
+  'on-road-safety-score': {
+    title: 'ON-ROAD SAFETY SCORE',
+    description: 'Your On-Road Safety Score reflects your overall driving safety performance. It is determined by your FICO score and other driving behavior metrics. A higher tier indicates safer driving habits across all categories.',
+  },
+  'proper-park-sequence': {
+    title: 'PROPER-PARK-SEQUENCE COMPLIANCE',
+    description: 'Vehicle rollaways can occur when you park a vehicle without following the Proper Park Sequence (PPS). Vehicle rollaways can be incredibly dangerous, but they are also very preventable if you follow the PPS.\n\nFirst, apply the parking brake. Next, shift the vehicle into Park (for manual transmission, into First or Reverse gear). If on a hill, turn your wheels toward the curb (Downhill) or toward the road (Uphill). Finally, turn off the engine if appropriate and remember to take your keys with you.',
+    howMeasured: 'This metric only looks at whether you first applied the parking brake, and next if you shifted gear into Park. You need to complete both operations, in that order to count as compliant. We\'ll show you the total percentage of stops you were compliant, along with the number and reasons for the stops that were not.',
+  },
+  'paw-print-contact': {
+    title: 'PAW PRINT CONTACT COMPLIANCE',
+    description: 'Identifying the presence of a dog starts before you exit your vehicle. You should look in the Delivery App notes at every stop for the Paw Print icon that says, “Be aware of a dog at this stop” or other identifying notes from the customer. The Paw Print icon indicates that a dog has been previously seen at this location, so it is critical to look for the Paw Print icon prior to entering the property to be aware of a potential dog presence.\n\nIf you see a Paw Print icon, you should text the customer to alert them that you are on your way - this automated text asks the customer to secure any pets. You should always use this feature whenever you see a paw print.',
+    howMeasured: 'This score measures how many stops where a "paw print" was noted and you correctly notified the customer via text. You should aim to notify customers of your arrival for ALL stops where a paw print is present.',
+  },
+  'distractions': {
+    title: 'DISTRACTIONS',
+    description: 'Please keep your attention on the road while driving. We capture 3 types of distraction based on video evidence, including when a DA is looking down, looking at their phone, or talking on their phone while driving. Each time a DA is driving while distracted, we will register one event.',
+    howMeasured: 'Your score is the sum of all distraction events divided by the total number of trips. This is shown on your Scorecard as XX events per 100 trips to make it easier to interpret.',
+  },
+  'speeding': {
+    title: 'SPEEDING',
+    description: 'Please travel within posted speed limits for your safety and the safety of others. A speeding instance is speeding 10 Miles per Hour (MPH) or more for roughly one city block.',
+    howMeasured: 'Your score is the sum of all speeding events divided by the total number of trips. This is shown on your Scorecard as XX events per 100 trips to make it easier to interpret',
+  },
+  'seatbelt-off': {
+    title: 'SEATBELT OFF',
+    description: 'The average number of times per route you did not wear your seatbelt. An event is recorded any time the vehicle accelerated faster than 6 mph and your seatbelt was not buckled.',
+    howMeasured: 'Your score is the sum of all seatbelt off instances divided by the total number of routes completed in a vehicle with seat belt sensors. This is shown on your Scorecard as XX events per 100 trips to make it easier to interpret.',
+  },
+  'follow-distance': {
+    title: 'FOLLOW DISTANCE',
+    description: 'Following Distance events occur when you are driving too close to the vehicle in front of you. Maintaining a safe following distance gives you more time to react to sudden stops or changes in traffic.',
+    howMeasured: 'Each time you don\'t leave enough following distance, we register 1 event, and your score is the sum of all following distance events divided by the number of trips. This will show on your DSP Scorecard as XX events per 100 trips to make it easier to interpret. For example, if you incurred 10 Following Distance Events during 200 trips in a week, then the Following Distance Rate is 5 events per 100 trips (10 events per 200 trips is the same as 5 events per 100 trips).',
+  },
+  'sign-signal-violations': {
+    title: 'SIGN/SIGNAL VIOLATIONS',
+    description: 'The Sign/Signal Violations Rate measures how well you adhere to posted road signs and traffic signals. We\'re currently including stop sign violations, which is any time a DA drives past/through a stop sign without coming to a full stop, illegal U-turns, which measure any time a DA makes a U-turn when a "No U-Turn sign" is present, and stop light violations, which is triggered any time a DA drives through an intersection while the light is red.',
+    howMeasured: 'In the measurement of this metric, a stop light violation will count 10 times to every one stop sign violation or illegal U-turn, since stop light violations can be particularly dangerous. Your weekly score is the sum of all stop sign violation events, illegal U-turns, and stop light violation events (which again, are weighted at 10 times stop sign violations) divided by the number of trips. This will show on your DSP Scorecard as XX events per 100 trips to make it easier to interpret.',
+  },
+};
 
 // ── Reusable Sub-Components ───────────────────────────────────────────────
 function TierBadge({ tier, className }: { tier: string; className?: string }) {
@@ -238,6 +298,7 @@ export default function EmployeePerformanceDashboard() {
   const [managerSigTimestamp, setManagerSigTimestamp] = useState<string | null>(null);
   const [savingRemarks, setSavingRemarks] = useState(false);
   const [loggedInUserName, setLoggedInUserName] = useState("");
+  const [infoModal, setInfoModal] = useState<{ key: string; score?: string } | null>(null);
 
   // Fetch logged-in user name
   useEffect(() => {
@@ -1338,22 +1399,31 @@ export default function EmployeePerformanceDashboard() {
                 </div>
                 <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-0 py-0 mb-4 overflow-hidden">
                   {/* On-Road Safety Score */}
-                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15">
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setInfoModal({ key: 'on-road-safety-score', score: d.ficoTier || 'N/A' })}>
                     <span className="text-sm font-bold">On-Road Safety Score</span>
-                    <span className="text-sm font-black">{d.ficoTier || 'N/A'}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-black">{d.ficoTier || 'N/A'}</span>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground/40" />
+                    </div>
                   </div>
                   {/* FICO Score */}
-                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: `linear-gradient(270deg, ${(d.ficoMetric ?? 0) >= 800 ? 'rgba(16,185,129,0.15)' : (d.ficoMetric ?? 0) >= 700 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)'} 0%, transparent 60%)` }}>
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setInfoModal({ key: 'fico-score', score: `${d.ficoMetric ?? '—'}/850` })} style={{ background: `linear-gradient(270deg, ${(d.ficoMetric ?? 0) >= 800 ? 'rgba(16,185,129,0.15)' : (d.ficoMetric ?? 0) >= 700 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)'} 0%, transparent 60%)` }}>
                     <span className="text-sm font-bold">FICO Score</span>
-                    <span className="text-sm font-black tabular-nums">
-                      <span className={(d.ficoMetric ?? 0) >= 800 ? 'text-emerald-600' : (d.ficoMetric ?? 0) >= 700 ? 'text-amber-500' : 'text-red-500'}>{d.ficoMetric ?? '—'}</span>
-                      <span className="text-muted-foreground font-normal">/850</span>
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-black tabular-nums">
+                        <span className={(d.ficoMetric ?? 0) >= 800 ? 'text-emerald-600' : (d.ficoMetric ?? 0) >= 700 ? 'text-amber-500' : 'text-red-500'}>{d.ficoMetric ?? '—'}</span>
+                        <span className="text-muted-foreground font-normal">/850</span>
+                      </span>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground/40" />
+                    </div>
                   </div>
                   {/* Proper-Park-Sequence Compliance */}
-                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(270deg, rgba(245,158,11,0.12) 0%, transparent 60%)' }}>
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setInfoModal({ key: 'proper-park-sequence', score: 'Coming Soon' })} style={{ background: 'linear-gradient(270deg, rgba(245,158,11,0.12) 0%, transparent 60%)' }}>
                     <span className="text-sm font-bold">Proper-Park-Sequence Compliance</span>
-                    <span className="text-[10px] font-semibold text-muted-foreground italic">Coming Soon</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold text-muted-foreground italic">Coming Soon</span>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground/40" />
+                    </div>
                   </div>
                   {/* Sub-rows */}
                   <div className="flex justify-between items-center px-4 py-2 pl-7 border-b border-border/10">
@@ -1365,9 +1435,12 @@ export default function EmployeePerformanceDashboard() {
                     <span className="text-sm font-black tabular-nums text-muted-foreground/50">—</span>
                   </div>
                   {/* Paw Print Contact Compliance */}
-                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(270deg, rgba(16,185,129,0.15) 0%, rgba(16,185,129,0.05) 50%, transparent 100%)' }}>
+                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setInfoModal({ key: 'paw-print-contact', score: 'Coming Soon' })} style={{ background: 'linear-gradient(270deg, rgba(16,185,129,0.15) 0%, rgba(16,185,129,0.05) 50%, transparent 100%)' }}>
                     <span className="text-sm font-bold">Paw Print Contact Compliance</span>
-                    <span className="text-[10px] font-semibold text-muted-foreground italic">Coming Soon</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold text-muted-foreground italic">Coming Soon</span>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground/40" />
+                    </div>
                   </div>
 
                   {/* Events header */}
@@ -1379,11 +1452,11 @@ export default function EmployeePerformanceDashboard() {
                   {/* Event rates with gradient bars */}
                   {(() => {
                     const events = [
-                      { label: 'Distractions', value: d.distractionsRate },
-                      { label: 'Speeding', value: d.speedingEventRate },
-                      { label: 'Seatbelt Off', value: d.seatbeltOffRate },
-                      { label: 'Follow Distance', value: d.followingDistanceRate },
-                      { label: 'Sign/Signal Violations', value: d.signSignalViolationsRate },
+                      { label: 'Distractions', value: d.distractionsRate, infoKey: 'distractions' },
+                      { label: 'Speeding', value: d.speedingEventRate, infoKey: 'speeding' },
+                      { label: 'Seatbelt Off', value: d.seatbeltOffRate, infoKey: 'seatbelt-off' },
+                      { label: 'Follow Distance', value: d.followingDistanceRate, infoKey: 'follow-distance' },
+                      { label: 'Sign/Signal Violations', value: d.signSignalViolationsRate, infoKey: 'sign-signal-violations' },
                     ];
                     const getEventColor = (v: number) => {
                       if (v === 0) return { text: 'text-emerald-500', bg: 'transparent' };
@@ -1395,9 +1468,12 @@ export default function EmployeePerformanceDashboard() {
                     return events.map((m, idx) => {
                       const colors = getEventColor(m.value);
                       return (
-                        <div key={m.label} className={cn("flex justify-between items-center px-4 py-2.5", idx < events.length - 1 && "border-b border-border/10")} style={{ background: colors.bg }}>
+                        <div key={m.label} className={cn("flex justify-between items-center px-4 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors", idx < events.length - 1 && "border-b border-border/10")} style={{ background: colors.bg }} onClick={() => setInfoModal({ key: m.infoKey, score: String(m.value) })}>
                           <span className="text-sm font-bold">{m.label}</span>
-                          <span className={cn("text-sm font-black tabular-nums", colors.text)}>{m.value}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className={cn("text-sm font-black tabular-nums", colors.text)}>{m.value}</span>
+                            <Info className="h-3.5 w-3.5 text-muted-foreground/40" />
+                          </div>
                         </div>
                       );
                     });
@@ -1720,6 +1796,173 @@ export default function EmployeePerformanceDashboard() {
                 </div>
               </div>
 
+              {/* ── CDF NEGATIVE FEEDBACK ── */}
+              <div>
+                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-red-600 to-rose-600 mx-4 rounded-t-xl">
+                  <h3 className="font-black text-sm text-white flex items-center gap-2">
+                    <MessageSquareWarning className="h-5 w-5 text-white/70" />
+                    CDF Negative Feedback
+                  </h3>
+                  <span className={cn("text-sm font-black tabular-nums text-white")}>
+                    {d.cdfNegativeCount} Record{d.cdfNegativeCount !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-5 py-4 mb-4">
+                  {d.cdfNegativeRecords && d.cdfNegativeRecords.length > 0 ? (
+                    <div className="space-y-2">
+                      {d.cdfNegativeRecords.map((rec, idx) => {
+                        // Determine which categories were flagged
+                        const flags: string[] = [];
+                        if (rec.daMishandledPackage && rec.daMishandledPackage.toLowerCase() === 'true') flags.push('Mishandled Package');
+                        if (rec.daWasUnprofessional && rec.daWasUnprofessional.toLowerCase() === 'true') flags.push('Unprofessional');
+                        if (rec.daDidNotFollowInstructions && rec.daDidNotFollowInstructions.toLowerCase() === 'true') flags.push('Did Not Follow Instructions');
+                        if (rec.deliveredToWrongAddress && rec.deliveredToWrongAddress.toLowerCase() === 'true') flags.push('Wrong Address');
+                        if (rec.neverReceivedDelivery && rec.neverReceivedDelivery.toLowerCase() === 'true') flags.push('Never Received');
+                        if (rec.receivedWrongItem && rec.receivedWrongItem.toLowerCase() === 'true') flags.push('Wrong Item');
+
+                        return (
+                          <div key={idx} className="rounded-lg border border-border/30 overflow-hidden hover:border-border/50 transition-colors">
+                            <div className="flex items-center justify-between px-3 py-2 border-b border-border/20">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {flags.length > 0 ? flags.map((f, fi) => (
+                                  <span key={fi} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 font-semibold">{f}</span>
+                                )) : (
+                                  <span className="text-[10px] text-muted-foreground italic">No categories flagged</span>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground tabular-nums shrink-0 ml-2">{rec.deliveryDate || '—'}</span>
+                            </div>
+                            {rec.feedbackDetails && (
+                              <div className="px-3 py-2">
+                                <p className="text-xs text-muted-foreground leading-relaxed">{rec.feedbackDetails}</p>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 px-3 pb-2">
+                              {rec.trackingId && <span className="text-[10px] font-mono text-muted-foreground">TID: {rec.trackingId}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center">
+                      <MessageSquareWarning className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" />
+                      <p className="text-xs text-muted-foreground">No negative feedback records this week</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── CUSTOMER DELIVERY FEEDBACK ── */}
+              <div>
+                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#d4950a] to-[#c2860a] mx-4 rounded-t-xl">
+                  <h3 className="font-black text-sm text-white flex items-center gap-2">
+                    <Smile className="h-5 w-5 text-white/70" />
+                    Customer Delivery Feedback
+                  </h3>
+                  {d.customerDeliveryFeedback && (
+                    <span className="text-sm font-black text-white">{d.customerDeliveryFeedback.cdfDpmoTier}</span>
+                  )}
+                </div>
+                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-0 py-0 mb-4 overflow-hidden">
+                  {d.customerDeliveryFeedback ? (() => {
+                    const cdfData = d.customerDeliveryFeedback;
+                    const dpmoColor = cdfData.cdfDpmo <= 200 ? 'text-emerald-500' : cdfData.cdfDpmo <= 500 ? 'text-green-500' : cdfData.cdfDpmo <= 1000 ? 'text-amber-500' : 'text-red-500';
+                    const dpmoGradient = cdfData.cdfDpmo <= 200
+                      ? 'linear-gradient(270deg, rgba(16,185,129,0.15) 0%, transparent 60%)'
+                      : cdfData.cdfDpmo <= 500
+                      ? 'linear-gradient(270deg, rgba(34,197,94,0.15) 0%, transparent 60%)'
+                      : cdfData.cdfDpmo <= 1000
+                      ? 'linear-gradient(270deg, rgba(245,158,11,0.15) 0%, transparent 60%)'
+                      : 'linear-gradient(270deg, rgba(239,68,68,0.15) 0%, transparent 60%)';
+                    return (
+                      <>
+                        <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: dpmoGradient }}>
+                          <span className="text-sm font-bold">CDF DPMO</span>
+                          <span className={cn("text-sm font-black tabular-nums", dpmoColor)}>{cdfData.cdfDpmo.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15">
+                          <span className="text-sm font-bold">CDF DPMO Tier</span>
+                          <span className="text-sm font-black">{cdfData.cdfDpmoTier}</span>
+                        </div>
+                        <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15">
+                          <span className="text-sm font-bold">CDF DPMO Score</span>
+                          <span className="text-sm font-black tabular-nums">{cdfData.cdfDpmoScore}</span>
+                        </div>
+                        <div className="flex justify-between items-center px-4 py-2.5" style={{ background: cdfData.negativeFeedbackCount > 0 ? 'linear-gradient(270deg, rgba(239,68,68,0.15) 0%, transparent 60%)' : undefined }}>
+                          <span className="text-sm font-bold">Negative Feedback Count</span>
+                          <span className={cn("text-sm font-black tabular-nums", cdfData.negativeFeedbackCount > 0 && "text-red-500")}>{cdfData.negativeFeedbackCount}</span>
+                        </div>
+                      </>
+                    );
+                  })() : (
+                    <div className="py-6 text-center">
+                      <Smile className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" />
+                      <p className="text-xs text-muted-foreground">No CDF data this week</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── QUALITY DSB / DNR ── */}
+              <div>
+                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-violet-600 to-purple-600 mx-4 rounded-t-xl">
+                  <h3 className="font-black text-sm text-white flex items-center gap-2">
+                    <ClipboardCheck className="h-5 w-5 text-white/70" />
+                    Quality DSB / DNR
+                  </h3>
+                  {d.qualityDsbDnr && (
+                    <span className={cn("text-sm font-black tabular-nums text-white")}>
+                      {d.qualityDsbDnr.dsbCount} DSB
+                    </span>
+                  )}
+                </div>
+                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-0 py-0 mb-4 overflow-hidden">
+                  {d.qualityDsbDnr ? (() => {
+                    const q = d.qualityDsbDnr;
+                    const dsbColor = q.dsbCount === 0 ? 'text-emerald-500' : q.dsbCount <= 3 ? 'text-amber-500' : 'text-red-500';
+                    const getRowGradient = (val: number) => val > 0
+                      ? 'linear-gradient(270deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 50%, transparent 100%)'
+                      : undefined;
+                    return (
+                      <>
+                        <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: q.dsbCount > 0 ? 'linear-gradient(270deg, rgba(239,68,68,0.15) 0%, rgba(239,68,68,0.05) 50%, transparent 100%)' : 'linear-gradient(270deg, rgba(16,185,129,0.12) 0%, transparent 60%)' }}>
+                          <span className="text-sm font-bold">DSB Count</span>
+                          <span className={cn("text-sm font-black tabular-nums", dsbColor)}>{q.dsbCount}</span>
+                        </div>
+                        <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15">
+                          <span className="text-sm font-bold">DSB DPMO</span>
+                          <span className="text-sm font-black tabular-nums">{q.dsbDpmo.toLocaleString()}</span>
+                        </div>
+                        <div className="px-4 pt-3 pb-1.5 border-b border-border/15">
+                          <span className="text-xs font-black text-muted-foreground uppercase tracking-wider">Breakdown</span>
+                        </div>
+                        {([
+                          { label: 'Attended Deliveries', value: q.attendedDeliveryCount },
+                          { label: 'Unattended Deliveries', value: q.unattendedDeliveryCount },
+                          { label: 'Simultaneous Deliveries', value: q.simultaneousDeliveries },
+                          { label: 'Delivered > 50m', value: q.deliveredOver50m },
+                          { label: 'Incorrect Scan (Attended)', value: q.incorrectScanUsageAttended },
+                          { label: 'Incorrect Scan (Unattended)', value: q.incorrectScanUsageUnattended },
+                          { label: 'No POD on Delivery', value: q.noPodOnDelivery },
+                          { label: 'Scanned Not Delivered/Returned', value: q.scannedNotDeliveredNotReturned },
+                        ] as const).map((row, idx, arr) => (
+                          <div key={row.label} className={cn("flex justify-between items-center px-4 py-2 pl-7", idx < arr.length - 1 && "border-b border-border/10")} style={{ background: getRowGradient(row.value) }}>
+                            <span className="text-sm text-muted-foreground">{row.label}</span>
+                            <span className={cn("text-sm font-black tabular-nums", row.value > 0 ? "text-amber-500" : "text-muted-foreground/50")}>{row.value || '—'}</span>
+                          </div>
+                        ))}
+                      </>
+                    );
+                  })() : (
+                    <div className="py-6 text-center">
+                      <ClipboardCheck className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" />
+                      <p className="text-xs text-muted-foreground">No DSB/DNR data this week</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* ── FOCUS AREA & GUIDANCE ── */}
               <div>
                 <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#1a7a8a] to-[#1a5f6a] mx-4 rounded-t-xl">
@@ -1831,6 +2074,50 @@ export default function EmployeePerformanceDashboard() {
                   </p>
                 </div>
               </div>
+            </div>
+          );
+        })()}
+      </DialogContent>
+    </Dialog>
+
+    {/* ── METRIC INFO MODAL ── */}
+    <Dialog open={!!infoModal} onOpenChange={() => setInfoModal(null)}>
+      <DialogContent className="sm:max-w-[520px] p-0 gap-0 overflow-hidden border border-border/60 shadow-2xl rounded-2xl">
+        <DialogHeader className="sr-only"><DialogTitle>Metric Information</DialogTitle><DialogDescription>Details about this metric</DialogDescription></DialogHeader>
+        {infoModal && METRIC_INFO[infoModal.key] && (() => {
+          const info = METRIC_INFO[infoModal.key];
+          return (
+            <div className="p-6 space-y-4">
+              {/* Title */}
+              <div className="flex items-start justify-between gap-4">
+                <h3 className="text-lg font-black tracking-tight leading-tight">{info.title}</h3>
+                <button onClick={() => setInfoModal(null)} className="shrink-0 p-1 rounded-lg hover:bg-muted transition-colors">
+                  <X className="h-5 w-5 text-muted-foreground" />
+                </button>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-3">
+                {info.description.split('\n\n').map((paragraph, idx) => (
+                  <p key={idx} className="text-sm text-muted-foreground leading-relaxed">{paragraph}</p>
+                ))}
+              </div>
+
+              {/* How it's measured */}
+              {info.howMeasured && (
+                <div className="space-y-2 pt-1">
+                  <h4 className="text-sm font-black uppercase tracking-wide">How It&apos;s Measured</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{info.howMeasured}</p>
+                </div>
+              )}
+
+              {/* Your Score */}
+              {infoModal.score && (
+                <div className="pt-2 border-t border-border/30 space-y-1.5">
+                  <h4 className="text-sm font-black uppercase tracking-wide">Your Score</h4>
+                  <p className="text-2xl font-black tabular-nums tracking-tight">{infoModal.score}</p>
+                </div>
+              )}
             </div>
           );
         })()}

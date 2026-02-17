@@ -44,7 +44,7 @@ const SymxScoreCardRemarksSchema: Schema = new Schema({
     },
     changedAt: { type: Date, default: Date.now },
   }],
-}, { timestamps: true, collection: 'ScoreCard_SymxScoreCardRemarks' });
+}, { timestamps: true, collection: 'ScoreCardRemarks' });
 
 // Compound unique index: one record per driver per week
 SymxScoreCardRemarksSchema.index({ transporterId: 1, week: 1 }, { unique: true });

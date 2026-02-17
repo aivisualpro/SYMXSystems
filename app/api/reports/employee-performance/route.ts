@@ -6,6 +6,8 @@ import SymxCustomerDeliveryFeedback from "@/lib/models/SymxCustomerDeliveryFeedb
 import SymxPhotoOnDelivery from "@/lib/models/SymxPhotoOnDelivery";
 import SymxDVICVehicleInspection from "@/lib/models/SymxDVICVehicleInspection";
 import SymxSafetyDashboardDFO2 from "@/lib/models/SymxSafetyDashboardDFO2";
+import ScoreCardCDFNegative from "@/lib/models/ScoreCardCDFNegative";
+import ScoreCardQualityDSBDNR from "@/lib/models/ScoreCardQualityDSBDNR";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 
@@ -119,12 +121,14 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch all 4 data sources for the selected week + employee images
-    const [excellence, cdf, pod, dvic, safetyDfo2, employees] = await Promise.all([
+    const [excellence, cdf, pod, dvic, safetyDfo2, cdfNegative, qualityDsbDnr, employees] = await Promise.all([
       SymxDeliveryExcellence.find({ week }).lean(),
       SymxCustomerDeliveryFeedback.find({ week }).lean(),
       SymxPhotoOnDelivery.find({ week }).lean(),
       SymxDVICVehicleInspection.find({ week }).lean(),
       SymxSafetyDashboardDFO2.find({ week }).lean(),
+      ScoreCardCDFNegative.find({ week }).lean(),
+      ScoreCardQualityDSBDNR.find({ week }).lean(),
       SymxEmployee.find({ transporterId: { $exists: true, $ne: '' } }, { transporterId: 1, profileImage: 1 }).lean(),
     ]);
 
@@ -153,6 +157,21 @@ export async function GET(req: NextRequest) {
     safetyDfo2.forEach((s: any) => {
       if (!safetyMap.has(s.transporterId)) safetyMap.set(s.transporterId, []);
       safetyMap.get(s.transporterId)!.push(s);
+    });
+
+    // CDF Negative: group per transporter
+    const cdfNegativeMap = new Map<string, any[]>();
+    cdfNegative.forEach((c: any) => {
+      const tid = c.transporterId || c.deliveryAssociate;
+      if (!tid) return;
+      if (!cdfNegativeMap.has(tid)) cdfNegativeMap.set(tid, []);
+      cdfNegativeMap.get(tid)!.push(c);
+    });
+
+    // Quality DSB/DNR: one record per transporter per week
+    const qualityDsbDnrMap = new Map<string, any>();
+    qualityDsbDnr.forEach((q: any) => {
+      if (q.transporterId) qualityDsbDnrMap.set(q.transporterId, q);
     });
 
     // Merge data per driver
@@ -282,6 +301,52 @@ export async function GET(req: NextRequest) {
           reviewDetails: s.reviewDetails || "",
         })),
         safetyEventCount: (safetyMap.get(driver.transporterId) || []).length,
+
+        // CDF Negative Feedback
+        cdfNegativeRecords: (cdfNegativeMap.get(driver.transporterId) || []).map((c: any) => ({
+          deliveryGroupId: c.deliveryGroupId || "",
+          deliveryAssociateName: c.deliveryAssociateName || "",
+          daMishandledPackage: c.daMishandledPackage || "",
+          daWasUnprofessional: c.daWasUnprofessional || "",
+          daDidNotFollowInstructions: c.daDidNotFollowInstructions || "",
+          deliveredToWrongAddress: c.deliveredToWrongAddress || "",
+          neverReceivedDelivery: c.neverReceivedDelivery || "",
+          receivedWrongItem: c.receivedWrongItem || "",
+          feedbackDetails: c.feedbackDetails || "",
+          trackingId: c.trackingId || "",
+          deliveryDate: c.deliveryDate || "",
+        })),
+        cdfNegativeCount: (cdfNegativeMap.get(driver.transporterId) || []).length,
+
+        // Quality DSB/DNR
+        qualityDsbDnr: (() => {
+          const q = qualityDsbDnrMap.get(driver.transporterId);
+          if (!q) return null;
+          return {
+            dsbCount: q.dsbCount ?? 0,
+            dsbDpmo: q.dsbDpmo ?? 0,
+            attendedDeliveryCount: q.attendedDeliveryCount ?? 0,
+            unattendedDeliveryCount: q.unattendedDeliveryCount ?? 0,
+            simultaneousDeliveries: q.simultaneousDeliveries ?? 0,
+            deliveredOver50m: q.deliveredOver50m ?? 0,
+            incorrectScanUsageAttended: q.incorrectScanUsageAttended ?? 0,
+            incorrectScanUsageUnattended: q.incorrectScanUsageUnattended ?? 0,
+            noPodOnDelivery: q.noPodOnDelivery ?? 0,
+            scannedNotDeliveredNotReturned: q.scannedNotDeliveredNotReturned ?? 0,
+          };
+        })(),
+
+        // Customer Delivery Feedback (summary — already partially in CDF section)
+        customerDeliveryFeedback: (() => {
+          const c = cdfMap.get(driver.transporterId);
+          if (!c) return null;
+          return {
+            cdfDpmo: c.cdfDpmo ?? 0,
+            cdfDpmoTier: c.cdfDpmoTier || "N/A",
+            cdfDpmoScore: c.cdfDpmoScore ?? 0,
+            negativeFeedbackCount: c.negativeFeedbackCount ?? 0,
+          };
+        })(),
       };
     });
 
