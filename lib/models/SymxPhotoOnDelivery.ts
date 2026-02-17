@@ -48,7 +48,7 @@ const SymxPhotoOnDeliverySchema: Schema = new Schema({
   photoTooDark: { type: Number, default: 0 },
   other: { type: Number, default: 0 },
 
-}, { timestamps: true, collection: 'SymxPhotoOnDelivery' });
+}, { timestamps: true, collection: 'ScoreCard_PhotoOnDelivery' });
 
 // Compound index for uniqueness on Week + Transporter ID
 SymxPhotoOnDeliverySchema.index({ week: 1, transporterId: 1 }, { unique: true });

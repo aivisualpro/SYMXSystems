@@ -28,7 +28,7 @@ const SymxCustomerDeliveryFeedbackSchema: Schema = new Schema({
   
   negativeFeedbackCount: { type: Number, default: 0 },
 
-}, { timestamps: true, collection: 'SymxCustomerDeliveryFeedback' });
+}, { timestamps: true, collection: 'ScoreCard_CustomerDeliveryFeedback' });
 
 // Compound index for uniqueness on Week + Transporter ID
 SymxCustomerDeliveryFeedbackSchema.index({ week: 1, transporterId: 1 }, { unique: true });

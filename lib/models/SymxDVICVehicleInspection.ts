@@ -33,7 +33,7 @@ const SymxDVICVehicleInspectionSchema: Schema = new Schema({
   endTime: { type: String },
   duration: { type: String },
   employeeId: { type: Schema.Types.ObjectId, ref: 'SymxEmployee' },
-}, { timestamps: true, collection: 'SymxDVICVehicleInspection' });
+}, { timestamps: true, collection: 'ScoreCard_DVICVehicleInspection' });
 
 // Compound index for uniqueness on Week + Transporter + VIN + startTime
 SymxDVICVehicleInspectionSchema.index(

@@ -5,6 +5,8 @@ import SymxDeliveryExcellence from "@/lib/models/SymxDeliveryExcellence";
 import SymxCustomerDeliveryFeedback from "@/lib/models/SymxCustomerDeliveryFeedback";
 import SymxPhotoOnDelivery from "@/lib/models/SymxPhotoOnDelivery";
 import SymxDVICVehicleInspection from "@/lib/models/SymxDVICVehicleInspection";
+import SymxSafetyDashboardDFO2 from "@/lib/models/SymxSafetyDashboardDFO2";
+import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -92,18 +94,37 @@ export async function GET(req: NextRequest) {
 
     // If no week specified, return available weeks
     if (!week) {
-      const weeks = await SymxDeliveryExcellence.distinct("week");
-      // Sort weeks descending (most recent first)
-      weeks.sort((a: string, b: string) => b.localeCompare(a));
+      let docs = await SymxAvailableWeek.find({}, { week: 1, _id: 0 }).lean();
+
+      // One-time backfill: if SymxAvailableWeeks is empty, seed from existing data collections
+      if (docs.length === 0) {
+        const [deWeeks, cdfWeeks, podWeeks, dvicWeeks, safetyWeeks] = await Promise.all([
+          SymxDeliveryExcellence.distinct("week"),
+          SymxCustomerDeliveryFeedback.distinct("week"),
+          SymxPhotoOnDelivery.distinct("week"),
+          SymxDVICVehicleInspection.distinct("week"),
+          SymxSafetyDashboardDFO2.distinct("week"),
+        ]);
+        const allWeeks = [...new Set([...deWeeks, ...cdfWeeks, ...podWeeks, ...dvicWeeks, ...safetyWeeks])];
+        if (allWeeks.length > 0) {
+          await SymxAvailableWeek.bulkWrite(
+            allWeeks.map(w => ({ updateOne: { filter: { week: w }, update: { $set: { week: w } }, upsert: true } }))
+          );
+          docs = await SymxAvailableWeek.find({}, { week: 1, _id: 0 }).lean();
+        }
+      }
+
+      const weeks = docs.map((d: any) => d.week).sort((a: string, b: string) => b.localeCompare(a));
       return NextResponse.json({ weeks });
     }
 
     // Fetch all 4 data sources for the selected week + employee images
-    const [excellence, cdf, pod, dvic, employees] = await Promise.all([
+    const [excellence, cdf, pod, dvic, safetyDfo2, employees] = await Promise.all([
       SymxDeliveryExcellence.find({ week }).lean(),
       SymxCustomerDeliveryFeedback.find({ week }).lean(),
       SymxPhotoOnDelivery.find({ week }).lean(),
       SymxDVICVehicleInspection.find({ week }).lean(),
+      SymxSafetyDashboardDFO2.find({ week }).lean(),
       SymxEmployee.find({ transporterId: { $exists: true, $ne: '' } }, { transporterId: 1, profileImage: 1 }).lean(),
     ]);
 
@@ -125,6 +146,13 @@ export async function GET(req: NextRequest) {
     dvic.forEach((d: any) => {
       if (!dvicMap.has(d.transporterId)) dvicMap.set(d.transporterId, []);
       dvicMap.get(d.transporterId)!.push(d);
+    });
+
+    // Safety Dashboard DFO2: group events per transporter
+    const safetyMap = new Map<string, any[]>();
+    safetyDfo2.forEach((s: any) => {
+      if (!safetyMap.has(s.transporterId)) safetyMap.set(s.transporterId, []);
+      safetyMap.get(s.transporterId)!.push(s);
     });
 
     // Merge data per driver
@@ -238,6 +266,22 @@ export async function GET(req: NextRequest) {
           }
           return false;
         }).length,
+
+        // Safety Dashboard DFO2
+        safetyEvents: (safetyMap.get(driver.transporterId) || []).map((s: any) => ({
+          date: s.date || "",
+          deliveryAssociate: s.deliveryAssociate || "",
+          eventId: s.eventId || "",
+          dateTime: s.dateTime || "",
+          vin: s.vin || "",
+          programImpact: s.programImpact || "",
+          metricType: s.metricType || "",
+          metricSubtype: s.metricSubtype || "",
+          source: s.source || "",
+          videoLink: s.videoLink || "",
+          reviewDetails: s.reviewDetails || "",
+        })),
+        safetyEventCount: (safetyMap.get(driver.transporterId) || []).length,
       };
     });
 

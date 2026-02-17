@@ -7,6 +7,11 @@ import SymxDeliveryExcellence from "@/lib/models/SymxDeliveryExcellence";
 import SymxPhotoOnDelivery from "@/lib/models/SymxPhotoOnDelivery";
 import SymxCustomerDeliveryFeedback from "@/lib/models/SymxCustomerDeliveryFeedback";
 import SymxDVICVehicleInspection from "@/lib/models/SymxDVICVehicleInspection";
+import SymxSafetyDashboardDFO2 from "@/lib/models/SymxSafetyDashboardDFO2";
+import ScoreCardQualityDSBDNR from "@/lib/models/ScoreCardQualityDSBDNR";
+import ScoreCardDCR from "@/lib/models/ScoreCardDCR";
+import ScoreCardCDFNegative from "@/lib/models/ScoreCardCDFNegative";
+import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 import { getISOWeek, getISOWeekYear, parseISO } from "date-fns";
 
 // Helper to sanitize keys (remove whitespace, special chars if needed) - not strictly needed if we map manually
@@ -125,6 +130,79 @@ const dvicHeaderMap: Record<string, string> = {
     "duration": "duration",
 };
 
+const safetyDashboardHeaderMap: Record<string, string> = {
+    "Date": "date",
+    "Delivery Associate": "deliveryAssociate",
+    "Delivery Associate ": "deliveryAssociate",
+    "Transporter ID": "transporterId",
+    "Event ID": "eventId",
+    "Date Time (PDT/PST)": "dateTime",
+    "VIN": "vin",
+    "Program Impact": "programImpact",
+    "Metric Type": "metricType",
+    "Metric Subtype": "metricSubtype",
+    "Source": "source",
+    "Video Link": "videoLink",
+    "Review Details": "reviewDetails",
+};
+
+const qualityDSBDNRHeaderMap: Record<string, string> = {
+    "Week": "week",
+    "Delivery Associate": "deliveryAssociate",
+    "Delivery Associate ": "deliveryAssociate",
+    "Transporter ID": "transporterId",
+    "DSB Count": "dsbCount",
+    "DSB DPMO": "dsbDpmo",
+    "Attended Delivery Count": "attendedDeliveryCount",
+    "Unattended Delivery Count": "unattendedDeliveryCount",
+    "Simultaneous Deliveries": "simultaneousDeliveries",
+    "Delivered > 50 m": "deliveredOver50m",
+    "Incorrect Scan Usage - Attended Delivery": "incorrectScanUsageAttended",
+    "Incorrect Scan Usage - Unattended Delivery": "incorrectScanUsageUnattended",
+    "No POD on Delivery": "noPodOnDelivery",
+    "Scanned - Not Delivered - Not Returned": "scannedNotDeliveredNotReturned",
+};
+
+const dcrHeaderMap: Record<string, string> = {
+    "Week": "week",
+    "Delivery Associate": "deliveryAssociate",
+    "Delivery Associate ": "deliveryAssociate",
+    "Transporter ID": "transporterId",
+    "DCR": "dcr",
+    "Packages Delivered": "packagesDelivered",
+    "Packages Dispatched": "packagesDispatched",
+    "Packages Returned To Station": "packagesReturnedToStation",
+    "Packages Returned to Station - DA Controllable": "packagesReturnedDAControllable",
+    "RTS All Exempted": "rtsAllExempted",
+    "RTS Business Closed": "rtsBusinessClosed",
+    "RTS Customer Unavailable": "rtsCustomerUnavailable",
+    "RTS No Secure Location": "rtsNoSecureLocation",
+    "RTS Other": "rtsOther",
+    "RTS Out of Drive Time": "rtsOutOfDriveTime",
+    "RTS Unable To Access": "rtsUnableToAccess",
+    "RTS Unable To Locate": "rtsUnableToLocate",
+    "RTS Unsafe Due to Dog": "rtsUnsafeDueToDog",
+    "RTS Bad Weather": "rtsBadWeather",
+    "RTS Locker Issue": "rtsLockerIssue",
+    "RTS Missing or Incorrect Access Code": "rtsMissingOrIncorrectAccessCode",
+    "RTS OTP Not Available": "rtsOtpNotAvailable",
+};
+
+const cdfNegativeHeaderMap: Record<string, string> = {
+    "Delivery Group ID": "deliveryGroupId",
+    "Delivery Associate": "deliveryAssociate",
+    "Delivery Associate Name": "deliveryAssociateName",
+    "DA Mishandled Package": "daMishandledPackage",
+    "DA was Unprofessional": "daWasUnprofessional",
+    "DA did not follow my delivery instructions": "daDidNotFollowInstructions",
+    "Delivered to Wrong Address": "deliveredToWrongAddress",
+    "Never Received Delivery": "neverReceivedDelivery",
+    "Received Wrong Item": "receivedWrongItem",
+    "Feedback Details": "feedbackDetails",
+    "Tracking ID": "trackingId",
+    "Delivery Date": "deliveryDate",
+};
+
 /**
  * Convert a date string like "2026-01-25" to ISO week format "2026-W04"
  */
@@ -155,6 +233,11 @@ export async function POST(req: NextRequest) {
     }
 
     await connectToDatabase();
+
+    // Register the week in the available weeks collection
+    if (week) {
+      await SymxAvailableWeek.updateOne({ week }, { $set: { week } }, { upsert: true });
+    }
 
     if (type === "employees") {
       // Get schema paths to dynamically handle types
@@ -526,6 +609,265 @@ export async function POST(req: NextRequest) {
 
         if (operations.length > 0) {
             const result = await SymxDVICVehicleInspection.bulkWrite(operations);
+            return NextResponse.json({
+                success: true,
+                count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                inserted: result.upsertedCount || 0,
+                updated: result.modifiedCount || 0,
+                matched: result.matchedCount
+            });
+        }
+
+        return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+    }
+
+    // ── Safety Dashboard DFO2 Import ──
+    else if (type === "safety-dashboard-dfo2") {
+        if (!week) {
+            return NextResponse.json({ error: "Week is required for Safety Dashboard import" }, { status: 400 });
+        }
+
+        // 1. Gather Transporter IDs
+        const transporterIds = data
+            .map((row: any) => (row["Transporter ID"] || "").toString().trim())
+            .filter((id: string) => id);
+
+        // 2. Fetch Employees
+        const employees = await SymxEmployee.find(
+            { transporterId: { $in: transporterIds } },
+            { _id: 1, transporterId: 1 }
+        ).lean();
+        
+        const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
+
+        // 3. Process Rows
+        const operations = data.map((row: any) => {
+            const processedData: any = { week };
+
+            // Map Headers
+            Object.entries(row).forEach(([header, value]) => {
+                const normalizedHeader = header.trim();
+                const schemaKey = safetyDashboardHeaderMap[normalizedHeader];
+                if (schemaKey && value !== undefined && value !== null && value !== "") {
+                    processedData[schemaKey] = value.toString().trim();
+                }
+            });
+
+            const transporterId = processedData.transporterId;
+            if (!transporterId) return null;
+
+            // Link Employee
+            if (employeeMap.has(transporterId)) {
+                processedData.employeeId = employeeMap.get(transporterId);
+            }
+
+            return {
+                updateOne: {
+                    filter: {
+                        week: processedData.week,
+                        transporterId: processedData.transporterId,
+                        eventId: processedData.eventId || '',
+                    },
+                    update: { $set: processedData },
+                    upsert: true
+                }
+            };
+        }).filter((op: any): op is NonNullable<typeof op> => op !== null);
+
+        if (operations.length > 0) {
+            const result = await SymxSafetyDashboardDFO2.bulkWrite(operations);
+            return NextResponse.json({
+                success: true,
+                count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                inserted: result.upsertedCount || 0,
+                updated: result.modifiedCount || 0,
+                matched: result.matchedCount
+            });
+        }
+
+        return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+    }
+
+    // ── Quality DSB DNR Import ──
+    else if (type === "quality-dsb-dnr") {
+        if (!week) {
+            return NextResponse.json({ error: "Week is required for Quality DSB DNR import" }, { status: 400 });
+        }
+
+        const transporterIds = data
+            .map((row: any) => (row["Transporter ID"] || "").toString().trim())
+            .filter((id: string) => id);
+
+        const employees = await SymxEmployee.find(
+            { transporterId: { $in: transporterIds } },
+            { _id: 1, transporterId: 1 }
+        ).lean();
+        const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
+
+        const operations = data.map((row: any) => {
+            const processedData: any = { week };
+
+            Object.entries(row).forEach(([header, value]) => {
+                const normalizedHeader = header.trim();
+                const schemaKey = qualityDSBDNRHeaderMap[normalizedHeader];
+                if (schemaKey && value !== undefined && value !== null && value !== "") {
+                    const val = value.toString().trim();
+                    // Numeric fields
+                    if (["dsbCount", "dsbDpmo", "attendedDeliveryCount", "unattendedDeliveryCount", "simultaneousDeliveries", "deliveredOver50m", "incorrectScanUsageAttended", "incorrectScanUsageUnattended", "noPodOnDelivery", "scannedNotDeliveredNotReturned"].includes(schemaKey)) {
+                        processedData[schemaKey] = parseFloat(val) || 0;
+                    } else if (schemaKey !== "week") {
+                        processedData[schemaKey] = val;
+                    }
+                }
+            });
+
+            const transporterId = processedData.transporterId;
+            if (!transporterId) return null;
+
+            if (employeeMap.has(transporterId)) {
+                processedData.employeeId = employeeMap.get(transporterId);
+            }
+
+            return {
+                updateOne: {
+                    filter: { week, transporterId },
+                    update: { $set: processedData },
+                    upsert: true
+                }
+            };
+        }).filter((op: any): op is NonNullable<typeof op> => op !== null);
+
+        if (operations.length > 0) {
+            const result = await ScoreCardQualityDSBDNR.bulkWrite(operations);
+            return NextResponse.json({
+                success: true,
+                count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                inserted: result.upsertedCount || 0,
+                updated: result.modifiedCount || 0,
+                matched: result.matchedCount
+            });
+        }
+
+        return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+    }
+
+    // ── Quality DCR Import ──
+    else if (type === "quality-dcr") {
+        if (!week) {
+            return NextResponse.json({ error: "Week is required for Quality DCR import" }, { status: 400 });
+        }
+
+        const transporterIds = data
+            .map((row: any) => (row["Transporter ID"] || "").toString().trim())
+            .filter((id: string) => id);
+
+        const employees = await SymxEmployee.find(
+            { transporterId: { $in: transporterIds } },
+            { _id: 1, transporterId: 1 }
+        ).lean();
+        const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
+
+        const numericFields = ["dcr", "packagesDelivered", "packagesDispatched", "packagesReturnedToStation", "packagesReturnedDAControllable", "rtsAllExempted", "rtsBusinessClosed", "rtsCustomerUnavailable", "rtsNoSecureLocation", "rtsOther", "rtsOutOfDriveTime", "rtsUnableToAccess", "rtsUnableToLocate", "rtsUnsafeDueToDog", "rtsBadWeather", "rtsLockerIssue", "rtsMissingOrIncorrectAccessCode", "rtsOtpNotAvailable"];
+
+        const operations = data.map((row: any) => {
+            const processedData: any = { week };
+
+            Object.entries(row).forEach(([header, value]) => {
+                const normalizedHeader = header.trim();
+                const schemaKey = dcrHeaderMap[normalizedHeader];
+                if (schemaKey && value !== undefined && value !== null && value !== "") {
+                    const val = value.toString().trim();
+                    if (numericFields.includes(schemaKey)) {
+                        processedData[schemaKey] = parseFloat(val) || 0;
+                    } else if (schemaKey !== "week") {
+                        processedData[schemaKey] = val;
+                    }
+                }
+            });
+
+            const transporterId = processedData.transporterId;
+            if (!transporterId) return null;
+
+            if (employeeMap.has(transporterId)) {
+                processedData.employeeId = employeeMap.get(transporterId);
+            }
+
+            return {
+                updateOne: {
+                    filter: { week, transporterId },
+                    update: { $set: processedData },
+                    upsert: true
+                }
+            };
+        }).filter((op: any): op is NonNullable<typeof op> => op !== null);
+
+        if (operations.length > 0) {
+            const result = await ScoreCardDCR.bulkWrite(operations);
+            return NextResponse.json({
+                success: true,
+                count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                inserted: result.upsertedCount || 0,
+                updated: result.modifiedCount || 0,
+                matched: result.matchedCount
+            });
+        }
+
+        return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+    }
+
+    // ── CDF Negative Import ──
+    else if (type === "cdf-negative") {
+        if (!week) {
+            return NextResponse.json({ error: "Week is required for CDF Negative import" }, { status: 400 });
+        }
+
+        // CDF Negative uses "Delivery Associate" as the transporter ID
+        const transporterIds = data
+            .map((row: any) => (row["Delivery Associate"] || "").toString().trim())
+            .filter((id: string) => id);
+
+        const employees = await SymxEmployee.find(
+            { transporterId: { $in: transporterIds } },
+            { _id: 1, transporterId: 1 }
+        ).lean();
+        const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
+
+        const operations = data.map((row: any) => {
+            const processedData: any = { week };
+
+            Object.entries(row).forEach(([header, value]) => {
+                const normalizedHeader = header.trim();
+                const schemaKey = cdfNegativeHeaderMap[normalizedHeader];
+                if (schemaKey && value !== undefined && value !== null && value !== "") {
+                    processedData[schemaKey] = value.toString().trim();
+                }
+            });
+
+            const deliveryAssociate = processedData.deliveryAssociate;
+            if (!deliveryAssociate) return null;
+
+            // Set transporterId from deliveryAssociate (which is actually the transporter ID in this CSV)
+            processedData.transporterId = deliveryAssociate;
+
+            if (employeeMap.has(deliveryAssociate)) {
+                processedData.employeeId = employeeMap.get(deliveryAssociate);
+            }
+
+            return {
+                updateOne: {
+                    filter: {
+                        week,
+                        deliveryAssociate,
+                        trackingId: processedData.trackingId || '',
+                    },
+                    update: { $set: processedData },
+                    upsert: true
+                }
+            };
+        }).filter((op: any): op is NonNullable<typeof op> => op !== null);
+
+        if (operations.length > 0) {
+            const result = await ScoreCardCDFNegative.bulkWrite(operations);
             return NextResponse.json({
                 success: true,
                 count: (result.upsertedCount || 0) + (result.modifiedCount || 0),

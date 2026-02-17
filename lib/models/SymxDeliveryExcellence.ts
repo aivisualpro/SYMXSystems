@@ -147,7 +147,7 @@ const SymxDeliveryExcellenceSchema: Schema = new Schema({
   podWeightApplied: { type: Number },
   psbWeightApplied: { type: Number },
 
-}, { timestamps: true, collection: 'SymxDeliveryExcellence' });
+}, { timestamps: true, collection: 'ScoreCard_SymxDeliveryExcellence' });
 
 // Add compound index for Week + Transporter ID to ensure uniqueness logic is optimized for lookups
 SymxDeliveryExcellenceSchema.index({ week: 1, transporterId: 1 }, { unique: true });

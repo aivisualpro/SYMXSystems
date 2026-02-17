@@ -32,7 +32,7 @@ import {
   Loader2, Shield, Truck, Camera, MessageSquareWarning, Target,
   Lightbulb, ChevronRight, Info, CheckCircle2, XCircle, Eye,
   Upload, Activity, MessageSquare, Search, Check, ClipboardCheck, Hash,
-  Pen, Save, Smile, X, CalendarDays, FileUp,
+  Pen, Save, Smile, X, CalendarDays, FileUp, ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -59,6 +59,9 @@ interface DriverData {
   dvicInspections: { vin: string; fleetType: string; inspectionType: string; inspectionStatus: string; startTime: string; endTime: string; duration: string; startDate: string }[];
   dvicTotalInspections: number;
   dvicRushedCount: number;
+  // Safety Dashboard DFO2
+  safetyEvents: { date: string; deliveryAssociate: string; eventId: string; dateTime: string; vin: string; programImpact: string; metricType: string; metricSubtype: string; source: string; videoLink: string; reviewDetails: string }[];
+  safetyEventCount: number;
 }
 interface PodRow {
   name: string; transporterId: string; opportunities: number; success: number;
@@ -318,44 +321,97 @@ export default function EmployeePerformanceDashboard() {
   const [importWeekSearchInput, setImportWeekSearchInput] = useState("");
   const importWeekInputRef = useRef<HTMLInputElement>(null);
 
-  // Batch file state — one file per import type
-  const [importFiles, setImportFiles] = useState<Record<string, File | null>>({
+  // Batch file state — one file per import type, with per-file detected week
+  const [importFiles, setImportFiles] = useState<Record<string, { file: File; detectedWeek: string | null } | null>>({
     "delivery-excellence": null,
     "import-pod": null,
     "customer-delivery-feedback": null,
     "dvic-vehicle-inspection": null,
+    "safety-dashboard-dfo2": null,
+    "quality-dsb-dnr": null,
+    "quality-dcr": null,
+    "cdf-negative": null,
   });
   const deFileRef = useRef<HTMLInputElement>(null);
   const podFileRef = useRef<HTMLInputElement>(null);
   const cdfFileRef = useRef<HTMLInputElement>(null);
   const dvicFileRef = useRef<HTMLInputElement>(null);
+  const safetyDfo2FileRef = useRef<HTMLInputElement>(null);
+  const dsbDnrFileRef = useRef<HTMLInputElement>(null);
+  const dcrFileRef = useRef<HTMLInputElement>(null);
+  const cdfNegFileRef = useRef<HTMLInputElement>(null);
 
   const fileRefMap: Record<string, React.RefObject<HTMLInputElement | null>> = {
     "delivery-excellence": deFileRef,
     "import-pod": podFileRef,
     "customer-delivery-feedback": cdfFileRef,
     "dvic-vehicle-inspection": dvicFileRef,
+    "safety-dashboard-dfo2": safetyDfo2FileRef,
+    "quality-dsb-dnr": dsbDnrFileRef,
+    "quality-dcr": dcrFileRef,
+    "cdf-negative": cdfNegFileRef,
   };
 
-  const handleImportFileAttach = (type: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Detect week from CSV content (first row's Week column or Date column)
+  const detectWeekFromCSV = (file: File): Promise<string | null> => {
+    return new Promise((resolve) => {
+      Papa.parse(file, {
+        header: true,
+        preview: 5, // Only parse first 5 rows
+        skipEmptyLines: true,
+        complete: (results) => {
+          const rows = results.data as any[];
+          if (rows.length === 0) { resolve(null); return; }
+          // Try Week column first
+          for (const row of rows) {
+            const weekVal = (row["Week"] || row["week"] || "").toString().trim();
+            if (weekVal) {
+              const normalized = normalizeWeekInput(weekVal);
+              if (normalized) { resolve(normalized); return; }
+            }
+          }
+          // Try Date column — convert date to ISO week
+          for (const row of rows) {
+            const dateVal = (row["Date"] || row["date"] || row["Delivery Date"] || "").toString().trim();
+            if (dateVal && dateVal.match(/\d{4}[-/]\d{1,2}[-/]\d{1,2}/)) {
+              try {
+                const parsed = new Date(dateVal);
+                if (!isNaN(parsed.getTime())) {
+                  // Get ISO week
+                  const jan4 = new Date(parsed.getFullYear(), 0, 4);
+                  const dayDiff = Math.floor((parsed.getTime() - jan4.getTime()) / 86400000);
+                  const weekNum = Math.ceil((dayDiff + jan4.getDay() + 1) / 7);
+                  if (weekNum >= 1 && weekNum <= 53) {
+                    resolve(`${parsed.getFullYear()}-W${weekNum.toString().padStart(2, '0')}`);
+                    return;
+                  }
+                }
+              } catch { /* ignore */ }
+            }
+          }
+          resolve(null);
+        },
+        error: () => resolve(null),
+      });
+    });
+  };
+
+  const handleImportFileAttach = (type: string) => async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const isValidExt = file.name.endsWith(".csv") || file.name.endsWith(".xlsx");
     if (!isValidExt) { toast.error("Please select a valid CSV or XLSX file"); return; }
-    setImportFiles(prev => ({ ...prev, [type]: file }));
 
-    // Auto-detect week from filename if not already set
-    const detectedWeek = extractWeekFromFilename(file.name);
-    if (detectedWeek) {
-      setImportWeek(prev => {
-        // Only auto-set if importWeek is empty or matches the default (selectedWeek)
-        if (!prev || prev === selectedWeek) return detectedWeek;
-        return prev;
-      });
-      // Add to weeks list if new
-      if (!weeks.includes(detectedWeek)) {
-        setWeeks(prev => [detectedWeek, ...prev].sort().reverse());
-      }
+    // Try to detect week from filename first, then from CSV content
+    let detectedWeek = extractWeekFromFilename(file.name);
+    if (!detectedWeek) {
+      detectedWeek = await detectWeekFromCSV(file);
+    }
+
+    setImportFiles(prev => ({ ...prev, [type]: { file, detectedWeek } }));
+
+    if (detectedWeek && !weeks.includes(detectedWeek)) {
+      setWeeks(prev => [detectedWeek!, ...prev].sort().reverse());
     }
   };
 
@@ -368,7 +424,7 @@ export default function EmployeePerformanceDashboard() {
   const attachedFileCount = Object.values(importFiles).filter(Boolean).length;
 
   // Process a single file type through the import API
-  const processImportFile = async (type: string, file: File): Promise<{ inserted: number; updated: number; total: number }> => {
+  const processImportFile = async (type: string, file: File, week: string): Promise<{ inserted: number; updated: number; total: number }> => {
     return new Promise((resolve, reject) => {
       Papa.parse(file, {
         header: true,
@@ -384,7 +440,7 @@ export default function EmployeePerformanceDashboard() {
           try {
             for (let i = 0; i < totalRows; i += batchSize) {
               const batch = data.slice(i, i + batchSize);
-              const payload: any = { type, data: batch, week: importWeek };
+              const payload: any = { type, data: batch, week };
 
               const response = await fetch("/api/admin/imports", {
                 method: "POST",
@@ -414,8 +470,15 @@ export default function EmployeePerformanceDashboard() {
   };
 
   const handleBatchImport = async () => {
-    const filesToProcess = Object.entries(importFiles).filter(([, file]) => file !== null) as [string, File][];
+    const filesToProcess = Object.entries(importFiles).filter(([, entry]) => entry !== null) as [string, { file: File; detectedWeek: string | null }][];
     if (filesToProcess.length === 0) { toast.error("No files attached. Please select at least one CSV."); return; }
+
+    // Validate: any file without a detected week needs the global fallback week
+    const filesWithoutWeek = filesToProcess.filter(([, { detectedWeek }]) => !detectedWeek);
+    if (filesWithoutWeek.length > 0 && !importWeek) {
+      toast.error(`Please select a fallback week — ${filesWithoutWeek.length} file(s) couldn't auto-detect their week.`);
+      return;
+    }
 
     setIsImporting(true);
     setImportProgress(0);
@@ -429,17 +492,22 @@ export default function EmployeePerformanceDashboard() {
       "import-pod": "Photo On Delivery",
       "customer-delivery-feedback": "Delivery Feedback",
       "dvic-vehicle-inspection": "DVIC Inspection",
+      "safety-dashboard-dfo2": "Safety Dashboard DFO2",
+      "quality-dsb-dnr": "Quality DSB DNR",
+      "quality-dcr": "Quality DCR",
+      "cdf-negative": "CDF Negative Feedback",
     };
 
     try {
       for (let i = 0; i < filesToProcess.length; i++) {
-        const [type, file] = filesToProcess[i];
+        const [type, { file, detectedWeek }] = filesToProcess[i];
+        const weekForFile = detectedWeek || importWeek;
         const label = typeLabels[type] || type;
         const pct = Math.round(((i) / filesToProcess.length) * 100);
         setImportProgress(pct);
-        setImportStatusMessage(`Importing ${label}... (${i + 1}/${filesToProcess.length})`);
+        setImportStatusMessage(`Importing ${label} (${weekForFile})... (${i + 1}/${filesToProcess.length})`);
 
-        const result = await processImportFile(type, file);
+        const result = await processImportFile(type, file, weekForFile);
         totalInserted += result.inserted;
         totalUpdated += result.updated;
         totalRecords += result.total;
@@ -454,7 +522,7 @@ export default function EmployeePerformanceDashboard() {
         setImportProgress(0);
         setImportStatusMessage("");
         // Reset all files
-        setImportFiles({ "delivery-excellence": null, "import-pod": null, "customer-delivery-feedback": null, "dvic-vehicle-inspection": null });
+        setImportFiles({ "delivery-excellence": null, "import-pod": null, "customer-delivery-feedback": null, "dvic-vehicle-inspection": null, "safety-dashboard-dfo2": null, "quality-dsb-dnr": null, "quality-dcr": null, "cdf-negative": null });
         Object.values(fileRefMap).forEach(ref => { if (ref?.current) ref.current.value = ""; });
         // Refresh scorecard data
         if (selectedWeek) fetchData(selectedWeek);
@@ -584,7 +652,7 @@ export default function EmployeePerformanceDashboard() {
             onChange={(e) => setDriverSearch(e.target.value)}
           />
         </div>
-        <Button size="sm" variant="outline" onClick={() => setShowImportDialog(true)} className="gap-2">
+        <Button size="sm" variant="outline" onClick={() => { console.log("IMPORT BUTTON CLICKED", showImportDialog); setShowImportDialog(true); }} className="gap-2">
           <Upload className="h-4 w-4" /> Import
         </Button>
         <div className="relative">
@@ -677,273 +745,98 @@ export default function EmployeePerformanceDashboard() {
     return tips.slice(0, 3);
   }, [dspMetrics]);
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-
-  if (!loading && drivers.length === 0 && selectedWeek) return (
-    <Card className="print:hidden"><CardContent className="py-16 text-center">
-      <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-      <p className="text-lg font-medium">No data for {selectedWeek}</p>
-      <p className="text-sm text-muted-foreground mt-1">Upload performance data or select a different week.</p>
-    </CardContent></Card>
-  );
-
-  const sm = dspMetrics;
-
-  return (
+  // ── Dialogs & hidden inputs must render even when there's no data ──
+  const importDialogElements = (
     <>
       {/* Hidden file inputs for each import type */}
-      <input type="file" ref={deFileRef} className="hidden" accept=".csv" onChange={handleImportFileAttach("delivery-excellence")} />
-      <input type="file" ref={podFileRef} className="hidden" accept=".csv" onChange={handleImportFileAttach("import-pod")} />
-      <input type="file" ref={cdfFileRef} className="hidden" accept=".csv" onChange={handleImportFileAttach("customer-delivery-feedback")} />
-      <input type="file" ref={dvicFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("dvic-vehicle-inspection")} />
+      <input type="file" ref={deFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("delivery-excellence")} suppressHydrationWarning />
+      <input type="file" ref={podFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("import-pod")} suppressHydrationWarning />
+      <input type="file" ref={cdfFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("customer-delivery-feedback")} suppressHydrationWarning />
+      <input type="file" ref={dvicFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("dvic-vehicle-inspection")} suppressHydrationWarning />
+      <input type="file" ref={safetyDfo2FileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("safety-dashboard-dfo2")} suppressHydrationWarning />
+      <input type="file" ref={dsbDnrFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("quality-dsb-dnr")} suppressHydrationWarning />
+      <input type="file" ref={dcrFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("quality-dcr")} suppressHydrationWarning />
+      <input type="file" ref={cdfNegFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("cdf-negative")} suppressHydrationWarning />
 
       {/* Import Dialog — Multi-file batch import */}
       <Dialog open={showImportDialog} onOpenChange={(open) => {
-        setShowImportDialog(open);
-        if (open) {
-          // Init import week to header week
-          setImportWeek(selectedWeek);
-          setImportWeekSearchInput("");
-          setImportWeekPopoverOpen(false);
-        } else {
-          // Reset files on close
-          setImportFiles({ "delivery-excellence": null, "import-pod": null, "customer-delivery-feedback": null, "dvic-vehicle-inspection": null });
+        if (!open) {
+          // Reset files when closing
+          setImportFiles({ "delivery-excellence": null, "import-pod": null, "customer-delivery-feedback": null, "dvic-vehicle-inspection": null, "safety-dashboard-dfo2": null, "quality-dsb-dnr": null, "quality-dcr": null, "cdf-negative": null });
           Object.values(fileRefMap).forEach(ref => { if (ref?.current) ref.current.value = ""; });
         }
+        setShowImportDialog(open);
       }}>
-        <DialogContent className="sm:max-w-[540px] gap-0">
-          <DialogHeader className="pb-4">
-            <DialogTitle>Import Data</DialogTitle>
-            <DialogDescription>Attach CSV files for each data type, then import all at once.</DialogDescription>
+        <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" /> Import Performance Data
+            </DialogTitle>
+            <DialogDescription>
+              Attach CSV or XLSX files for each data type. Week will be auto-detected from filenames or content.
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-1 gap-3 py-4 border-t">
-            {/* Delivery Excellence */}
-            <div
-              className={cn(
-                "flex items-center justify-between gap-4 px-4 py-3 rounded-lg border-2 border-dashed transition-all cursor-pointer hover:bg-accent/50",
-                importFiles["delivery-excellence"] ? "border-emerald-500/40 bg-emerald-500/5" : "border-border"
-              )}
-              onClick={() => !importFiles["delivery-excellence"] && deFileRef.current?.click()}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-full bg-emerald-500/10"><Activity className="h-5 w-5 text-emerald-500" /></div>
-                <div>
-                  <span className="font-semibold text-sm">Delivery Excellence</span>
-                  {importFiles["delivery-excellence"] ? (
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />{importFiles["delivery-excellence"].name}</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground mt-0.5">DSP metrics by Transporter ID</p>
-                  )}
-                </div>
-              </div>
-              {importFiles["delivery-excellence"] ? (
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); removeImportFile("delivery-excellence"); }}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              ) : (
-                <FileUp className="h-4 w-4 text-muted-foreground shrink-0" />
-              )}
-            </div>
-
-            {/* Photo On Delivery */}
-            <div
-              className={cn(
-                "flex items-center justify-between gap-4 px-4 py-3 rounded-lg border-2 border-dashed transition-all cursor-pointer hover:bg-accent/50",
-                importFiles["import-pod"] ? "border-blue-500/40 bg-blue-500/5" : "border-border"
-              )}
-              onClick={() => !importFiles["import-pod"] && podFileRef.current?.click()}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-full bg-blue-500/10"><Camera className="h-5 w-5 text-blue-500" /></div>
-                <div>
-                  <span className="font-semibold text-sm">Photo On Delivery</span>
-                  {importFiles["import-pod"] ? (
-                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />{importFiles["import-pod"].name}</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground mt-0.5">POD metrics (uses selected week)</p>
-                  )}
-                </div>
-              </div>
-              {importFiles["import-pod"] ? (
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); removeImportFile("import-pod"); }}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              ) : (
-                <FileUp className="h-4 w-4 text-muted-foreground shrink-0" />
-              )}
-            </div>
-
-            {/* Delivery Feedback */}
-            <div
-              className={cn(
-                "flex items-center justify-between gap-4 px-4 py-3 rounded-lg border-2 border-dashed transition-all cursor-pointer hover:bg-accent/50",
-                importFiles["customer-delivery-feedback"] ? "border-violet-500/40 bg-violet-500/5" : "border-border"
-              )}
-              onClick={() => !importFiles["customer-delivery-feedback"] && cdfFileRef.current?.click()}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-full bg-violet-500/10"><MessageSquare className="h-5 w-5 text-violet-500" /></div>
-                <div>
-                  <span className="font-semibold text-sm">Delivery Feedback</span>
-                  {importFiles["customer-delivery-feedback"] ? (
-                    <p className="text-xs text-violet-600 dark:text-violet-400 mt-0.5 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />{importFiles["customer-delivery-feedback"].name}</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground mt-0.5">CDF metrics (uses selected week)</p>
-                  )}
-                </div>
-              </div>
-              {importFiles["customer-delivery-feedback"] ? (
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); removeImportFile("customer-delivery-feedback"); }}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              ) : (
-                <FileUp className="h-4 w-4 text-muted-foreground shrink-0" />
-              )}
-            </div>
-
-            {/* DVIC Vehicle Inspection */}
-            <div
-              className={cn(
-                "flex items-center justify-between gap-4 px-4 py-3 rounded-lg border-2 border-dashed transition-all cursor-pointer hover:bg-accent/50",
-                importFiles["dvic-vehicle-inspection"] ? "border-sky-500/40 bg-sky-500/5" : "border-border"
-              )}
-              onClick={() => !importFiles["dvic-vehicle-inspection"] && dvicFileRef.current?.click()}
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-full bg-sky-500/10"><ClipboardCheck className="h-5 w-5 text-sky-500" /></div>
-                <div>
-                  <span className="font-semibold text-sm">DVIC Vehicle Inspection</span>
-                  {importFiles["dvic-vehicle-inspection"] ? (
-                    <p className="text-xs text-sky-600 dark:text-sky-400 mt-0.5 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />{importFiles["dvic-vehicle-inspection"].name}</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground mt-0.5">Inspection times — week auto-detected</p>
-                  )}
-                </div>
-              </div>
-              {importFiles["dvic-vehicle-inspection"] ? (
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => { e.stopPropagation(); removeImportFile("dvic-vehicle-inspection"); }}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              ) : (
-                <FileUp className="h-4 w-4 text-muted-foreground shrink-0" />
-              )}
-            </div>
-          </div>
-
-          {/* Footer — Week selector + Import button */}
-          <DialogFooter className="border-t pt-4 sm:justify-between">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <div className="relative">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-[160px] justify-between font-normal gap-1.5"
-                  onClick={() => setImportWeekPopoverOpen(!importWeekPopoverOpen)}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="font-mono font-bold text-xs">{importWeek || "Select Week"}</span>
-                  </span>
-                  <ChevronRight className="h-3 w-3 rotate-90 text-muted-foreground" />
-                </Button>
-                {importWeekPopoverOpen && (
-                  <div className="absolute left-0 bottom-full mb-1 z-50 w-[340px] rounded-md border bg-popover text-popover-foreground shadow-md">
-                    <div className="p-2 border-b">
-                      <div className="relative">
-                        <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
-                        <Input
-                          ref={importWeekInputRef}
-                          type="text"
-                          placeholder="Type week e.g. 2026-W06"
-                          className="h-8 pl-7 text-sm"
-                          value={importWeekSearchInput}
-                          onChange={(e) => setImportWeekSearchInput(e.target.value.toUpperCase())}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              const normalized = normalizeWeekInput(importWeekSearchInput);
-                              if (normalized) {
-                                if (!weeks.includes(normalized)) {
-                                  setWeeks(prev => [normalized, ...prev].sort().reverse());
-                                }
-                                setImportWeek(normalized);
-                                setImportWeekSearchInput("");
-                                setImportWeekPopoverOpen(false);
-                              } else {
-                                toast.error("Invalid week format. Use YYYY-Wxx (e.g. 2026-W05)");
-                              }
-                            }
-                          }}
-                          autoFocus
-                        />
+          <div className="flex-1 overflow-y-auto space-y-2 py-2">
+            {([
+              { key: "delivery-excellence", label: "Delivery Excellence", icon: "📦" },
+              { key: "import-pod", label: "Photo On Delivery (POD)", icon: "📸" },
+              { key: "customer-delivery-feedback", label: "Customer Delivery Feedback", icon: "💬" },
+              { key: "dvic-vehicle-inspection", label: "DVIC Vehicle Inspection", icon: "🚛" },
+              { key: "safety-dashboard-dfo2", label: "Safety Dashboard DFO2", icon: "🛡️" },
+              { key: "quality-dsb-dnr", label: "Quality DSB / DNR", icon: "📋" },
+              { key: "quality-dcr", label: "Quality DCR", icon: "✅" },
+              { key: "cdf-negative", label: "CDF Negative Feedback", icon: "⚠️" },
+            ] as const).map(({ key, label, icon }) => {
+              const entry = importFiles[key];
+              return (
+                <div key={key} className={cn(
+                  "flex items-center gap-3 p-3 rounded-lg border transition-all",
+                  entry ? "bg-emerald-500/5 border-emerald-500/30" : "bg-muted/30 border-border hover:bg-muted/50"
+                )}>
+                  <span className="text-lg shrink-0">{icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{label}</p>
+                    {entry ? (
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Check className="h-3 w-3 text-emerald-500 shrink-0" />
+                        <span className="text-xs text-emerald-600 dark:text-emerald-400 truncate">{entry.file.name}</span>
+                        {entry.detectedWeek && (
+                          <span className="text-[10px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-medium shrink-0">
+                            {entry.detectedWeek}
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-1 px-0.5">Format: YYYY-Wxx (e.g. 2026-W06)</p>
-                    </div>
-                    <div className="max-h-[160px] overflow-y-auto">
-                      {(() => {
-                        const normalizedImport = normalizeWeekInput(importWeekSearchInput);
-                        const isNewWeek = !!normalizedImport && !weeks.includes(normalizedImport);
-                        const filtered = importWeekSearchInput
-                          ? weeks.filter(w => w.toLowerCase().includes(importWeekSearchInput.toLowerCase()))
-                          : weeks;
-                        return (
-                          <>
-                            {isNewWeek && normalizedImport && (
-                              <div
-                                className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-primary/10 border-b bg-primary/5 transition-colors"
-                                onClick={() => {
-                                  setWeeks(prev => [normalizedImport, ...prev].sort().reverse());
-                                  setImportWeek(normalizedImport);
-                                  setImportWeekSearchInput("");
-                                  setImportWeekPopoverOpen(false);
-                                }}
-                              >
-                                <span className="flex items-center gap-1 text-xs bg-primary/15 text-primary px-2 py-0.5 rounded-full font-semibold">
-                                  <Hash className="h-3 w-3" /> Add
-                                </span>
-                                <span className="font-semibold text-primary">{normalizedImport}</span>
-                                <span className="text-[10px] text-muted-foreground ml-auto">↵ Enter</span>
-                              </div>
-                            )}
-                            {filtered.length > 0 ? filtered.map(w => (
-                              <div
-                                key={w}
-                                className={cn("flex items-center px-3 py-1.5 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground", importWeek === w && "bg-accent/50 font-medium")}
-                                onClick={() => { setImportWeek(w); setImportWeekSearchInput(""); setImportWeekPopoverOpen(false); }}
-                              >
-                                <Check className={cn("mr-2 h-3.5 w-3.5", importWeek === w ? "opacity-100" : "opacity-0")} />
-                                {w}
-                              </div>
-                            )) : (
-                              <div className="py-4 px-3 text-center">
-                                <p className="text-xs text-muted-foreground">
-                                  {importWeekSearchInput
-                                    ? normalizeWeekInput(importWeekSearchInput)
-                                      ? "Click + Add above"
-                                      : "Invalid format — use YYYY-Wxx"
-                                    : "No weeks available"}
-                                </p>
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">No file attached</p>
+                    )}
                   </div>
-                )}
-              </div>
-              {attachedFileCount > 0 && (
-                <span className="text-xs">· {attachedFileCount} file{attachedFileCount > 1 ? 's' : ''}</span>
-              )}
+                  {entry ? (
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => removeImportFile(key)}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => fileRefMap[key]?.current?.click()}>
+                      <Upload className="h-3 w-3" /> Attach
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="border-t pt-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="font-medium">{attachedFileCount}</span> file{attachedFileCount !== 1 ? "s" : ""} attached
+              {selectedWeek && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">Week: {selectedWeek}</span>}
             </div>
             <Button
-              onClick={handleBatchImport}
+              size="sm"
               disabled={attachedFileCount === 0}
-              className="gap-2"
+              onClick={handleBatchImport}
+              className="gap-1.5"
             >
-              <Upload className="h-4 w-4" />
-              Import {attachedFileCount > 0 ? `(${attachedFileCount})` : "All"}
+              <Upload className="h-3.5 w-3.5" /> Import All
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -965,6 +858,24 @@ export default function EmployeePerformanceDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+    </>
+  );
+
+  if (loading) return <>{importDialogElements}<div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div></>;
+
+  if (!loading && drivers.length === 0 && selectedWeek) return (
+    <>{importDialogElements}<Card className="print:hidden"><CardContent className="py-16 text-center">
+      <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+      <p className="text-lg font-medium">No data for {selectedWeek}</p>
+      <p className="text-sm text-muted-foreground mt-1">Upload performance data or select a different week.</p>
+    </CardContent></Card></>
+  );
+
+  const sm = dspMetrics;
+
+  return (
+    <>
+      {importDialogElements}
 
     <div className="space-y-4 print:space-y-2">
       {/* Tab Navigation */}
@@ -1739,6 +1650,71 @@ export default function EmployeePerformanceDashboard() {
                     <div className="py-6 text-center">
                       <ClipboardCheck className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" />
                       <p className="text-xs text-muted-foreground">No inspections recorded this week</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── SAFETY DASHBOARD DFO2 ── */}
+              <div>
+                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-orange-600 to-amber-600 mx-4 rounded-t-xl">
+                  <h3 className="font-black text-sm text-white flex items-center gap-2">
+                    <ShieldAlert className="h-5 w-5 text-white/70" />
+                    Safety Dashboard DFO2
+                  </h3>
+                  <span className={cn("text-sm font-black tabular-nums text-white")}>
+                    {d.safetyEventCount} Event{d.safetyEventCount !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-5 py-4 mb-4">
+                  {d.safetyEvents.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {d.safetyEvents.map((evt, idx) => {
+                        const impactLower = (evt.programImpact || '').toLowerCase();
+                        const impactColor = impactLower.includes('tier 1') || impactLower.includes('high')
+                          ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                          : impactLower.includes('tier 2') || impactLower.includes('medium')
+                          ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                          : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+
+                        return (
+                          <div key={idx} className="rounded-lg border border-border/30 overflow-hidden hover:border-border/50 transition-colors">
+                            {/* Top row: Metric Type + Date */}
+                            <div className="flex items-center justify-between px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold">{evt.metricType || '—'}</span>
+                                {evt.metricSubtype && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">
+                                    {evt.metricSubtype}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground tabular-nums">{evt.date || evt.dateTime || '—'}</span>
+                            </div>
+                            {/* Bottom row: Impact, Source, Video */}
+                            <div className="flex items-center gap-2 px-3 pb-2 pt-0.5">
+                              {evt.programImpact && (
+                                <span className={cn("inline-flex items-center text-[10px] px-1.5 py-0.5 rounded border font-semibold", impactColor)}>
+                                  {evt.programImpact}
+                                </span>
+                              )}
+                              {evt.source && (
+                                <span className="text-[10px] text-muted-foreground">{evt.source}</span>
+                              )}
+                              {evt.videoLink && (
+                                <a href={evt.videoLink} target="_blank" rel="noopener noreferrer" className="text-[10px] text-sky-500 hover:underline ml-auto">
+                                  View Video
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center">
+                      <ShieldAlert className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" />
+                      <p className="text-xs text-muted-foreground">No safety events recorded this week</p>
                     </div>
                   )}
                 </div>
