@@ -1345,7 +1345,7 @@ export default function EmployeePerformanceDashboard() {
     </div>
     {/* ═══ DRIVER DETAIL DIALOG ═══ */}
     <Dialog open={!!selectedDriver} onOpenChange={() => setSelectedDriver(null)}>
-      <DialogContent className="sm:max-w-[520px] max-h-[92vh] p-0 gap-0 overflow-hidden border border-white/10 shadow-2xl rounded-2xl backdrop-blur-xl bg-background/85">
+      <DialogContent className="sm:max-w-[680px] max-h-[92vh] p-0 gap-0 overflow-hidden border border-white/10 shadow-2xl rounded-2xl backdrop-blur-xl bg-background/85">
         <DialogHeader className="sr-only"><DialogTitle>Driver Scorecard</DialogTitle><DialogDescription>Detailed performance breakdown</DialogDescription></DialogHeader>
         {selectedDriver && (() => {
           const d = selectedDriver;
