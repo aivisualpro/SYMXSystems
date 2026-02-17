@@ -964,13 +964,7 @@ export default function EmployeePerformanceDashboard() {
 
   if (loading) return <>{importDialogElements}<div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div></>;
 
-  if (!loading && drivers.length === 0 && selectedWeek) return (
-    <>{importDialogElements}<Card className="print:hidden"><CardContent className="py-16 text-center">
-      <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-      <p className="text-lg font-medium">No data for {selectedWeek}</p>
-      <p className="text-sm text-muted-foreground mt-1">Upload performance data or select a different week.</p>
-    </CardContent></Card></>
-  );
+
 
   const sm = dspMetrics;
 
@@ -1228,11 +1222,17 @@ export default function EmployeePerformanceDashboard() {
               </Card>
             </div>
           </>}
+          {!sm && (
+            <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
+              <Target className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No SYMX scorecard data for this week</p>
+            </CardContent></Card>
+          )}
         </div>)}
 
         {activeTab === 'POD' && (
         <div className="mt-4">
-          {podRows.length > 0 && (
+          {podRows.length > 0 ? (
             <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
               <Table>
                 <TableHeader><TableRow>
@@ -1268,6 +1268,11 @@ export default function EmployeePerformanceDashboard() {
                 </TableBody>
               </Table>
             </div></CardContent></Card>
+          ) : (
+            <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
+              <Camera className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No POD data for this week</p>
+            </CardContent></Card>
           )}
         </div>)}
 
