@@ -8,6 +8,7 @@ import SymxDVICVehicleInspection from "@/lib/models/SymxDVICVehicleInspection";
 import SymxSafetyDashboardDFO2 from "@/lib/models/SymxSafetyDashboardDFO2";
 import ScoreCardCDFNegative from "@/lib/models/ScoreCardCDFNegative";
 import ScoreCardQualityDSBDNR from "@/lib/models/ScoreCardQualityDSBDNR";
+import ScoreCardDCR from "@/lib/models/ScoreCardDCR";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 
@@ -121,7 +122,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch all 4 data sources for the selected week + employee images
-    const [excellence, cdf, pod, dvic, safetyDfo2, cdfNegative, qualityDsbDnr, employees] = await Promise.all([
+    const [excellence, cdf, pod, dvic, safetyDfo2, cdfNegative, qualityDsbDnr, dcrData, employees] = await Promise.all([
       SymxDeliveryExcellence.find({ week }).lean(),
       SymxCustomerDeliveryFeedback.find({ week }).lean(),
       SymxPhotoOnDelivery.find({ week }).lean(),
@@ -129,6 +130,7 @@ export async function GET(req: NextRequest) {
       SymxSafetyDashboardDFO2.find({ week }).lean(),
       ScoreCardCDFNegative.find({ week }).lean(),
       ScoreCardQualityDSBDNR.find({ week }).lean(),
+      ScoreCardDCR.find({ week }).lean(),
       SymxEmployee.find({ transporterId: { $exists: true, $ne: '' } }, { transporterId: 1, profileImage: 1 }).lean(),
     ]);
 
@@ -172,6 +174,12 @@ export async function GET(req: NextRequest) {
     const qualityDsbDnrMap = new Map<string, any>();
     qualityDsbDnr.forEach((q: any) => {
       if (q.transporterId) qualityDsbDnrMap.set(q.transporterId, q);
+    });
+
+    // DCR: one record per transporter per week
+    const dcrMap = new Map<string, any>();
+    dcrData.forEach((d: any) => {
+      if (d.transporterId) dcrMap.set(d.transporterId, d);
     });
 
     // Merge data per driver
@@ -252,6 +260,9 @@ export async function GET(req: NextRequest) {
         // Scores for sorting
         dsbCount: driver.dsb ?? 0,
         issueCount: (podData.rejects ?? 0) + (cdfData.negativeFeedbackCount ?? 0),
+
+        // DCR from ScoreCard_DCR
+        dcrFromCollection: dcrMap.get(driver.transporterId)?.dcr ?? null,
 
         // DVIC
         dvicInspections: (dvicMap.get(driver.transporterId) || []).map((d: any) => ({
@@ -557,6 +568,69 @@ export async function GET(req: NextRequest) {
       cdfRows,
       cdfNegativeRows,
       dvicRows,
+      // Raw collection rows for individual tab views
+      deliveryExcellenceRows: excellence.map((e: any) => ({
+        deliveryAssociate: e.deliveryAssociate || 'Unknown',
+        transporterId: e.transporterId || '',
+        overallStanding: e.overallStanding || 'N/A',
+        overallScore: e.overallScore ?? 0,
+        ficoMetric: e.ficoMetric ?? null,
+        ficoTier: e.ficoTier || 'N/A',
+        speedingEventRate: e.speedingEventRate ?? 0,
+        seatbeltOffRate: e.seatbeltOffRate ?? 0,
+        distractionsRate: e.distractionsRate ?? 0,
+        signSignalViolationsRate: e.signSignalViolationsRate ?? 0,
+        followingDistanceRate: e.followingDistanceRate ?? 0,
+        cdfDpmo: e.cdfDpmo ?? 0,
+        ced: e.ced ?? 0,
+        dcr: e.dcr || 'N/A',
+        dsb: e.dsb ?? 0,
+        pod: e.pod || 'N/A',
+        packagesDelivered: e.packagesDelivered ?? 0,
+      })),
+      dcrRows: dcrData.map((d: any) => ({
+        deliveryAssociate: d.deliveryAssociate || 'Unknown',
+        transporterId: d.transporterId || '',
+        dcr: d.dcr ?? 0,
+        packagesDelivered: d.packagesDelivered ?? 0,
+        packagesDispatched: d.packagesDispatched ?? 0,
+        packagesReturnedToStation: d.packagesReturnedToStation ?? 0,
+        packagesReturnedDAControllable: d.packagesReturnedDAControllable ?? 0,
+        rtsBusinessClosed: d.rtsBusinessClosed ?? 0,
+        rtsCustomerUnavailable: d.rtsCustomerUnavailable ?? 0,
+        rtsNoSecureLocation: d.rtsNoSecureLocation ?? 0,
+        rtsOther: d.rtsOther ?? 0,
+        rtsUnableToAccess: d.rtsUnableToAccess ?? 0,
+        rtsUnableToLocate: d.rtsUnableToLocate ?? 0,
+      })),
+      dsbRows: qualityDsbDnr.map((q: any) => ({
+        deliveryAssociate: q.deliveryAssociate || 'Unknown',
+        transporterId: q.transporterId || '',
+        dsbCount: q.dsbCount ?? 0,
+        dsbDpmo: q.dsbDpmo ?? 0,
+        attendedDeliveryCount: q.attendedDeliveryCount ?? 0,
+        unattendedDeliveryCount: q.unattendedDeliveryCount ?? 0,
+        simultaneousDeliveries: q.simultaneousDeliveries ?? 0,
+        deliveredOver50m: q.deliveredOver50m ?? 0,
+        incorrectScanUsageAttended: q.incorrectScanUsageAttended ?? 0,
+        incorrectScanUsageUnattended: q.incorrectScanUsageUnattended ?? 0,
+        noPodOnDelivery: q.noPodOnDelivery ?? 0,
+        scannedNotDeliveredNotReturned: q.scannedNotDeliveredNotReturned ?? 0,
+      })),
+      safetyRows: safetyDfo2.map((s: any) => ({
+        deliveryAssociate: s.deliveryAssociate || 'Unknown',
+        transporterId: s.transporterId || '',
+        date: s.date || '',
+        eventId: s.eventId || '',
+        dateTime: s.dateTime || '',
+        vin: s.vin || '',
+        programImpact: s.programImpact || '',
+        metricType: s.metricType || '',
+        metricSubtype: s.metricSubtype || '',
+        source: s.source || '',
+        videoLink: s.videoLink || '',
+        reviewDetails: s.reviewDetails || '',
+      })),
     });
 
   } catch (error) {

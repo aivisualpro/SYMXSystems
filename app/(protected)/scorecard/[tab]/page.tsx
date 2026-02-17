@@ -33,7 +33,7 @@ import {
   Lightbulb, ChevronRight, Info, CheckCircle2, XCircle, Eye,
   Upload, Activity, MessageSquare, Search, Check, ClipboardCheck, Hash,
   Pen, Save, Smile, X, CalendarDays, FileUp, ShieldAlert,
-  UserCheck, ShieldCheck,
+  UserCheck, ShieldCheck, Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -56,6 +56,7 @@ interface DriverData {
   podOpportunities: number; podSuccess: number; podBypass: number;
   podRejects: number; podRejectBreakdown: Record<string, number>;
   dsbCount: number; issueCount: number;
+  dcrFromCollection: number | null;
   // DVIC
   dvicInspections: { vin: string; fleetType: string; inspectionType: string; inspectionStatus: string; startTime: string; endTime: string; duration: string; startDate: string }[];
   dvicTotalInspections: number;
@@ -285,9 +286,14 @@ function DebouncedTextarea({ value, onChange, ...props }: { value: string; onCha
 const TAB_MAP = [
   { slug: 'Drivers', icon: Truck, label: 'Drivers' },
   { slug: 'SYMX', icon: Target, label: 'SYMX' },
-  { slug: 'CDF', icon: Smile, label: 'CDF' },
-  { slug: 'CDF-Negative', icon: MessageSquareWarning, label: 'CDF Negative' },
+  { slug: 'Safety', icon: Shield, label: 'Safety' },
   { slug: 'POD', icon: Camera, label: 'POD Analysis' },
+  { slug: 'Delivery-Excellence', icon: Activity, label: 'Delivery Quality' },
+  { slug: 'CDF', icon: Smile, label: 'Customer Feedback' },
+  { slug: 'CDF-Negative', icon: MessageSquareWarning, label: 'CDF Negative' },
+  { slug: 'DVIC', icon: ClipboardCheck, label: 'Inspection Time' },
+  { slug: 'DSB', icon: ShieldAlert, label: 'DSB' },
+  { slug: 'DCR', icon: Package, label: 'DCR' },
 ] as const;
 
 // ── Main Component ────────────────────────────────────────────────────────
@@ -304,6 +310,11 @@ export default function EmployeePerformanceDashboard() {
   const [podRows, setPodRows] = useState<PodRow[]>([]);
   const [cdfRows, setCdfRows] = useState<CdfRow[]>([]);
   const [cdfNegativeRows, setCdfNegativeRows] = useState<CdfNegativeRow[]>([]);
+  const [deliveryExcellenceRows, setDeliveryExcellenceRows] = useState<any[]>([]);
+  const [dcrRows, setDcrRows] = useState<any[]>([]);
+  const [dsbRows, setDsbRows] = useState<any[]>([]);
+  const [safetyRows, setSafetyRows] = useState<any[]>([]);
+  const [dvicRawRows, setDvicRawRows] = useState<any[]>([]);
   const [totalDrivers, setTotalDrivers] = useState(0);
   const [totalDelivered, setTotalDelivered] = useState(0);
   const [avgOverallScore, setAvgOverallScore] = useState(0);
@@ -312,6 +323,7 @@ export default function EmployeePerformanceDashboard() {
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [pageTitle, setPageTitle] = useState("Scorecard");
   const [selectedDriver, setSelectedDriver] = useState<DriverData | null>(null);
+  const [videoDialogUrl, setVideoDialogUrl] = useState<string | null>(null);
   const [driverSearch, setDriverSearch] = useState("");
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -712,6 +724,8 @@ export default function EmployeePerformanceDashboard() {
       const res = await fetch(`/api/reports/employee-performance?week=${encodeURIComponent(week)}`);
       const data = await res.json();
       setDrivers(data.drivers || []); setPodRows(data.podRows || []); setCdfRows(data.cdfRows || []); setCdfNegativeRows(data.cdfNegativeRows || []);
+      setDeliveryExcellenceRows(data.deliveryExcellenceRows || []); setDcrRows(data.dcrRows || []);
+      setDsbRows(data.dsbRows || []); setSafetyRows(data.safetyRows || []); setDvicRawRows(data.dvicRows || []);
       setTotalDrivers(data.totalDrivers || 0); setTotalDelivered(data.totalDelivered || 0);
       setAvgOverallScore(data.avgOverallScore || 0); setDspMetrics(data.dspMetrics || null);
       // Fetch signature statuses for this week
@@ -962,7 +976,7 @@ export default function EmployeePerformanceDashboard() {
     </>
   );
 
-  if (loading) return <>{importDialogElements}<div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div></>;
+
 
 
 
@@ -992,6 +1006,12 @@ export default function EmployeePerformanceDashboard() {
         ))}
       </div>
 
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (<>
+
         {activeTab === 'Drivers' && (
         <div className="space-y-4 mt-4">
           {drivers.length > 0 ? (
@@ -1005,17 +1025,13 @@ export default function EmployeePerformanceDashboard() {
                         <TableHead className="min-w-[180px]">Driver</TableHead>
                         <TableHead className="text-center w-[70px]">Signed</TableHead>
                         <TableHead className="text-center">Deliveries</TableHead>
-                        <TableHead className="text-center">Rank</TableHead>
-                        <TableHead className="text-center">
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span>DVIC</span>
-                            <div className="flex items-center justify-center gap-1">
-                              <AlertTriangle className="h-3 w-3 text-amber-500" />
-                              <span className="text-[10px] text-muted-foreground">/</span>
-                              <ClipboardCheck className="h-3 w-3 text-muted-foreground" />
-                            </div>
-                          </div>
-                        </TableHead>
+                        <TableHead className="text-center">Safety</TableHead>
+                        <TableHead className="text-center">DVIC</TableHead>
+                        <TableHead className="text-center">DSB DPMO</TableHead>
+                        <TableHead className="text-center">DCR</TableHead>
+                        <TableHead className="text-center">Overall Score</TableHead>
+                        <TableHead className="text-center">NFC</TableHead>
+                        <TableHead className="text-center w-10">Video</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1064,7 +1080,21 @@ export default function EmployeePerformanceDashboard() {
                               <span className="text-sm font-bold tabular-nums">{d.packagesDelivered.toLocaleString()}</span>
                             </TableCell>
                             <TableCell className="text-center">
-                              <span className="text-sm font-bold">{i + 1}<span className="text-[10px] text-muted-foreground">/{drivers.length}</span></span>
+                              {d.safetyEvents.length > 0 ? (
+                                <a
+                                  href={d.safetyEvents[0].videoLink || '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-blue-500 hover:text-blue-400 transition-colors"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title={`${d.safetyEvents.length} safety event(s)`}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  <span className="text-xs font-semibold">{d.safetyEvents.length}</span>
+                                </a>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
                             </TableCell>
                             <TableCell className="text-center">
                               {d.dvicTotalInspections > 0 ? (
@@ -1073,6 +1103,31 @@ export default function EmployeePerformanceDashboard() {
                                   <span className="text-muted-foreground font-normal">/</span>
                                   <span>{d.dvicTotalInspections}</span>
                                 </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className="text-sm font-bold tabular-nums">{d.qualityDsbDnr?.dsbDpmo ?? '—'}</span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className="text-sm font-bold tabular-nums">{d.dcrFromCollection != null ? `${d.dcrFromCollection}%` : '—'}</span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className="text-sm font-bold tabular-nums">{d.overallScore ?? '—'}</span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className={cn("text-sm font-bold tabular-nums", d.negativeFeedbackCount > 0 ? "text-red-500" : "")}>{d.negativeFeedbackCount}</span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {d.safetyEvents.length > 0 && d.safetyEvents[0].videoLink ? (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setVideoDialogUrl(d.safetyEvents[0].videoLink); }}
+                                  className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors"
+                                  title="Play safety video"
+                                >
+                                  <Play className="h-3.5 w-3.5 fill-current" />
+                                </button>
                               ) : (
                                 <span className="text-xs text-muted-foreground">—</span>
                               )}
@@ -1365,6 +1420,260 @@ export default function EmployeePerformanceDashboard() {
             </CardContent></Card>
           )}
         </div>)}
+
+        {/* ═══ TAB: DELIVERY EXCELLENCE ═══ */}
+        {activeTab === 'Delivery-Excellence' && (
+        <div className="mt-4">
+          {deliveryExcellenceRows.length > 0 ? (
+            <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow>
+                  <TableHead className="w-8">#</TableHead>
+                  <TableHead className="min-w-[160px]">Driver</TableHead>
+                  <TableHead>ID</TableHead>
+                  <TableHead className="text-center">Standing</TableHead>
+                  <TableHead className="text-right">Score</TableHead>
+                  <TableHead className="text-right">FICO</TableHead>
+                  <TableHead className="text-right">Speeding</TableHead>
+                  <TableHead className="text-right">Seatbelt</TableHead>
+                  <TableHead className="text-right">Distractions</TableHead>
+                  <TableHead className="text-right">Sign/Signal</TableHead>
+                  <TableHead className="text-right">Follow Dist</TableHead>
+                  <TableHead className="text-right">CDF DPMO</TableHead>
+                  <TableHead className="text-right">CED</TableHead>
+                  <TableHead className="text-right">DCR</TableHead>
+                  <TableHead className="text-right">DSB</TableHead>
+                  <TableHead className="text-right">POD</TableHead>
+                  <TableHead className="text-right">Delivered</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {deliveryExcellenceRows.map((r: any, i: number) => (
+                    <TableRow key={r.transporterId + i}>
+                      <TableCell>{i + 1}</TableCell>
+                      <TableCell className="font-medium">{r.deliveryAssociate}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground font-mono">{r.transporterId}</TableCell>
+                      <TableCell className="text-center"><TierBadge tier={r.overallStanding} className="text-[9px]" /></TableCell>
+                      <TableCell className="text-right font-bold">{r.overallScore}</TableCell>
+                      <TableCell className="text-right">{r.ficoMetric ?? '—'}</TableCell>
+                      <TableCell className="text-right">{r.speedingEventRate}</TableCell>
+                      <TableCell className="text-right">{r.seatbeltOffRate}</TableCell>
+                      <TableCell className="text-right">{r.distractionsRate}</TableCell>
+                      <TableCell className="text-right">{r.signSignalViolationsRate}</TableCell>
+                      <TableCell className="text-right">{r.followingDistanceRate}</TableCell>
+                      <TableCell className="text-right">{r.cdfDpmo}</TableCell>
+                      <TableCell className="text-right">{r.ced}</TableCell>
+                      <TableCell className="text-right">{r.dcr}</TableCell>
+                      <TableCell className="text-right">{r.dsb}</TableCell>
+                      <TableCell className="text-right">{r.pod}</TableCell>
+                      <TableCell className="text-right">{r.packagesDelivered}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div></CardContent></Card>
+          ) : (
+            <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
+              <Activity className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No Delivery Excellence data for this week</p>
+            </CardContent></Card>
+          )}
+        </div>)}
+
+        {/* ═══ TAB: DCR ═══ */}
+        {activeTab === 'DCR' && (
+        <div className="mt-4">
+          {dcrRows.length > 0 ? (
+            <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow>
+                  <TableHead className="w-8">#</TableHead>
+                  <TableHead className="min-w-[160px]">Driver</TableHead>
+                  <TableHead>ID</TableHead>
+                  <TableHead className="text-right">DCR %</TableHead>
+                  <TableHead className="text-right">Delivered</TableHead>
+                  <TableHead className="text-right">Dispatched</TableHead>
+                  <TableHead className="text-right">RTS</TableHead>
+                  <TableHead className="text-right">DA Ctrl</TableHead>
+                  <TableHead className="text-right">Biz Closed</TableHead>
+                  <TableHead className="text-right">Cust Unavail</TableHead>
+                  <TableHead className="text-right">No Secure</TableHead>
+                  <TableHead className="text-right">Unable Access</TableHead>
+                  <TableHead className="text-right">Unable Locate</TableHead>
+                  <TableHead className="text-right">Other</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {dcrRows.map((r: any, i: number) => (
+                    <TableRow key={r.transporterId + i}>
+                      <TableCell>{i + 1}</TableCell>
+                      <TableCell className="font-medium">{r.deliveryAssociate}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground font-mono">{r.transporterId}</TableCell>
+                      <TableCell className="text-right font-bold">{r.dcr}%</TableCell>
+                      <TableCell className="text-right">{r.packagesDelivered}</TableCell>
+                      <TableCell className="text-right">{r.packagesDispatched}</TableCell>
+                      <TableCell className="text-right"><span className={r.packagesReturnedToStation > 0 ? "text-red-500 font-bold" : ""}>{r.packagesReturnedToStation}</span></TableCell>
+                      <TableCell className="text-right">{r.packagesReturnedDAControllable}</TableCell>
+                      <TableCell className="text-right">{r.rtsBusinessClosed}</TableCell>
+                      <TableCell className="text-right">{r.rtsCustomerUnavailable}</TableCell>
+                      <TableCell className="text-right">{r.rtsNoSecureLocation}</TableCell>
+                      <TableCell className="text-right">{r.rtsUnableToAccess}</TableCell>
+                      <TableCell className="text-right">{r.rtsUnableToLocate}</TableCell>
+                      <TableCell className="text-right">{r.rtsOther}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div></CardContent></Card>
+          ) : (
+            <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
+              <Package className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No DCR data for this week</p>
+            </CardContent></Card>
+          )}
+        </div>)}
+
+        {/* ═══ TAB: DSB ═══ */}
+        {activeTab === 'DSB' && (
+        <div className="mt-4">
+          {dsbRows.length > 0 ? (
+            <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow>
+                  <TableHead className="w-8">#</TableHead>
+                  <TableHead className="min-w-[160px]">Driver</TableHead>
+                  <TableHead>ID</TableHead>
+                  <TableHead className="text-right">DSB Count</TableHead>
+                  <TableHead className="text-right">DSB DPMO</TableHead>
+                  <TableHead className="text-right">Attended</TableHead>
+                  <TableHead className="text-right">Unattended</TableHead>
+                  <TableHead className="text-right">Simultaneous</TableHead>
+                  <TableHead className="text-right">Over 50m</TableHead>
+                  <TableHead className="text-right">Scan Att.</TableHead>
+                  <TableHead className="text-right">Scan Unatt.</TableHead>
+                  <TableHead className="text-right">No POD</TableHead>
+                  <TableHead className="text-right">SNDNR</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {dsbRows.map((r: any, i: number) => (
+                    <TableRow key={r.transporterId + i}>
+                      <TableCell>{i + 1}</TableCell>
+                      <TableCell className="font-medium">{r.deliveryAssociate}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground font-mono">{r.transporterId}</TableCell>
+                      <TableCell className="text-right"><span className={r.dsbCount > 0 ? "text-red-500 font-bold" : ""}>{r.dsbCount}</span></TableCell>
+                      <TableCell className="text-right">{r.dsbDpmo}</TableCell>
+                      <TableCell className="text-right">{r.attendedDeliveryCount}</TableCell>
+                      <TableCell className="text-right">{r.unattendedDeliveryCount}</TableCell>
+                      <TableCell className="text-right">{r.simultaneousDeliveries}</TableCell>
+                      <TableCell className="text-right">{r.deliveredOver50m}</TableCell>
+                      <TableCell className="text-right">{r.incorrectScanUsageAttended}</TableCell>
+                      <TableCell className="text-right">{r.incorrectScanUsageUnattended}</TableCell>
+                      <TableCell className="text-right">{r.noPodOnDelivery}</TableCell>
+                      <TableCell className="text-right">{r.scannedNotDeliveredNotReturned}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div></CardContent></Card>
+          ) : (
+            <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
+              <ShieldAlert className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No DSB data for this week</p>
+            </CardContent></Card>
+          )}
+        </div>)}
+
+        {/* ═══ TAB: SAFETY ═══ */}
+        {activeTab === 'Safety' && (
+        <div className="mt-4">
+          {safetyRows.length > 0 ? (
+            <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow>
+                  <TableHead className="w-8">#</TableHead>
+                  <TableHead className="min-w-[140px]">Driver</TableHead>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Subtype</TableHead>
+                  <TableHead>Impact</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>VIN</TableHead>
+                  <TableHead className="min-w-[200px]">Review Details</TableHead>
+                  <TableHead>Video</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {safetyRows.map((r: any, i: number) => (
+                    <TableRow key={r.eventId + i}>
+                      <TableCell>{i + 1}</TableCell>
+                      <TableCell className="font-medium">{r.deliveryAssociate}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground font-mono">{r.transporterId}</TableCell>
+                      <TableCell className="text-xs">{r.date}</TableCell>
+                      <TableCell className="text-xs">{r.metricType}</TableCell>
+                      <TableCell className="text-xs">{r.metricSubtype}</TableCell>
+                      <TableCell className="text-xs"><span className={r.programImpact?.toLowerCase().includes('tier') ? "text-red-500 font-semibold" : ""}>{r.programImpact}</span></TableCell>
+                      <TableCell className="text-xs">{r.source}</TableCell>
+                      <TableCell className="text-xs font-mono">{r.vin}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[300px] truncate" title={r.reviewDetails}>{r.reviewDetails || '—'}</TableCell>
+                      <TableCell className="text-xs">{r.videoLink ? <a href={r.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">View</a> : '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div></CardContent></Card>
+          ) : (
+            <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
+              <Shield className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No Safety events for this week</p>
+            </CardContent></Card>
+          )}
+        </div>)}
+
+        {/* ═══ TAB: DVIC ═══ */}
+        {activeTab === 'DVIC' && (
+        <div className="mt-4">
+          {dvicRawRows.length > 0 ? (
+            <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow>
+                  <TableHead className="w-8">#</TableHead>
+                  <TableHead className="min-w-[140px]">Driver</TableHead>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>VIN</TableHead>
+                  <TableHead>Fleet Type</TableHead>
+                  <TableHead>Inspection Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Start Time</TableHead>
+                  <TableHead>End Time</TableHead>
+                  <TableHead>Duration</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {dvicRawRows.map((r: any, i: number) => (
+                    <TableRow key={r.transporterId + r.vin + i}>
+                      <TableCell>{i + 1}</TableCell>
+                      <TableCell className="font-medium">{r.transporterName || r.deliveryAssociate || '—'}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground font-mono">{r.transporterId}</TableCell>
+                      <TableCell className="text-xs">{r.startDate}</TableCell>
+                      <TableCell className="text-xs font-mono">{r.vin}</TableCell>
+                      <TableCell className="text-xs">{r.fleetType}</TableCell>
+                      <TableCell className="text-xs">{r.inspectionType}</TableCell>
+                      <TableCell className="text-xs"><span className={r.inspectionStatus?.toLowerCase() === 'rushed' ? "text-amber-500 font-semibold" : "text-emerald-500"}>{r.inspectionStatus}</span></TableCell>
+                      <TableCell className="text-xs">{r.startTime}</TableCell>
+                      <TableCell className="text-xs">{r.endTime}</TableCell>
+                      <TableCell className="text-xs">{r.duration}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div></CardContent></Card>
+          ) : (
+            <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
+              <ClipboardCheck className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No DVIC inspection data for this week</p>
+            </CardContent></Card>
+          )}
+        </div>)}
+
+        </>)}
 
 
 
@@ -2218,6 +2527,33 @@ export default function EmployeePerformanceDashboard() {
             </div>
           );
         })()}
+      </DialogContent>
+    </Dialog>
+
+    {/* ═══ VIDEO PLAYBACK DIALOG ═══ */}
+    <Dialog open={!!videoDialogUrl} onOpenChange={() => setVideoDialogUrl(null)}>
+      <DialogContent className="sm:max-w-[720px] p-0 gap-0 overflow-hidden">
+        <DialogHeader className="p-4 pb-2">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Play className="h-4 w-4 text-blue-500" />
+            Safety Event Video
+          </DialogTitle>
+          <DialogDescription>Video from ScoreCard Safety Dashboard</DialogDescription>
+        </DialogHeader>
+        <div className="px-4 pb-4">
+          {videoDialogUrl && (
+            <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
+              <video
+                src={videoDialogUrl}
+                controls
+                autoPlay
+                className="w-full h-full"
+              >
+                Your browser does not support the video tag.
+              </video>
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
 
