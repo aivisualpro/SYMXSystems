@@ -106,36 +106,7 @@ const data = {
       url: "/owner",
       icon: IconCrown,
       subModules: [
-        { name: "Efficiency Company", url: "#" }, 
-        { name: "Dropdowns", url: "#" }, 
-        { name: "General Settings", url: "#" }, 
-        { name: "Menu", url: "#" }, 
-        { name: "App Users", url: "/owner/app-users" }, 
-        { name: "Expenses", url: "#" }
-      ]
-    },
-    {
-      name: "Dispatch",
-      url: "/dispatch",
-      icon: IconTruckDelivery,
-      subModules: [
-        { name: "Roster", url: "#" }, 
-        { name: "Performance Dashboard", url: "#" }, 
-        { name: "Opening", url: "#" }, 
-        { name: "Attendance", url: "#" }, 
-        { name: "Repairs", url: "#" }, 
-        { name: "Loadout", url: "#" }, 
-        { name: "Time", url: "#" }, 
-        { name: "Schedule", url: "#" }, 
-        { name: "Closing", url: "#" }, 
-        { name: "Contacts", url: "#" }, 
-        { name: "Verbal Coaching", url: "#" }, 
-        { name: "Messaging", url: "#" }, 
-        { name: "Efficiency", url: "#" }, 
-        { name: "Routes", url: "#" }, 
-        { name: "Incidents", url: "#" }, 
-        { name: "Coaching", url: "#" }, 
-        { name: "Checklist", url: "#" }
+        { name: "App Users", url: "/owner/app-users" },
       ]
     },
     {
@@ -152,68 +123,11 @@ const data = {
       ],
     },
     {
-      name: "Everyday",
-      url: "#",
-      icon: IconSun,
-    },
-    {
-      name: "Fleet",
-      url: "#",
-      icon: IconCar,
-    },
-    {
       name: "HR",
       url: "/hr",
       icon: IconUsersGroup,
       subModules: [
-        { name: "Employees", url: "/hr/employees" }, 
-        { name: "Employee Performance", url: "#" }, 
-        { name: "Reimbursement", url: "#" }, 
-        { name: "Claims Dashboard", url: "#" }, 
-        { name: "Employee Audit", url: "#" }, 
-        { name: "HR Tickets", url: "#" }, 
-        { name: "Timesheet", url: "#" }, 
-        { name: "Interviews", url: "#" }, 
-        { name: "Onboarding", url: "#" }, 
-        { name: "Hired", url: "#" }, 
-        { name: "Uniforms", url: "#" }, 
-        { name: "Terminations", url: "#" }
-      ]
-    },
-    {
-      name: "Incidents",
-      url: "#",
-      icon: IconAlertTriangle,
-    },
-    {
-      name: "Insurance",
-      url: "#",
-      icon: IconShield,
-    },
-    {
-      name: "Manager",
-      url: "/manager",
-      icon: IconTie,
-      subModules: [
-        { name: "Routes Manager", url: "#" }, 
-        { name: "Punch Ins Manager", url: "#" }, 
-        { name: "Punch Ins Import", url: "#" }, 
-        { name: "RTS Manager", url: "#" }, 
-        { name: "Rescue Manager", url: "#" }, 
-        { name: "Driver Efficiency Manager", url: "#" }, 
-        { name: "Performance Summary", url: "#" }, 
-        { name: "Scorecard Performance", url: "#" }, 
-        { name: "Employee Ranking", url: "#" }, 
-        { name: "HR Tickets Managers", url: "#" }, 
-        { name: "Notices", url: "#" }, 
-        { name: "Work Hours Compliance", url: "#" }, 
-        { name: "Paycom Schedule Export", url: "#" }, 
-        { name: "Work Summary Tool", url: "#" }, 
-        { name: "Fleet Summary", url: "#" }, 
-        { name: "Repairs", url: "#" }, 
-        { name: "Scorecard History", url: "#" }, 
-        { name: "Weekly ScoreCard", url: "/scorecard" }, 
-        { name: "Lunch Compliance", url: "#" }
+        { name: "Employees", url: "/hr/employees" }
       ]
     },
     {

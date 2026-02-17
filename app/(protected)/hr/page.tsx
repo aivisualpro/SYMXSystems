@@ -26,18 +26,7 @@ const DEFAULT_DARK_IMAGE = "/images/dark-default.png";
 const DEFAULT_LIGHT_IMAGE = "/images/light-default.png";
 
 const initialHRCards = [
-  { name: "Employees", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "/hr/employees" },
-  { name: "Employee Performance", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "Reimbursement", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "Claims Dashboard", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "Employee Audit", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "HR Tickets", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "Timesheet", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "Interviews", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "Onboarding", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "Hired", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "Uniforms", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "Terminations", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
+  { name: "Employees", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "/hr/employees" }
 ];
 
 export default function HRPage() {

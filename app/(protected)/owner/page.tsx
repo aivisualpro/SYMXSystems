@@ -26,12 +26,7 @@ const DEFAULT_DARK_IMAGE = "/images/dark-default.png";
 const DEFAULT_LIGHT_IMAGE = "/images/light-default.png";
 
 const initialOwnerCards = [
-  { name: "Efficiency Company", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "Dropdowns", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "General Settings", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "Menu", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
-  { name: "App Users", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "/owner/app-users" },
-  { name: "Expenses", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "#" },
+  { name: "App Users", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "/owner/app-users" }
 ];
 
 export default function OwnerPage() {
