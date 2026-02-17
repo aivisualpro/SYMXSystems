@@ -517,6 +517,108 @@ export async function GET(req: NextRequest) {
         cdfDpmoTier: avgCdfDpmo <= 200 ? "Fantastic" : avgCdfDpmo <= 500 ? "Great" : avgCdfDpmo <= 1000 ? "Fair" : "Poor",
       },
       focusAreas: focusAreas.slice(0, 3),
+
+      // ── DVIC Aggregate ──────────────────────────────────────────────────
+      dvicSummary: (() => {
+        const totalInspections = dvic.length;
+        const rushedCount = dvic.filter((d: any) => {
+          const dur = d.duration;
+          if (dur == null || dur === "") return false;
+          if (!isNaN(Number(dur))) return Number(dur) < 90;
+          const durStr = String(dur);
+          const minMatch = durStr.match(/(\d+(?:\.\d+)?)\s*min/i);
+          if (minMatch) return parseFloat(minMatch[1]) * 60 < 90;
+          const parts = durStr.split(":");
+          if (parts.length >= 2) {
+            const sec = parts.length === 3 ? parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]) : parseInt(parts[0]) * 60 + parseInt(parts[1]);
+            return sec < 90;
+          }
+          return false;
+        }).length;
+        const driversWithInspections = new Set(dvic.map((d: any) => d.transporterId)).size;
+        return { totalInspections, rushedCount, driversWithInspections };
+      })(),
+
+      // ── Safety Events Aggregate ─────────────────────────────────────────
+      safetyAggregate: (() => {
+        const totalEvents = safetyDfo2.length;
+        const driversWithEvents = new Set(safetyDfo2.map((s: any) => s.transporterId)).size;
+        const byMetricType: Record<string, number> = {};
+        const byMetricSubtype: Record<string, number> = {};
+        const byProgramImpact: Record<string, number> = {};
+        safetyDfo2.forEach((s: any) => {
+          const mt = s.metricType || "Unknown";
+          byMetricType[mt] = (byMetricType[mt] || 0) + 1;
+          const ms = s.metricSubtype || "Unknown";
+          byMetricSubtype[ms] = (byMetricSubtype[ms] || 0) + 1;
+          const pi = s.programImpact || "Unknown";
+          byProgramImpact[pi] = (byProgramImpact[pi] || 0) + 1;
+        });
+        return { totalEvents, driversWithEvents, byMetricType, byMetricSubtype, byProgramImpact };
+      })(),
+
+      // ── CDF Negative Aggregate ──────────────────────────────────────────
+      cdfNegativeAggregate: (() => {
+        const total = cdfNegative.length;
+        const driversAffected = new Set(cdfNegative.map((c: any) => c.transporterId || c.deliveryAssociate)).size;
+        let mishandled = 0, unprofessional = 0, didNotFollow = 0, wrongAddress = 0, neverReceived = 0, wrongItem = 0;
+        cdfNegative.forEach((c: any) => {
+          if (c.daMishandledPackage && c.daMishandledPackage !== "0" && c.daMishandledPackage !== "") mishandled++;
+          if (c.daWasUnprofessional && c.daWasUnprofessional !== "0" && c.daWasUnprofessional !== "") unprofessional++;
+          if (c.daDidNotFollowInstructions && c.daDidNotFollowInstructions !== "0" && c.daDidNotFollowInstructions !== "") didNotFollow++;
+          if (c.deliveredToWrongAddress && c.deliveredToWrongAddress !== "0" && c.deliveredToWrongAddress !== "") wrongAddress++;
+          if (c.neverReceivedDelivery && c.neverReceivedDelivery !== "0" && c.neverReceivedDelivery !== "") neverReceived++;
+          if (c.receivedWrongItem && c.receivedWrongItem !== "0" && c.receivedWrongItem !== "") wrongItem++;
+        });
+        return { total, driversAffected, mishandled, unprofessional, didNotFollow, wrongAddress, neverReceived, wrongItem };
+      })(),
+
+      // ── DCR Aggregate ───────────────────────────────────────────────────
+      dcrAggregate: (() => {
+        const dcrVals = dcrData.map((d: any) => d.dcr).filter((v: any) => v != null && !isNaN(v));
+        const avgDcrCollection = dcrVals.length > 0 ? dcrVals.reduce((a: number, b: number) => a + b, 0) / dcrVals.length : 0;
+        const totalDispatched = dcrData.reduce((s: number, d: any) => s + (d.packagesDispatched ?? 0), 0);
+        const totalDeliveredDcr = dcrData.reduce((s: number, d: any) => s + (d.packagesDelivered ?? 0), 0);
+        const totalRts = dcrData.reduce((s: number, d: any) => s + (d.packagesReturnedToStation ?? 0), 0);
+        const totalRtsControllable = dcrData.reduce((s: number, d: any) => s + (d.packagesReturnedDAControllable ?? 0), 0);
+        const rtsBizClosed = dcrData.reduce((s: number, d: any) => s + (d.rtsBusinessClosed ?? 0), 0);
+        const rtsCustUnavail = dcrData.reduce((s: number, d: any) => s + (d.rtsCustomerUnavailable ?? 0), 0);
+        const rtsNoSecure = dcrData.reduce((s: number, d: any) => s + (d.rtsNoSecureLocation ?? 0), 0);
+        const rtsOther = dcrData.reduce((s: number, d: any) => s + (d.rtsOther ?? 0), 0);
+        const rtsAccess = dcrData.reduce((s: number, d: any) => s + (d.rtsUnableToAccess ?? 0), 0);
+        const rtsLocate = dcrData.reduce((s: number, d: any) => s + (d.rtsUnableToLocate ?? 0), 0);
+        const driversCount = dcrData.length;
+        return { avgDcr: Math.round(avgDcrCollection * 100) / 100, totalDispatched, totalDelivered: totalDeliveredDcr, totalRts, totalRtsControllable, rtsBizClosed, rtsCustUnavail, rtsNoSecure, rtsOther, rtsAccess, rtsLocate, driversCount };
+      })(),
+
+      // ── DSB Aggregate ───────────────────────────────────────────────────
+      dsbAggregate: (() => {
+        const totalDsbCount = qualityDsbDnr.reduce((s: number, q: any) => s + (q.dsbCount ?? 0), 0);
+        const dpmoVals = qualityDsbDnr.map((q: any) => q.dsbDpmo).filter((v: any) => v != null && !isNaN(v));
+        const avgDsbDpmo = dpmoVals.length > 0 ? dpmoVals.reduce((a: number, b: number) => a + b, 0) / dpmoVals.length : 0;
+        const totalAttended = qualityDsbDnr.reduce((s: number, q: any) => s + (q.attendedDeliveryCount ?? 0), 0);
+        const totalUnattended = qualityDsbDnr.reduce((s: number, q: any) => s + (q.unattendedDeliveryCount ?? 0), 0);
+        const totalSimultaneous = qualityDsbDnr.reduce((s: number, q: any) => s + (q.simultaneousDeliveries ?? 0), 0);
+        const totalOver50m = qualityDsbDnr.reduce((s: number, q: any) => s + (q.deliveredOver50m ?? 0), 0);
+        const totalIncorrectAttended = qualityDsbDnr.reduce((s: number, q: any) => s + (q.incorrectScanUsageAttended ?? 0), 0);
+        const totalIncorrectUnattended = qualityDsbDnr.reduce((s: number, q: any) => s + (q.incorrectScanUsageUnattended ?? 0), 0);
+        const totalNoPod = qualityDsbDnr.reduce((s: number, q: any) => s + (q.noPodOnDelivery ?? 0), 0);
+        const totalSNDNR = qualityDsbDnr.reduce((s: number, q: any) => s + (q.scannedNotDeliveredNotReturned ?? 0), 0);
+        const driversCount = qualityDsbDnr.length;
+        return { totalDsbCount, avgDsbDpmo: Math.round(avgDsbDpmo), totalAttended, totalUnattended, totalSimultaneous, totalOver50m, totalIncorrectAttended, totalIncorrectUnattended, totalNoPod, totalSNDNR, driversCount };
+      })(),
+
+      // ── Collection Record Counts ────────────────────────────────────────
+      collectionCounts: {
+        deliveryExcellence: excellence.length,
+        customerDeliveryFeedback: cdf.length,
+        photoOnDelivery: pod.length,
+        dvicVehicleInspection: dvic.length,
+        safetyDashboardDFO2: safetyDfo2.length,
+        cdfNegative: cdfNegative.length,
+        qualityDSBDNR: qualityDsbDnr.length,
+        dcr: dcrData.length,
+      },
     };
 
     // Sort raw POD data (most rejects first)

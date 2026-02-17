@@ -11,16 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, Trash, User, Eye } from "lucide-react";
+import { User } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
 
 export default function EmployeesPage() {
@@ -207,39 +200,7 @@ export default function EmployeesPage() {
     { accessorKey: "lastDateWorked", header: "Last Worked", cell: ({row}) => row.original.lastDateWorked ? new Date(row.original.lastDateWorked).toLocaleDateString() : "" },
     { accessorKey: "exitInterviewNotes", header: "Exit Notes" },
     
-    {
-      id: "actions",
-      header: "Actions",
-      cell: ({ row }) => {
-        const item = row.original;
-        return (
-          <div className="flex justify-end">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => router.push(`/hr/employees/${item._id}`)}>
-                  <Eye className="mr-2 h-4 w-4" /> View Details
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => openEditDialog(item)}>
-                  <Pencil className="mr-2 h-4 w-4" /> Edit
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                   className="text-destructive focus:text-destructive"
-                   onClick={() => handleDelete(String(item._id))}
-                >
-                  <Trash className="mr-2 h-4 w-4" /> Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        );
-      },
-    },
+
   ];
 
   // Define initial visibility: Show key fields, hide others
@@ -307,6 +268,7 @@ export default function EmployeesPage() {
          showColumnToggle={true}
          initialColumnVisibility={initialVisibility}
          enableGlobalFilter={true}
+         onRowClick={(employee) => router.push(`/hr/employees/${employee._id}`)}
          extraActions={
            <div className="flex items-center space-x-2 mr-2">
              <Switch 
