@@ -530,6 +530,22 @@ export async function GET(req: NextRequest) {
       startDate: d.startDate || "",
     }));
 
+    // CDF Negative raw rows for tab view
+    const cdfNegativeRows = cdfNegative.map((c: any) => ({
+      deliveryAssociateName: c.deliveryAssociateName || c.deliveryAssociate || 'Unknown',
+      transporterId: c.transporterId || c.deliveryAssociate || '',
+      deliveryGroupId: c.deliveryGroupId || '',
+      trackingId: c.trackingId || '',
+      deliveryDate: c.deliveryDate || '',
+      daMishandledPackage: c.daMishandledPackage || '',
+      daWasUnprofessional: c.daWasUnprofessional || '',
+      daDidNotFollowInstructions: c.daDidNotFollowInstructions || '',
+      deliveredToWrongAddress: c.deliveredToWrongAddress || '',
+      neverReceivedDelivery: c.neverReceivedDelivery || '',
+      receivedWrongItem: c.receivedWrongItem || '',
+      feedbackDetails: c.feedbackDetails || '',
+    }));
+
     return NextResponse.json({
       week,
       totalDrivers,
@@ -539,6 +555,7 @@ export async function GET(req: NextRequest) {
       drivers,
       podRows,
       cdfRows,
+      cdfNegativeRows,
       dvicRows,
     });
 

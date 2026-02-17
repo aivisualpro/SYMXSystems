@@ -33,6 +33,7 @@ import {
   Lightbulb, ChevronRight, Info, CheckCircle2, XCircle, Eye,
   Upload, Activity, MessageSquare, Search, Check, ClipboardCheck, Hash,
   Pen, Save, Smile, X, CalendarDays, FileUp, ShieldAlert,
+  UserCheck, ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -79,6 +80,13 @@ interface PodRow {
 interface CdfRow {
   name: string; transporterId: string; cdfDpmo: number; cdfDpmoTier: string;
   cdfDpmoScore: number; negativeFeedbackCount: number;
+}
+interface CdfNegativeRow {
+  deliveryAssociateName: string; transporterId: string; deliveryGroupId: string;
+  trackingId: string; deliveryDate: string;
+  daMishandledPackage: string; daWasUnprofessional: string; daDidNotFollowInstructions: string;
+  deliveredToWrongAddress: string; neverReceivedDelivery: string; receivedWrongItem: string;
+  feedbackDetails: string;
 }
 interface DspMetrics {
   overallScore: number; overallTier: string;
@@ -168,6 +176,11 @@ const METRIC_INFO: Record<string, MetricInfoEntry> = {
     title: 'SIGN/SIGNAL VIOLATIONS',
     description: 'The Sign/Signal Violations Rate measures how well you adhere to posted road signs and traffic signals. We\'re currently including stop sign violations, which is any time a DA drives past/through a stop sign without coming to a full stop, illegal U-turns, which measure any time a DA makes a U-turn when a "No U-Turn sign" is present, and stop light violations, which is triggered any time a DA drives through an intersection while the light is red.',
     howMeasured: 'In the measurement of this metric, a stop light violation will count 10 times to every one stop sign violation or illegal U-turn, since stop light violations can be particularly dangerous. Your weekly score is the sum of all stop sign violation events, illegal U-turns, and stop light violation events (which again, are weighted at 10 times stop sign violations) divided by the number of trips. This will show on your DSP Scorecard as XX events per 100 trips to make it easier to interpret.',
+  },
+  'dvic-rushed': {
+    title: 'DVIC — RUSHED INSPECTIONS',
+    description: 'The Daily Vehicle Inspection Checklist (DVIC) is Amazon\'s vehicle safety inspection, designed to keep you safe. You are prompted to complete DVIC in the Amazon Delivery App when required, and you should follow the process thoroughly. The delivery app records the amount of time it takes you to perform the inspection.',
+    howMeasured: 'For standard vehicles, DAs should complete the DVIC in no less than 90 seconds. For DOT vehicles like Step Vans, the process should take no less than 5 minutes.\n\nAny inspection under the recommended time is listed on your scorecard, with inspections under 10 seconds highlighted in red. Your goal is to have 0 rushed inspections.',
   },
 };
 
@@ -278,6 +291,7 @@ export default function EmployeePerformanceDashboard() {
   const [drivers, setDrivers] = useState<DriverData[]>([]);
   const [podRows, setPodRows] = useState<PodRow[]>([]);
   const [cdfRows, setCdfRows] = useState<CdfRow[]>([]);
+  const [cdfNegativeRows, setCdfNegativeRows] = useState<CdfNegativeRow[]>([]);
   const [totalDrivers, setTotalDrivers] = useState(0);
   const [totalDelivered, setTotalDelivered] = useState(0);
   const [avgOverallScore, setAvgOverallScore] = useState(0);
@@ -686,7 +700,7 @@ export default function EmployeePerformanceDashboard() {
     try {
       const res = await fetch(`/api/reports/employee-performance?week=${encodeURIComponent(week)}`);
       const data = await res.json();
-      setDrivers(data.drivers || []); setPodRows(data.podRows || []); setCdfRows(data.cdfRows || []);
+      setDrivers(data.drivers || []); setPodRows(data.podRows || []); setCdfRows(data.cdfRows || []); setCdfNegativeRows(data.cdfNegativeRows || []);
       setTotalDrivers(data.totalDrivers || 0); setTotalDelivered(data.totalDelivered || 0);
       setAvgOverallScore(data.avgOverallScore || 0); setDspMetrics(data.dspMetrics || null);
       // Fetch signature statuses for this week
@@ -958,10 +972,10 @@ export default function EmployeePerformanceDashboard() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="print:hidden">
         <TabsList>
           <TabsTrigger value="drivers-tab" className="gap-1.5"><Truck className="h-3.5 w-3.5" />Drivers</TabsTrigger>
-          <TabsTrigger value="scorecard" className="gap-1.5"><Target className="h-3.5 w-3.5" />DSP Scorecard</TabsTrigger>
-          <TabsTrigger value="drivers" className="gap-1.5"><Users className="h-3.5 w-3.5" />Driver Details</TabsTrigger>
+          <TabsTrigger value="scorecard" className="gap-1.5"><Target className="h-3.5 w-3.5" />SYMX</TabsTrigger>
+          <TabsTrigger value="cdf-tab" className="gap-1.5"><Smile className="h-3.5 w-3.5" />CDF</TabsTrigger>
+          <TabsTrigger value="cdf-negative-tab" className="gap-1.5"><MessageSquareWarning className="h-3.5 w-3.5" />CDF Negative</TabsTrigger>
           <TabsTrigger value="pod" className="gap-1.5"><Camera className="h-3.5 w-3.5" />POD Analysis</TabsTrigger>
-          <TabsTrigger value="cdf" className="gap-1.5"><MessageSquareWarning className="h-3.5 w-3.5" />CDF Report</TabsTrigger>
         </TabsList>
 
         {/* ═══ TAB: DRIVERS ═══ */}
@@ -977,12 +991,17 @@ export default function EmployeePerformanceDashboard() {
                         <TableHead className="min-w-[180px]">Driver</TableHead>
                         <TableHead className="text-center w-[70px]">Signed</TableHead>
                         <TableHead className="text-center">Deliveries</TableHead>
-                        <TableHead className="text-center">Tier</TableHead>
                         <TableHead className="text-center">Rank</TableHead>
-                        <TableHead className="text-center">Driving Safety</TableHead>
-                        <TableHead className="text-center">Delivery Quality</TableHead>
-                        <TableHead className="text-center">Customer Feedback</TableHead>
-                        <TableHead className="text-center">DVIC</TableHead>
+                        <TableHead className="text-center">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span>DVIC</span>
+                            <div className="flex items-center justify-center gap-1">
+                              <AlertTriangle className="h-3 w-3 text-amber-500" />
+                              <span className="text-[10px] text-muted-foreground">/</span>
+                              <ClipboardCheck className="h-3 w-3 text-muted-foreground" />
+                            </div>
+                          </div>
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1011,23 +1030,35 @@ export default function EmployeePerformanceDashboard() {
                               </div>
                             </TableCell>
                             <TableCell className="text-center">
+                              <div className="flex items-center justify-center gap-2.5">
+                                <div title={signatureMap[d.transporterId]?.driverSigned ? 'Driver signed' : 'Driver not signed'}>
+                                  {signatureMap[d.transporterId]?.driverSigned
+                                    ? <UserCheck className="h-[22px] w-[22px] text-emerald-500 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
+                                    : <Users className="h-[22px] w-[22px] text-muted-foreground/20" />
+                                  }
+                                </div>
+                                <div className="w-px h-5 bg-border/30" />
+                                <div title={signatureMap[d.transporterId]?.managerSigned ? 'Manager signed' : 'Manager not signed'}>
+                                  {signatureMap[d.transporterId]?.managerSigned
+                                    ? <ShieldCheck className="h-[22px] w-[22px] text-emerald-500 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
+                                    : <Shield className="h-[22px] w-[22px] text-muted-foreground/20" />
+                                  }
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
                               <span className="text-sm font-bold tabular-nums">{d.packagesDelivered.toLocaleString()}</span>
                             </TableCell>
-                            <TableCell className="text-center"><TierBadge tier={d.overallStanding} /></TableCell>
                             <TableCell className="text-center">
                               <span className="text-sm font-bold">{i + 1}<span className="text-[10px] text-muted-foreground">/{drivers.length}</span></span>
                             </TableCell>
-                            <TableCell className="text-center"><TierBadge tier={d.ficoTier || 'N/A'} /></TableCell>
-                            <TableCell className="text-center"><TierBadge tier={d.dcrTier} /></TableCell>
-                            <TableCell className="text-center"><TierBadge tier={d.cdfDpmoTier} /></TableCell>
                             <TableCell className="text-center">
                               {d.dvicTotalInspections > 0 ? (
-                                <div className="flex flex-col items-center">
-                                  <span className="text-sm font-bold">{d.dvicTotalInspections}</span>
-                                  {d.dvicRushedCount > 0 && (
-                                    <span className="text-[10px] text-amber-500 font-medium">{d.dvicRushedCount} rushed</span>
-                                  )}
-                                </div>
+                                <span className="text-sm font-bold tabular-nums">
+                                  <span className={d.dvicRushedCount > 0 ? "text-amber-500" : "text-emerald-500"}>{d.dvicRushedCount}</span>
+                                  <span className="text-muted-foreground font-normal">/</span>
+                                  <span>{d.dvicTotalInspections}</span>
+                                </span>
                               ) : (
                                 <span className="text-xs text-muted-foreground">—</span>
                               )}
@@ -1287,6 +1318,96 @@ export default function EmployeePerformanceDashboard() {
                 </TableBody>
               </Table>
             </div></CardContent></Card>
+          )}
+        </TabsContent>
+
+        {/* ═══ TAB: CDF ═══ */}
+        <TabsContent value="cdf-tab" className="mt-4">
+          {cdfRows.length > 0 ? (
+            <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow>
+                  <TableHead className="w-8">#</TableHead>
+                  <TableHead className="min-w-[160px]">Driver</TableHead>
+                  <TableHead>ID</TableHead>
+                  <TableHead className="text-center">CDF DPMO</TableHead>
+                  <TableHead className="text-center">Tier</TableHead>
+                  <TableHead className="text-center">Score</TableHead>
+                  <TableHead className="text-center">Negative Feedback</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {cdfRows.map((r, i) => (
+                    <TableRow key={r.transporterId} className={r.negativeFeedbackCount > 0 ? "bg-red-500/5" : ""}>
+                      <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                      <TableCell className="font-medium">{r.name}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground font-mono">{r.transporterId}</TableCell>
+                      <TableCell className="text-center tabular-nums">{r.cdfDpmo}</TableCell>
+                      <TableCell className="text-center"><TierBadge tier={r.cdfDpmoTier} className="text-[9px]" /></TableCell>
+                      <TableCell className="text-center tabular-nums">{r.cdfDpmoScore}</TableCell>
+                      <TableCell className="text-center">
+                        <span className={r.negativeFeedbackCount > 0 ? "text-red-500 font-bold" : "text-muted-foreground"}>{r.negativeFeedbackCount}</span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div></CardContent></Card>
+          ) : (
+            <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
+              <Smile className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No CDF data available for this week</p>
+            </CardContent></Card>
+          )}
+        </TabsContent>
+
+        {/* ═══ TAB: CDF NEGATIVE ═══ */}
+        <TabsContent value="cdf-negative-tab" className="mt-4">
+          {cdfNegativeRows.length > 0 ? (
+            <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow>
+                  <TableHead className="w-8">#</TableHead>
+                  <TableHead className="min-w-[160px]">Driver</TableHead>
+                  <TableHead>Tracking ID</TableHead>
+                  <TableHead className="text-center">Delivery Date</TableHead>
+                  <TableHead className="text-center">Mishandled</TableHead>
+                  <TableHead className="text-center">Unprofessional</TableHead>
+                  <TableHead className="text-center">Didn&apos;t Follow Instructions</TableHead>
+                  <TableHead className="text-center">Wrong Address</TableHead>
+                  <TableHead className="text-center">Never Received</TableHead>
+                  <TableHead className="text-center">Wrong Item</TableHead>
+                  <TableHead className="min-w-[200px]">Feedback Details</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {cdfNegativeRows.map((r, i) => {
+                    const flagClass = (val: string) => val && val.toLowerCase() === 'yes'
+                      ? 'text-red-500 font-bold'
+                      : 'text-muted-foreground/40';
+                    const flagLabel = (val: string) => val && val.toLowerCase() === 'yes' ? 'Yes' : '—';
+                    return (
+                      <TableRow key={`${r.trackingId}-${i}`} className="bg-red-500/5">
+                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="font-medium">{r.deliveryAssociateName}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground font-mono">{r.trackingId || '—'}</TableCell>
+                        <TableCell className="text-center text-xs">{r.deliveryDate || '—'}</TableCell>
+                        <TableCell className={cn("text-center text-xs", flagClass(r.daMishandledPackage))}>{flagLabel(r.daMishandledPackage)}</TableCell>
+                        <TableCell className={cn("text-center text-xs", flagClass(r.daWasUnprofessional))}>{flagLabel(r.daWasUnprofessional)}</TableCell>
+                        <TableCell className={cn("text-center text-xs", flagClass(r.daDidNotFollowInstructions))}>{flagLabel(r.daDidNotFollowInstructions)}</TableCell>
+                        <TableCell className={cn("text-center text-xs", flagClass(r.deliveredToWrongAddress))}>{flagLabel(r.deliveredToWrongAddress)}</TableCell>
+                        <TableCell className={cn("text-center text-xs", flagClass(r.neverReceivedDelivery))}>{flagLabel(r.neverReceivedDelivery)}</TableCell>
+                        <TableCell className={cn("text-center text-xs", flagClass(r.receivedWrongItem))}>{flagLabel(r.receivedWrongItem)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[300px] truncate" title={r.feedbackDetails}>{r.feedbackDetails || '—'}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div></CardContent></Card>
+          ) : (
+            <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
+              <MessageSquareWarning className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No CDF Negative records for this week</p>
+            </CardContent></Card>
           )}
         </TabsContent>
       </Tabs>
@@ -1650,8 +1771,11 @@ export default function EmployeePerformanceDashboard() {
                     return (
                       <>
                         {/* Rushed Inspections header */}
-                        <div className="flex items-center justify-between py-2 mb-2 border-b border-border/30">
-                          <span className="text-sm font-black">Rushed Inspections</span>
+                        <div className="flex items-center justify-between py-2 mb-2 border-b border-border/30 cursor-pointer hover:bg-muted/30 transition-colors rounded-lg px-1 -mx-1" onClick={() => setInfoModal({ key: 'dvic-rushed', score: `${d.dvicRushedCount}/${d.dvicTotalInspections}` })}>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-black">Rushed Inspections</span>
+                            <Info className="h-3.5 w-3.5 text-muted-foreground/40" />
+                          </div>
                           <span className={cn("text-sm font-black tabular-nums", d.dvicRushedCount > 0 ? "text-amber-500" : "text-emerald-500")}>
                             {d.dvicRushedCount}/{d.dvicTotalInspections}
                           </span>
