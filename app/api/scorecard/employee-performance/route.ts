@@ -219,7 +219,6 @@ export async function GET(req: NextRequest) {
         // Identity — resolve name from whichever collection has it
         name: driver.deliveryAssociate
           || cdfData.deliveryAssociate
-          || (podData.firstName ? `${podData.firstName} ${podData.lastName || ""}`.trim() : "")
           || dcrMap.get(transporterId)?.deliveryAssociate
           || qualityDsbDnrMap.get(transporterId)?.deliveryAssociate
           || (safetyMap.get(transporterId) || [])[0]?.deliveryAssociate
@@ -623,7 +622,6 @@ export async function GET(req: NextRequest) {
 
     // Sort raw POD data (most rejects first)
     const podRows = pod.map((p: any) => ({
-      name: `${p.firstName || ""} ${p.lastName || ""}`.trim() || "Unknown",
       transporterId: p.transporterId,
       opportunities: p.opportunities ?? 0,
       success: p.success ?? 0,
@@ -639,7 +637,7 @@ export async function GET(req: NextRequest) {
       photoTooDark: p.photoTooDark ?? 0,
       other: p.other ?? 0,
     }));
-    podRows.sort((a: any, b: any) => b.rejects - a.rejects || (a.name || "").localeCompare(b.name || ""));
+    podRows.sort((a: any, b: any) => b.rejects - a.rejects || (a.transporterId || "").localeCompare(b.transporterId || ""));
 
     // Sort raw CDF data (most negative feedback first)
     const cdfRows = cdf.map((c: any) => ({

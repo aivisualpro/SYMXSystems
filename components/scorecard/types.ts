@@ -32,7 +32,7 @@ export interface DriverData {
 }
 
 export interface PodRow {
-  name: string; transporterId: string; opportunities: number; success: number;
+  transporterId: string; opportunities: number; success: number;
   bypass: number; rejects: number; blurryPhoto: number; humanInThePicture: number;
   noPackageDetected: number; packageInCar: number; packageInHand: number;
   packageNotClearlyVisible: number; packageTooClose: number; photoTooDark: number; other: number;

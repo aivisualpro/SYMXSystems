@@ -88,8 +88,7 @@ const normalizePodHeader = (header: string) => {
 };
 
 const podHeaderMap: Record<string, string> = {
-    "First": "firstName",
-    "Last": "lastName",
+    "Transporter Id": "transporterId",
     "Transporter ID": "transporterId",
     "Opportunities": "opportunities",
     "Success": "success",
@@ -400,10 +399,10 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Week is required for POD import" }, { status: 400 });
         }
 
-        // 1. Gather Transporter IDs
+        // 1. Gather Transporter IDs (support both "Transporter Id" and "Transporter ID")
         const transporterIds = data
-            .map((row: any) => row["Transporter ID"])
-            .filter((id: any) => id);
+            .map((row: any) => (row["Transporter Id"] || row["Transporter ID"] || "").toString().trim())
+            .filter((id: string) => id);
 
         // 2. Fetch Employees
         const employees = await SymxEmployee.find(
@@ -415,7 +414,7 @@ export async function POST(req: NextRequest) {
 
         // 3. Process Rows
         const operations = data.map((row: any) => {
-            const transporterId = row["Transporter ID"];
+            const transporterId = (row["Transporter Id"] || row["Transporter ID"] || "").toString().trim();
             
             if (!transporterId) return null;
 
@@ -431,7 +430,7 @@ export async function POST(req: NextRequest) {
                 const schemaKey = podHeaderMap[normalizedHeader];
 
                 if (schemaKey) {
-                    if (schemaKey === 'firstName' || schemaKey === 'lastName' || schemaKey === 'transporterId') {
+                    if (schemaKey === 'transporterId') {
                         if (value !== undefined && value !== null) processedData[schemaKey] = value.toString().trim();
                     } else {
                         // Numeric stats

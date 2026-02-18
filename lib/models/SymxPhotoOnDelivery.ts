@@ -6,9 +6,6 @@ export interface ISymxPhotoOnDelivery extends Document {
   transporterId: string;
   employeeId?: mongoose.Types.ObjectId; // Reference to SymxEmployee
   
-  firstName?: string;
-  lastName?: string;
-  
   opportunities?: number;
   success?: number;
   bypass?: number;
@@ -29,9 +26,6 @@ const SymxPhotoOnDeliverySchema: Schema = new Schema({
   week: { type: String, required: true },
   transporterId: { type: String, required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'SymxEmployee' },
-
-  firstName: { type: String },
-  lastName: { type: String },
 
   opportunities: { type: Number, default: 0 },
   success: { type: Number, default: 0 },
