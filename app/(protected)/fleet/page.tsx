@@ -471,17 +471,10 @@ export default function FleetDashboard() {
           <SectionHeader title="Vehicle Slots" icon={IconParking} count={data.slots.length} onAdd={() => openCreateModal("slot")} />
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2">
             {data.slots.map((s: any) => (
-              <div key={s._id} onClick={() => openEditModal("slot", s)} className={`relative cursor-pointer p-3 rounded-xl border transition-all duration-200 hover:scale-[1.02] hover:shadow-md ${
-                s.status === "Active" ? "border-emerald-500/30 bg-emerald-500/[0.06]" :
-                s.status === "Maintenance" ? "border-amber-500/30 bg-amber-500/[0.06]" :
-                s.status === "Inactive" ? "border-red-500/30 bg-red-500/[0.06]" :
-                "border-border bg-muted/30"
-              }`}>
+              <div key={s._id} onClick={() => openEditModal("slot", s)} className="relative cursor-pointer p-3 rounded-xl border border-border bg-muted/30 transition-all duration-200 hover:scale-[1.02] hover:shadow-md hover:border-primary/30">
                 <div className="text-center">
                   <p className="text-lg font-bold text-foreground">{s.vehicleSlotNumber}</p>
-                  <StatusBadge status={s.status} />
                   <p className="text-[10px] text-muted-foreground mt-1 truncate">{s.location || "No location"}</p>
-                  {s.currentVIN && <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{s.currentVIN.slice(-6)}</p>}
                 </div>
               </div>
             ))}
@@ -652,11 +645,7 @@ export default function FleetDashboard() {
         </>)}
 
         {modalType === "slot" && (<>
-          <FormField label="Location"><input className={inputClass} value={formData.location || ""} onChange={e => updateForm("location", e.target.value)} placeholder="Lot A, Bay 1" /></FormField>
-          <FormField label="Status"><select className={selectClass} value={formData.status || "Empty"} onChange={e => updateForm("status", e.target.value)}>
-            {["Active","Inactive","Maintenance","Empty"].map(s => <option key={s} value={s}>{s}</option>)}
-          </select></FormField>
-          <FormField label="Current VIN"><input className={inputClass} value={formData.currentVIN || ""} onChange={e => updateForm("currentVIN", e.target.value)} /></FormField>
+          <FormField label="Location"><input className={inputClass} value={formData.location || ""} onChange={e => updateForm("location", e.target.value)} placeholder="e.g. DFO2, Lot A Bay 1" /></FormField>
         </>)}
 
         {modalType === "repair" && (<>

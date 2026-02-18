@@ -46,7 +46,9 @@ export async function GET(req: NextRequest) {
       const groundedVehicles = vehicles.filter((v: any) => v.status === "Grounded").length;
       const inactiveVehicles = vehicles.filter((v: any) => v.status === "Inactive").length;
       const totalSlots = slots.length;
-      const emptySlots = slots.filter((s: any) => s.status === "Empty").length;
+      // Empty slots = slots whose vehicleSlotNumber is NOT assigned to any vehicle
+      const assignedSlotNumbers = new Set(vehicles.map((v: any) => v.vehicleSlotNumber).filter(Boolean));
+      const emptySlots = slots.filter((s: any) => !assignedSlotNumbers.has(s.vehicleSlotNumber)).length;
       const utilizationRate = totalSlots > 0 ? ((totalSlots - emptySlots) / totalSlots * 100).toFixed(1) : "0";
 
       // Status breakdown for donut chart
