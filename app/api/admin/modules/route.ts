@@ -10,15 +10,24 @@ const DEFAULT_MODULES = [
   { name: "Owner", url: "/owner", icon: "IconCrown", order: 1, subModules: [
     { name: "App Users", url: "/owner/app-users" },
   ]},
-  { name: "Scheduling", url: "/scheduling", icon: "IconCalendarTime", order: 2, subModules: [
+  { name: "Fleet", url: "/fleet", icon: "IconCar", order: 2, subModules: [
+    { name: "Dashboard", url: "/fleet" },
+    { name: "Vehicles", url: "/fleet/vehicles" },
+    { name: "Vehicle Slots", url: "/fleet/slots" },
+    { name: "Repairs", url: "/fleet/repairs" },
+    { name: "Inspections", url: "/fleet/inspections" },
+    { name: "Rental Agreements", url: "/fleet/rentals" },
+    { name: "Activity Logs", url: "/fleet/activity" },
+  ]},
+  { name: "Scheduling", url: "/scheduling", icon: "IconCalendarTime", order: 3, subModules: [
     { name: "Schedule", url: "#" }, { name: "Confirm Schedules", url: "#" },
     { name: "Work Hour Compliance", url: "#" }, { name: "Capacity Planning", url: "#" },
     { name: "Availability", url: "#" }, { name: "Schedule Check", url: "#" },
   ]},
-  { name: "HR", url: "/hr", icon: "IconUsersGroup", order: 3, subModules: [
+  { name: "HR", url: "/hr", icon: "IconUsersGroup", order: 4, subModules: [
     { name: "Employees", url: "/hr/employees" }
   ]},
-  { name: "Scorecard", url: "/scorecard", icon: "IconTarget", order: 4, subModules: [] },
+  { name: "Scorecard", url: "/scorecard", icon: "IconTarget", order: 5, subModules: [] },
 ];
 
 // GET: Fetch all modules (ordered) — auto-seeds on first request
@@ -141,10 +150,25 @@ export async function POST(req: NextRequest) {
         ],
       },
       {
+        name: "Fleet",
+        url: "/fleet",
+        icon: "IconCar",
+        order: 2,
+        subModules: [
+          { name: "Dashboard", url: "/fleet" },
+          { name: "Vehicles", url: "/fleet/vehicles" },
+          { name: "Vehicle Slots", url: "/fleet/slots" },
+          { name: "Repairs", url: "/fleet/repairs" },
+          { name: "Inspections", url: "/fleet/inspections" },
+          { name: "Rental Agreements", url: "/fleet/rentals" },
+          { name: "Activity Logs", url: "/fleet/activity" },
+        ],
+      },
+      {
         name: "Scheduling",
         url: "/scheduling",
         icon: "IconCalendarTime",
-        order: 2,
+        order: 3,
         subModules: [
           { name: "Schedule", url: "#" },
           { name: "Confirm Schedules", url: "#" },
@@ -158,7 +182,7 @@ export async function POST(req: NextRequest) {
         name: "HR",
         url: "/hr",
         icon: "IconUsersGroup",
-        order: 3,
+        order: 4,
         subModules: [
           { name: "Employees", url: "/hr/employees" }
         ],
@@ -167,7 +191,7 @@ export async function POST(req: NextRequest) {
         name: "Scorecard",
         url: "/scorecard",
         icon: "IconTarget",
-        order: 4,
+        order: 5,
         subModules: [],
       },
     ];

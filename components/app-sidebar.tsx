@@ -110,6 +110,20 @@ const data = {
       ]
     },
     {
+      name: "Fleet",
+      url: "/fleet",
+      icon: IconCar,
+      subModules: [
+        { name: "Dashboard", url: "/fleet" },
+        { name: "Vehicles", url: "/fleet/vehicles" },
+        { name: "Vehicle Slots", url: "/fleet/slots" },
+        { name: "Repairs", url: "/fleet/repairs" },
+        { name: "Inspections", url: "/fleet/inspections" },
+        { name: "Rental Agreements", url: "/fleet/rentals" },
+        { name: "Activity Logs", url: "/fleet/activity" },
+      ]
+    },
+    {
       name: "Scheduling",
       url: "/scheduling",
       icon: IconCalendarTime,
