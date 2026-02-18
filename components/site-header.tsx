@@ -43,6 +43,14 @@ export function SiteHeader() {
     if (path === "/dashboard") return "Dashboard";
     if (path.includes("andres-tracker")) return "Andres Tracker";
     
+    // Fleet sub-routes: show "Fleet - SubPage"
+    if (path.startsWith("/fleet")) {
+      const fleetSegments = path.replace("/fleet", "").split("/").filter(Boolean);
+      const subPage = fleetSegments[0] || "overview";
+      const formatted = subPage.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      return `Fleet - ${formatted}`;
+    }
+
     const segments = path.split("/").filter(Boolean);
     const lastSegment = segments[segments.length - 1];
     if (!lastSegment) return "Dashboard";
