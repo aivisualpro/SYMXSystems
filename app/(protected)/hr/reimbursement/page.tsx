@@ -175,14 +175,9 @@ export default function ReimbursementPage() {
       accessorKey: "employeeName",
       header: "Employee",
       cell: ({ row }) => (
-        <div className="flex flex-col">
-          <span className="font-medium text-sm">
-            {row.original.employeeName || "—"}
-          </span>
-          <span className="text-[10px] text-muted-foreground font-mono">
-            {row.original.transporterId}
-          </span>
-        </div>
+        <span className="font-medium text-sm">
+          {row.original.employeeName || "—"}
+        </span>
       ),
     },
     {
@@ -191,7 +186,7 @@ export default function ReimbursementPage() {
       cell: ({ row }) => {
         if (!row.original.date) return "—";
         const d = new Date(row.original.date);
-        return <span className="text-xs">{d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>;
+        return <span className="text-xs">{d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}</span>;
       },
     },
     {
@@ -221,13 +216,7 @@ export default function ReimbursementPage() {
         </span>
       ),
     },
-    {
-      accessorKey: "receiptNumber",
-      header: "Receipt #",
-      cell: ({ row }) => (
-        <span className="font-mono text-xs">{row.original.receiptNumber || "—"}</span>
-      ),
-    },
+
     {
       accessorKey: "status",
       header: "Status",
@@ -249,7 +238,7 @@ export default function ReimbursementPage() {
     },
     {
       accessorKey: "notes",
-      header: "Notes",
+      header: "Reason",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground max-w-[150px] truncate block">
           {row.original.notes || "—"}

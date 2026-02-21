@@ -598,7 +598,7 @@ export default function SchedulingPage() {
           </div>
         ) : (
           <div className="rounded-xl border border-border/50 overflow-hidden bg-card">
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[calc(100vh-320px)]">
               <table className="w-full text-sm">
                 {/* Table Header with Dates */}
                 <thead className="sticky top-0 z-20">
