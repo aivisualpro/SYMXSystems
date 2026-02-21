@@ -1,0 +1,212 @@
+"use client";
+
+import { useState, useRef } from "react";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Upload,
+  FileSpreadsheet,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  CalendarDays,
+} from "lucide-react";
+import { toast } from "sonner";
+import Papa from "papaparse";
+
+interface ImportResult {
+  success: boolean;
+  count: number;
+  inserted: number;
+  updated: number;
+  matched?: number;
+}
+
+const importTypes = [
+  {
+    id: "employee-schedules",
+    name: "Employee Schedules",
+    description: "Import weekly employee schedule data from CSV. Fields: Week Day, Year Week, Transporter ID, Date, Status, Type, Sub Type, Training Day, Start Time, Confirmations, Van, Note.",
+    icon: CalendarDays,
+    color: "from-blue-500 to-cyan-500",
+    bgColor: "bg-blue-500/10",
+    borderColor: "border-blue-500/20",
+  },
+];
+
+export default function ImportsSettingsPage() {
+  const [isImporting, setIsImporting] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<Record<string, ImportResult | null>>({});
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [activeImportType, setActiveImportType] = useState<string | null>(null);
+
+  const handleImportClick = (typeId: string) => {
+    setActiveImportType(typeId);
+    fileRef.current?.click();
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeImportType) return;
+    e.target.value = "";
+
+    setIsImporting(activeImportType);
+    setLastResult((prev) => ({ ...prev, [activeImportType]: null }));
+
+    try {
+      // Parse CSV
+      const parsed = await new Promise<any[]>((resolve, reject) => {
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => resolve(results.data),
+          error: (err) => reject(err),
+        });
+      });
+
+      if (parsed.length === 0) {
+        toast.error("CSV file is empty or has no valid rows");
+        setIsImporting(null);
+        return;
+      }
+
+      // Send to API
+      const res = await fetch("/api/admin/imports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: activeImportType,
+          data: parsed,
+        }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || "Import failed");
+      }
+
+      setLastResult((prev) => ({ ...prev, [activeImportType]: result }));
+      toast.success(
+        `Imported ${result.count} records (${result.inserted} new, ${result.updated} updated)`
+      );
+    } catch (err: any) {
+      toast.error(err.message || "Import failed");
+      setLastResult((prev) => ({
+        ...prev,
+        [activeImportType]: { success: false, count: 0, inserted: 0, updated: 0 },
+      }));
+    } finally {
+      setIsImporting(null);
+      setActiveImportType(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-medium">Imports</h3>
+        <p className="text-sm text-muted-foreground">
+          Import data from CSV files into the system.
+        </p>
+      </div>
+      <Separator />
+
+      {/* Hidden File Input */}
+      <input
+        type="file"
+        ref={fileRef}
+        className="hidden"
+        accept=".csv"
+        onChange={handleFileSelect}
+      />
+
+      <div className="grid gap-4">
+        {importTypes.map((importType) => {
+          const isActive = isImporting === importType.id;
+          const result = lastResult[importType.id];
+
+          return (
+            <div
+              key={importType.id}
+              className={`relative overflow-hidden rounded-xl border ${importType.borderColor} bg-card p-6 transition-all hover:shadow-md`}
+            >
+              {/* Gradient accent */}
+              <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${importType.color}`} />
+
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${importType.bgColor}`}>
+                    <importType.icon className="h-6 w-6 text-blue-500" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-base font-semibold">{importType.name}</h4>
+                    <p className="text-sm text-muted-foreground max-w-lg">
+                      {importType.description}
+                    </p>
+                    {result && (
+                      <div className="flex items-center gap-2 mt-2">
+                        {result.success !== false ? (
+                          <>
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            <span className="text-xs text-emerald-500 font-medium">
+                              {result.count} records processed ({result.inserted} new, {result.updated} updated)
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="h-4 w-4 text-red-500" />
+                            <span className="text-xs text-red-500 font-medium">Import failed</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleImportClick(importType.id)}
+                  disabled={isActive}
+                  className="shrink-0 gap-2"
+                >
+                  {isActive ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      Import CSV
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Expected CSV schema preview */}
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {[
+                  "Week Day", "Year Week", "Transporter ID", "Date", "Status",
+                  "Type", "Sub Type", "Training Day", "Start Time",
+                  "Day Before Confirmation", "Day Of Confirmation",
+                  "Week Confirmation", "Van", "Note",
+                ].map((field) => (
+                  <Badge
+                    key={field}
+                    variant="secondary"
+                    className="text-[10px] font-mono bg-muted/50 text-muted-foreground"
+                  >
+                    {field}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

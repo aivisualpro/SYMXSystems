@@ -12,6 +12,7 @@ import ScoreCardQualityDSBDNR from "@/lib/models/ScoreCardQualityDSBDNR";
 import ScoreCardDCR from "@/lib/models/ScoreCardDCR";
 import ScoreCardCDFNegative from "@/lib/models/ScoreCardCDFNegative";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
+import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import { getISOWeek, getISOWeekYear, parseISO } from "date-fns";
 
 // Helper to sanitize keys (remove whitespace, special chars if needed) - not strictly needed if we map manually
@@ -216,6 +217,49 @@ function dateToISOWeek(dateStr: string): string | null {
     return null;
   }
 }
+
+/**
+ * Convert a date to yearWeek format "yyyy-Wxx" where Sunday is the first day of the week.
+ * Week 1 starts with the first Sunday of the year (or Jan 1 if it is a Sunday).
+ */
+function dateToSundayWeek(dateStr: string): string | null {
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return null;
+    // Find the Sunday that starts this week (Sunday=0)
+    const dayOfWeek = date.getUTCDay(); // 0=Sun,1=Mon...6=Sat
+    const sundayOfThisWeek = new Date(date);
+    sundayOfThisWeek.setUTCDate(date.getUTCDate() - dayOfWeek);
+    // Compute the year of that Sunday
+    const year = sundayOfThisWeek.getUTCFullYear();
+    // The first day of that year
+    const jan1 = new Date(Date.UTC(year, 0, 1));
+    // Day of year for that Sunday (0-indexed)
+    const dayOfYear = Math.floor((sundayOfThisWeek.getTime() - jan1.getTime()) / 86400000);
+    const weekNum = Math.floor(dayOfYear / 7) + 1;
+    return `${year}-W${weekNum.toString().padStart(2, '0')}`;
+  } catch {
+    return null;
+  }
+}
+
+const employeeScheduleHeaderMap: Record<string, string> = {
+  "Week Day": "weekDay",
+  "Year Week": "yearWeek",
+  "Transporter ID": "transporterId",
+  " Transporter ID": "transporterId",
+  "Date": "date",
+  "Status": "status",
+  "Type": "type",
+  "Sub Type": "subType",
+  "Training Day": "trainingDay",
+  "Start Time": "startTime",
+  "Day Before Confirmation": "dayBeforeConfirmation",
+  "Day Of Confirmation": "dayOfConfirmation",
+  "Week Confirmation": "weekConfirmation",
+  "Van": "van",
+  "Note": "note",
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -867,6 +911,85 @@ export async function POST(req: NextRequest) {
 
         if (operations.length > 0) {
             const result = await ScoreCardCDFNegative.bulkWrite(operations);
+            return NextResponse.json({
+                success: true,
+                count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                inserted: result.upsertedCount || 0,
+                updated: result.modifiedCount || 0,
+                matched: result.matchedCount
+            });
+        }
+
+        return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+    }
+
+    // ── Employee Schedules Import ──
+    else if (type === "employee-schedules") {
+        // 1. Gather Transporter IDs
+        const transporterIds = data
+            .map((row: any) => (row["Transporter ID"] || row[" Transporter ID"] || "").toString().trim())
+            .filter((id: string) => id);
+
+        // 2. Fetch matching Employees
+        const employees = await SymxEmployee.find(
+            { transporterId: { $in: transporterIds } },
+            { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }
+        ).lean();
+        const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
+
+        // 3. Process Rows
+        const operations = data.map((row: any) => {
+            const processedData: any = {};
+
+            // Map headers
+            Object.entries(row).forEach(([header, value]) => {
+                const normalizedHeader = header.trim();
+                const schemaKey = employeeScheduleHeaderMap[normalizedHeader] || employeeScheduleHeaderMap[header];
+                if (schemaKey && value !== undefined && value !== null && value !== "") {
+                    processedData[schemaKey] = value.toString().trim();
+                }
+            });
+
+            const transporterId = processedData.transporterId;
+            if (!transporterId) return null;
+
+            // Parse the date field
+            let dateVal: Date | null = null;
+            if (processedData.date) {
+                const parsed = new Date(processedData.date);
+                if (!isNaN(parsed.getTime())) {
+                    const dateStr = parsed.toISOString().split('T')[0];
+                    dateVal = new Date(`${dateStr}T00:00:00.000Z`);
+                    processedData.date = dateVal;
+                }
+            }
+            if (!dateVal) return null;
+
+            // Compute yearWeek from date (Sunday first day)
+            const computedWeek = dateToSundayWeek(dateVal.toISOString());
+            if (computedWeek) {
+                processedData.yearWeek = computedWeek;
+            }
+
+            // Link Employee
+            if (employeeMap.has(transporterId)) {
+                processedData.employeeId = employeeMap.get(transporterId);
+            }
+
+            return {
+                updateOne: {
+                    filter: {
+                        transporterId: processedData.transporterId,
+                        date: processedData.date,
+                    },
+                    update: { $set: processedData },
+                    upsert: true
+                }
+            };
+        }).filter((op: any): op is NonNullable<typeof op> => op !== null);
+
+        if (operations.length > 0) {
+            const result = await SymxEmployeeSchedule.bulkWrite(operations);
             return NextResponse.json({
                 success: true,
                 count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
