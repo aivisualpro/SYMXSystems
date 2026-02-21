@@ -151,16 +151,16 @@ function computePlanningData(employees: EmployeeSchedule[]): PlanningRow[] {
     for (let d = 0; d < 7; d++) {
       const day = emp.days[d];
       if (!day) continue;
-      const status = (day.status || "").trim();
-      const type = (day.type || "").trim().toLowerCase();
+      const typeVal = (day.type || "").trim().toLowerCase();
+      const empType = (emp.employee?.type || "").trim().toLowerCase();
 
-      if (status !== "OFF" && status !== "" && status !== "Close" && status !== "Request Off") {
+      if (typeVal && typeVal !== "off" && typeVal !== "close" && typeVal !== "request off") {
         daStats[d]++;
       }
-      if (status === "Stand By") standBy[d]++;
-      if (status === "Route") routesAssigned[d]++;
-      if (type === "ops" || type === "operations") ops[d]++;
-      if (type === "extra" || status === "Open") extraDAs[d]++;
+      if (typeVal === "stand by") standBy[d]++;
+      if (typeVal === "route") routesAssigned[d]++;
+      if (empType === "ops" || empType === "operations") ops[d]++;
+      if (typeVal === "open") extraDAs[d]++;
     }
   });
 
@@ -192,8 +192,8 @@ function countWorkingDays(emp: EmployeeSchedule): number {
   for (let d = 0; d < 7; d++) {
     const day = emp.days[d];
     if (day) {
-      const status = (day.status || "").trim();
-      if (status !== "OFF" && status !== "" && status !== "Close" && status !== "Request Off") {
+      const typeVal = (day.type || "").trim().toLowerCase();
+      if (typeVal && typeVal !== "off" && typeVal !== "close" && typeVal !== "request off") {
         count++;
       }
     }
@@ -435,7 +435,9 @@ export default function SchedulingPage() {
 
   // Date format helpers
   const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr + "T00:00:00Z");
+    const cleaned = dateStr.split("T")[0]; // strip time if present
+    const d = new Date(cleaned + "T00:00:00Z");
+    if (isNaN(d.getTime())) return "";
     return `${(d.getUTCMonth() + 1).toString().padStart(2, "0")}/${d.getUTCDate().toString().padStart(2, "0")}`;
   };
 
@@ -451,10 +453,13 @@ export default function SchedulingPage() {
     (sum, emp) => sum + Object.keys(emp.days).length, 0
   ) || 0;
   const totalRoutes = weekData?.employees?.reduce((sum, emp) => {
-    return sum + Object.values(emp.days).filter((d: DayData) => d.status === "Route").length;
+    return sum + Object.values(emp.days).filter((d: DayData) => (d.type || "").trim().toLowerCase() === "route").length;
   }, 0) || 0;
   const totalOff = weekData?.employees?.reduce((sum, emp) => {
-    return sum + Object.values(emp.days).filter((d: DayData) => d.status === "OFF" || !d.status).length;
+    return sum + Object.values(emp.days).filter((d: DayData) => {
+      const t = (d.type || "").trim().toLowerCase();
+      return t === "off" || t === "";
+    }).length;
   }, 0) || 0;
 
   if (loading) {
@@ -596,9 +601,9 @@ export default function SchedulingPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 {/* Table Header with Dates */}
-                <thead>
-                  <tr className="bg-muted/30 border-b border-border/50">
-                    <th className="text-left font-semibold px-3 py-2.5 min-w-[180px] sticky left-0 bg-muted/30 z-10 backdrop-blur-sm">
+                <thead className="sticky top-0 z-20">
+                  <tr className="bg-muted border-b border-border/50">
+                    <th className="text-left font-semibold px-3 py-2.5 min-w-[180px] sticky left-0 bg-muted z-30 backdrop-blur-sm">
                       Employee Name
                     </th>
                     {weekData?.dates?.map((date, i) => (
