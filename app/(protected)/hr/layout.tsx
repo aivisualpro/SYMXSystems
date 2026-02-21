@@ -73,21 +73,23 @@ export default function HRLayout({ children }: { children: ReactNode }) {
     <div className="space-y-4 max-w-[1600px] mx-auto">
       {/* ── Tab Navigation ─────────────────────────────────────── */}
       {!isDetailPage && (
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => router.push(tab.href)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 ${
-                activeTab === tab.id
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              <tab.icon size={14} />
-              {tab.label}
-            </button>
-          ))}
+        <div className="sticky top-0 z-20 -mx-[16px] px-[16px] pt-0 pb-2 bg-background/80 backdrop-blur-md">
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => router.push(tab.href)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+                  activeTab === tab.id
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                <tab.icon size={14} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
