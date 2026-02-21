@@ -137,11 +137,22 @@ const data = {
       ],
     },
     {
-      name: "HR",
+      name: "Employees",
       url: "/hr",
       icon: IconUsersGroup,
       subModules: [
-        { name: "Employees", url: "/hr/employees" }
+        { name: "Dashboard", url: "/hr" },
+        { name: "Employees", url: "/hr/employees" },
+        { name: "Reimbursement", url: "/hr/reimbursement" },
+        { name: "Claims Dashboard", url: "/hr/claims" },
+        { name: "Employee Audit", url: "/hr/audit" },
+        { name: "HR Tickets", url: "/hr/tickets" },
+        { name: "Timesheet", url: "/hr/timesheet" },
+        { name: "Interviews", url: "/hr/interviews" },
+        { name: "Onboarding", url: "/hr/onboarding" },
+        { name: "Hired", url: "/hr/hired" },
+        { name: "Uniforms", url: "/hr/uniforms" },
+        { name: "Terminations", url: "/hr/terminations" },
       ]
     },
     {

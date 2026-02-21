@@ -1,307 +1,326 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import Image from "next/image";
-import { 
-  Pencil, 
-  Upload,
+import {
+  Users,
+  UserCheck,
+  UserX,
+  UserPlus,
+  TrendingUp,
+  TrendingDown,
+  Clock,
+  CalendarDays,
+  AlertTriangle,
+  ShieldCheck,
+  Activity,
+  Briefcase,
   Loader2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
+import { ISymxEmployee } from "@/lib/models/SymxEmployee";
 
-const DEFAULT_DARK_IMAGE = "/images/dark-default.png";
-const DEFAULT_LIGHT_IMAGE = "/images/light-default.png";
+// ── KPI Card ──
+function KPICard({
+  label, value, subtitle, icon: Icon, trend, trendLabel, accentFrom, accentTo,
+}: {
+  label: string; value: string | number; subtitle?: string;
+  icon: any; trend?: "up" | "down" | "neutral"; trendLabel?: string;
+  accentFrom: string; accentTo: string;
+}) {
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-5 transition-all hover:shadow-lg hover:border-border">
+      <div className={cn("absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b", accentFrom, accentTo)} />
+      <div className="flex items-start justify-between">
+        <div className="space-y-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">{label}</p>
+          <p className="text-3xl font-black tracking-tight text-foreground">{value}</p>
+          {subtitle && <p className="text-[11px] text-muted-foreground font-medium">{subtitle}</p>}
+        </div>
+        <div className="p-2.5 rounded-xl bg-muted/40 group-hover:bg-muted transition-colors">
+          <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+        </div>
+      </div>
+      {trend && trendLabel && (
+        <div className="flex items-center gap-1 mt-3">
+          {trend === "up" ? (
+            <TrendingUp className="h-3 w-3 text-emerald-500" />
+          ) : trend === "down" ? (
+            <TrendingDown className="h-3 w-3 text-red-500" />
+          ) : null}
+          <span className={cn("text-[10px] font-bold", 
+            trend === "up" ? "text-emerald-500" : trend === "down" ? "text-red-500" : "text-muted-foreground"
+          )}>
+            {trendLabel}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
-const initialHRCards = [
-  { name: "Employees", bgDark: DEFAULT_DARK_IMAGE, bgLight: DEFAULT_LIGHT_IMAGE, route: "/hr/employees" }
-];
+// ── Status Breakdown Row ──
+function StatusRow({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
+  const pct = total > 0 ? (count / total) * 100 : 0;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-foreground">{label}</span>
+        <span className="text-xs font-bold text-muted-foreground">{count} <span className="text-[10px] font-normal">({pct.toFixed(0)}%)</span></span>
+      </div>
+      <div className="h-1.5 w-full bg-muted/50 rounded-full overflow-hidden">
+        <div className={cn("h-full rounded-full transition-all duration-700 ease-out", color)} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
 
-export default function HRPage() {
-  const router = useRouter();
-  const [cards, setCards] = useState(initialHRCards);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  
+// ── Type Breakdown Chip ──
+function TypeChip({ label, count, color }: { label: string; count: number; color: string }) {
+  return (
+    <div className={cn("flex items-center gap-2 px-3 py-2 rounded-xl border bg-card")}>
+      <div className={cn("h-2.5 w-2.5 rounded-full", color)} />
+      <span className="text-xs font-semibold text-foreground">{label}</span>
+      <span className="text-xs font-black text-muted-foreground ml-auto">{count}</span>
+    </div>
+  );
+}
+
+export default function EmployeesDashboardPage() {
+  const [employees, setEmployees] = useState<ISymxEmployee[]>([]);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    fetch("/api/card-config?page=hr")
-      .then(res => res.json())
-      .then(data => {
-        if (data.cards?.length) {
-          setCards(prev => prev.map((card, i) => {
-            const saved = data.cards.find((c: any) => c.index === i);
-            if (!saved) return card;
-            return {
-              ...card,
-              name: saved.name || card.name,
-              bgDark: saved.bgDark || card.bgDark,
-              bgLight: saved.bgLight || card.bgLight,
-            };
-          }));
+    const fetchData = async () => {
+      try {
+        const res = await fetch("/api/admin/employees");
+        if (res.ok) {
+          const data = await res.json();
+          setEmployees(data);
         }
-      })
-      .catch(() => {});
-
-    fetch("/api/user/permissions")
-      .then(res => res.json())
-      .then(data => {
-        if (data.role === "Super Admin") {
-          setIsSuperAdmin(true);
-        }
-      })
-      .catch(() => {});
+      } catch (err) {
+        console.error("Failed to fetch employees:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
-  // Edit State
-  const [editIndex, setEditIndex] = useState<number | null>(null);
-  const [newName, setNewName] = useState("");
-  const [newDarkImage, setNewDarkImage] = useState<string | null>(null);
-  const [newLightImage, setNewLightImage] = useState<string | null>(null);
-  const [darkPreview, setDarkPreview] = useState<string | null>(null);
-  const [lightPreview, setLightPreview] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const darkFileRef = useRef<HTMLInputElement>(null);
-  const lightFileRef = useRef<HTMLInputElement>(null);
+  // ── Computed Stats ──
+  const stats = useMemo(() => {
+    const total = employees.length;
+    const active = employees.filter(e => e.status === "Active").length;
+    const terminated = employees.filter(e => e.status === "Terminated").length;
+    const resigned = employees.filter(e => e.status === "Resigned" || e.resignationDate).length;
+    const inactive = employees.filter(e => e.status === "Inactive").length;
 
-  const startEdit = (index: number) => {
-    setEditIndex(index);
-    setNewName(cards[index].name);
-    setNewDarkImage(null);
-    setNewLightImage(null);
-    setDarkPreview(cards[index].bgDark);
-    setLightPreview(cards[index].bgLight);
-  };
+    // Type breakdown
+    const typeMap: Record<string, number> = {};
+    employees.forEach(e => {
+      const t = e.type || "Unassigned";
+      typeMap[t] = (typeMap[t] || 0) + 1;
+    });
 
-  const uploadToCloudinary = async (file: File): Promise<string | null> => {
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const res = await fetch("/api/admin/upload", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Upload failed");
-      const data = await res.json();
-      return data.secure_url || data.url || null;
-    } catch {
-      return null;
-    }
-  };
+    // Recent hires (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentHires = employees.filter(e => {
+      if (!e.hiredDate) return false;
+      return new Date(e.hiredDate) >= thirtyDaysAgo;
+    }).length;
 
-  const handleDarkFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setNewDarkImage(file as any);
-    const reader = new FileReader();
-    reader.onload = (ev) => setDarkPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
+    // Expiring documents (DL within 30 days)
+    const expiringDL = employees.filter(e => {
+      if (!e.dlExpiration || e.status !== "Active") return false;
+      const exp = new Date(e.dlExpiration);
+      const now = new Date();
+      const thirtyDays = new Date();
+      thirtyDays.setDate(thirtyDays.getDate() + 30);
+      return exp >= now && exp <= thirtyDays;
+    }).length;
 
-  const handleLightFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setNewLightImage(file as any);
-    const reader = new FileReader();
-    reader.onload = (ev) => setLightPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
+    // Missing documents
+    const missingDocs = employees.filter(e => {
+      if (e.status !== "Active") return false;
+      return !e.offerLetterFile || !e.driversLicenseFile || !e.i9File;
+    }).length;
 
-  const saveCard = async () => {
-    if (editIndex === null) return;
-    setIsSaving(true);
+    // Hourly status breakdown
+    const hourlyMap: Record<string, number> = {};
+    employees.filter(e => e.status === "Active").forEach(e => {
+      const h = e.hourlyStatus || "Unspecified";
+      hourlyMap[h] = (hourlyMap[h] || 0) + 1;
+    });
 
-    try {
-      let darkUrl = cards[editIndex].bgDark;
-      let lightUrl = cards[editIndex].bgLight;
+    return {
+      total, active, terminated, resigned, inactive,
+      typeMap, recentHires, expiringDL, missingDocs, hourlyMap,
+    };
+  }, [employees]);
 
-      if (newDarkImage) {
-        const uploaded = await uploadToCloudinary(newDarkImage as any);
-        if (uploaded) darkUrl = uploaded;
-        else { toast.error("Failed to upload dark mode image"); setIsSaving(false); return; }
-      }
-      if (newLightImage) {
-        const uploaded = await uploadToCloudinary(newLightImage as any);
-        if (uploaded) lightUrl = uploaded;
-        else { toast.error("Failed to upload light mode image"); setIsSaving(false); return; }
-      }
+  const typeColors = [
+    "bg-blue-500", "bg-emerald-500", "bg-purple-500", "bg-amber-500",
+    "bg-rose-500", "bg-cyan-500", "bg-indigo-500", "bg-teal-500",
+  ];
 
-      const updatedCards = [...cards];
-      updatedCards[editIndex] = { ...updatedCards[editIndex], name: newName, bgDark: darkUrl, bgLight: lightUrl };
-      setCards(updatedCards);
-
-      const cardData = updatedCards.map((c, i) => ({
-        index: i,
-        name: c.name,
-        bgDark: c.bgDark === DEFAULT_DARK_IMAGE ? undefined : c.bgDark,
-        bgLight: c.bgLight === DEFAULT_LIGHT_IMAGE ? undefined : c.bgLight,
-      }));
-
-      const res = await fetch("/api/card-config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ page: "hr", cards: cardData }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error(err.error || "Failed to save");
-        setIsSaving(false);
-        return;
-      }
-
-      setEditIndex(null);
-      toast.success("Card updated successfully");
-    } catch {
-      toast.error("Failed to save card settings");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground animate-pulse">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      {/* Hidden File Inputs */}
-      <input type="file" ref={darkFileRef} className="hidden" accept="image/*" onChange={handleDarkFileSelect} />
-      <input type="file" ref={lightFileRef} className="hidden" accept="image/*" onChange={handleLightFileSelect} />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {cards.map((card, index) => (
-          <div 
-            key={index}
-            className={cn(
-              "group relative overflow-hidden rounded-xl border bg-card text-card-foreground shadow transition-all hover:shadow-lg h-[200px]",
-              card.route && card.route !== "#" && "cursor-pointer"
-            )}
-            onClick={() => card.route && card.route !== "#" && router.push(card.route)}
-          >
-            {/* Background Image with Overlay */}
-            <div className="absolute inset-0 z-0">
-               {/* Dark Mode Image */}
-               <Image 
-                 src={card.bgDark} 
-                 alt={card.name} 
-                 fill 
-                 className="object-cover transition-transform duration-500 group-hover:scale-105 opacity-80 dark:opacity-60 hidden dark:block"
-               />
-               {/* Light Mode Image */}
-               <Image 
-                 src={card.bgLight} 
-                 alt={card.name} 
-                 fill 
-                 className="object-cover transition-transform duration-500 group-hover:scale-105 opacity-80 dark:opacity-60 block dark:hidden"
-               />
-               
-               <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-white/40 to-transparent dark:from-black/90 dark:via-black/40 dark:to-transparent" />
-            </div>
-
-            {/* Content */}
-            <div className="relative z-10 flex flex-col justify-between h-full p-5">
-                            {/* Top Actions */}
-               <div className="flex items-start justify-end">
-                  {/* Edit Button (Visible on Hover, Super Admin only) */}
-                  {isSuperAdmin && (
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                     <Button 
-                         size="icon" 
-                         variant="secondary" 
-                         className="h-8 w-8 rounded-full bg-background/40 hover:bg-background/60 backdrop-blur-sm border-0 text-foreground" 
-                         title="Edit Card"
-                         onClick={(e) => { e.stopPropagation(); startEdit(index); }}
-                     >
-                        <Pencil className="h-3.5 w-3.5" />
-                     </Button>
-                  </div>
-                  )}
-               </div>
-
-               {/* Bottom Info — Glass Effect */}
-               <div className="bg-white/15 dark:bg-black/20 backdrop-blur-md rounded-lg px-4 py-3 border border-white/25 dark:border-white/10 shadow-sm">
-                  <h3 style={{ fontFamily: "'Lovelo', sans-serif" }} className="text-2xl uppercase tracking-wide drop-shadow-md text-zinc-900 dark:text-white group-hover:text-primary transition-colors duration-300">
-                     {card.name}
-                  </h3>
-               </div>
-               {(!card.route || card.route === "#") && (
-                  <Badge variant="secondary" className="bg-primary/15 text-primary border-primary/30 backdrop-blur-md hover:bg-primary/25 mt-2">
-                     Coming Soon
-                  </Badge>
-               )}
-            </div>
-            
-            {/* Hover visual enhancement: slight border glow */}
-            <div className="absolute inset-0 border-2 border-transparent group-hover:border-primary/50 rounded-xl transition-colors duration-300 pointer-events-none" />
-          </div>
-        ))}
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* ── KPI Grid ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          label="Total Employees"
+          value={stats.total}
+          subtitle={`${stats.active} active`}
+          icon={Users}
+          accentFrom="from-blue-400"
+          accentTo="to-blue-600"
+        />
+        <KPICard
+          label="Active"
+          value={stats.active}
+          subtitle={`${((stats.active / Math.max(stats.total, 1)) * 100).toFixed(0)}% of total`}
+          icon={UserCheck}
+          trend="up"
+          trendLabel="Headcount"
+          accentFrom="from-emerald-400"
+          accentTo="to-emerald-600"
+        />
+        <KPICard
+          label="Recent Hires"
+          value={stats.recentHires}
+          subtitle="Last 30 days"
+          icon={UserPlus}
+          trend={stats.recentHires > 0 ? "up" : "neutral"}
+          trendLabel={stats.recentHires > 0 ? "New additions" : "No new hires"}
+          accentFrom="from-purple-400"
+          accentTo="to-purple-600"
+        />
+        <KPICard
+          label="Terminated"
+          value={stats.terminated}
+          subtitle={`${stats.resigned} resigned`}
+          icon={UserX}
+          trend={stats.terminated > 0 ? "down" : "neutral"}
+          trendLabel={stats.terminated > 0 ? `${stats.terminated} total` : "None"}
+          accentFrom="from-red-400"
+          accentTo="to-red-600"
+        />
       </div>
 
-      {/* Edit Card Dialog */}
-      <Dialog open={editIndex !== null} onOpenChange={(open) => !open && setEditIndex(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Edit Card</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-5 py-4">
-            {/* Display Name */}
-            <div className="space-y-2">
-              <Label htmlFor="card-name">Display Name</Label>
-              <Input
-                id="card-name"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-              />
-            </div>
+      {/* ── Second Row ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Employee Status Breakdown */}
+        <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4 lg:col-span-1">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Status Breakdown</h3>
+          </div>
+          <div className="space-y-3">
+            <StatusRow label="Active" count={stats.active} total={stats.total} color="bg-emerald-500" />
+            <StatusRow label="Terminated" count={stats.terminated} total={stats.total} color="bg-red-500" />
+            <StatusRow label="Resigned" count={stats.resigned} total={stats.total} color="bg-amber-500" />
+            <StatusRow label="Inactive" count={stats.inactive} total={stats.total} color="bg-zinc-400" />
+          </div>
+        </div>
 
-            {/* Dark Mode Image */}
-            <div className="space-y-2">
-              <Label>Dark Mode Image</Label>
-              <div
-                className="relative flex items-center justify-center h-28 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 transition-colors cursor-pointer overflow-hidden bg-zinc-900"
-                onClick={() => darkFileRef.current?.click()}
-              >
-                {darkPreview ? (
-                  <Image src={darkPreview} alt="Dark preview" fill className="object-cover opacity-70" />
-                ) : null}
-                <div className="relative z-10 flex flex-col items-center gap-1 text-muted-foreground">
-                  <Upload className="h-5 w-5" />
-                  <span className="text-xs">Click to upload dark mode image</span>
-                </div>
+        {/* Employee Types */}
+        <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4 lg:col-span-1">
+          <div className="flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">By Type</h3>
+          </div>
+          <div className="space-y-2">
+            {Object.entries(stats.typeMap)
+              .sort((a, b) => b[1] - a[1])
+              .map(([type, count], idx) => (
+                <TypeChip key={type} label={type} count={count} color={typeColors[idx % typeColors.length]} />
+              ))}
+          </div>
+        </div>
+
+        {/* Alerts & Compliance */}
+        <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4 lg:col-span-1">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Compliance Alerts</h3>
+          </div>
+          <div className="space-y-3">
+            {/* DL Expiring Soon */}
+            <div className={cn(
+              "flex items-center gap-3 p-3 rounded-xl border",
+              stats.expiringDL > 0
+                ? "bg-amber-500/5 border-amber-500/20"
+                : "bg-emerald-500/5 border-emerald-500/20"
+            )}>
+              <div className={cn("p-2 rounded-lg", stats.expiringDL > 0 ? "bg-amber-500/10" : "bg-emerald-500/10")}>
+                <AlertTriangle className={cn("h-4 w-4", stats.expiringDL > 0 ? "text-amber-500" : "text-emerald-500")} />
+              </div>
+              <div>
+                <p className="text-xs font-bold">{stats.expiringDL > 0 ? `${stats.expiringDL} DL Expiring Soon` : "All DLs Valid"}</p>
+                <p className="text-[10px] text-muted-foreground">Within next 30 days</p>
               </div>
             </div>
 
-            {/* Light Mode Image */}
-            <div className="space-y-2">
-              <Label>Light Mode Image</Label>
-              <div
-                className="relative flex items-center justify-center h-28 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 transition-colors cursor-pointer overflow-hidden bg-zinc-100"
-                onClick={() => lightFileRef.current?.click()}
-              >
-                {lightPreview ? (
-                  <Image src={lightPreview} alt="Light preview" fill className="object-cover opacity-70" />
-                ) : null}
-                <div className="relative z-10 flex flex-col items-center gap-1 text-muted-foreground">
-                  <Upload className="h-5 w-5" />
-                  <span className="text-xs">Click to upload light mode image</span>
-                </div>
+            {/* Missing Documents */}
+            <div className={cn(
+              "flex items-center gap-3 p-3 rounded-xl border",
+              stats.missingDocs > 0
+                ? "bg-red-500/5 border-red-500/20"
+                : "bg-emerald-500/5 border-emerald-500/20"
+            )}>
+              <div className={cn("p-2 rounded-lg", stats.missingDocs > 0 ? "bg-red-500/10" : "bg-emerald-500/10")}>
+                <AlertTriangle className={cn("h-4 w-4", stats.missingDocs > 0 ? "text-red-500" : "text-emerald-500")} />
+              </div>
+              <div>
+                <p className="text-xs font-bold">{stats.missingDocs > 0 ? `${stats.missingDocs} Missing Documents` : "All Docs Complete"}</p>
+                <p className="text-[10px] text-muted-foreground">Offer letter, DL, or I-9</p>
+              </div>
+            </div>
+
+            {/* Active Headcount */}
+            <div className="flex items-center gap-3 p-3 rounded-xl border bg-blue-500/5 border-blue-500/20">
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <Clock className="h-4 w-4 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-xs font-bold">{stats.active} Active Employees</p>
+                <p className="text-[10px] text-muted-foreground">Current headcount</p>
               </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditIndex(null)} disabled={isSaving}>Cancel</Button>
-            <Button onClick={saveCard} disabled={isSaving}>
-              {isSaving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : "Save Changes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      </div>
+
+      {/* ── Hourly Status Breakdown ── */}
+      {Object.keys(stats.hourlyMap).length > 0 && (
+        <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Hourly Status Distribution</h3>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {Object.entries(stats.hourlyMap)
+              .sort((a, b) => b[1] - a[1])
+              .map(([status, count]) => (
+                <div key={status} className="flex items-center justify-between px-4 py-3 rounded-xl bg-muted/30 border border-border/50">
+                  <span className="text-xs font-semibold text-foreground truncate">{status}</span>
+                  <span className="text-sm font-black text-foreground ml-2">{count}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

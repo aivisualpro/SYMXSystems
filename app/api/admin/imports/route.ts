@@ -13,7 +13,21 @@ import ScoreCardDCR from "@/lib/models/ScoreCardDCR";
 import ScoreCardCDFNegative from "@/lib/models/ScoreCardCDFNegative";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import { getISOWeek, getISOWeekYear, parseISO } from "date-fns";
+
+const reimbursementHeaderMap: Record<string, string> = {
+  "Transporter ID": "transporterId",
+  "Employee Name": "employeeName",
+  "Date": "date",
+  "Category": "category",
+  "Description": "description",
+  "Amount": "amount",
+  "Receipt Number": "receiptNumber",
+  "Status": "status",
+  "Approved By": "approvedBy",
+  "Notes": "notes",
+};
 
 // Helper to sanitize keys (remove whitespace, special chars if needed) - not strictly needed if we map manually
 // But manual mapping is safer for exact matches.
@@ -990,6 +1004,79 @@ export async function POST(req: NextRequest) {
 
         if (operations.length > 0) {
             const result = await SymxEmployeeSchedule.bulkWrite(operations);
+            return NextResponse.json({
+                success: true,
+                count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                inserted: result.upsertedCount || 0,
+                updated: result.modifiedCount || 0,
+                matched: result.matchedCount
+            });
+        }
+
+        return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+    }
+
+    // ── Reimbursement Import ──
+    else if (type === "reimbursement") {
+        // 1. Gather Transporter IDs
+        const transporterIds = data
+            .map((row: any) => (row["Transporter ID"] || "").toString().trim())
+            .filter((id: string) => id);
+
+        // 2. Fetch matching Employees
+        const employees = await SymxEmployee.find(
+            { transporterId: { $in: transporterIds } },
+            { _id: 1, transporterId: 1 }
+        ).lean();
+        const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
+
+        // 3. Process Rows
+        const operations = data.map((row: any) => {
+            const processedData: any = {};
+
+            // Map headers
+            Object.entries(row).forEach(([header, value]) => {
+                const normalizedHeader = header.trim();
+                const schemaKey = reimbursementHeaderMap[normalizedHeader];
+                if (schemaKey && value !== undefined && value !== null && value !== "") {
+                    if (schemaKey === 'amount') {
+                        const num = parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
+                        if (!isNaN(num)) processedData[schemaKey] = num;
+                    } else if (schemaKey === 'date') {
+                        const parsed = new Date(value.toString());
+                        if (!isNaN(parsed.getTime())) {
+                            const dateStr = parsed.toISOString().split('T')[0];
+                            processedData[schemaKey] = new Date(`${dateStr}T00:00:00.000Z`);
+                        }
+                    } else {
+                        processedData[schemaKey] = value.toString().trim();
+                    }
+                }
+            });
+
+            const transporterId = processedData.transporterId;
+            if (!transporterId) return null;
+
+            // Link Employee
+            if (employeeMap.has(transporterId)) {
+                processedData.employeeId = employeeMap.get(transporterId);
+            }
+
+            return {
+                updateOne: {
+                    filter: {
+                        transporterId: processedData.transporterId,
+                        date: processedData.date,
+                        receiptNumber: processedData.receiptNumber || '',
+                    },
+                    update: { $set: processedData },
+                    upsert: true
+                }
+            };
+        }).filter((op: any): op is NonNullable<typeof op> => op !== null);
+
+        if (operations.length > 0) {
+            const result = await SymxReimbursement.bulkWrite(operations);
             return NextResponse.json({
                 success: true,
                 count: (result.upsertedCount || 0) + (result.modifiedCount || 0),

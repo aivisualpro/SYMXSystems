@@ -718,7 +718,7 @@ export default function SchedulingPage() {
 
                               return (
                                 <tr
-                                  key={emp.transporterId}
+                                  key={`${groupName}-${emp.transporterId}`}
                                   className="border-b border-border/10 hover:bg-muted/20 transition-colors group"
                                 >
                                   <td className="px-3 py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors">

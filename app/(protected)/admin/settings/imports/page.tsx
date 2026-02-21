@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Upload,
-  FileSpreadsheet,
   Loader2,
   CheckCircle2,
   AlertCircle,
   CalendarDays,
+  Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 import Papa from "papaparse";
@@ -23,6 +23,8 @@ interface ImportResult {
   matched?: number;
 }
 
+const CHUNK_SIZE = 500; // Rows per batch to stay under Vercel's 4.5MB limit
+
 const importTypes = [
   {
     id: "employee-schedules",
@@ -32,11 +34,33 @@ const importTypes = [
     color: "from-blue-500 to-cyan-500",
     bgColor: "bg-blue-500/10",
     borderColor: "border-blue-500/20",
+    iconColor: "text-blue-500",
+    fields: [
+      "Week Day", "Year Week", "Transporter ID", "Date", "Status",
+      "Type", "Sub Type", "Training Day", "Start Time",
+      "Day Before Confirmation", "Day Of Confirmation",
+      "Week Confirmation", "Van", "Note",
+    ],
+  },
+  {
+    id: "reimbursement",
+    name: "Reimbursement",
+    description: "Import employee reimbursement records from CSV.",
+    icon: Receipt,
+    color: "from-emerald-500 to-teal-500",
+    bgColor: "bg-emerald-500/10",
+    borderColor: "border-emerald-500/20",
+    iconColor: "text-emerald-500",
+    fields: [
+      "Transporter ID", "Employee Name", "Date", "Category", "Description",
+      "Amount", "Receipt Number", "Status", "Approved By", "Notes",
+    ],
   },
 ];
 
 export default function ImportsSettingsPage() {
   const [isImporting, setIsImporting] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState<string>("");
   const [lastResult, setLastResult] = useState<Record<string, ImportResult | null>>({});
   const fileRef = useRef<HTMLInputElement>(null);
   const [activeImportType, setActiveImportType] = useState<string | null>(null);
@@ -52,6 +76,7 @@ export default function ImportsSettingsPage() {
     e.target.value = "";
 
     setIsImporting(activeImportType);
+    setImportProgress("Parsing CSV...");
     setLastResult((prev) => ({ ...prev, [activeImportType]: null }));
 
     try {
@@ -68,28 +93,53 @@ export default function ImportsSettingsPage() {
       if (parsed.length === 0) {
         toast.error("CSV file is empty or has no valid rows");
         setIsImporting(null);
+        setImportProgress("");
         return;
       }
 
-      // Send to API
-      const res = await fetch("/api/admin/imports", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: activeImportType,
-          data: parsed,
-        }),
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.error || "Import failed");
+      // Split into chunks to avoid Vercel 4.5MB body limit
+      const chunks: any[][] = [];
+      for (let i = 0; i < parsed.length; i += CHUNK_SIZE) {
+        chunks.push(parsed.slice(i, i + CHUNK_SIZE));
       }
 
-      setLastResult((prev) => ({ ...prev, [activeImportType]: result }));
+      let totalInserted = 0;
+      let totalUpdated = 0;
+      let totalCount = 0;
+
+      for (let i = 0; i < chunks.length; i++) {
+        setImportProgress(`Uploading batch ${i + 1} of ${chunks.length} (${chunks[i].length} rows)...`);
+
+        const res = await fetch("/api/admin/imports", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: activeImportType,
+            data: chunks[i],
+          }),
+        });
+
+        const result = await res.json();
+
+        if (!res.ok) {
+          throw new Error(result.error || `Import failed on batch ${i + 1}`);
+        }
+
+        totalInserted += result.inserted || 0;
+        totalUpdated += result.updated || 0;
+        totalCount += result.count || 0;
+      }
+
+      const finalResult: ImportResult = {
+        success: true,
+        count: totalCount,
+        inserted: totalInserted,
+        updated: totalUpdated,
+      };
+
+      setLastResult((prev) => ({ ...prev, [activeImportType]: finalResult }));
       toast.success(
-        `Imported ${result.count} records (${result.inserted} new, ${result.updated} updated)`
+        `Imported ${totalCount} records (${totalInserted} new, ${totalUpdated} updated)${chunks.length > 1 ? ` in ${chunks.length} batches` : ""}`
       );
     } catch (err: any) {
       toast.error(err.message || "Import failed");
@@ -99,6 +149,7 @@ export default function ImportsSettingsPage() {
       }));
     } finally {
       setIsImporting(null);
+      setImportProgress("");
       setActiveImportType(null);
     }
   };
@@ -138,14 +189,20 @@ export default function ImportsSettingsPage() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-4">
                   <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${importType.bgColor}`}>
-                    <importType.icon className="h-6 w-6 text-blue-500" />
+                    <importType.icon className={`h-6 w-6 ${importType.iconColor}`} />
                   </div>
                   <div className="space-y-1">
                     <h4 className="text-base font-semibold">{importType.name}</h4>
                     <p className="text-sm text-muted-foreground max-w-lg">
                       {importType.description}
                     </p>
-                    {result && (
+                    {isActive && importProgress && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                        <span className="text-xs text-blue-500 font-medium">{importProgress}</span>
+                      </div>
+                    )}
+                    {result && !isActive && (
                       <div className="flex items-center gap-2 mt-2">
                         {result.success !== false ? (
                           <>
@@ -188,12 +245,7 @@ export default function ImportsSettingsPage() {
 
               {/* Expected CSV schema preview */}
               <div className="mt-4 flex flex-wrap gap-1.5">
-                {[
-                  "Week Day", "Year Week", "Transporter ID", "Date", "Status",
-                  "Type", "Sub Type", "Training Day", "Start Time",
-                  "Day Before Confirmation", "Day Of Confirmation",
-                  "Week Confirmation", "Van", "Note",
-                ].map((field) => (
+                {importType.fields.map((field) => (
                   <Badge
                     key={field}
                     variant="secondary"

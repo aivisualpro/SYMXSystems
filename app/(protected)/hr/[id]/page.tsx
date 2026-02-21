@@ -208,7 +208,7 @@ export default function EmployeeDetailPage(props: PageProps) {
           setEmployee(data);
         } else {
           toast.error("Employee not found");
-          router.push("/hr/employees");
+          router.push("/hr");
         }
       } catch (error) {
         toast.error("Error fetching employee details");

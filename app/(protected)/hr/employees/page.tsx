@@ -268,7 +268,7 @@ export default function EmployeesPage() {
          showColumnToggle={true}
          initialColumnVisibility={initialVisibility}
          enableGlobalFilter={true}
-         onRowClick={(employee) => router.push(`/hr/employees/${employee._id}`)}
+         onRowClick={(employee) => router.push(`/hr/${employee._id}`)}
          extraActions={
            <div className="flex items-center space-x-2 mr-2">
              <Switch 

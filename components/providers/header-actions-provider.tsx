@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 
 interface HeaderActionsContextType {
   actions: ReactNode | null;
@@ -19,6 +20,15 @@ export function HeaderActionsProvider({ children }: { children: ReactNode }) {
   const [actions, setActions] = useState<ReactNode | null>(null);
   const [leftContent, setLeftContent] = useState<ReactNode | null>(null);
   const [rightContent, setRightContent] = useState<ReactNode | null>(null);
+  const pathname = usePathname();
+
+  // Clear all header actions on route change so stale content
+  // from the previous page never flashes during client-side navigation
+  useEffect(() => {
+    setActions(null);
+    setLeftContent(null);
+    setRightContent(null);
+  }, [pathname]);
 
   return (
     <HeaderActionsContext.Provider 
