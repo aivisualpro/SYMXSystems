@@ -11,7 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
-import { User } from "lucide-react";
+import { Search, User } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
@@ -23,19 +25,56 @@ export default function EmployeesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [showTerminated, setShowTerminated] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const PAGE_SIZE = 50;
   const router = useRouter();
 
-  const fetchEmployees = async () => {
-    setLoading(true);
+  useEffect(() => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, [searchQuery]);
+
+  const fetchEmployees = async (reset = true) => {
+    const skip = reset ? 0 : data.length;
+    if (reset) setLoading(true);
+    else setLoadingMore(true);
+
     try {
-      const response = await fetch("/api/admin/employees");
+      const params = new URLSearchParams({
+        skip: skip.toString(),
+        limit: PAGE_SIZE.toString(),
+        terminated: showTerminated.toString()
+      });
+      if (debouncedSearch) params.set("search", debouncedSearch);
+
+      const response = await fetch(`/api/admin/employees?${params}`);
       if (response.ok) {
-        const employees: ISymxEmployee[] = await response.json();
-        // Sort alphabetically by first name
-        const sorted = [...employees].sort((a, b) => 
-          (a.firstName || "").localeCompare(b.firstName || "")
-        );
-        setData(sorted);
+        const result = await response.json();
+        
+        let fetchedData = result.records || result;
+        
+        if (reset) {
+          setData(fetchedData);
+        } else {
+          setData(prev => {
+             // Deduplicate by ID just in case
+             const existingIds = new Set(prev.map(e => String(e._id)));
+             const newRecords = fetchedData.filter((e: any) => !existingIds.has(String(e._id)));
+             return [...prev, ...newRecords];
+          });
+        }
+        setTotalCount(result.totalCount || fetchedData.length);
+        setHasMore(result.hasMore || false);
       } else {
         toast.error("Failed to fetch employees");
       }
@@ -43,12 +82,14 @@ export default function EmployeesPage() {
       toast.error("Failed to fetch employees");
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
-    fetchEmployees();
-  }, []);
+    fetchEmployees(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, showTerminated]);
 
   const handleSubmit = async (formData: any) => {
     setIsSubmitting(true);
@@ -253,9 +294,10 @@ export default function EmployeesPage() {
   };
 
   const filteredData = React.useMemo(() => {
-    if (showTerminated) return data;
-    return data.filter(emp => emp.status !== 'Terminated');
-  }, [data, showTerminated]);
+    // The server already filters by 'terminated' and 'search' now,
+    // so we can just return data directly.
+    return data;
+  }, [data]);
 
   return (
     <div className="w-full h-full">
@@ -267,18 +309,36 @@ export default function EmployeesPage() {
          loading={loading}
          showColumnToggle={true}
          initialColumnVisibility={initialVisibility}
-         enableGlobalFilter={true}
+         enableGlobalFilter={false}
          onRowClick={(employee) => router.push(`/hr/${employee._id}`)}
+         hasMore={hasMore}
+         onLoadMore={() => fetchEmployees(false)}
+         loadingMore={loadingMore}
+         hideFooter={true}
          extraActions={
-           <div className="flex items-center space-x-2 mr-2">
-             <Switch 
-               id="show-terminated" 
-               checked={showTerminated} 
-               onCheckedChange={setShowTerminated}
-             />
-             <Label htmlFor="show-terminated" className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap">
-               Include Terminated
-             </Label>
+           <div className="flex items-center space-x-3 mr-2">
+             <div className="relative">
+               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+               <Input
+                 placeholder="Search employees..."
+                 value={searchQuery}
+                 onChange={(e) => setSearchQuery(e.target.value)}
+                 className="pl-8 h-8 w-[200px]"
+               />
+             </div>
+             <Badge variant="secondary" className="h-8 px-3 text-xs shrink-0 font-normal">
+               {data.length} of {totalCount > 0 ? totalCount : data.length} records
+             </Badge>
+             <div className="flex items-center space-x-2">
+               <Switch 
+                 id="show-terminated" 
+                 checked={showTerminated} 
+                 onCheckedChange={setShowTerminated}
+               />
+               <Label htmlFor="show-terminated" className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap">
+                 Include Terminated
+               </Label>
+             </div>
            </div>
          }
       />

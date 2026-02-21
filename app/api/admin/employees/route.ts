@@ -15,8 +15,50 @@ export async function GET(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const employees = await SymxEmployee.find({})
-      .sort({ createdAt: -1 });
+    const { searchParams } = new URL(req.url);
+    const skip = parseInt(searchParams.get('skip') || '0', 10);
+    const limitParams = searchParams.get('limit');
+    let limit = limitParams ? parseInt(limitParams, 10) : 0;
+    const search = searchParams.get('search') || '';
+    const fetchTerminated = searchParams.get('terminated') === 'true';
+
+    // Construct query
+    const query: any = {};
+    if (!fetchTerminated) {
+      query.status = { $ne: 'Terminated' };
+    }
+    if (search) {
+      const regex = new RegExp(search, 'i');
+      query.$or = [
+        { firstName: regex },
+        { lastName: regex },
+        { email: regex },
+        { badgeNumber: regex },
+        { transporterId: regex },
+        { eeCode: regex },
+      ];
+    }
+
+    if (limit > 0) {
+      // Return paginated object
+      const totalCount = await SymxEmployee.countDocuments(query);
+      const employees = await SymxEmployee.find(query)
+        .sort({ firstName: 1, lastName: 1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+      return NextResponse.json({
+        records: employees,
+        totalCount,
+        hasMore: skip + limit < totalCount
+      });
+    }
+
+    // Backwards compatibility: fetch all
+    const employees = await SymxEmployee.find(query)
+      .sort({ firstName: 1, lastName: 1 })
+      .lean();
 
     return NextResponse.json(employees);
   } catch (error) {

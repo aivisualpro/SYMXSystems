@@ -70,10 +70,10 @@ export default function HRLayout({ children }: { children: ReactNode }) {
   const isDetailPage = pathname.match(/^\/hr\/[a-f0-9]{24}/i);
 
   return (
-    <div className="space-y-4 max-w-[1600px] mx-auto">
+    <div className="flex flex-col h-full space-y-4 max-w-[1600px] w-full mx-auto" suppressHydrationWarning>
       {/* ── Tab Navigation ─────────────────────────────────────── */}
       {!isDetailPage && (
-        <div className="sticky top-0 z-20 -mx-[16px] px-[16px] pt-0 pb-2 bg-background/80 backdrop-blur-md">
+        <div className="shrink-0 sticky top-0 z-20 -mx-[16px] px-[16px] pt-0 pb-2 bg-background/80 backdrop-blur-md">
           <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
             {tabs.map((tab) => (
               <button
@@ -94,7 +94,9 @@ export default function HRLayout({ children }: { children: ReactNode }) {
       )}
 
       {/* ── Page Content ────────────────────────────────────────── */}
-      {children}
+      <div className="flex-1 min-h-0 pb-2">
+        {children}
+      </div>
     </div>
   );
 }

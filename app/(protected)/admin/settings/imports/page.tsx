@@ -52,8 +52,8 @@ const importTypes = [
     borderColor: "border-emerald-500/20",
     iconColor: "text-emerald-500",
     fields: [
-      "Transporter ID", "Employee Name", "Date", "Category", "Description",
-      "Amount", "Receipt Number", "Status", "Approved By", "Notes",
+      "_id", "transporterId", "date", "amount", "reason",
+      "attachment", "status", "createdBy", "createdAt",
     ],
   },
 ];

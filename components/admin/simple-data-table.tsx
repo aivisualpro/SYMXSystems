@@ -47,6 +47,11 @@ interface SimpleDataTableProps<TData, TValue> {
   initialColumnVisibility?: VisibilityState;
   extraActions?: React.ReactNode;
   enableGlobalFilter?: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
+  totalCount?: number;
+  hideFooter?: boolean;
 }
 
 export function SimpleDataTable<TData, TValue>({
@@ -61,6 +66,11 @@ export function SimpleDataTable<TData, TValue>({
   initialColumnVisibility = {},
   extraActions,
   enableGlobalFilter = false,
+  hasMore = false,
+  onLoadMore,
+  loadingMore = false,
+  totalCount = 0,
+  hideFooter = false,
 }: SimpleDataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -71,13 +81,37 @@ export function SimpleDataTable<TData, TValue>({
   const [rowSelection, setRowSelection] = React.useState({});
   const [globalFilter, setGlobalFilter] = React.useState("");
 
+  const observerRef = React.useRef<IntersectionObserver | null>(null);
+  const sentinelRef = React.useRef<HTMLTableRowElement | null>(null);
+
+  React.useEffect(() => {
+    if (!onLoadMore) return;
+
+    if (observerRef.current) observerRef.current.disconnect();
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+          onLoadMore();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+
+    if (sentinelRef.current) {
+      observerRef.current.observe(sentinelRef.current);
+    }
+
+    return () => observerRef.current?.disconnect();
+  }, [hasMore, loadingMore, loading, onLoadMore]);
+
   const table = useReactTable({
     data,
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    getPaginationRowModel: onLoadMore ? undefined : getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
@@ -249,42 +283,61 @@ export function SimpleDataTable<TData, TValue>({
                 </TableCell>
               </TableRow>
             )}
+            {onLoadMore && hasMore && (
+              <TableRow ref={sentinelRef}>
+                <TableCell colSpan={columns.length} className="h-14 text-center text-muted-foreground">
+                  {loadingMore ? "Loading more..." : ""}
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </table>
       </div>
-      <div className="flex items-center justify-end space-x-2 py-2">
-        <div className="flex-1 text-sm text-muted-foreground">
-          Showing {table.getFilteredRowModel().rows.length > 0 ? table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1 : 0} to{" "}
-          {Math.min(
-            (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-            table.getFilteredRowModel().rows.length
-          )}{" "}
-          of {table.getFilteredRowModel().rows.length} records.
-          {table.getFilteredSelectedRowModel().rows.length > 0 && (
-            <span className="ml-2">
-              ({table.getFilteredSelectedRowModel().rows.length} selected)
-            </span>
+      {!hideFooter && (
+        <div className="flex items-center justify-end space-x-2 py-2">
+          <div className="flex-1 text-sm text-muted-foreground">
+            {onLoadMore ? (
+              <span>
+                Showing {data.length} of {totalCount > 0 ? totalCount : data.length} records.
+              </span>
+            ) : (
+              <span>
+                Showing {table.getFilteredRowModel().rows.length > 0 ? table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1 : 0} to{" "}
+                {Math.min(
+                  (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
+                  table.getFilteredRowModel().rows.length
+                )}{" "}
+                of {table.getFilteredRowModel().rows.length} records.
+              </span>
+            )}
+            {table.getFilteredSelectedRowModel().rows.length > 0 && (
+              <span className="ml-2">
+                ({table.getFilteredSelectedRowModel().rows.length} selected)
+              </span>
+            )}
+          </div>
+          {!onLoadMore && (
+            <div className="space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+              >
+                Next
+              </Button>
+            </div>
           )}
         </div>
-        <div className="space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

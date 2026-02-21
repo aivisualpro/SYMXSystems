@@ -17,14 +17,28 @@ import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import { getISOWeek, getISOWeekYear, parseISO } from "date-fns";
 
 const reimbursementHeaderMap: Record<string, string> = {
+  // Current CSV headers (camelCase)
+  "_id": "legacyId",
+  "transporterId": "transporterId",
+  "date": "date",
+  "amount": "amount",
+  "reason": "notes",
+  "attachment": "attachment",
+  "status": "status",
+  "createdBy": "createdBy",
+  "createdAt": "createdAt",
+  // Legacy/alternative headers (backward compatibility)
   "Transporter ID": "transporterId",
-  "Employee Name": "employeeName",
+  "Date of Expense": "date",
   "Date": "date",
+  "Amount": "amount",
+  "Reason": "notes",
+  "Attachment": "attachment",
+  "Status": "status",
+  "Employee Name": "employeeName",
   "Category": "category",
   "Description": "description",
-  "Amount": "amount",
   "Receipt Number": "receiptNumber",
-  "Status": "status",
   "Approved By": "approvedBy",
   "Notes": "notes",
 };
@@ -1018,9 +1032,9 @@ export async function POST(req: NextRequest) {
 
     // ── Reimbursement Import ──
     else if (type === "reimbursement") {
-        // 1. Gather Transporter IDs
+        // 1. Gather Transporter IDs (support both camelCase and legacy headers)
         const transporterIds = data
-            .map((row: any) => (row["Transporter ID"] || "").toString().trim())
+            .map((row: any) => (row["transporterId"] || row["Transporter ID"] || "").toString().trim())
             .filter((id: string) => id);
 
         // 2. Fetch matching Employees
@@ -1039,14 +1053,23 @@ export async function POST(req: NextRequest) {
                 const normalizedHeader = header.trim();
                 const schemaKey = reimbursementHeaderMap[normalizedHeader];
                 if (schemaKey && value !== undefined && value !== null && value !== "") {
-                    if (schemaKey === 'amount') {
+                    if (schemaKey === 'legacyId') {
+                        processedData.legacyId = value.toString().trim();
+                    } else if (schemaKey === 'amount') {
                         const num = parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
                         if (!isNaN(num)) processedData[schemaKey] = num;
-                    } else if (schemaKey === 'date') {
+                    } else if (schemaKey === 'date' || schemaKey === 'createdAt') {
                         const parsed = new Date(value.toString());
                         if (!isNaN(parsed.getTime())) {
-                            const dateStr = parsed.toISOString().split('T')[0];
-                            processedData[schemaKey] = new Date(`${dateStr}T00:00:00.000Z`);
+                            if (schemaKey === 'date') {
+                                const dateStr = parsed.toISOString().split('T')[0];
+                                processedData[schemaKey] = new Date(`${dateStr}T00:00:00.000Z`);
+                                // Compute week from date
+                                const computedWeek = dateToSundayWeek(dateStr);
+                                if (computedWeek) processedData.week = computedWeek;
+                            } else {
+                                processedData[schemaKey] = parsed;
+                            }
                         }
                     } else {
                         processedData[schemaKey] = value.toString().trim();
@@ -1062,13 +1085,24 @@ export async function POST(req: NextRequest) {
                 processedData.employeeId = employeeMap.get(transporterId);
             }
 
+            // Use legacyId for upsert deduplication
+            if (processedData.legacyId) {
+                return {
+                    updateOne: {
+                        filter: { legacyId: processedData.legacyId },
+                        update: { $set: processedData },
+                        upsert: true
+                    }
+                };
+            }
+
+            // Fallback: use transporterId + date
+            const filter: any = { transporterId: processedData.transporterId };
+            if (processedData.date) filter.date = processedData.date;
+
             return {
                 updateOne: {
-                    filter: {
-                        transporterId: processedData.transporterId,
-                        date: processedData.date,
-                        receiptNumber: processedData.receiptNumber || '',
-                    },
+                    filter,
                     update: { $set: processedData },
                     upsert: true
                 }
