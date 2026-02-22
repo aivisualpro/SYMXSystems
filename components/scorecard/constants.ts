@@ -1,6 +1,6 @@
 import {
   Truck, Target, Shield, Camera, Activity, Smile,
-  MessageSquareWarning, ClipboardCheck, ShieldAlert, Package,
+  MessageSquareWarning, ClipboardCheck, ShieldAlert, Package, RotateCcw,
 } from "lucide-react";
 
 // ── Tier Styling ──────────────────────────────────────────────────────────
@@ -109,4 +109,5 @@ export const TAB_MAP = [
   { slug: 'DVIC', icon: ClipboardCheck, label: 'Inspection Time' },
   { slug: 'DSB', icon: ShieldAlert, label: 'DSB' },
   { slug: 'DCR', icon: Package, label: 'DCR' },
+  { slug: 'RTS', icon: RotateCcw, label: 'RTS' },
 ] as const;

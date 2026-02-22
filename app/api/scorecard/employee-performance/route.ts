@@ -400,6 +400,19 @@ export async function GET(req: NextRequest) {
             scannedNotDeliveredNotReturned: q.scannedNotDeliveredNotReturned ?? 0,
           };
         })(),
+
+        // Return to Station (RTS)
+        rtsRecords: (rtsMap.get(transporterId) || []).map((r: any) => ({
+          deliveryAssociate: r.deliveryAssociate || "",
+          trackingId: r.trackingId || "",
+          impactDcr: r.impactDcr || "",
+          rtsCode: r.rtsCode || "",
+          customerContactDetails: r.customerContactDetails || "",
+          plannedDeliveryDate: r.plannedDeliveryDate || "",
+          exemptionReason: r.exemptionReason || "",
+          serviceArea: r.serviceArea || "",
+        })),
+        rtsCount: (rtsMap.get(transporterId) || []).length,
         };
     });
 

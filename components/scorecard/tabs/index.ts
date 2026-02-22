@@ -7,3 +7,4 @@ export { DcrTab } from "./dcr-tab";
 export { DsbTab } from "./dsb-tab";
 export { SafetyTab } from "./safety-tab";
 export { DvicTab } from "./dvic-tab";
+export { RtsTab } from "./rts-tab";

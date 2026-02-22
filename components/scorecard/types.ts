@@ -26,6 +26,9 @@ export interface DriverData {
   cdfNegativeCount: number;
   // Quality DSB/DNR
   qualityDsbDnr: { dsbCount: number; dsbDpmo: number; attendedDeliveryCount: number; unattendedDeliveryCount: number; simultaneousDeliveries: number; deliveredOver50m: number; incorrectScanUsageAttended: number; incorrectScanUsageUnattended: number; noPodOnDelivery: number; scannedNotDeliveredNotReturned: number } | null;
+  // Return to Station (RTS)
+  rtsRecords: { deliveryAssociate: string; trackingId: string; impactDcr: string; rtsCode: string; customerContactDetails: string; plannedDeliveryDate: string; exemptionReason: string; serviceArea: string }[];
+  rtsCount: number;
 }
 
 export interface PodRow {
@@ -41,6 +44,12 @@ export interface CdfNegativeRow {
   daMishandledPackage: string; daWasUnprofessional: string; daDidNotFollowInstructions: string;
   deliveredToWrongAddress: string; neverReceivedDelivery: string; receivedWrongItem: string;
   feedbackDetails: string;
+}
+
+export interface RtsRow {
+  deliveryAssociate: string; transporterId: string; trackingId: string;
+  impactDcr: string; rtsCode: string; customerContactDetails: string;
+  plannedDeliveryDate: string; exemptionReason: string; serviceArea: string;
 }
 
 export interface DspMetrics {

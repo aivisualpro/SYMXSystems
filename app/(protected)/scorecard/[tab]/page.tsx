@@ -20,10 +20,10 @@ import Papa from "papaparse";
 
 // ── Extracted Scorecard Modules ───────────────────────────────────────────
 import { TAB_MAP } from "@/components/scorecard/constants";
-import type { DriverData, PodRow, CdfNegativeRow, DspMetrics } from "@/components/scorecard/types";
+import type { DriverData, PodRow, CdfNegativeRow, RtsRow, DspMetrics } from "@/components/scorecard/types";
 import {
   DriversTab, SYMXTab, PodTab, CdfNegativeTab,
-  DeliveryExcellenceTab, DcrTab, DsbTab, SafetyTab, DvicTab,
+  DeliveryExcellenceTab, DcrTab, DsbTab, SafetyTab, DvicTab, RtsTab,
 } from "@/components/scorecard/tabs";
 import { DriverDetailDialog } from "@/components/scorecard/driver-detail-dialog";
 
@@ -45,6 +45,7 @@ export default function EmployeePerformanceDashboard() {
   const [drivers, setDrivers] = useState<DriverData[]>([]);
   const [podRows, setPodRows] = useState<PodRow[]>([]);
   const [cdfNegativeRows, setCdfNegativeRows] = useState<CdfNegativeRow[]>([]);
+  const [rtsRows, setRtsRows] = useState<RtsRow[]>([]);
   const [deliveryExcellenceRows, setDeliveryExcellenceRows] = useState<any[]>([]);
   const [dcrRows, setDcrRows] = useState<any[]>([]);
   const [dsbRows, setDsbRows] = useState<any[]>([]);
@@ -339,6 +340,7 @@ export default function EmployeePerformanceDashboard() {
       "quality-dsb-dnr": "Quality DSB DNR",
       "quality-dcr": "Quality DCR",
       "cdf-negative": "CDF Negative Feedback",
+      "rts": "Return to Station",
     };
 
     try {
@@ -459,7 +461,7 @@ export default function EmployeePerformanceDashboard() {
     try {
       const res = await fetch(`/api/scorecard/employee-performance?week=${encodeURIComponent(week)}`);
       const data = await res.json();
-      setDrivers(data.drivers || []); setPodRows(data.podRows || []); setCdfNegativeRows(data.cdfNegativeRows || []);
+      setDrivers(data.drivers || []); setPodRows(data.podRows || []); setCdfNegativeRows(data.cdfNegativeRows || []); setRtsRows(data.rtsRows || []);
       setDeliveryExcellenceRows(data.deliveryExcellenceRows || []); setDcrRows(data.dcrRows || []);
       setDsbRows(data.dsbRows || []); setSafetyRows(data.safetyRows || []); setDvicRawRows(data.dvicRows || []);
       setTotalDrivers(data.totalDrivers || 0); setTotalDelivered(data.totalDelivered || 0);
@@ -636,6 +638,7 @@ export default function EmployeePerformanceDashboard() {
               { key: "quality-dsb-dnr", label: "Quality DSB / DNR", icon: "📋" },
               { key: "quality-dcr", label: "Quality DCR", icon: "✅" },
               { key: "cdf-negative", label: "CDF Negative Feedback", icon: "⚠️", href: "https://logistics.amazon.com/performance?pageId=dsp_customer_delivery_feedback_negative" },
+              { key: "rts", label: "Return to Station", icon: "🔄" },
             ] as const).map(({ key, label, icon, ...rest }) => {
               const href = 'href' in rest ? (rest as any).href as string : undefined;
               const entry = importFiles[key];
@@ -797,6 +800,10 @@ export default function EmployeePerformanceDashboard() {
 
         {activeTab === 'DVIC' && (
           <DvicTab dvicRawRows={dvicRawRows} />
+        )}
+
+        {activeTab === 'RTS' && (
+          <RtsTab rtsRows={rtsRows} />
         )}
 
         </>)}
