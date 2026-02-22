@@ -262,25 +262,12 @@ export function DriverDetailDialog({
                 <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-5 py-4 mb-4">
                   {d.cdfNegativeRecords && d.cdfNegativeRecords.length > 0 ? (
                     <div className="space-y-2">
-                      {d.cdfNegativeRecords.map((rec, idx) => {
-                        const flags: string[] = [];
-                        if (rec.daMishandledPackage?.toLowerCase() === 'true') flags.push('Mishandled Package');
-                        if (rec.daWasUnprofessional?.toLowerCase() === 'true') flags.push('Unprofessional');
-                        if (rec.daDidNotFollowInstructions?.toLowerCase() === 'true') flags.push('Did Not Follow Instructions');
-                        if (rec.deliveredToWrongAddress?.toLowerCase() === 'true') flags.push('Wrong Address');
-                        if (rec.neverReceivedDelivery?.toLowerCase() === 'true') flags.push('Never Received');
-                        if (rec.receivedWrongItem?.toLowerCase() === 'true') flags.push('Wrong Item');
-                        return (
-                          <div key={idx} className="rounded-lg border border-border/30 overflow-hidden hover:border-border/50 transition-colors">
-                            <div className="flex items-center justify-between px-3 py-2 border-b border-border/20">
-                              <div className="flex items-center gap-2 flex-wrap">{flags.length > 0 ? flags.map((f, fi) => <span key={fi} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 font-semibold">{f}</span>) : <span className="text-[10px] text-muted-foreground italic">No categories flagged</span>}</div>
-                              <span className="text-xs text-muted-foreground tabular-nums shrink-0 ml-2">{rec.deliveryDate || '—'}</span>
-                            </div>
-                            {rec.feedbackDetails && <div className="px-3 py-2"><p className="text-xs text-muted-foreground leading-relaxed">{rec.feedbackDetails}</p></div>}
-                            <div className="flex items-center gap-2 px-3 pb-2">{rec.trackingId && <span className="text-[10px] font-mono text-muted-foreground">TID: {rec.trackingId}</span>}</div>
-                          </div>
-                        );
-                      })}
+                      {d.cdfNegativeRecords.map((rec, idx) => (
+                        <div key={idx} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5">
+                          <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 tabular-nums whitespace-nowrap">{rec.deliveryDate || '—'}</span>
+                          <span className="text-xs text-amber-700 dark:text-amber-300">{rec.feedbackDetails || 'No details provided'}</span>
+                        </div>
+                      ))}
                     </div>
                   ) : (<div className="py-6 text-center"><MessageSquareWarning className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" /><p className="text-xs text-muted-foreground">No negative feedback records this week</p></div>)}
                 </div>
