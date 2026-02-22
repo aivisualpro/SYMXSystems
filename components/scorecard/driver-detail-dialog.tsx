@@ -238,9 +238,13 @@ export function DriverDetailDialog({
                         const impactLower = (evt.programImpact || '').toLowerCase();
                         const impactColor = impactLower.includes('tier 1') || impactLower.includes('high') ? 'bg-red-500/10 text-red-500 border-red-500/20' : impactLower.includes('tier 2') || impactLower.includes('medium') ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
                         return (
-                          <div key={idx} className="rounded-lg border border-border/30 overflow-hidden hover:border-border/50 transition-colors">
-                            <div className="flex items-center justify-between px-3 py-2"><div className="flex items-center gap-2"><span className="text-sm font-bold">{evt.metricType || '—'}</span>{evt.metricSubtype && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">{evt.metricSubtype}</span>}</div><span className="text-xs text-muted-foreground tabular-nums">{evt.date || evt.dateTime || '—'}</span></div>
-                            <div className="flex items-center gap-2 px-3 pb-2 pt-0.5">{evt.programImpact && <span className={cn("inline-flex items-center text-[10px] px-1.5 py-0.5 rounded border font-semibold", impactColor)}>{evt.programImpact}</span>}{evt.source && <span className="text-[10px] text-muted-foreground">{evt.source}</span>}{evt.videoLink && <a href={evt.videoLink} target="_blank" rel="noopener noreferrer" className="text-[10px] text-sky-500 hover:underline ml-auto">View Video</a>}</div>
+                          <div key={idx} className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors">
+                            <span className="text-sm font-bold whitespace-nowrap">{evt.metricType || '—'}</span>
+                            {evt.metricSubtype && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 font-medium whitespace-nowrap">{evt.metricSubtype}</span>}
+                            <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">{evt.date || evt.dateTime || '—'}</span>
+                            {evt.programImpact && <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-semibold whitespace-nowrap", impactColor)}>{evt.programImpact}</span>}
+                            {evt.source && <span className="text-[10px] text-muted-foreground whitespace-nowrap">{evt.source}</span>}
+                            {evt.videoLink && <a href={evt.videoLink} target="_blank" rel="noopener noreferrer" className="text-[10px] text-sky-500 hover:underline ml-auto whitespace-nowrap">View Video</a>}
                           </div>
                         );
                       })}
