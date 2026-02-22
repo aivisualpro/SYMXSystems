@@ -65,7 +65,6 @@ export function DriversTab({
                         </span>
                       </TableHead>
                     ))}
-                    <TableHead className="text-center w-10">Video</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -77,7 +76,7 @@ export function DriversTab({
                           case 'name': return 0;
                           case 'signed': return (signatureMap[d.transporterId]?.driverSigned ? 1 : 0) + (signatureMap[d.transporterId]?.managerSigned ? 1 : 0);
                           case 'deliveries': return d.packagesDelivered;
-                          case 'safety': return d.safetyEventCount;
+                          case 'safety': return d.safetyEvents.filter(e => (e.reviewDetails || '').toLowerCase() !== 'none').length;
                           case 'dvic': return d.dvicRushedCount;
                           case 'dsbDpmo': return d.qualityDsbDnr?.dsbDpmo ?? -1;
                           case 'dcr': return d.dcrFromCollection ?? -1;
@@ -153,24 +152,28 @@ export function DriversTab({
                           <span className="text-sm tabular-nums">{d.overallScore ?? '—'}</span>
                         </TableCell>
                         <TableCell className="text-center">
-                          {d.safetyEvents.length > 0 ? (
-                            <span className="text-xs font-medium">{d.safetyEvents[0].metricSubtype || '—'}</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {d.safetyEvents.length > 0 && d.safetyEvents[0].videoLink ? (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); onPlayVideo(d.safetyEvents[0].videoLink); }}
-                              className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors"
-                              title="Play safety video"
-                            >
-                              <Play className="h-3 w-3 fill-current" />
-                            </button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
+                          {(() => {
+                            const filtered = d.safetyEvents.filter(e => (e.reviewDetails || '').toLowerCase() !== 'none');
+                            const count = filtered.length;
+                            if (count === 0) return <span className="text-xs text-muted-foreground">—</span>;
+                            return (
+                              <div className="relative group inline-block">
+                                <span className={cn("text-sm font-bold tabular-nums cursor-default", count > 0 && "text-amber-500")}>{count}</span>
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 w-max max-w-[280px]">
+                                  <div className="bg-popover border border-border rounded-lg shadow-xl p-2.5 space-y-1">
+                                    {filtered.map((evt, i) => (
+                                      <div key={i} className="flex items-center gap-1.5 text-[11px]">
+                                        <span className="font-semibold">{evt.metricType}</span>
+                                        {evt.metricSubtype && <span className="text-amber-500">{evt.metricSubtype}</span>}
+                                        <span className="text-muted-foreground">{evt.date || evt.dateTime || ''}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="w-2 h-2 bg-popover border-b border-r border-border rotate-45 absolute left-1/2 -translate-x-1/2 -bottom-1" />
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                       </TableRow>
                     ))}
