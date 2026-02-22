@@ -8,7 +8,7 @@ import SignaturePad from "@/components/ui/signature-pad";
 import {
   Shield, Target, TrendingUp, Info, CheckCircle2, Activity,
   ClipboardCheck, ShieldAlert, MessageSquareWarning, Smile, Pen, Save,
-  Loader2, Lightbulb, AlertTriangle, X,
+  Loader2, Lightbulb, AlertTriangle, X, RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -305,6 +305,30 @@ export function DriverDetailDialog({
                       ))}
                     </>);
                   })() : (<div className="py-6 text-center"><ClipboardCheck className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" /><p className="text-xs text-muted-foreground">No DSB/DNR data this week</p></div>)}
+                </div>
+              </div>
+
+              {/* ── RETURN TO STATION (RTS) ── */}
+              <div>
+                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-amber-600 to-yellow-600 mx-4 rounded-t-xl">
+                  <h3 className="font-black text-sm text-white flex items-center gap-2"><RotateCcw className="h-5 w-5 text-white/70" />Return to Station</h3>
+                  <span className="text-sm font-black tabular-nums text-white">{d.rtsCount} RTS</span>
+                </div>
+                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-5 py-4 mb-4">
+                  {d.rtsRecords && d.rtsRecords.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {d.rtsRecords.map((rec, idx) => (
+                        <div key={idx} className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5">
+                          <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 tabular-nums whitespace-nowrap">{rec.plannedDeliveryDate || '—'}</span>
+                          <span className="text-xs font-medium truncate">{rec.rtsCode || 'Unknown'}</span>
+                          {(rec.impactDcr?.toLowerCase() === 'yes' || rec.impactDcr?.toLowerCase() === 'true') && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 font-semibold whitespace-nowrap">Impacts DCR</span>
+                          )}
+                          {rec.exemptionReason && <span className="text-[10px] text-muted-foreground truncate ml-auto">{rec.exemptionReason}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (<div className="py-6 text-center"><RotateCcw className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" /><p className="text-xs text-muted-foreground">No RTS records this week</p></div>)}
                 </div>
               </div>
 
