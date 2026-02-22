@@ -81,6 +81,21 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
     description: 'Delivery Completion measures the share of packages dispatched to you which are successfully delivered to the customer and not returned to the station. Thresholds for qualifying as "Fantastic" for this metric are station dependent and can vary slightly based on historical delivery difficulty, but are typically around 99%.',
     howMeasured: 'Uncontrollable behaviors like dogs, safety, weather, or unexpected road closures are excluded. If you are rescued and your packages move to another DA, those packages are also excluded from your score.',
   },
+  'delivered-not-received': {
+    title: 'DELIVERED, NOT RECEIVED',
+    description: 'Delivery Success Behaviors (DSB or DNR) is a score or count of packages that you confirmed as delivered, but that the customer contacted Amazon and said they did not receive.',
+    howMeasured: 'This only applies when you mark a package as delivered, and only in specific situations that you have control over.\n\n(1) Delivering multiple packages at once in a group stop, excluding mailrooms, apartments, receptionist, or customers at the same address.\n(2) Packages marked as delivered more than 50 meters from the Geopin.\n(3) Packages delivered to household members.\n(4) Packages without a POD photo.',
+  },
+  'pod-acceptance': {
+    title: 'PHOTO-ON-DELIVERY ACCEPTANCE',
+    description: 'Proof-Of-Delivery Photos, or PODs, help customers find their packages, and you are required to take one whenever prompted by the delivery app. If you don\'t take one when asked, or your photo is rejected, this will count against your score in this metric.',
+    howMeasured: 'This metric shows the total number of usable POD photos taken that were able to be shown to a customer divided by the total number of POD opportunities.',
+  },
+  'pod-rejects': {
+    title: 'PHOTO-ON-DELIVERY REJECTS',
+    description: 'Only high quality photos that indicate where the package is located are shown to customers. Poor quality photos and photos where the customer cannot tell where the package is located are rejected. Retaking a photo is always allowed and does not count against you.\n\nPhotos can also be rejected for a variety of reasons, which are listed below this metric if you had any. Use the reasons to better understand what you need to change to have your photos approved.',
+    howMeasured: 'This is the total count of deliveries that had rejected POD photos.',
+  },
 };
 
 // ── Tab Routing Map ───────────────────────────────────────────────────────
