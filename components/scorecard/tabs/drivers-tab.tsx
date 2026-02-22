@@ -33,7 +33,7 @@ export function DriversTab({
       {drivers.length > 0 ? (
         <Card className="overflow-hidden py-0">
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[calc(100vh-200px)]">
               <Table>
                 <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
                   <TableRow>
@@ -47,6 +47,7 @@ export function DriversTab({
                       { key: 'dcr', label: 'DCR', className: 'text-center' },
                       { key: 'overallScore', label: 'Overall Score', className: 'text-center' },
                       { key: 'safety', label: 'Safety', className: 'text-center' },
+                      { key: 'cdfNegative', label: 'CDF', className: 'text-center' },
                     ].map(col => (
                       <TableHead
                         key={col.key}
@@ -77,6 +78,7 @@ export function DriversTab({
                           case 'signed': return (signatureMap[d.transporterId]?.driverSigned ? 1 : 0) + (signatureMap[d.transporterId]?.managerSigned ? 1 : 0);
                           case 'deliveries': return d.packagesDelivered;
                           case 'safety': return d.safetyEvents.filter(e => (e.reviewDetails || '').toLowerCase() !== 'none').length;
+                          case 'cdfNegative': return d.cdfNegativeCount;
                           case 'dvic': return d.dvicRushedCount;
                           case 'dsbDpmo': return d.qualityDsbDnr?.dsbDpmo ?? -1;
                           case 'dcr': return d.dcrFromCollection ?? -1;
@@ -167,6 +169,28 @@ export function DriversTab({
                                         <span className="font-semibold">{evt.metricType}</span>
                                         {evt.metricSubtype && <span className="text-amber-500 font-medium">{evt.metricSubtype}</span>}
                                         <span className="text-muted-foreground">{evt.date || evt.dateTime || ''}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {(() => {
+                            const count = d.cdfNegativeCount;
+                            if (count === 0) return <span className="text-xs text-muted-foreground">—</span>;
+                            return (
+                              <div className="relative group/cdf inline-block">
+                                <span className={cn("text-sm font-bold tabular-nums cursor-default", "text-amber-500")}>{count}</span>
+                                <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden group-hover/cdf:block z-[100] w-max max-w-[380px]">
+                                  <div className="bg-popover border border-border rounded-lg shadow-2xl p-3 space-y-1.5">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">CDF Negative Feedback</p>
+                                    {d.cdfNegativeRecords.map((rec, i) => (
+                                      <div key={i} className="flex items-center gap-2 text-xs">
+                                        <span className="font-semibold text-amber-500 tabular-nums whitespace-nowrap">{rec.deliveryDate || '—'}</span>
+                                        <span className="text-muted-foreground">{rec.feedbackDetails || 'No details'}</span>
                                       </div>
                                     ))}
                                   </div>
