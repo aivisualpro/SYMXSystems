@@ -10,6 +10,7 @@ import SymxSafetyDashboardDFO2 from "@/lib/models/SymxSafetyDashboardDFO2";
 import ScoreCardQualityDSBDNR from "@/lib/models/ScoreCardQualityDSBDNR";
 import ScoreCardDCR from "@/lib/models/ScoreCardDCR";
 import ScoreCardCDFNegative from "@/lib/models/ScoreCardCDFNegative";
+import ScoreCardRTS from "@/lib/models/ScoreCardRTS";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
@@ -220,6 +221,18 @@ const cdfNegativeHeaderMap: Record<string, string> = {
     "Feedback Details": "feedbackDetails",
     "Tracking ID": "trackingId",
     "Delivery Date": "deliveryDate",
+};
+
+const rtsHeaderMap: Record<string, string> = {
+    "Delivery Associate": "deliveryAssociate",
+    "Tracking ID": "trackingId",
+    "Transporter ID": "transporterId",
+    "Impact DCR": "impactDcr",
+    "RTS Code": "rtsCode",
+    "Customer Contact Details": "customerContactDetails",
+    "Planned Delivery Date": "plannedDeliveryDate",
+    "Exemption Reason": "exemptionReason",
+    "Service Area": "serviceArea",
 };
 
 /**
@@ -855,6 +868,76 @@ export async function POST(req: NextRequest) {
 
         if (operations.length > 0) {
             const result = await ScoreCardCDFNegative.bulkWrite(operations);
+            return NextResponse.json({
+                success: true,
+                count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                inserted: result.upsertedCount || 0,
+                updated: result.modifiedCount || 0,
+                matched: result.matchedCount
+            });
+        }
+
+        return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+    }
+
+    // ── Return to Station (RTS) Import ──
+    else if (type === "rts") {
+        const transporterIds = data
+            .map((row: any) => (row["Transporter ID"] || "").toString().trim())
+            .filter((id: string) => id);
+
+        const employees = await SymxEmployee.find(
+            { transporterId: { $in: transporterIds } },
+            { _id: 1, transporterId: 1 }
+        ).lean();
+        const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
+
+        const operations = data.map((row: any) => {
+            const processedData: any = {};
+
+            Object.entries(row).forEach(([header, value]) => {
+                const normalizedHeader = header.trim();
+                const schemaKey = rtsHeaderMap[normalizedHeader];
+                if (schemaKey && value !== undefined && value !== null && value !== "") {
+                    processedData[schemaKey] = value.toString().trim();
+                }
+            });
+
+            const transporterId = processedData.transporterId;
+            if (!transporterId) return null;
+
+            // Derive week from Planned Delivery Date using Sunday-based week
+            const plannedDate = processedData.plannedDeliveryDate;
+            const computedWeek = plannedDate ? dateToSundayWeek(plannedDate) : (week || null);
+            if (!computedWeek) return null;
+            processedData.week = computedWeek;
+
+            if (employeeMap.has(transporterId)) {
+                processedData.employeeId = employeeMap.get(transporterId);
+            }
+
+            return {
+                updateOne: {
+                    filter: {
+                        week: computedWeek,
+                        transporterId,
+                        trackingId: processedData.trackingId || '',
+                    },
+                    update: { $set: processedData },
+                    upsert: true
+                }
+            };
+        }).filter((op: any): op is NonNullable<typeof op> => op !== null);
+
+        // Register computed weeks
+        const rtsWeeks = new Set<string>();
+        operations.forEach((op: any) => { if (op.updateOne.filter.week) rtsWeeks.add(op.updateOne.filter.week); });
+        for (const w of rtsWeeks) {
+            await SymxAvailableWeek.updateOne({ week: w }, { $set: { week: w } }, { upsert: true });
+        }
+
+        if (operations.length > 0) {
+            const result = await ScoreCardRTS.bulkWrite(operations);
             return NextResponse.json({
                 success: true,
                 count: (result.upsertedCount || 0) + (result.modifiedCount || 0),

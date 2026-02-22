@@ -8,6 +8,7 @@ import SymxSafetyDashboardDFO2 from "@/lib/models/SymxSafetyDashboardDFO2";
 import ScoreCardCDFNegative from "@/lib/models/ScoreCardCDFNegative";
 import ScoreCardQualityDSBDNR from "@/lib/models/ScoreCardQualityDSBDNR";
 import ScoreCardDCR from "@/lib/models/ScoreCardDCR";
+import ScoreCardRTS from "@/lib/models/ScoreCardRTS";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 
@@ -153,7 +154,7 @@ export async function GET(req: NextRequest) {
     const dvicDateRange = weekToSundaySaturdayRange(week);
 
     // Fetch all applicable data sources for the selected week + employee images
-    const [excellence, pod, dvic, safetyDfo2, cdfNegative, qualityDsbDnr, dcrData, employees] = await Promise.all([
+    const [excellence, pod, dvic, safetyDfo2, cdfNegative, qualityDsbDnr, dcrData, rtsData, employees] = await Promise.all([
       SymxDeliveryExcellence.find({ week }).lean(),
       SymxPhotoOnDelivery.find({ week }).lean(),
       // DVIC: filter by startDate range (Sunday–Saturday) instead of week field
@@ -164,6 +165,7 @@ export async function GET(req: NextRequest) {
       ScoreCardCDFNegative.find({ week }).lean(),
       ScoreCardQualityDSBDNR.find({ week }).lean(),
       ScoreCardDCR.find({ week }).lean(),
+      ScoreCardRTS.find({ week }).lean(),
       SymxEmployee.find({ transporterId: { $exists: true, $ne: '' } }, { transporterId: 1, profileImage: 1 }).lean(),
     ]);
 
@@ -220,6 +222,16 @@ export async function GET(req: NextRequest) {
     cdfNegative.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
     qualityDsbDnr.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
     dcrData.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
+    rtsData.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
+
+    // RTS: group per transporter
+    const rtsMap = new Map<string, any[]>();
+    rtsData.forEach((r: any) => {
+      const tid = r.transporterId;
+      if (!tid) return;
+      if (!rtsMap.has(tid)) rtsMap.set(tid, []);
+      rtsMap.get(tid)!.push(r);
+    });
 
     // Build a lookup map for excellence data
     const excellenceMap = new Map<string, any>();
@@ -613,6 +625,7 @@ export async function GET(req: NextRequest) {
         cdfNegative: cdfNegative.length,
         qualityDSBDNR: qualityDsbDnr.length,
         dcr: dcrData.length,
+        rts: rtsData.length,
       },
     };
 
@@ -675,6 +688,17 @@ export async function GET(req: NextRequest) {
       podRows,
       cdfNegativeRows,
       dvicRows,
+      rtsRows: rtsData.map((r: any) => ({
+        deliveryAssociate: r.deliveryAssociate || 'Unknown',
+        transporterId: r.transporterId || '',
+        trackingId: r.trackingId || '',
+        impactDcr: r.impactDcr || '',
+        rtsCode: r.rtsCode || '',
+        customerContactDetails: r.customerContactDetails || '',
+        plannedDeliveryDate: r.plannedDeliveryDate || '',
+        exemptionReason: r.exemptionReason || '',
+        serviceArea: r.serviceArea || '',
+      })),
       // Raw collection rows for individual tab views
       deliveryExcellenceRows: excellence.map((e: any) => ({
         deliveryAssociate: e.deliveryAssociate || 'Unknown',
