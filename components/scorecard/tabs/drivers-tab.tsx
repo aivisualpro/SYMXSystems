@@ -35,7 +35,7 @@ export function DriversTab({
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
                   <TableRow>
                     <TableHead className="w-10 text-center">#</TableHead>
                     {[
@@ -159,17 +159,17 @@ export function DriversTab({
                             return (
                               <div className="relative group inline-block">
                                 <span className={cn("text-sm font-bold tabular-nums cursor-default", count > 0 && "text-amber-500")}>{count}</span>
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 w-max max-w-[280px]">
-                                  <div className="bg-popover border border-border rounded-lg shadow-xl p-2.5 space-y-1">
+                                <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden group-hover:block z-[100] w-max max-w-[340px]">
+                                  <div className="bg-popover border border-border rounded-lg shadow-2xl p-3 space-y-1.5">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Safety Events</p>
                                     {filtered.map((evt, i) => (
-                                      <div key={i} className="flex items-center gap-1.5 text-[11px]">
+                                      <div key={i} className="flex items-center gap-2 text-xs">
                                         <span className="font-semibold">{evt.metricType}</span>
-                                        {evt.metricSubtype && <span className="text-amber-500">{evt.metricSubtype}</span>}
+                                        {evt.metricSubtype && <span className="text-amber-500 font-medium">{evt.metricSubtype}</span>}
                                         <span className="text-muted-foreground">{evt.date || evt.dateTime || ''}</span>
                                       </div>
                                     ))}
                                   </div>
-                                  <div className="w-2 h-2 bg-popover border-b border-r border-border rotate-45 absolute left-1/2 -translate-x-1/2 -bottom-1" />
                                 </div>
                               </div>
                             );
