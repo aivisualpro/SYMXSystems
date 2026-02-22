@@ -71,6 +71,36 @@ function parsePct(val: string | number | undefined): number | null {
   return isNaN(n) ? null : n;
 }
 
+/**
+ * Given an ISO week like "2026-W07", compute the Sunday–Saturday date range
+ * where Sunday is the first day of the week.
+ * ISO week starts Monday, so our Sunday = ISO Monday - 1 day,
+ * and our Saturday = ISO Sunday (end of ISO week).
+ * Returns { start: "YYYY-MM-DD", end: "YYYY-MM-DD" }
+ */
+function weekToSundaySaturdayRange(weekStr: string): { start: string; end: string } | null {
+  const match = weekStr.match(/^(\d{4})-W(\d{2})$/);
+  if (!match) return null;
+  const year = parseInt(match[1]);
+  const weekNum = parseInt(match[2]);
+  // ISO week 1 contains Jan 4. Find the Monday of ISO week 1.
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const dayOfWeek = jan4.getUTCDay() || 7; // 1=Mon..7=Sun
+  const isoWeek1Monday = new Date(jan4);
+  isoWeek1Monday.setUTCDate(jan4.getUTCDate() - (dayOfWeek - 1));
+  // Monday of the requested ISO week
+  const mondayOfWeek = new Date(isoWeek1Monday);
+  mondayOfWeek.setUTCDate(isoWeek1Monday.getUTCDate() + (weekNum - 1) * 7);
+  // Sunday = Monday - 1 day (start of our week)
+  const sunday = new Date(mondayOfWeek);
+  sunday.setUTCDate(mondayOfWeek.getUTCDate() - 1);
+  // Saturday = Sunday + 6 days (end of our week)
+  const saturday = new Date(sunday);
+  saturday.setUTCDate(sunday.getUTCDate() + 6);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  return { start: fmt(sunday), end: fmt(saturday) };
+}
+
 // Determine DSP-level tier from average metric
 function getDspTier(avg: number, type: "score" | "rate" | "percent" | "fico"): string {
   switch (type) {
@@ -119,11 +149,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ weeks });
     }
 
+    // Compute Sunday–Saturday date range for DVIC querying
+    const dvicDateRange = weekToSundaySaturdayRange(week);
+
     // Fetch all applicable data sources for the selected week + employee images
     const [excellence, pod, dvic, safetyDfo2, cdfNegative, qualityDsbDnr, dcrData, employees] = await Promise.all([
       SymxDeliveryExcellence.find({ week }).lean(),
       SymxPhotoOnDelivery.find({ week }).lean(),
-      SymxDVICVehicleInspection.find({ week }).lean(),
+      // DVIC: filter by startDate range (Sunday–Saturday) instead of week field
+      dvicDateRange
+        ? SymxDVICVehicleInspection.find({ startDate: { $gte: dvicDateRange.start, $lte: dvicDateRange.end } }).lean()
+        : SymxDVICVehicleInspection.find({ week }).lean(),
       SymxSafetyDashboardDFO2.find({ week }).lean(),
       ScoreCardCDFNegative.find({ week }).lean(),
       ScoreCardQualityDSBDNR.find({ week }).lean(),

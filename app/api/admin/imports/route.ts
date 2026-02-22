@@ -553,9 +553,9 @@ export async function POST(req: NextRequest) {
 
             if (!transporterId) return null;
 
-            // Use the passed week from the frontend (auto-detected from filename), fallback to date-based calculation
-            const recordWeek = week || (startDate ? dateToISOWeek(startDate) : null);
-            if (!recordWeek) return null; // Skip rows without a valid week
+            // DVIC: Always derive week from startDate (Sunday-based), ignore the passed week
+            const recordWeek = startDate ? dateToSundayWeek(startDate) : null;
+            if (!recordWeek) return null; // Skip rows without a valid startDate
 
             const processedData: any = {
                 week: recordWeek,

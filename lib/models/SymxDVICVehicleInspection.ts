@@ -44,6 +44,9 @@ SymxDVICVehicleInspectionSchema.index(
 // Index for querying by week
 SymxDVICVehicleInspectionSchema.index({ week: 1 });
 
+// Index for querying by startDate range (Sunday-based virtual week)
+SymxDVICVehicleInspectionSchema.index({ startDate: 1 });
+
 // Prevent overwrite error in dev hot reloading
 const SymxDVICVehicleInspection: Model<ISymxDVICVehicleInspection> =
   mongoose.models.SymxDVICVehicleInspection ||
