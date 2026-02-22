@@ -76,6 +76,11 @@ export const METRIC_INFO: Record<string, MetricInfoEntry> = {
     description: 'The Daily Vehicle Inspection Checklist (DVIC) is Amazon\'s vehicle safety inspection, designed to keep you safe. You are prompted to complete DVIC in the Amazon Delivery App when required, and you should follow the process thoroughly. The delivery app records the amount of time it takes you to perform the inspection.',
     howMeasured: 'For standard vehicles, DAs should complete the DVIC in no less than 90 seconds. For DOT vehicles like Step Vans, the process should take no less than 5 minutes.\n\nAny inspection under the recommended time is listed on your scorecard, with inspections under 10 seconds highlighted in red. Your goal is to have 0 rushed inspections.',
   },
+  'completion-rate': {
+    title: 'DELIVERY COMPLETION RATE',
+    description: 'Delivery Completion measures the share of packages dispatched to you which are successfully delivered to the customer and not returned to the station. Thresholds for qualifying as "Fantastic" for this metric are station dependent and can vary slightly based on historical delivery difficulty, but are typically around 99%.',
+    howMeasured: 'Uncontrollable behaviors like dogs, safety, weather, or unexpected road closures are excluded. If you are rescued and your packages move to another DA, those packages are also excluded from your score.',
+  },
 };
 
 // ── Tab Routing Map ───────────────────────────────────────────────────────
