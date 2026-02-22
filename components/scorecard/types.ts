@@ -10,7 +10,6 @@ export interface DriverData {
   dcr: string; dcrTier: string; dsb: number; dsbTier: string;
   pod: string; podTier: string; psb: number; psbTier: string;
   packagesDelivered: number; ced: number; cedTier: string;
-  cdfDpmo: number; cdfDpmoTier: string; negativeFeedbackCount: number;
   podOpportunities: number; podSuccess: number; podBypass: number;
   podRejects: number; podRejectBreakdown: Record<string, number>;
   dsbCount: number; issueCount: number;
@@ -19,7 +18,7 @@ export interface DriverData {
   dvicInspections: { vin: string; fleetType: string; inspectionType: string; inspectionStatus: string; startTime: string; endTime: string; duration: string; startDate: string }[];
   dvicTotalInspections: number;
   dvicRushedCount: number;
-  // Safety Dashboard DFO2
+  // Safety Dashboard
   safetyEvents: { date: string; deliveryAssociate: string; eventId: string; dateTime: string; vin: string; programImpact: string; metricType: string; metricSubtype: string; source: string; videoLink: string; reviewDetails: string }[];
   safetyEventCount: number;
   // CDF Negative Feedback
@@ -27,8 +26,6 @@ export interface DriverData {
   cdfNegativeCount: number;
   // Quality DSB/DNR
   qualityDsbDnr: { dsbCount: number; dsbDpmo: number; attendedDeliveryCount: number; unattendedDeliveryCount: number; simultaneousDeliveries: number; deliveredOver50m: number; incorrectScanUsageAttended: number; incorrectScanUsageUnattended: number; noPodOnDelivery: number; scannedNotDeliveredNotReturned: number } | null;
-  // Customer Delivery Feedback (summary)
-  customerDeliveryFeedback: { cdfDpmo: number; cdfDpmoTier: string; cdfDpmoScore: number; negativeFeedbackCount: number } | null;
 }
 
 export interface PodRow {
@@ -36,11 +33,6 @@ export interface PodRow {
   bypass: number; rejects: number; blurryPhoto: number; humanInThePicture: number;
   noPackageDetected: number; packageInCar: number; packageInHand: number;
   packageNotClearlyVisible: number; packageTooClose: number; photoTooDark: number; other: number;
-}
-
-export interface CdfRow {
-  name: string; transporterId: string; cdfDpmo: number; cdfDpmoTier: string;
-  cdfDpmoScore: number; negativeFeedbackCount: number;
 }
 
 export interface CdfNegativeRow {
@@ -67,7 +59,6 @@ export interface DspMetrics {
     pod: number; podTier: string; podAcceptanceRate: number;
     totalPodOpps: number; totalPodSuccess: number; totalPodRejects: number; totalPodBypass: number;
     totalCed: number; avgCed: number; cedTier: string;
-    totalNegativeFeedback: number; avgCdfDpmo: number; cdfDpmoTier: string;
   };
   focusAreas: { area: string; reason: string; score: number }[];
   safetyAggregate?: {
@@ -116,7 +107,6 @@ export interface DspMetrics {
   };
   collectionCounts?: {
     deliveryExcellence: number;
-    customerDeliveryFeedback: number;
     photoOnDelivery: number;
     dvicVehicleInspection: number;
     safetyDashboardDFO2: number;

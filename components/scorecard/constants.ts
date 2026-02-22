@@ -85,7 +85,6 @@ export const TAB_MAP = [
   { slug: 'Safety', icon: Shield, label: 'Safety' },
   { slug: 'POD', icon: Camera, label: 'POD Analysis' },
   { slug: 'Delivery-Excellence', icon: Activity, label: 'Delivery Quality' },
-  { slug: 'CDF', icon: Smile, label: 'Customer Feedback' },
   { slug: 'CDF-Negative', icon: MessageSquareWarning, label: 'CDF Negative' },
   { slug: 'DVIC', icon: ClipboardCheck, label: 'Inspection Time' },
   { slug: 'DSB', icon: ShieldAlert, label: 'DSB' },

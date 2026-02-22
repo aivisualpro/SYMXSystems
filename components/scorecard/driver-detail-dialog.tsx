@@ -55,7 +55,6 @@ export function DriverDetailDialog({
           const podRate = d.podOpportunities > 0 ? Math.round((d.podSuccess / d.podOpportunities) * 10000) / 100 : 0;
 
           const focusAreas: { title: string; tip: string }[] = [];
-          if (d.negativeFeedbackCount > 0) focusAreas.push({ title: 'Customer Delivery Feedback', tip: 'Always read the customer notes before executing a delivery! These notes will aid you in the delivery and help to ensure your success. When in doubt, call customer support or call/text the customer for guidance on how they want their package delivered. Lastly, if you ever interact with a customer directly, smiling and being courteous will generally help your CDF score.' });
           if (d.dsb > 0) focusAreas.push({ title: 'Delivery Success Behaviors', tip: 'Focus on following the correct sequence at every stop — scan, photo, confirm. Skipping steps or rushing through can trigger DSB flags.' });
           if (d.podRejects > 0) focusAreas.push({ title: 'Photo-On-Delivery Quality', tip: 'Make sure your photos clearly show the package at the delivery location. Avoid blurry images, photos that are too close, or images that include people.' });
           if (d.speedingEventRate > 0.5) focusAreas.push({ title: 'Speeding Events', tip: 'Keep an eye on your speed, especially in residential areas and school zones. Reducing your speed will directly improve your FICO score.' });
@@ -180,22 +179,6 @@ export function DriverDetailDialog({
                 </div>
               </div>
 
-              {/* ── CUSTOMER FEEDBACK ── */}
-              <div>
-                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#d4950a] to-[#c2860a] mx-4 rounded-t-xl"><h3 className="font-black text-sm text-white">Customer Feedback</h3><Smile className="h-5 w-5 text-white/70" /></div>
-                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-0 py-0 mb-4 overflow-hidden">
-                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(90deg, rgba(212,149,10,0.12) 0%, rgba(212,149,10,0.05) 100%)' }}><span className="text-sm font-bold">Overall Feedback Score</span><span className="text-sm font-black text-[#c2860a]">{d.cdfDpmoTier || 'N/A'}</span></div>
-                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(90deg, rgba(212,149,10,0.08) 0%, rgba(212,149,10,0.03) 100%)' }}><span className="text-sm font-bold">Negative Feedback Rate <span className="font-normal text-muted-foreground">(CDF DPMO)</span></span><span className="text-sm font-black tabular-nums text-[#c2860a]">{typeof d.cdfDpmo === 'number' ? d.cdfDpmo.toLocaleString() : d.cdfDpmo}</span></div>
-                  <div className="flex justify-between items-center px-4 py-2.5 pl-7 border-b border-border/15" style={{ background: 'linear-gradient(90deg, rgba(212,149,10,0.05) 0%, transparent 100%)' }}><span className="text-sm text-muted-foreground">Deliveries w/ Negative Feedback</span><span className="text-sm font-black tabular-nums">{d.negativeFeedbackCount}<span className="text-muted-foreground font-normal">/{d.packagesDelivered}</span></span></div>
-                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: 'linear-gradient(270deg, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0.04) 60%, transparent 100%)' }}><span className="text-sm font-bold">Escalation Defects</span><span className="text-[10px] font-semibold text-muted-foreground italic">Coming Soon</span></div>
-                  <div className="px-4 pt-3 pb-1"><p className="text-sm font-black mb-1">Negative Feedback</p><p className="text-[10px] text-muted-foreground italic mb-2">Coming Soon</p></div>
-                  {['Not Great', 'Did Not Follow Instructions', 'Wrong Address', 'Never Received'].map((label) => (
-                    <div key={label} className="flex justify-between items-center px-4 py-2 pl-7 border-t border-border/10"><span className="text-sm text-muted-foreground">{label}</span><span className="text-sm font-black tabular-nums text-muted-foreground/50">—</span></div>
-                  ))}
-                  <div className="h-1" />
-                </div>
-              </div>
-
               {/* ── DVIC ── */}
               <div>
                 <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#1a7a8a] to-[#1a5f6a] mx-4 rounded-t-xl"><h3 className="font-black text-sm text-white">Vehicle Inspection Times (DVIC)</h3><ClipboardCheck className="h-5 w-5 text-white/70" /></div>
@@ -245,7 +228,7 @@ export function DriverDetailDialog({
               {/* ── SAFETY DASHBOARD DFO2 ── */}
               <div>
                 <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-orange-600 to-amber-600 mx-4 rounded-t-xl">
-                  <h3 className="font-black text-sm text-white flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-white/70" />Safety Dashboard DFO2</h3>
+                  <h3 className="font-black text-sm text-white flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-white/70" />Safety Dashboard</h3>
                   <span className="text-sm font-black tabular-nums text-white">{d.safetyEventCount} Event{d.safetyEventCount !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-5 py-4 mb-4">
@@ -296,27 +279,6 @@ export function DriverDetailDialog({
                       })}
                     </div>
                   ) : (<div className="py-6 text-center"><MessageSquareWarning className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" /><p className="text-xs text-muted-foreground">No negative feedback records this week</p></div>)}
-                </div>
-              </div>
-
-              {/* ── CUSTOMER DELIVERY FEEDBACK ── */}
-              <div>
-                <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-[#d4950a] to-[#c2860a] mx-4 rounded-t-xl">
-                  <h3 className="font-black text-sm text-white flex items-center gap-2"><Smile className="h-5 w-5 text-white/70" />Customer Delivery Feedback</h3>
-                  {d.customerDeliveryFeedback && <span className="text-sm font-black text-white">{d.customerDeliveryFeedback.cdfDpmoTier}</span>}
-                </div>
-                <div className="mx-4 border border-t-0 border-border/40 rounded-b-xl bg-card/60 px-0 py-0 mb-4 overflow-hidden">
-                  {d.customerDeliveryFeedback ? (() => {
-                    const cdfData = d.customerDeliveryFeedback;
-                    const dpmoColor = cdfData.cdfDpmo <= 200 ? 'text-emerald-500' : cdfData.cdfDpmo <= 500 ? 'text-green-500' : cdfData.cdfDpmo <= 1000 ? 'text-amber-500' : 'text-red-500';
-                    const dpmoGradient = cdfData.cdfDpmo <= 200 ? 'linear-gradient(270deg, rgba(16,185,129,0.15) 0%, transparent 60%)' : cdfData.cdfDpmo <= 500 ? 'linear-gradient(270deg, rgba(34,197,94,0.15) 0%, transparent 60%)' : cdfData.cdfDpmo <= 1000 ? 'linear-gradient(270deg, rgba(245,158,11,0.15) 0%, transparent 60%)' : 'linear-gradient(270deg, rgba(239,68,68,0.15) 0%, transparent 60%)';
-                    return (<>
-                      <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15" style={{ background: dpmoGradient }}><span className="text-sm font-bold">CDF DPMO</span><span className={cn("text-sm font-black tabular-nums", dpmoColor)}>{cdfData.cdfDpmo.toLocaleString()}</span></div>
-                      <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15"><span className="text-sm font-bold">CDF DPMO Tier</span><span className="text-sm font-black">{cdfData.cdfDpmoTier}</span></div>
-                      <div className="flex justify-between items-center px-4 py-2.5 border-b border-border/15"><span className="text-sm font-bold">CDF DPMO Score</span><span className="text-sm font-black tabular-nums">{cdfData.cdfDpmoScore}</span></div>
-                      <div className="flex justify-between items-center px-4 py-2.5" style={{ background: cdfData.negativeFeedbackCount > 0 ? 'linear-gradient(270deg, rgba(239,68,68,0.15) 0%, transparent 60%)' : undefined }}><span className="text-sm font-bold">Negative Feedback Count</span><span className={cn("text-sm font-black tabular-nums", cdfData.negativeFeedbackCount > 0 && "text-red-500")}>{cdfData.negativeFeedbackCount}</span></div>
-                    </>);
-                  })() : (<div className="py-6 text-center"><Smile className="h-7 w-7 mx-auto mb-2 text-muted-foreground/20" /><p className="text-xs text-muted-foreground">No CDF data this week</p></div>)}
                 </div>
               </div>
 

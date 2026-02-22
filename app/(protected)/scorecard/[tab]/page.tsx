@@ -20,9 +20,9 @@ import Papa from "papaparse";
 
 // ── Extracted Scorecard Modules ───────────────────────────────────────────
 import { TAB_MAP } from "@/components/scorecard/constants";
-import type { DriverData, PodRow, CdfRow, CdfNegativeRow, DspMetrics } from "@/components/scorecard/types";
+import type { DriverData, PodRow, CdfNegativeRow, DspMetrics } from "@/components/scorecard/types";
 import {
-  DriversTab, SYMXTab, PodTab, CdfTab, CdfNegativeTab,
+  DriversTab, SYMXTab, PodTab, CdfNegativeTab,
   DeliveryExcellenceTab, DcrTab, DsbTab, SafetyTab, DvicTab,
 } from "@/components/scorecard/tabs";
 import { DriverDetailDialog } from "@/components/scorecard/driver-detail-dialog";
@@ -44,7 +44,6 @@ export default function EmployeePerformanceDashboard() {
   const [loadingWeeks, setLoadingWeeks] = useState(true);
   const [drivers, setDrivers] = useState<DriverData[]>([]);
   const [podRows, setPodRows] = useState<PodRow[]>([]);
-  const [cdfRows, setCdfRows] = useState<CdfRow[]>([]);
   const [cdfNegativeRows, setCdfNegativeRows] = useState<CdfNegativeRow[]>([]);
   const [deliveryExcellenceRows, setDeliveryExcellenceRows] = useState<any[]>([]);
   const [dcrRows, setDcrRows] = useState<any[]>([]);
@@ -335,9 +334,8 @@ export default function EmployeePerformanceDashboard() {
     const typeLabels: Record<string, string> = {
       "delivery-excellence": "Delivery Excellence",
       "import-pod": "Photo On Delivery",
-      "customer-delivery-feedback": "Delivery Feedback",
       "dvic-vehicle-inspection": "DVIC Inspection",
-      "safety-dashboard-dfo2": "Safety Dashboard DFO2",
+      "safety-dashboard-dfo2": "Safety Dashboard",
       "quality-dsb-dnr": "Quality DSB DNR",
       "quality-dcr": "Quality DCR",
       "cdf-negative": "CDF Negative Feedback",
@@ -461,7 +459,7 @@ export default function EmployeePerformanceDashboard() {
     try {
       const res = await fetch(`/api/scorecard/employee-performance?week=${encodeURIComponent(week)}`);
       const data = await res.json();
-      setDrivers(data.drivers || []); setPodRows(data.podRows || []); setCdfRows(data.cdfRows || []); setCdfNegativeRows(data.cdfNegativeRows || []);
+      setDrivers(data.drivers || []); setPodRows(data.podRows || []); setCdfNegativeRows(data.cdfNegativeRows || []);
       setDeliveryExcellenceRows(data.deliveryExcellenceRows || []); setDcrRows(data.dcrRows || []);
       setDsbRows(data.dsbRows || []); setSafetyRows(data.safetyRows || []); setDvicRawRows(data.dvicRows || []);
       setTotalDrivers(data.totalDrivers || 0); setTotalDelivered(data.totalDelivered || 0);
@@ -480,7 +478,7 @@ export default function EmployeePerformanceDashboard() {
 
   const generatePDF = () => { setGeneratingPdf(true); setTimeout(() => { window.print(); setGeneratingPdf(false); }, 300); };
 
-  const driversWithIssues = drivers.filter(d => d.dsbCount > 0 || d.negativeFeedbackCount > 0 || d.podRejects > 0).length;
+  const driversWithIssues = drivers.filter(d => d.dsbCount > 0 || d.podRejects > 0).length;
 
   // Set dynamic header title
   useEffect(() => {
@@ -633,13 +631,13 @@ export default function EmployeePerformanceDashboard() {
             {([
               { key: "delivery-excellence", label: "Delivery Excellence", icon: "📦" },
               { key: "import-pod", label: "Photo On Delivery (POD)", icon: "📸" },
-              { key: "customer-delivery-feedback", label: "Customer Delivery Feedback", icon: "💬" },
               { key: "dvic-vehicle-inspection", label: "DVIC Vehicle Inspection", icon: "🚛" },
-              { key: "safety-dashboard-dfo2", label: "Safety Dashboard DFO2", icon: "🛡️" },
+              { key: "safety-dashboard-dfo2", label: "Safety Dashboard", icon: "🛡️" },
               { key: "quality-dsb-dnr", label: "Quality DSB / DNR", icon: "📋" },
               { key: "quality-dcr", label: "Quality DCR", icon: "✅" },
-              { key: "cdf-negative", label: "CDF Negative Feedback", icon: "⚠️" },
-            ] as const).map(({ key, label, icon }) => {
+              { key: "cdf-negative", label: "CDF Negative Feedback", icon: "⚠️", href: "https://logistics.amazon.com/performance?pageId=dsp_customer_delivery_feedback_negative" },
+            ] as const).map(({ key, label, icon, ...rest }) => {
+              const href = 'href' in rest ? (rest as any).href as string : undefined;
               const entry = importFiles[key];
               return (
                 <div key={key} className={cn(
@@ -648,7 +646,11 @@ export default function EmployeePerformanceDashboard() {
                 )}>
                   <span className="text-lg shrink-0">{icon}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{label}</p>
+                    {href ? (
+                      <a href={href} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline" onClick={(e) => e.stopPropagation()}>{label}</a>
+                    ) : (
+                      <p className="text-sm font-medium">{label}</p>
+                    )}
                     {entry ? (
                       <div className="flex items-center gap-2 mt-0.5">
                         <Check className="h-3 w-3 text-emerald-500 shrink-0" />
@@ -773,10 +775,6 @@ export default function EmployeePerformanceDashboard() {
           <PodTab podRows={podRows} />
         )}
 
-        {activeTab === 'CDF' && (
-          <CdfTab cdfRows={cdfRows} />
-        )}
-
         {activeTab === 'CDF-Negative' && (
           <CdfNegativeTab cdfNegativeRows={cdfNegativeRows} />
         )}
@@ -816,15 +814,14 @@ export default function EmployeePerformanceDashboard() {
               <div><span className="font-bold text-base">{driver.name}</span><span className="text-sm text-gray-500 ml-2">({driver.transporterId})</span></div>
               <div className="text-sm text-gray-500 text-right">Coached: ☐ Yes ☐ No &nbsp;&nbsp; DA Initials: ____ &nbsp;&nbsp; Mgr: __ &nbsp;&nbsp; Date: ___/___</div>
             </div>
-            <div className="font-bold text-sm mb-1">DSB: {driver.dsb} &nbsp;|&nbsp; CDF Notes: {driver.negativeFeedbackCount} (Incidents: {driver.cdfDpmo}) &nbsp;|&nbsp; POD Rejects: {driver.podRejects}</div>
-            <div className="text-xs text-gray-600 mb-3">Overall: {driver.overallScore ?? "N/A"} ({driver.overallStanding}), FICO: {driver.ficoMetric ?? "No Data"} ({driver.ficoTier}), DCR: {driver.dcr} ({driver.dcrTier}), CDF DPMO: {driver.cdfDpmo} ({driver.cdfDpmoTier}), POD: {driver.pod} ({driver.podTier})</div>
+            <div className="font-bold text-sm mb-1">DSB: {driver.dsb} &nbsp;|&nbsp; POD Rejects: {driver.podRejects}</div>
+            <div className="text-xs text-gray-600 mb-3">Overall: {driver.overallScore ?? "N/A"} ({driver.overallStanding}), FICO: {driver.ficoMetric ?? "No Data"} ({driver.ficoTier}), DCR: {driver.dcr} ({driver.dcrTier}), POD: {driver.pod} ({driver.podTier})</div>
             <div className="text-sm mb-2">
               <span className="font-semibold">Issues to Address:</span>
-              {driver.podRejects === 0 && driver.negativeFeedbackCount === 0 && driver.dsb === 0
+              {driver.podRejects === 0 && driver.dsb === 0
                 ? <span className="text-gray-500 ml-2">No issues flagged this week.</span>
                 : <ul className="list-disc list-inside mt-1 text-xs space-y-0.5">
                     {driver.podRejects > 0 && <li>POD Rejects ({driver.podRejects}): {Object.entries(driver.podRejectBreakdown).sort(([,a],[,b]) => b - a).map(([r,c]) => `${r}: ${c}`).join(", ")}</li>}
-                    {driver.negativeFeedbackCount > 0 && <li>Negative CDF: {driver.negativeFeedbackCount} feedback record(s)</li>}
                     {driver.dsb > 0 && <li>DSB: {driver.dsb} delivery success behavior event(s)</li>}
                   </ul>
               }

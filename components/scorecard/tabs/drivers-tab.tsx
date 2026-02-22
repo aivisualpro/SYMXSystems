@@ -46,7 +46,6 @@ export function DriversTab({
                       { key: 'dsbDpmo', label: 'DSB DPMO', className: 'text-center' },
                       { key: 'dcr', label: 'DCR', className: 'text-center' },
                       { key: 'overallScore', label: 'Overall Score', className: 'text-center' },
-                      { key: 'nfc', label: 'NFC', className: 'text-center' },
                       { key: 'safety', label: 'Safety', className: 'text-center' },
                     ].map(col => (
                       <TableHead
@@ -83,7 +82,6 @@ export function DriversTab({
                           case 'dsbDpmo': return d.qualityDsbDnr?.dsbDpmo ?? -1;
                           case 'dcr': return d.dcrFromCollection ?? -1;
                           case 'overallScore': return d.overallScore ?? -1;
-                          case 'nfc': return d.negativeFeedbackCount;
                           default: return 0;
                         }
                       };
@@ -153,9 +151,6 @@ export function DriversTab({
                         </TableCell>
                         <TableCell className="text-center">
                           <span className="text-sm tabular-nums">{d.overallScore ?? '—'}</span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className={cn("text-sm tabular-nums", d.negativeFeedbackCount > 0 ? "text-red-500" : "")}>{d.negativeFeedbackCount}</span>
                         </TableCell>
                         <TableCell className="text-center">
                           {d.safetyEvents.length > 0 ? (

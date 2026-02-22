@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxDeliveryExcellence from "@/lib/models/SymxDeliveryExcellence";
-import SymxCustomerDeliveryFeedback from "@/lib/models/SymxCustomerDeliveryFeedback";
 import SymxPhotoOnDelivery from "@/lib/models/SymxPhotoOnDelivery";
 import SymxDVICVehicleInspection from "@/lib/models/SymxDVICVehicleInspection";
 import SymxSafetyDashboardDFO2 from "@/lib/models/SymxSafetyDashboardDFO2";
@@ -101,14 +100,13 @@ export async function GET(req: NextRequest) {
 
       // One-time backfill: if SymxAvailableWeeks is empty, seed from existing data collections
       if (docs.length === 0) {
-        const [deWeeks, cdfWeeks, podWeeks, dvicWeeks, safetyWeeks] = await Promise.all([
+        const [deWeeks, podWeeks, dvicWeeks, safetyWeeks] = await Promise.all([
           SymxDeliveryExcellence.distinct("week"),
-          SymxCustomerDeliveryFeedback.distinct("week"),
           SymxPhotoOnDelivery.distinct("week"),
           SymxDVICVehicleInspection.distinct("week"),
           SymxSafetyDashboardDFO2.distinct("week"),
         ]);
-        const allWeeks = [...new Set([...deWeeks, ...cdfWeeks, ...podWeeks, ...dvicWeeks, ...safetyWeeks])];
+        const allWeeks = [...new Set([...deWeeks, ...podWeeks, ...dvicWeeks, ...safetyWeeks])];
         if (allWeeks.length > 0) {
           await SymxAvailableWeek.bulkWrite(
             allWeeks.map(w => ({ updateOne: { filter: { week: w }, update: { $set: { week: w } }, upsert: true } }))
@@ -121,10 +119,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ weeks });
     }
 
-    // Fetch all 4 data sources for the selected week + employee images
-    const [excellence, cdf, pod, dvic, safetyDfo2, cdfNegative, qualityDsbDnr, dcrData, employees] = await Promise.all([
+    // Fetch all applicable data sources for the selected week + employee images
+    const [excellence, pod, dvic, safetyDfo2, cdfNegative, qualityDsbDnr, dcrData, employees] = await Promise.all([
       SymxDeliveryExcellence.find({ week }).lean(),
-      SymxCustomerDeliveryFeedback.find({ week }).lean(),
       SymxPhotoOnDelivery.find({ week }).lean(),
       SymxDVICVehicleInspection.find({ week }).lean(),
       SymxSafetyDashboardDFO2.find({ week }).lean(),
@@ -140,10 +137,6 @@ export async function GET(req: NextRequest) {
       if (e.transporterId && e.profileImage) empImageMap.set(e.transporterId, e.profileImage);
     });
 
-    // Build a lookup map by transporterId
-    const cdfMap = new Map<string, any>();
-    cdf.forEach((c: any) => cdfMap.set(c.transporterId, c));
-
     const podMap = new Map<string, any>();
     pod.forEach((p: any) => podMap.set(p.transporterId, p));
 
@@ -154,7 +147,7 @@ export async function GET(req: NextRequest) {
       dvicMap.get(d.transporterId)!.push(d);
     });
 
-    // Safety Dashboard DFO2: group events per transporter
+    // Safety Dashboard: group events per transporter
     const safetyMap = new Map<string, any[]>();
     safetyDfo2.forEach((s: any) => {
       if (!safetyMap.has(s.transporterId)) safetyMap.set(s.transporterId, []);
@@ -185,7 +178,6 @@ export async function GET(req: NextRequest) {
     // Build a unified set of transporterIds from ALL collections
     const allTransporterIds = new Set<string>();
     excellence.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
-    cdf.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
     pod.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
     dvic.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
     safetyDfo2.forEach((d: any) => { if (d.transporterId) allTransporterIds.add(d.transporterId); });
@@ -200,8 +192,8 @@ export async function GET(req: NextRequest) {
     // Merge data per driver (from ALL collections)
     const drivers = Array.from(allTransporterIds).map((transporterId) => {
       const driver = excellenceMap.get(transporterId) || {};
-      const cdfData = cdfMap.get(transporterId) || {};
       const podData = podMap.get(transporterId) || {};
+      const cdfNegativeList = cdfNegativeMap.get(transporterId) || [];
 
       // POD reject breakdown
       const podRejectBreakdown: Record<string, number> = {};
@@ -218,7 +210,6 @@ export async function GET(req: NextRequest) {
       return {
         // Identity — resolve name from whichever collection has it
         name: driver.deliveryAssociate
-          || cdfData.deliveryAssociate
           || dcrMap.get(transporterId)?.deliveryAssociate
           || qualityDsbDnrMap.get(transporterId)?.deliveryAssociate
           || (safetyMap.get(transporterId) || [])[0]?.deliveryAssociate
@@ -265,13 +256,6 @@ export async function GET(req: NextRequest) {
         podScore: driver.podScore ?? null,
         psbScore: driver.psbScore ?? null,
         cedScore: driver.cedScore ?? null,
-        cdfDpmoScore: driver.cdfDpmoScore ?? null,
-
-        // CDF
-        cdfDpmo: driver.cdfDpmo ?? cdfData.cdfDpmo ?? 0,
-        cdfDpmoTier: driver.cdfDpmoTier ?? cdfData.cdfDpmoTier ?? "N/A",
-        negativeFeedbackCount: cdfData.negativeFeedbackCount ?? 0,
-
         // POD
         podOpportunities: podData.opportunities ?? 0,
         podSuccess: podData.success ?? 0,
@@ -281,7 +265,7 @@ export async function GET(req: NextRequest) {
 
         // Scores for sorting
         dsbCount: driver.dsb ?? 0,
-        issueCount: (podData.rejects ?? 0) + (cdfData.negativeFeedbackCount ?? 0),
+        issueCount: (podData.rejects ?? 0) + cdfNegativeList.length,
 
         // DCR from ScoreCard_DCR
         dcrFromCollection: dcrMap.get(transporterId)?.dcr ?? null,
@@ -319,7 +303,7 @@ export async function GET(req: NextRequest) {
           return false;
         }).length,
 
-        // Safety Dashboard DFO2
+        // Safety Dashboard
         safetyEvents: (safetyMap.get(transporterId) || []).map((s: any) => ({
           date: s.date || "",
           deliveryAssociate: s.deliveryAssociate || "",
@@ -368,25 +352,12 @@ export async function GET(req: NextRequest) {
             scannedNotDeliveredNotReturned: q.scannedNotDeliveredNotReturned ?? 0,
           };
         })(),
-
-        // Customer Delivery Feedback (summary — already partially in CDF section)
-        customerDeliveryFeedback: (() => {
-          const c = cdfMap.get(transporterId);
-          if (!c) return null;
-          return {
-            cdfDpmo: c.cdfDpmo ?? 0,
-            cdfDpmoTier: c.cdfDpmoTier || "N/A",
-            cdfDpmoScore: c.cdfDpmoScore ?? 0,
-            negativeFeedbackCount: c.negativeFeedbackCount ?? 0,
-          };
-        })(),
-      };
+        };
     });
 
-    // Sort: worst first (DSB highest, then CDF incidents, then POD rejects, then lowest overall score, then A-Z)
+    // Sort: worst first (DSB highest, then POD rejects, then lowest overall score, then A-Z)
     drivers.sort((a: any, b: any) => {
       if (b.dsbCount !== a.dsbCount) return b.dsbCount - a.dsbCount;
-      if (b.negativeFeedbackCount !== a.negativeFeedbackCount) return b.negativeFeedbackCount - a.negativeFeedbackCount;
       if (b.podRejects !== a.podRejects) return b.podRejects - a.podRejects;
       if (b.issueCount !== a.issueCount) return b.issueCount - a.issueCount;
       const scoreA = a.overallScore ?? 999;
@@ -434,11 +405,6 @@ export async function GET(req: NextRequest) {
     const avgCed = cedValues.length > 0 ? cedValues.reduce((a: number, b: number) => a + b, 0) / cedValues.length : 0;
     const totalCed = drivers.reduce((sum: number, d: any) => sum + (d.ced || 0), 0);
 
-    // CDF
-    const totalNegativeFeedback = drivers.reduce((sum: number, d: any) => sum + (d.negativeFeedbackCount || 0), 0);
-    const cdfDpmoValues = drivers.map((d: any) => d.cdfDpmo).filter((v: any) => v != null && v > 0);
-    const avgCdfDpmo = cdfDpmoValues.length > 0 ? cdfDpmoValues.reduce((a: number, b: number) => a + b, 0) / cdfDpmoValues.length : 0;
-
     // Tier distributions
     const tierDistribution: Record<string, number> = {};
     drivers.forEach((d: any) => {
@@ -462,8 +428,6 @@ export async function GET(req: NextRequest) {
     
     // Check CED
     if (totalCed > 10) focusAreas.push({ area: "Customer Escalation Defect DPMO", reason: `${totalCed} escalation incidents`, score: totalCed });
-    // Check CDF
-    if (totalNegativeFeedback > 0) focusAreas.push({ area: "Customer Delivery Feedback", reason: `${totalNegativeFeedback} negative feedback records`, score: totalNegativeFeedback });
     // Check DSB
     if (totalDsb > 5) focusAreas.push({ area: "Delivery Success Behaviors", reason: `${totalDsb} total DSB events`, score: totalDsb });
     // Check POD rejects
@@ -511,9 +475,6 @@ export async function GET(req: NextRequest) {
         totalCed,
         avgCed: Math.round(avgCed * 100) / 100,
         cedTier: totalCed <= 5 ? "Fantastic" : totalCed <= 15 ? "Great" : totalCed <= 30 ? "Fair" : "Poor",
-        totalNegativeFeedback,
-        avgCdfDpmo: Math.round(avgCdfDpmo),
-        cdfDpmoTier: avgCdfDpmo <= 200 ? "Fantastic" : avgCdfDpmo <= 500 ? "Great" : avgCdfDpmo <= 1000 ? "Fair" : "Poor",
       },
       focusAreas: focusAreas.slice(0, 3),
 
@@ -610,7 +571,6 @@ export async function GET(req: NextRequest) {
       // ── Collection Record Counts ────────────────────────────────────────
       collectionCounts: {
         deliveryExcellence: excellence.length,
-        customerDeliveryFeedback: cdf.length,
         photoOnDelivery: pod.length,
         dvicVehicleInspection: dvic.length,
         safetyDashboardDFO2: safetyDfo2.length,
@@ -638,17 +598,6 @@ export async function GET(req: NextRequest) {
       other: p.other ?? 0,
     }));
     podRows.sort((a: any, b: any) => b.rejects - a.rejects || (a.transporterId || "").localeCompare(b.transporterId || ""));
-
-    // Sort raw CDF data (most negative feedback first)
-    const cdfRows = cdf.map((c: any) => ({
-      name: c.deliveryAssociate || "Unknown",
-      transporterId: c.transporterId,
-      cdfDpmo: c.cdfDpmo ?? 0,
-      cdfDpmoTier: c.cdfDpmoTier || "N/A",
-      cdfDpmoScore: c.cdfDpmoScore ?? 0,
-      negativeFeedbackCount: c.negativeFeedbackCount ?? 0,
-    }));
-    cdfRows.sort((a: any, b: any) => b.negativeFeedbackCount - a.negativeFeedbackCount || (a.name || "").localeCompare(b.name || ""));
 
     // DVIC aggregated rows (all inspections for the week)
     const dvicRows = dvic.map((d: any) => ({
@@ -688,7 +637,6 @@ export async function GET(req: NextRequest) {
       dspMetrics,
       drivers,
       podRows,
-      cdfRows,
       cdfNegativeRows,
       dvicRows,
       // Raw collection rows for individual tab views
@@ -704,7 +652,6 @@ export async function GET(req: NextRequest) {
         distractionsRate: e.distractionsRate ?? 0,
         signSignalViolationsRate: e.signSignalViolationsRate ?? 0,
         followingDistanceRate: e.followingDistanceRate ?? 0,
-        cdfDpmo: e.cdfDpmo ?? 0,
         ced: e.ced ?? 0,
         dcr: e.dcr || 'N/A',
         dsb: e.dsb ?? 0,

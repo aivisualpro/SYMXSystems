@@ -79,7 +79,6 @@ export function SYMXTab({
               <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-1">
                 <div className="col-span-2 mb-1"><span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Customer Delivery Experience</span></div>
                 <MetricRow label="CED DPMO" value={sm.deliveryQuality.totalCed} tier={sm.deliveryQuality.cedTier} />
-                <MetricRow label="CDF DPMO" value={sm.deliveryQuality.avgCdfDpmo} tier={sm.deliveryQuality.cdfDpmoTier} />
               </div>
               <div className="p-4 space-y-1">
                 <MetricRow label="Delivery Completion Rate" value={`${sm.deliveryQuality.dcr}%`} tier={sm.deliveryQuality.dcrTier} />
@@ -126,7 +125,7 @@ export function SYMXTab({
                 <div className="p-2 rounded-lg bg-red-500/10"><ShieldAlert className="h-5 w-5 text-red-500" /></div>
                 <div>
                   <h3 className="text-base font-bold">Safety Event Breakdown</h3>
-                  <p className="text-xs text-muted-foreground">ScoreCard_safetyDashboardDFO2</p>
+                  <p className="text-xs text-muted-foreground">ScoreCard_safetyDashboard</p>
                 </div>
               </div>
               <div className="text-right">
@@ -440,7 +439,6 @@ export function SYMXTab({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 { name: "Delivery Excellence", count: sm.collectionCounts?.deliveryExcellence ?? 0, icon: "🏆", color: "text-emerald-500" },
-                { name: "Customer Feedback", count: sm.collectionCounts?.customerDeliveryFeedback ?? 0, icon: "💬", color: "text-blue-500" },
                 { name: "Photo on Delivery", count: sm.collectionCounts?.photoOnDelivery ?? 0, icon: "📸", color: "text-teal-500" },
                 { name: "DVIC Inspection", count: sm.collectionCounts?.dvicVehicleInspection ?? 0, icon: "📋", color: "text-sky-500" },
                 { name: "Safety Dashboard", count: sm.collectionCounts?.safetyDashboardDFO2 ?? 0, icon: "🛡️", color: "text-red-500" },

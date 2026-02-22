@@ -5,7 +5,6 @@ import connectToDatabase from "@/lib/db";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxDeliveryExcellence from "@/lib/models/SymxDeliveryExcellence";
 import SymxPhotoOnDelivery from "@/lib/models/SymxPhotoOnDelivery";
-import SymxCustomerDeliveryFeedback from "@/lib/models/SymxCustomerDeliveryFeedback";
 import SymxDVICVehicleInspection from "@/lib/models/SymxDVICVehicleInspection";
 import SymxSafetyDashboardDFO2 from "@/lib/models/SymxSafetyDashboardDFO2";
 import ScoreCardQualityDSBDNR from "@/lib/models/ScoreCardQualityDSBDNR";
@@ -134,14 +133,6 @@ const podHeaderMap: Record<string, string> = {
     "Other": "other"
 };
 
-const cdfHeaderMap: Record<string, string> = {
-    "Delivery Associate": "deliveryAssociate",
-    "Transporter ID": "transporterId",
-    "CDF DPMO": "cdfDpmo",
-    "CDF DPMO Tier": "cdfDpmoTier",
-    "CDF DPMO Score": "cdfDpmoScore",
-    "Negative Feedback Count": "negativeFeedbackCount",
-};
 
 const dvicHeaderMap: Record<string, string> = {
     "start_date": "startDate",
@@ -538,82 +529,7 @@ export async function POST(req: NextRequest) {
         
         return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
     }
-    
-    // ── Customer Delivery Feedback Import ──
-    else if (type === "customer-delivery-feedback") {
-        if (!week) {
-            return NextResponse.json({ error: "Week is required for CDF import" }, { status: 400 });
-        }
 
-        // 1. Gather Transporter IDs
-        const transporterIds = data
-            .map((row: any) => row["Transporter ID"])
-            .filter((id: any) => id);
-
-        // 2. Fetch Employees
-        const employees = await SymxEmployee.find(
-            { transporterId: { $in: transporterIds } },
-            { _id: 1, transporterId: 1 }
-        ).lean();
-        
-        const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
-
-        // 3. Process Rows
-        const operations = data.map((row: any) => {
-            const transporterId = row["Transporter ID"];
-            
-            if (!transporterId) return null;
-
-            const processedData: any = {
-                week: week, // Use the passed week
-                transporterId: transporterId
-            };
-
-            // Map Headers
-            Object.entries(row).forEach(([header, value]) => {
-                // Remove extra spaces if any
-                const normalizedHeader = header.trim();
-                const schemaKey = cdfHeaderMap[normalizedHeader];
-
-                if (schemaKey) {
-                    if (schemaKey === 'deliveryAssociate' || schemaKey === 'transporterId' || schemaKey === 'cdfDpmoTier') {
-                        if (value !== undefined && value !== null && value !== "") {
-                           processedData[schemaKey] = value.toString().trim();
-                        }
-                    } else {
-                        // Numeric stats
-                        processedData[schemaKey] = safeParseFloat(value);
-                    }
-                }
-            });
-
-            // Link Employee
-            if (employeeMap.has(transporterId)) {
-                processedData.employeeId = employeeMap.get(transporterId);
-            }
-
-            return {
-                updateOne: {
-                    filter: { week: processedData.week, transporterId: processedData.transporterId },
-                    update: { $set: processedData },
-                    upsert: true
-                }
-            };
-        }).filter((op): op is NonNullable<typeof op> => op !== null);
-
-        if (operations.length > 0) {
-            const result = await SymxCustomerDeliveryFeedback.bulkWrite(operations);
-            return NextResponse.json({ 
-                success: true, 
-                count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
-                inserted: result.upsertedCount || 0,
-                updated: result.modifiedCount || 0,
-                matched: result.matchedCount 
-            });
-        }
-        
-        return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
-    }
 
     // ── DVIC Vehicle Inspection Times Import ──
     else if (type === "dvic-vehicle-inspection") {
@@ -692,7 +608,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
     }
 
-    // ── Safety Dashboard DFO2 Import ──
+    // ── Safety Dashboard Import ──
     else if (type === "safety-dashboard-dfo2") {
         if (!week) {
             return NextResponse.json({ error: "Week is required for Safety Dashboard import" }, { status: 400 });
