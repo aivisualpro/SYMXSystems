@@ -40,6 +40,7 @@ import { cn, formatPhoneNumber } from "@/lib/utils";
 import { format, startOfWeek, addDays } from "date-fns";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { EmployeeForm } from "@/components/admin/employee-form";
+import { EmployeeScorecard } from "@/components/hr/employee-scorecard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -426,13 +427,13 @@ export default function EmployeeDetailPage(props: PageProps) {
 
         {/* ════════ RIGHT COLUMN: Schedule + Tabs ════════ */}
         <div className="lg:col-span-8 space-y-6">
-          <Tabs defaultValue="performance" className="w-full">
+          <Tabs defaultValue="scorecard" className="w-full">
             <TabsList className="bg-muted/30 dark:bg-white/[0.04] p-1 rounded-2xl inline-flex gap-1 h-auto mb-6 border border-border/50 dark:border-white/10">
               <TabsTrigger 
-                value="performance" 
+                value="scorecard" 
                 className="rounded-[0.9rem] px-5 py-2 font-bold text-xs data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/30 transition-all"
               >
-                Performance
+                Scorecard
               </TabsTrigger>
               <TabsTrigger 
                 value="logistics" 
@@ -456,87 +457,9 @@ export default function EmployeeDetailPage(props: PageProps) {
               )}
             </TabsList>
 
-            {/* ──────── PERFORMANCE TAB ──────── */}
-            <TabsContent value="performance" className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
-              {/* KPI Metrics Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <PerformanceMetric label="Rank" value="#12" icon={Award} accent="bg-gradient-to-b from-amber-400 to-amber-600" trend="+3" />
-                <PerformanceMetric label="Rating" value="96%" icon={Star} accent="bg-gradient-to-b from-blue-400 to-blue-600" progressColor="bg-blue-500" trend="+4%" />
-                <PerformanceMetric label="Efficiency" value="94%" icon={Zap} accent="bg-gradient-to-b from-emerald-400 to-emerald-600" progressColor="bg-emerald-500" trend="+5%" />
-                <PerformanceMetric label="ScoreCard" value="98%" icon={Target} accent="bg-gradient-to-b from-purple-400 to-purple-600" progressColor="bg-purple-500" />
-              </div>
-
-              {/* Performance Overview Cards */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Task Completion */}
-                <Card className="border border-border/50 dark:border-white/10 bg-card overflow-hidden">
-                  <CardContent className="p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-muted-foreground">Task Completion</h4>
-                      <BarChart3 className="w-4 h-4 text-muted-foreground/40" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      {[
-                        { label: "Total", value: "201", color: "from-blue-500 to-indigo-500" },
-                        { label: "Completed", value: "143", color: "from-emerald-500 to-teal-500" },
-                        { label: "In Progress", value: "38", color: "from-amber-500 to-orange-500" },
-                        { label: "Pending", value: "20", color: "from-rose-500 to-pink-500" },
-                      ].map((item) => (
-                        <div key={item.label} className="p-3 rounded-xl bg-muted/20 dark:bg-white/[0.04] border border-border/30 dark:border-white/[0.06]">
-                          <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{item.label}</p>
-                          <div className="flex items-center gap-2">
-                            <div className={cn("w-0.5 h-6 rounded-full bg-gradient-to-b", item.color)} />
-                            <span className="text-xl font-black text-foreground leading-none">{item.value}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Time Performance - Redesigned */}
-                <Card className="border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm rounded-[32px] overflow-hidden relative group">
-                  <CardContent className="p-6 flex flex-col items-center justify-between h-full relative z-10">
-                    <div className="w-full flex items-center justify-between mb-2">
-                       <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 group-hover:text-foreground/80 transition-colors">Weekly Hours</h4>
-                       <div className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-foreground">
-                         <Clock className="w-3.5 h-3.5" />
-                       </div>
-                    </div>
-                    
-                    {/* Main Chart */}
-                    <div className="relative w-40 h-40 my-2">
-                        <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                          {/* Background Ring */}
-                          <circle cx="50" cy="50" r="42" fill="none" strokeWidth="8" className="stroke-zinc-100 dark:stroke-zinc-800" />
-                          {/* Progress Ring - Green #16C47F */}
-                          <circle cx="50" cy="50" r="42" fill="none" strokeWidth="8" strokeLinecap="round" strokeDasharray="264" strokeDashoffset="53" className="stroke-[#16C47F] transition-all duration-1000" />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                           <span className="text-4xl font-black text-foreground tracking-tighter">80<span className="text-xl align-top text-muted-foreground">%</span></span>
-                           <div className="flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-[#16C47F]/10">
-                              <TrendingUp className="w-3 h-3 text-[#16C47F]" />
-                              <span className="text-[10px] font-bold text-[#16C47F] uppercase tracking-wide">+23%</span>
-                           </div>
-                        </div>
-                    </div>
-
-                    {/* Bottom Stats - Clean Layout */}
-                    <div className="flex items-center justify-between w-full border-t border-zinc-100 dark:border-zinc-800 pt-5 mt-2">
-                       <div className="text-center flex-1 border-r border-zinc-100 dark:border-zinc-800">
-                          <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-1">This Week</p>
-                          <p className="text-xl font-black text-foreground tracking-tight">38.5<span className="text-sm font-bold text-muted-foreground ml-0.5">h</span></p>
-                       </div>
-                       <div className="text-center flex-1">
-                          <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Avg/Week</p>
-                          <p className="text-xl font-black text-foreground tracking-tight">41.2<span className="text-sm font-bold text-muted-foreground ml-0.5">h</span></p>
-                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-
+            {/* ──────── SCORECARD TAB ──────── */}
+            <TabsContent value="scorecard" className="animate-in fade-in slide-in-from-right-2 duration-300">
+              <EmployeeScorecard transporterId={employee.transporterId || ''} />
             </TabsContent>
 
             {/* ──────── LOGISTICS TAB ──────── */}
