@@ -114,6 +114,12 @@ export interface DspMetrics {
     totalNoPod: number;
     totalSNDNR: number;
   };
+  rtsAggregate?: {
+    totalRecords: number;
+    uniqueDrivers: number;
+    impactsDcr: number;
+    rtsCodeCounts: Record<string, number>;
+  };
   collectionCounts?: {
     deliveryExcellence: number;
     photoOnDelivery: number;
@@ -122,5 +128,6 @@ export interface DspMetrics {
     cdfNegative: number;
     qualityDSBDNR: number;
     dcr: number;
+    rts: number;
   };
 }

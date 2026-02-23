@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   Shield, Truck, Users, AlertTriangle, Lightbulb,
   ChevronRight, Eye, Activity, MessageSquare, Camera,
-  ShieldAlert, ClipboardCheck, Package, Target,
+  ShieldAlert, ClipboardCheck, Package, Target, RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getTier } from "../constants";
@@ -426,6 +425,74 @@ export function SYMXTab({
           </Card>
         </div>
 
+        {/* ── Row 5: RTS Aggregate (NEW) ────────────────────────────── */}
+        {(sm.rtsAggregate?.totalRecords ?? 0) > 0 && (
+          <Card className="overflow-hidden py-0">
+            <div className="bg-orange-500/5 border-b border-orange-500/20 p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-orange-500/10"><RotateCcw className="h-5 w-5 text-orange-500" /></div>
+                <div>
+                  <h3 className="text-base font-bold">Return to Station — RTS Analysis</h3>
+                  <p className="text-xs text-muted-foreground">ScoreCard_RTS</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xl font-black text-orange-500">{sm.rtsAggregate?.totalRecords ?? 0}</p>
+                <p className="text-[10px] text-muted-foreground">total RTS returns</p>
+              </div>
+            </div>
+            <CardContent className="p-4">
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="rounded-lg bg-muted/30 p-3 text-center">
+                  <p className="text-lg font-black text-orange-500">{sm.rtsAggregate?.uniqueDrivers ?? 0}</p>
+                  <p className="text-[10px] text-muted-foreground">Unique Drivers</p>
+                </div>
+                <div className="rounded-lg bg-muted/30 p-3 text-center">
+                  <p className="text-lg font-black text-red-500">{sm.rtsAggregate?.impactsDcr ?? 0}</p>
+                  <p className="text-[10px] text-muted-foreground">Impact DCR</p>
+                </div>
+                <div className="rounded-lg bg-muted/30 p-3 text-center">
+                  <p className="text-lg font-black text-emerald-500">{(sm.rtsAggregate?.totalRecords ?? 0) - (sm.rtsAggregate?.impactsDcr ?? 0)}</p>
+                  <p className="text-[10px] text-muted-foreground">Non-DCR Impact</p>
+                </div>
+              </div>
+              {/* DCR Impact Rate */}
+              {(sm.rtsAggregate?.totalRecords ?? 0) > 0 && (
+                <div className="space-y-1 mb-4">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>DCR Impact Rate</span>
+                    <span className="font-semibold">{Math.round(((sm.rtsAggregate?.impactsDcr ?? 0) / (sm.rtsAggregate?.totalRecords || 1)) * 100)}%</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-emerald-500/20 overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-red-500 to-orange-400 transition-all duration-500" style={{ width: `${((sm.rtsAggregate?.impactsDcr ?? 0) / (sm.rtsAggregate?.totalRecords || 1)) * 100}%` }} />
+                  </div>
+                </div>
+              )}
+              {/* RTS Code Breakdown */}
+              {sm.rtsAggregate?.rtsCodeCounts && Object.keys(sm.rtsAggregate.rtsCodeCounts).length > 0 && (() => {
+                const entries = Object.entries(sm.rtsAggregate!.rtsCodeCounts).sort(([, a], [, b]) => b - a);
+                const maxVal = Math.max(...entries.map(([, v]) => v), 1);
+                return (
+                  <div className="space-y-2 pt-3 border-t">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">RTS Code Distribution</p>
+                    {entries.slice(0, 10).map(([code, count]) => (
+                      <div key={code} className="space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs truncate max-w-[300px]">{code}</span>
+                          <span className="text-xs font-semibold tabular-nums">{count}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                          <div className="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-500" style={{ width: `${(count / maxVal) * 100}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        )}
+
         {/* ── Collection Health ──────────────────────────────────────── */}
         <Card className="overflow-hidden py-0">
           <div className="bg-slate-500/5 border-b border-slate-500/20 p-4 flex items-center gap-3">
@@ -445,6 +512,7 @@ export function SYMXTab({
                 { name: "CDF Negative", count: sm.collectionCounts?.cdfNegative ?? 0, icon: "⚠️", color: "text-amber-500" },
                 { name: "Quality DSB/DNR", count: sm.collectionCounts?.qualityDSBDNR ?? 0, icon: "📊", color: "text-rose-500" },
                 { name: "DCR", count: sm.collectionCounts?.dcr ?? 0, icon: "📦", color: "text-violet-500" },
+                { name: "RTS", count: sm.collectionCounts?.rts ?? 0, icon: "🔄", color: "text-orange-500" },
               ].map(col => (
                 <div key={col.name} className="rounded-lg bg-muted/30 border p-3 flex items-center gap-3 hover:bg-muted/50 transition-colors">
                   <span className="text-xl">{col.icon}</span>

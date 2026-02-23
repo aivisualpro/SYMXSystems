@@ -9,9 +9,10 @@ import { TierBadge, ScoreBar, OverallStandingBar, MetricRow, SectionHeader } fro
 
 interface EmployeeScorecardProps {
   transporterId: string;
+  employeeName?: string;
 }
 
-export function EmployeeScorecard({ transporterId }: EmployeeScorecardProps) {
+export function EmployeeScorecard({ transporterId, employeeName }: EmployeeScorecardProps) {
   const [weeks, setWeeks] = useState<string[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<string>("");
   const [loadingWeeks, setLoadingWeeks] = useState(true);
@@ -47,7 +48,20 @@ export function EmployeeScorecard({ transporterId }: EmployeeScorecardProps) {
       try {
         const res = await fetch(`/api/scorecard/employee-performance?week=${selectedWeek}`);
         const json = await res.json();
-        const driver = json.drivers?.find((d: any) => d.transporterId === transporterId);
+        
+        // Try matching by transporterId first, then by name
+        let driver = null;
+        if (transporterId) {
+          driver = json.drivers?.find((d: any) => d.transporterId === transporterId);
+        }
+        if (!driver && employeeName) {
+          const normalizedName = employeeName.toLowerCase().trim();
+          driver = json.drivers?.find((d: any) => {
+            const driverName = (d.name || '').toLowerCase().trim();
+            return driverName === normalizedName;
+          });
+        }
+        
         setData(driver || null);
       } catch (e) {
         console.error("Error fetching performance data", e);
@@ -57,7 +71,7 @@ export function EmployeeScorecard({ transporterId }: EmployeeScorecardProps) {
       }
     }
     fetchData();
-  }, [selectedWeek, transporterId]);
+  }, [selectedWeek, transporterId, employeeName]);
 
   const handlePrevWeek = () => {
     const idx = weeks.indexOf(selectedWeek);
@@ -69,13 +83,13 @@ export function EmployeeScorecard({ transporterId }: EmployeeScorecardProps) {
     if (idx > 0) setSelectedWeek(weeks[idx - 1]);
   };
 
-  if (!transporterId) {
+  if (!transporterId && !employeeName) {
     return (
       <Card className="py-12 bg-card border border-border/50">
         <CardContent className="flex flex-col items-center justify-center text-center">
           <Activity className="h-10 w-10 text-muted-foreground/20 mb-3" />
-          <p className="text-sm text-muted-foreground">No Transporter ID configured for this employee.</p>
-          <p className="text-xs text-muted-foreground mt-1">Please assign a Transporter ID in Logistics tab to see Scorecard data.</p>
+          <p className="text-sm text-muted-foreground">No Transporter ID or employee name available.</p>
+          <p className="text-xs text-muted-foreground mt-1">Please complete the employee profile to see Scorecard data.</p>
         </CardContent>
       </Card>
     );

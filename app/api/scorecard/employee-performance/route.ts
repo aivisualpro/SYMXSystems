@@ -629,6 +629,22 @@ export async function GET(req: NextRequest) {
         return { totalDsbCount, avgDsbDpmo: Math.round(avgDsbDpmo), totalAttended, totalUnattended, totalSimultaneous, totalOver50m, totalIncorrectAttended, totalIncorrectUnattended, totalNoPod, totalSNDNR, driversCount };
       })(),
 
+      // ── RTS Aggregate ────────────────────────────────────────────────────
+      rtsAggregate: (() => {
+        const totalRecords = rtsData.length;
+        const uniqueDrivers = new Set(rtsData.map((r: any) => r.transporterId)).size;
+        const impactsDcr = rtsData.filter((r: any) => {
+          const val = (r.impactDcr || '').toLowerCase();
+          return val === 'yes' || val === 'true';
+        }).length;
+        const rtsCodeCounts: Record<string, number> = {};
+        rtsData.forEach((r: any) => {
+          const code = r.rtsCode || 'Unknown';
+          rtsCodeCounts[code] = (rtsCodeCounts[code] || 0) + 1;
+        });
+        return { totalRecords, uniqueDrivers, impactsDcr, rtsCodeCounts };
+      })(),
+
       // ── Collection Record Counts ────────────────────────────────────────
       collectionCounts: {
         deliveryExcellence: excellence.length,

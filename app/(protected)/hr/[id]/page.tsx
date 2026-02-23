@@ -459,7 +459,7 @@ export default function EmployeeDetailPage(props: PageProps) {
 
             {/* ──────── SCORECARD TAB ──────── */}
             <TabsContent value="scorecard" className="animate-in fade-in slide-in-from-right-2 duration-300">
-              <EmployeeScorecard transporterId={employee.transporterId || ''} />
+              <EmployeeScorecard transporterId={employee.transporterId || ''} employeeName={`${employee.firstName} ${employee.lastName}`} />
             </TabsContent>
 
             {/* ──────── LOGISTICS TAB ──────── */}
