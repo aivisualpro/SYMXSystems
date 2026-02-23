@@ -2,8 +2,36 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Textarea } from "@/components/ui/textarea";
+import { TableHead } from "@/components/ui/table";
+import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getTier } from "./constants";
+
+// ── SortableTableHead ─────────────────────────────────────────────────────
+export function SortableTableHead({ 
+  label, sortKey, currentSort, requestSort, className 
+}: { 
+  label: React.ReactNode; 
+  sortKey: string; 
+  currentSort: { key: string; direction: 'asc' | 'desc' } | null; 
+  requestSort: (key: string) => void; 
+  className?: string; 
+}) {
+  const isActive = currentSort?.key === sortKey;
+  return (
+    <TableHead
+      className={cn(className, "cursor-pointer select-none hover:bg-muted/50 transition-colors")}
+      onClick={() => requestSort(sortKey)}
+    >
+      <div className={cn("flex items-center gap-1 group", className?.includes("text-right") ? "justify-end" : className?.includes("text-center") ? "justify-center" : "justify-start")}>
+        {label}
+        <span className={cn("text-muted-foreground/50 transition-colors inline-flex", isActive ? "text-foreground opacity-100" : "opacity-0 group-hover:opacity-100")}>
+          {isActive ? (currentSort.direction === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3" />}
+        </span>
+      </div>
+    </TableHead>
+  );
+}
 
 // ── TierBadge ─────────────────────────────────────────────────────────────
 export function TierBadge({ tier, className }: { tier: string; className?: string }) {

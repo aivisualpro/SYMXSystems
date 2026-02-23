@@ -5,39 +5,42 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Activity } from "lucide-react";
-import { TierBadge } from "../shared-components";
+import { TierBadge, SortableTableHead } from "../shared-components";
+import { useSort } from "../hooks/use-sort";
 
 interface DeliveryExcellenceTabProps {
   deliveryExcellenceRows: any[];
 }
 
 export function DeliveryExcellenceTab({ deliveryExcellenceRows }: DeliveryExcellenceTabProps) {
+  const { sortedItems, requestSort, sortConfig } = useSort(deliveryExcellenceRows, 'overallScore', 'desc');
+
   return (
     <div className="mt-4">
       {deliveryExcellenceRows.length > 0 ? (
-        <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+        <Card className="py-0"><CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow>
+            <TableHeader className="sticky top-0 z-20 bg-background shadow-sm"><TableRow>
               <TableHead className="w-8">#</TableHead>
-              <TableHead className="min-w-[160px]">Driver</TableHead>
-              <TableHead>ID</TableHead>
-              <TableHead className="text-center">Standing</TableHead>
-              <TableHead className="text-right">Score</TableHead>
-              <TableHead className="text-right">FICO</TableHead>
-              <TableHead className="text-right">Speeding</TableHead>
-              <TableHead className="text-right">Seatbelt</TableHead>
-              <TableHead className="text-right">Distractions</TableHead>
-              <TableHead className="text-right">Sign/Signal</TableHead>
-              <TableHead className="text-right">Follow Dist</TableHead>
-              <TableHead className="text-right">CDF DPMO</TableHead>
-              <TableHead className="text-right">CED</TableHead>
-              <TableHead className="text-right">DCR</TableHead>
-              <TableHead className="text-right">DSB</TableHead>
-              <TableHead className="text-right">POD</TableHead>
-              <TableHead className="text-right">Delivered</TableHead>
+              <SortableTableHead label="Driver" sortKey="deliveryAssociate" currentSort={sortConfig} requestSort={requestSort} className="min-w-[160px]" />
+              <SortableTableHead label="ID" sortKey="transporterId" currentSort={sortConfig} requestSort={requestSort} />
+              <SortableTableHead label="Standing" sortKey="overallStanding" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+              <SortableTableHead label="Score" sortKey="overallScore" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="FICO" sortKey="ficoMetric" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Speeding" sortKey="speedingEventRate" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Seatbelt" sortKey="seatbeltOffRate" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Distractions" sortKey="distractionsRate" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Sign/Signal" sortKey="signSignalViolationsRate" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Follow Dist" sortKey="followingDistanceRate" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="CDF DPMO" sortKey="cdfDpmo" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="CED" sortKey="ced" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="DCR" sortKey="dcr" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="DSB" sortKey="dsb" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="POD" sortKey="pod" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Delivered" sortKey="packagesDelivered" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
             </TableRow></TableHeader>
             <TableBody>
-              {deliveryExcellenceRows.map((r: any, i: number) => (
+              {sortedItems.map((r: any, i: number) => (
                 <TableRow key={r.transporterId + i}>
                   <TableCell>{i + 1}</TableCell>
                   <TableCell className="font-medium">{r.deliveryAssociate}</TableCell>
@@ -59,8 +62,8 @@ export function DeliveryExcellenceTab({ deliveryExcellenceRows }: DeliveryExcell
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
-        </div></CardContent></Card>
+        </Table>
+        </CardContent></Card>
       ) : (
         <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
           <Activity className="h-10 w-10 text-muted-foreground/20 mb-3" />

@@ -185,7 +185,7 @@ export default function EmployeePerformanceDashboard() {
   const dsbDnrFileRef = useRef<HTMLInputElement>(null);
   const dcrFileRef = useRef<HTMLInputElement>(null);
   const cdfNegFileRef = useRef<HTMLInputElement>(null);
-
+  const rtsFileRef = useRef<HTMLInputElement>(null);
   const fileRefMap: Record<string, React.RefObject<HTMLInputElement | null>> = {
     "delivery-excellence": deFileRef,
     "import-pod": podFileRef,
@@ -195,6 +195,7 @@ export default function EmployeePerformanceDashboard() {
     "quality-dsb-dnr": dsbDnrFileRef,
     "quality-dcr": dcrFileRef,
     "cdf-negative": cdfNegFileRef,
+    "rts": rtsFileRef,
   };
 
   // Detect week from CSV content (first row's Week column or Date column)
@@ -610,6 +611,7 @@ export default function EmployeePerformanceDashboard() {
       <input type="file" ref={dsbDnrFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("quality-dsb-dnr")} suppressHydrationWarning />
       <input type="file" ref={dcrFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("quality-dcr")} suppressHydrationWarning />
       <input type="file" ref={cdfNegFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("cdf-negative")} suppressHydrationWarning />
+      <input type="file" ref={rtsFileRef} className="hidden" accept=".csv,.xlsx" onChange={handleImportFileAttach("rts")} suppressHydrationWarning />
 
       {/* Import Dialog — Multi-file batch import */}
       <Dialog open={showImportDialog} onOpenChange={(open) => {

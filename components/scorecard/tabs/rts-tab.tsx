@@ -6,6 +6,8 @@ import {
 } from "@/components/ui/table";
 import { RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SortableTableHead } from "../shared-components";
+import { useSort } from "../hooks/use-sort";
 import type { RtsRow } from "../types";
 
 interface RtsTabProps {
@@ -13,6 +15,8 @@ interface RtsTabProps {
 }
 
 export function RtsTab({ rtsRows }: RtsTabProps) {
+  const { sortedItems, requestSort, sortConfig } = useSort(rtsRows, 'plannedDeliveryDate', 'desc');
+
   // Aggregate stats
   const totalRts = rtsRows.length;
   const impactsDcr = rtsRows.filter(r => r.impactDcr?.toLowerCase() === 'yes' || r.impactDcr?.toLowerCase() === 'true').length;
@@ -71,20 +75,20 @@ export function RtsTab({ rtsRows }: RtsTabProps) {
 
       {/* Data Table */}
       {rtsRows.length > 0 ? (
-        <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+        <Card className="py-0"><CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow>
+            <TableHeader className="sticky top-0 z-20 bg-background shadow-sm"><TableRow>
               <TableHead className="w-8">#</TableHead>
-              <TableHead className="min-w-[120px]">Driver</TableHead>
-              <TableHead>Tracking ID</TableHead>
-              <TableHead className="text-center">Impact DCR</TableHead>
-              <TableHead className="min-w-[180px]">RTS Code</TableHead>
-              <TableHead className="text-center">Delivery Date</TableHead>
-              <TableHead>Exemption</TableHead>
-              <TableHead>Service Area</TableHead>
+              <SortableTableHead label="Driver" sortKey="deliveryAssociate" currentSort={sortConfig} requestSort={requestSort} className="min-w-[120px]" />
+              <SortableTableHead label="Tracking ID" sortKey="trackingId" currentSort={sortConfig} requestSort={requestSort} />
+              <SortableTableHead label="Impact DCR" sortKey="impactDcr" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+              <SortableTableHead label="RTS Code" sortKey="rtsCode" currentSort={sortConfig} requestSort={requestSort} className="min-w-[180px]" />
+              <SortableTableHead label="Delivery Date" sortKey="plannedDeliveryDate" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+              <SortableTableHead label="Exemption" sortKey="exemptionReason" currentSort={sortConfig} requestSort={requestSort} />
+              <SortableTableHead label="Service Area" sortKey="serviceArea" currentSort={sortConfig} requestSort={requestSort} />
             </TableRow></TableHeader>
             <TableBody>
-              {rtsRows.map((r, i) => (
+              {sortedItems.map((r, i) => (
                 <TableRow key={`${r.trackingId}-${i}`} className={cn(
                   r.impactDcr?.toLowerCase() === 'yes' || r.impactDcr?.toLowerCase() === 'true'
                     ? "bg-red-500/5" : "bg-amber-500/5"
@@ -108,7 +112,7 @@ export function RtsTab({ rtsRows }: RtsTabProps) {
               ))}
             </TableBody>
           </Table>
-        </div></CardContent></Card>
+        </CardContent></Card>
       ) : (
         <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
           <RotateCcw className="h-10 w-10 text-muted-foreground/20 mb-3" />

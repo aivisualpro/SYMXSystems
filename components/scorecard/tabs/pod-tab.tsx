@@ -5,6 +5,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Camera } from "lucide-react";
+import { SortableTableHead } from "../shared-components";
+import { useSort } from "../hooks/use-sort";
 import type { PodRow } from "../types";
 
 interface PodTabProps {
@@ -12,22 +14,32 @@ interface PodTabProps {
 }
 
 export function PodTab({ podRows }: PodTabProps) {
+  const { sortedItems, requestSort, sortConfig } = useSort(podRows, 'transporterId', 'asc');
+
   return (
     <div className="mt-4">
       {podRows.length > 0 ? (
-        <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+        <Card className="py-0"><CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow>
-              <TableHead className="w-8">#</TableHead><TableHead>Transporter ID</TableHead><TableHead className="text-right">Opps</TableHead>
-              <TableHead className="text-right">Success</TableHead><TableHead className="text-right">Bypass</TableHead>
-              <TableHead className="text-right">Rejects</TableHead><TableHead className="text-right">Blurry</TableHead>
-              <TableHead className="text-right">Human</TableHead><TableHead className="text-right">No Pkg</TableHead>
-              <TableHead className="text-right">In Car</TableHead><TableHead className="text-right">In Hand</TableHead>
-              <TableHead className="text-right">Not Visible</TableHead><TableHead className="text-right">Too Close</TableHead>
-              <TableHead className="text-right">Too Dark</TableHead><TableHead className="text-right">Other</TableHead>
+            <TableHeader className="sticky top-0 z-20 bg-background shadow-sm"><TableRow>
+              <TableHead className="w-8">#</TableHead>
+              <SortableTableHead label="Transporter ID" sortKey="transporterId" currentSort={sortConfig} requestSort={requestSort} />
+              <SortableTableHead label="Opps" sortKey="opportunities" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Success" sortKey="success" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Bypass" sortKey="bypass" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Rejects" sortKey="rejects" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Blurry" sortKey="blurryPhoto" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Human" sortKey="humanInThePicture" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="No Pkg" sortKey="noPackageDetected" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="In Car" sortKey="packageInCar" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="In Hand" sortKey="packageInHand" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Not Visible" sortKey="packageNotClearlyVisible" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Too Close" sortKey="packageTooClose" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Too Dark" sortKey="photoTooDark" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Other" sortKey="other" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
             </TableRow></TableHeader>
             <TableBody>
-              {podRows.map((r, i) => (
+              {sortedItems.map((r, i) => (
                 <TableRow key={r.transporterId} className={r.rejects > 0 ? "bg-red-500/5" : ""}>
                   <TableCell>{i + 1}</TableCell>
                   <TableCell className="font-medium font-mono">{r.transporterId}</TableCell>
@@ -47,8 +59,8 @@ export function PodTab({ podRows }: PodTabProps) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
-        </div></CardContent></Card>
+        </Table>
+        </CardContent></Card>
       ) : (
         <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
           <Camera className="h-10 w-10 text-muted-foreground/20 mb-3" />

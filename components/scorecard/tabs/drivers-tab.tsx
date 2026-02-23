@@ -31,15 +31,14 @@ export function DriversTab({
   return (
     <div className="space-y-4 mt-4">
       {drivers.length > 0 ? (
-        <Card className="overflow-hidden py-0">
+        <Card className="py-0">
           <CardContent className="p-0">
-            <div className="overflow-auto max-h-[calc(100vh-200px)]">
               <Table>
                 <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
                   <TableRow>
                     <TableHead className="w-10 text-center">#</TableHead>
                     {[
-                      { key: 'name', label: 'Driver', className: 'min-w-[140px] text-left' },
+                      { key: 'name', label: 'Driver', className: 'w-[140px] max-w-[140px] text-left' },
                       { key: 'signed', label: 'Signed', className: 'text-center w-[70px]' },
                       { key: 'deliveries', label: 'Deliveries', className: 'text-center' },
                       { key: 'overallScore', label: 'Overall Score', className: 'text-center' },
@@ -99,17 +98,17 @@ export function DriversTab({
                         onClick={() => onSelectDriver(d)}
                       >
                         <TableCell className="text-center font-medium text-muted-foreground">{i + 1}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2.5">
+                        <TableCell className="w-[140px] max-w-[140px]">
+                          <div className="flex items-center gap-2">
                             {d.profileImage ? (
-                              <Image src={d.profileImage} alt={d.name} width={32} height={32} className="h-8 w-8 rounded-full object-cover" />
+                              <Image src={d.profileImage} alt={d.name} width={28} height={28} className="h-7 w-7 rounded-full object-cover shrink-0" />
                             ) : (
-                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                              <div className="h-7 w-7 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
                                 {d.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                               </div>
                             )}
-                            <div>
-                              <p className="text-sm font-medium leading-none">{d.name}</p>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium leading-none truncate" title={d.name}>{d.name}</p>
                             </div>
                           </div>
                         </TableCell>
@@ -195,11 +194,10 @@ export function DriversTab({
                     ))}
                 </TableBody>
               </Table>
-            </div>
           </CardContent>
         </Card>
       ) : (
-        <Card className="overflow-hidden py-0">
+        <Card className="py-0">
           <CardContent className="py-16 text-center">
             <Truck className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-lg font-medium">No driver data</p>

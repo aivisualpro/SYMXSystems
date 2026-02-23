@@ -6,6 +6,8 @@ import {
 } from "@/components/ui/table";
 import { MessageSquareWarning } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SortableTableHead } from "../shared-components";
+import { useSort } from "../hooks/use-sort";
 import type { CdfNegativeRow } from "../types";
 
 interface CdfNegativeTabProps {
@@ -13,26 +15,28 @@ interface CdfNegativeTabProps {
 }
 
 export function CdfNegativeTab({ cdfNegativeRows }: CdfNegativeTabProps) {
+  const { sortedItems, requestSort, sortConfig } = useSort(cdfNegativeRows, 'deliveryDate', 'desc');
+
   return (
     <div className="mt-4">
       {cdfNegativeRows.length > 0 ? (
-        <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+        <Card className="py-0"><CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow>
+            <TableHeader className="sticky top-0 z-20 bg-background shadow-sm"><TableRow>
               <TableHead className="w-8">#</TableHead>
-              <TableHead className="min-w-[160px]">Driver</TableHead>
-              <TableHead>Tracking ID</TableHead>
-              <TableHead className="text-center">Delivery Date</TableHead>
-              <TableHead className="text-center">Mishandled</TableHead>
-              <TableHead className="text-center">Unprofessional</TableHead>
-              <TableHead className="text-center">Didn&apos;t Follow Instructions</TableHead>
-              <TableHead className="text-center">Wrong Address</TableHead>
-              <TableHead className="text-center">Never Received</TableHead>
-              <TableHead className="text-center">Wrong Item</TableHead>
-              <TableHead className="min-w-[200px]">Feedback Details</TableHead>
+              <SortableTableHead label="Driver" sortKey="deliveryAssociateName" currentSort={sortConfig} requestSort={requestSort} className="min-w-[160px]" />
+              <SortableTableHead label="Tracking ID" sortKey="trackingId" currentSort={sortConfig} requestSort={requestSort} />
+              <SortableTableHead label="Delivery Date" sortKey="deliveryDate" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+              <SortableTableHead label="Mishandled" sortKey="mishandledPackage" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+              <SortableTableHead label="Unprofessional" sortKey="unprofessionalBehavior" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+              <SortableTableHead label="Didn't Follow Instructions" sortKey="didNotFollowDeliveryInstructions" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+              <SortableTableHead label="Wrong Address" sortKey="deliveredToWrongAddress" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+              <SortableTableHead label="Never Received" sortKey="neverReceivedDelivery" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+              <SortableTableHead label="Wrong Item" sortKey="deliveredWrongItem" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+              <SortableTableHead label="Feedback Details" sortKey="feedbackDetails" currentSort={sortConfig} requestSort={requestSort} className="min-w-[200px]" />
             </TableRow></TableHeader>
             <TableBody>
-              {cdfNegativeRows.map((r, i) => {
+              {sortedItems.map((r, i) => {
                 const flagClass = (val: string) => val && val.toLowerCase() === 'yes'
                   ? 'text-red-500 font-bold'
                   : 'text-muted-foreground/40';
@@ -55,7 +59,7 @@ export function CdfNegativeTab({ cdfNegativeRows }: CdfNegativeTabProps) {
               })}
             </TableBody>
           </Table>
-        </div></CardContent></Card>
+        </CardContent></Card>
       ) : (
         <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
           <MessageSquareWarning className="h-10 w-10 text-muted-foreground/20 mb-3" />

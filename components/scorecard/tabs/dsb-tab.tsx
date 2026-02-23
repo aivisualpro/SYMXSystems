@@ -5,34 +5,38 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { ShieldAlert } from "lucide-react";
+import { SortableTableHead } from "../shared-components";
+import { useSort } from "../hooks/use-sort";
 
 interface DsbTabProps {
   dsbRows: any[];
 }
 
 export function DsbTab({ dsbRows }: DsbTabProps) {
+  const { sortedItems, requestSort, sortConfig } = useSort(dsbRows, 'dsbCount', 'desc');
+
   return (
     <div className="mt-4">
       {dsbRows.length > 0 ? (
-        <Card className="py-0"><CardContent className="p-0"><div className="overflow-x-auto">
+        <Card className="py-0"><CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow>
+            <TableHeader className="sticky top-0 z-20 bg-background shadow-sm"><TableRow>
               <TableHead className="w-8">#</TableHead>
-              <TableHead className="min-w-[160px]">Driver</TableHead>
-              <TableHead>ID</TableHead>
-              <TableHead className="text-right">DSB Count</TableHead>
-              <TableHead className="text-right">DSB DPMO</TableHead>
-              <TableHead className="text-right">Attended</TableHead>
-              <TableHead className="text-right">Unattended</TableHead>
-              <TableHead className="text-right">Simultaneous</TableHead>
-              <TableHead className="text-right">Over 50m</TableHead>
-              <TableHead className="text-right">Scan Att.</TableHead>
-              <TableHead className="text-right">Scan Unatt.</TableHead>
-              <TableHead className="text-right">No POD</TableHead>
-              <TableHead className="text-right">SNDNR</TableHead>
+              <SortableTableHead label="Driver" sortKey="deliveryAssociate" currentSort={sortConfig} requestSort={requestSort} className="min-w-[160px]" />
+              <SortableTableHead label="ID" sortKey="transporterId" currentSort={sortConfig} requestSort={requestSort} />
+              <SortableTableHead label="DSB Count" sortKey="dsbCount" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="DSB DPMO" sortKey="dsbDpmo" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Attended" sortKey="attendedDeliveryCount" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Unattended" sortKey="unattendedDeliveryCount" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Simultaneous" sortKey="simultaneousDeliveries" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Over 50m" sortKey="deliveredOver50m" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Scan Att." sortKey="incorrectScanUsageAttended" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="Scan Unatt." sortKey="incorrectScanUsageUnattended" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="No POD" sortKey="noPodOnDelivery" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
+              <SortableTableHead label="SNDNR" sortKey="scannedNotDeliveredNotReturned" currentSort={sortConfig} requestSort={requestSort} className="text-right" />
             </TableRow></TableHeader>
             <TableBody>
-              {dsbRows.map((r: any, i: number) => (
+              {sortedItems.map((r: any, i: number) => (
                 <TableRow key={r.transporterId + i}>
                   <TableCell>{i + 1}</TableCell>
                   <TableCell className="font-medium">{r.deliveryAssociate}</TableCell>
@@ -51,7 +55,7 @@ export function DsbTab({ dsbRows }: DsbTabProps) {
               ))}
             </TableBody>
           </Table>
-        </div></CardContent></Card>
+        </CardContent></Card>
       ) : (
         <Card className="py-12"><CardContent className="flex flex-col items-center justify-center text-center">
           <ShieldAlert className="h-10 w-10 text-muted-foreground/20 mb-3" />
