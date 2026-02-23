@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   CalendarDays,
@@ -33,6 +34,7 @@ import {
   Save,
   Pencil,
   X,
+  MessageSquare,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import MessagingPanel from "@/components/scheduling/messaging-panel";
 
 // ── Type Options with Icons & Colors ──
 interface TypeOption {
@@ -359,6 +362,9 @@ function EditableNote({
 }
 
 export default function SchedulingPage() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const activeMainTab = pathname.includes("/messaging") ? "messaging" : "scheduling";
   const [weeks, setWeeks] = useState<string[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<string>("");
   const [weekData, setWeekData] = useState<WeekData | null>(null);
@@ -369,6 +375,7 @@ export default function SchedulingPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [planningCollapsed, setPlanningCollapsed] = useState(true);
+  const [selectAllTrigger, setSelectAllTrigger] = useState(0);
   const { setLeftContent, setRightContent } = useHeaderActions();
 
   // Fetch available weeks
@@ -458,6 +465,16 @@ export default function SchedulingPage() {
             className="pl-8 h-8 w-[220px] text-sm"
           />
         </div>
+        {activeMainTab === "messaging" && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setSelectAllTrigger((p) => p + 1)}
+          >
+            Select All
+          </Button>
+        )}
       </div>
     );
 
@@ -465,7 +482,7 @@ export default function SchedulingPage() {
       setLeftContent(null);
       setRightContent(null);
     };
-  }, [setLeftContent, setRightContent, searchQuery]);
+  }, [setLeftContent, setRightContent, searchQuery, activeMainTab]);
 
   // Update right content whenever week state changes
   useEffect(() => {
@@ -730,6 +747,50 @@ export default function SchedulingPage() {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-3">
+
+        {/* ── Main Tabs: Scheduling | Messaging ── */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => router.push("/scheduling")}
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all",
+              activeMainTab === "scheduling"
+                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            <CalendarDays className="h-4 w-4" />
+            Scheduling
+          </button>
+          <button
+            onClick={() => router.push("/scheduling/messaging")}
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all",
+              activeMainTab === "messaging"
+                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            <MessageSquare className="h-4 w-4" />
+            Messaging
+          </button>
+        </div>
+
+        {/* ── Messaging Tab Content ── */}
+        {activeMainTab === "messaging" && (
+          <div className="flex-1 min-h-0 overflow-auto">
+            <MessagingPanel
+              weeks={weeks}
+              selectedWeek={selectedWeek}
+              setSelectedWeek={setSelectedWeek}
+              searchQuery={searchQuery}
+              selectAllTrigger={selectAllTrigger}
+            />
+          </div>
+        )}
+
+        {/* ── Scheduling Tab Content ── */}
+        {activeMainTab === "scheduling" && (<>
 
         {/* ── KPI Cards ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1144,6 +1205,7 @@ export default function SchedulingPage() {
             );
           })}
         </div>
+        </>)}
       </div>
     </TooltipProvider>
   );
