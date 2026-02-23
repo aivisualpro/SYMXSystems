@@ -246,3 +246,19 @@ body {
 .animate-pulse-slow {
   animation: pulse-slow 4s ease-in-out infinite;
 }
+
+@keyframes ring-caution {
+  0%, 100% { box-shadow: 0 0 0 2.5px rgba(251, 191, 36, 0.7); }
+  50% { box-shadow: 0 0 0 2.5px rgba(251, 191, 36, 0.25); }
+}
+.animate-ring-caution {
+  animation: ring-caution 2s ease-in-out infinite;
+}
+
+@keyframes ring-danger {
+  0%, 100% { box-shadow: 0 0 0 2.5px rgba(239, 68, 68, 0.8); }
+  50% { box-shadow: 0 0 0 2.5px rgba(239, 68, 68, 0.25); }
+}
+.animate-ring-danger {
+  animation: ring-danger 1.2s ease-in-out infinite;
+}

@@ -69,9 +69,9 @@ interface TypeOption {
 
 const TYPE_OPTIONS: TypeOption[] = [
   { label: "Route",         icon: Navigation,    bg: "bg-emerald-600",    text: "text-white",  border: "border-emerald-700",   dotColor: "bg-emerald-500" },
-  { label: "Open",          icon: DoorOpen,      bg: "bg-orange-500",     text: "text-white",  border: "border-orange-600",    dotColor: "bg-orange-500" },
-  { label: "Close",         icon: DoorClosed,    bg: "bg-red-600",        text: "text-white",  border: "border-red-700",       dotColor: "bg-red-500" },
-  { label: "Off",           icon: Coffee,        bg: "bg-zinc-300 dark:bg-zinc-600", text: "text-zinc-900 dark:text-white", border: "border-zinc-400 dark:border-zinc-500", dotColor: "bg-zinc-400" },
+  { label: "Open",          icon: DoorOpen,      bg: "bg-amber-400/80",   text: "text-white",  border: "border-amber-500/60",  dotColor: "bg-amber-400" },
+  { label: "Close",         icon: DoorClosed,    bg: "bg-rose-400/80",    text: "text-white",  border: "border-rose-500/60",   dotColor: "bg-rose-400" },
+  { label: "Off",           icon: Coffee,        bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600", dotColor: "bg-zinc-400" },
   { label: "Call Out",      icon: PhoneOff,      bg: "bg-yellow-500",     text: "text-white",  border: "border-yellow-600",    dotColor: "bg-yellow-500" },
   { label: "AMZ Training",  icon: GraduationCap, bg: "bg-indigo-600",     text: "text-white",  border: "border-indigo-700",    dotColor: "bg-indigo-500" },
   { label: "Fleet",         icon: TruckIcon,     bg: "bg-blue-600",       text: "text-white",  border: "border-blue-700",      dotColor: "bg-blue-500" },
@@ -87,7 +87,7 @@ const TYPE_MAP = new Map(TYPE_OPTIONS.map(opt => [opt.label.toLowerCase(), opt])
 
 const getTypeStyle = (value: string): { bg: string; text: string; border: string } => {
   if (!value || value.trim() === "") {
-    return { bg: "bg-zinc-300 dark:bg-zinc-600", text: "text-zinc-900 dark:text-white", border: "border-zinc-400 dark:border-zinc-500" };
+    return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" };
   }
   const opt = TYPE_MAP.get(value.trim().toLowerCase());
   if (opt) return { bg: opt.bg, text: opt.text, border: opt.border };
@@ -337,15 +337,24 @@ function EditableNote({
   }
 
   return (
-    <div
-      className="flex items-center gap-1 cursor-pointer group/note min-w-[100px] max-w-[250px] rounded px-1 py-0.5 hover:bg-muted/40 transition-colors"
-      onClick={() => setEditing(true)}
-    >
-      <span className="text-[11px] text-muted-foreground truncate flex-1">
-        {value || <span className="italic opacity-50">—</span>}
-      </span>
-      <Pencil className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover/note:opacity-100 transition-opacity shrink-0" />
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className="flex items-center gap-1 cursor-pointer group/note min-w-[100px] max-w-[250px] rounded px-1 py-0.5 hover:bg-muted/40 transition-colors"
+          onClick={() => setEditing(true)}
+        >
+          <span className="text-[11px] text-muted-foreground truncate flex-1">
+            {value || <span className="italic opacity-50">—</span>}
+          </span>
+          <Pencil className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover/note:opacity-100 transition-opacity shrink-0" />
+        </div>
+      </TooltipTrigger>
+      {value && value.length > 25 && (
+        <TooltipContent side="top" className="max-w-[300px] text-xs bg-popover text-popover-foreground border shadow-lg">
+          <p>{value}</p>
+        </TooltipContent>
+      )}
+    </Tooltip>
   );
 }
 
@@ -359,7 +368,7 @@ export default function SchedulingPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-  const [planningCollapsed, setPlanningCollapsed] = useState(false);
+  const [planningCollapsed, setPlanningCollapsed] = useState(true);
   const { setLeftContent, setRightContent } = useHeaderActions();
 
   // Fetch available weeks
@@ -411,19 +420,52 @@ export default function SchedulingPage() {
     setCollapsedGroups(prev => ({ ...prev, [group]: !prev[group] }));
   };
 
-  // Push title + week nav into the main header
+  // Compute warning counts for KPI card
+  const warningCounts = useMemo(() => {
+    if (!weekData?.employees) return { caution: 0, danger: 0, cautionNames: [] as string[], dangerNames: [] as string[] };
+    let caution = 0;
+    let danger = 0;
+    const cautionNames: string[] = [];
+    const dangerNames: string[] = [];
+    weekData.employees.forEach(emp => {
+      const warnings = getConsecutiveWarnings(emp);
+      let hasCaution = false;
+      let hasDanger = false;
+      warnings.forEach(w => {
+        if (w.type === 'danger') hasDanger = true;
+        else if (w.type === 'caution') hasCaution = true;
+      });
+      const name = emp.employee?.name || emp.transporterId;
+      if (hasDanger) { danger++; dangerNames.push(name); }
+      else if (hasCaution) { caution++; cautionNames.push(name); }
+    });
+    return { caution, danger, cautionNames, dangerNames };
+  }, [weekData]);
+
+  // Push title + search into the main header
   useEffect(() => {
     setLeftContent(
-      <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-        Scheduling
-      </h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+          Scheduling
+        </h1>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search employee..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 h-8 w-[220px] text-sm"
+          />
+        </div>
+      </div>
     );
 
     return () => {
       setLeftContent(null);
       setRightContent(null);
     };
-  }, [setLeftContent, setRightContent]);
+  }, [setLeftContent, setRightContent, searchQuery]);
 
   // Update right content whenever week state changes
   useEffect(() => {
@@ -687,7 +729,7 @@ export default function SchedulingPage() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="space-y-4">
+      <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-3">
 
         {/* ── KPI Cards ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -700,14 +742,7 @@ export default function SchedulingPage() {
               iconColor: "text-blue-500",
               borderColor: "border-blue-500/20",
             },
-            {
-              label: "Total Entries",
-              value: totalScheduleEntries,
-              icon: CalendarDays,
-              gradient: "from-emerald-500/15 to-green-500/15",
-              iconColor: "text-emerald-500",
-              borderColor: "border-emerald-500/20",
-            },
+
             {
               label: "Routes",
               value: totalRoutes,
@@ -738,47 +773,51 @@ export default function SchedulingPage() {
               </div>
             </div>
           ))}
+          {/* Warnings Card */}
+          <div className="relative overflow-hidden rounded-xl border border-amber-500/30 p-4 bg-gradient-to-br from-zinc-500/10 to-zinc-500/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Warnings</p>
+                <div className="flex items-center gap-3 mt-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-1.5 cursor-default">
+                        <span className="h-2.5 w-2.5 rounded-full bg-orange-400 animate-pulse" />
+                        <span className="text-lg font-bold text-orange-400">{loadingData ? "—" : warningCounts.caution}</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[250px] bg-popover text-popover-foreground border shadow-lg">
+                      <p className="font-semibold text-amber-500 mb-1">6 Consecutive Days</p>
+                      {warningCounts.cautionNames.length > 0
+                        ? warningCounts.cautionNames.map(n => <p key={n} className="text-xs">{n}</p>)
+                        : <p className="text-xs text-muted-foreground">None</p>
+                      }
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className="text-muted-foreground/30">|</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-1.5 cursor-default">
+                        <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-lg font-bold text-red-500">{loadingData ? "—" : warningCounts.danger}</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[250px] bg-popover text-popover-foreground border shadow-lg">
+                      <p className="font-semibold text-red-500 mb-1">7+ Consecutive Days</p>
+                      {warningCounts.dangerNames.length > 0
+                        ? warningCounts.dangerNames.map(n => <p key={n} className="text-xs">{n}</p>)
+                        : <p className="text-xs text-muted-foreground">None</p>
+                      }
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+              <AlertTriangle className="h-8 w-8 text-amber-500 opacity-50" />
+            </div>
+          </div>
         </div>
 
-        {/* ── Filters ── */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name or transporter ID..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9"
-            />
-          </div>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-[160px] h-9">
-              <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-              <SelectValue placeholder="All Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {employeeTypes.map(t => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px] h-9">
-              <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-              <SelectValue placeholder="All Statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              {allStatuses.map(s => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Badge variant="secondary" className="h-9 px-3 text-xs">
-            {filteredEmployees.length} of {totalEmployees} employees
-          </Badge>
-        </div>
+
 
         {/* ── Main Schedule Table ── */}
         {loadingData ? (
@@ -786,8 +825,8 @@ export default function SchedulingPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <div className="rounded-xl border border-border/50 overflow-hidden bg-card">
-            <div className="overflow-auto max-h-[calc(100vh-320px)]">
+          <div className="rounded-xl border border-border/50 overflow-hidden bg-card flex-1 min-h-0 flex flex-col">
+            <div className="overflow-auto flex-1">
               <table className="w-full text-sm">
                 {/* Table Header with Dates */}
                 <thead className="sticky top-0 z-20">
@@ -946,23 +985,25 @@ export default function SchedulingPage() {
                                               <DropdownMenuTrigger asChild>
                                                 <div
                                                   className={cn(
-                                                    "flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold transition-all border cursor-pointer select-none",
+                                                    "relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold transition-all border cursor-pointer select-none",
                                                     style.bg,
                                                     style.text,
                                                     style.border,
-                                                    "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]",
-                                                    warning?.type === 'danger' && "ring-2 ring-red-500 ring-offset-1 ring-offset-card",
-                                                    warning?.type === 'caution' && "ring-2 ring-amber-400 ring-offset-1 ring-offset-card"
+                                                    "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
                                                   )}
                                                 >
-                                                  {warning && (
-                                                    <AlertTriangle className={cn(
-                                                      "h-3 w-3 shrink-0",
-                                                      warning.type === 'danger' ? "text-yellow-200" : "text-yellow-200"
-                                                    )} />
-                                                  )}
                                                   {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
                                                   <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
+                                                  {warning && (
+                                                    <span className={cn(
+                                                      "absolute -top-1.5 -right-1.5 flex items-center justify-center h-3.5 min-w-[14px] rounded-full text-[8px] font-bold text-white leading-none px-0.5 shadow-sm",
+                                                      warning.type === 'danger'
+                                                        ? "bg-red-500 animate-pulse"
+                                                        : "bg-orange-400"
+                                                    )}>
+                                                      {warning.consecutive}
+                                                    </span>
+                                                  )}
                                                 </div>
                                               </DropdownMenuTrigger>
                                             </TooltipTrigger>
