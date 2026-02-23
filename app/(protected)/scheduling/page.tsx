@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { cn } from "@/lib/utils";
 import {
   CalendarDays,
@@ -30,6 +30,9 @@ import {
   Ban,
   ShieldAlert,
   Coffee,
+  Save,
+  Pencil,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -88,12 +91,25 @@ const getTypeStyle = (value: string): { bg: string; text: string; border: string
   }
   const opt = TYPE_MAP.get(value.trim().toLowerCase());
   if (opt) return { bg: opt.bg, text: opt.text, border: opt.border };
-  // Fallback for unknown values — keep them visible
   return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
 };
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+// Working types — anything NOT in this list is considered "not working"
+const NON_WORKING_TYPES = new Set(["off", "close", "request off", ""]);
+
+function isWorkingDay(type: string): boolean {
+  return !NON_WORKING_TYPES.has((type || "").trim().toLowerCase());
+}
+
+// Route types for consecutive route detection
+const ROUTE_TYPES = new Set(["route"]);
+
+function isRouteDay(type: string): boolean {
+  return ROUTE_TYPES.has((type || "").trim().toLowerCase());
+}
 
 interface DayData {
   _id: string;
@@ -154,7 +170,7 @@ function computePlanningData(employees: EmployeeSchedule[]): PlanningRow[] {
       const typeVal = (day.type || "").trim().toLowerCase();
       const empType = (emp.employee?.type || "").trim().toLowerCase();
 
-      if (typeVal && typeVal !== "off" && typeVal !== "close" && typeVal !== "request off") {
+      if (isWorkingDay(day.type)) {
         daStats[d]++;
       }
       if (typeVal === "stand by") standBy[d]++;
@@ -191,14 +207,146 @@ function countWorkingDays(emp: EmployeeSchedule): number {
   let count = 0;
   for (let d = 0; d < 7; d++) {
     const day = emp.days[d];
-    if (day) {
-      const typeVal = (day.type || "").trim().toLowerCase();
-      if (typeVal && typeVal !== "off" && typeVal !== "close" && typeVal !== "request off") {
-        count++;
-      }
+    if (day && isWorkingDay(day.type)) {
+      count++;
     }
   }
   return count;
+}
+
+// Detect consecutive working days and return warnings per day index
+// Returns a Map<dayIndex, { consecutive: number, type: 'caution' | 'danger' }>
+function getConsecutiveWarnings(emp: EmployeeSchedule): Map<number, { consecutive: number; type: 'caution' | 'danger' }> {
+  const warnings = new Map<number, { consecutive: number; type: 'caution' | 'danger' }>();
+  
+  // Check consecutive working (not just route — any working day counts)
+  let consecutive = 0;
+  for (let d = 0; d < 7; d++) {
+    const day = emp.days[d];
+    if (day && isWorkingDay(day.type)) {
+      consecutive++;
+      if (consecutive === 6) {
+        warnings.set(d, { consecutive: 6, type: 'caution' });
+      } else if (consecutive >= 7) {
+        warnings.set(d, { consecutive, type: 'danger' });
+      }
+    } else {
+      consecutive = 0;
+    }
+  }
+  
+  return warnings;
+}
+
+// ── Inline Editable Note Component ──
+function EditableNote({
+  value,
+  employeeId,
+  onSaved,
+}: {
+  value: string;
+  employeeId: string | undefined;
+  onSaved: (newNote: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const handleSave = async () => {
+    if (!employeeId) {
+      toast.error("No employee ID available");
+      return;
+    }
+    if (draft === value) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/schedules", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId, note: draft }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+      toast.success("Note saved");
+      onSaved(draft);
+      setEditing(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save note");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setDraft(value);
+    setEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleSave();
+    if (e.key === "Escape") handleCancel();
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1 min-w-[180px]">
+        <Input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="h-6 text-[11px] px-1.5 py-0 border-primary/40 focus-visible:ring-primary/30"
+          disabled={saving}
+          placeholder="Add a note..."
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-5 w-5 shrink-0 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10"
+          onClick={handleSave}
+          disabled={saving}
+        >
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-5 w-5 shrink-0 text-zinc-400 hover:text-zinc-300 hover:bg-zinc-500/10"
+          onClick={handleCancel}
+          disabled={saving}
+        >
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex items-center gap-1 cursor-pointer group/note min-w-[100px] max-w-[250px] rounded px-1 py-0.5 hover:bg-muted/40 transition-colors"
+      onClick={() => setEditing(true)}
+    >
+      <span className="text-[11px] text-muted-foreground truncate flex-1">
+        {value || <span className="italic opacity-50">—</span>}
+      </span>
+      <Pencil className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover/note:opacity-100 transition-opacity shrink-0" />
+    </div>
+  );
 }
 
 export default function SchedulingPage() {
@@ -211,6 +359,7 @@ export default function SchedulingPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [planningCollapsed, setPlanningCollapsed] = useState(false);
   const { setLeftContent, setRightContent } = useHeaderActions();
 
   // Fetch available weeks
@@ -334,11 +483,6 @@ export default function SchedulingPage() {
     transporterId: string,
     dayIdx: number
   ) => {
-    if (!scheduleId) {
-      toast.error("No schedule entry for this day");
-      return;
-    }
-
     // Optimistic update
     setWeekData(prev => {
       if (!prev) return prev;
@@ -350,9 +494,9 @@ export default function SchedulingPage() {
           days: {
             ...emp.days,
             [dayIdx]: {
-              ...emp.days[dayIdx],
+              ...(emp.days[dayIdx] || {}),
               type: newType,
-            },
+            } as DayData,
           },
         };
       });
@@ -360,16 +504,40 @@ export default function SchedulingPage() {
     });
 
     try {
+      // Build payload — include creation fields when no scheduleId
+      const payload: Record<string, string> = { type: newType };
+      if (scheduleId) {
+        payload.scheduleId = scheduleId;
+      } else {
+        // Need to create a new entry — compute the date from weekData.dates
+        const dateStr = weekData?.dates?.[dayIdx];
+        if (!dateStr || !selectedWeek) {
+          toast.error("Cannot determine date for this day");
+          return;
+        }
+        payload.transporterId = transporterId;
+        payload.date = dateStr;
+        payload.yearWeek = selectedWeek;
+        payload.weekDay = FULL_DAY_NAMES[dayIdx];
+      }
+
       const res = await fetch("/api/schedules", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduleId, type: newType }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Failed to update");
       }
       toast.success(`Type updated to ${newType}`);
+
+      // Refetch to get the new _id if we created a new entry
+      if (!scheduleId) {
+        const refetchRes = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`);
+        const refetchData = await refetchRes.json();
+        setWeekData(refetchData);
+      }
     } catch (err: any) {
       toast.error(err.message || "Failed to update type");
       // Revert on error — refetch
@@ -379,7 +547,24 @@ export default function SchedulingPage() {
         setWeekData(data);
       }
     }
-  }, [selectedWeek]);
+  }, [selectedWeek, weekData]);
+
+  // Handle note save — optimistic update
+  const handleNoteSaved = useCallback((transporterId: string, newNote: string) => {
+    setWeekData(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        employees: prev.employees.map(emp => {
+          if (emp.transporterId !== transporterId) return emp;
+          return {
+            ...emp,
+            employee: emp.employee ? { ...emp.employee, scheduleNotes: newNote } : emp.employee,
+          };
+        }),
+      };
+    });
+  }, []);
 
   // Filter employees
   const filteredEmployees = useMemo(() => {
@@ -408,11 +593,15 @@ export default function SchedulingPage() {
     });
   }, [weekData, searchQuery, typeFilter, statusFilter]);
 
+  const isFiltered = searchQuery || typeFilter !== "all" || statusFilter !== "all";
+
   // Group data
   const grouped = useMemo(() => groupByType(filteredEmployees), [filteredEmployees]);
+  
+  // Planning data now uses filtered employees when any filter is active
   const planningData = useMemo(
-    () => computePlanningData(weekData?.employees || []),
-    [weekData]
+    () => computePlanningData(isFiltered ? filteredEmployees : (weekData?.employees || [])),
+    [weekData, filteredEmployees, isFiltered]
   );
 
   // Get unique types and statuses for filters
@@ -622,13 +811,27 @@ export default function SchedulingPage() {
                 </thead>
                 <tbody>
                   {/* ── Planning Section ── */}
-                  <tr className="border-b border-border/30">
+                  <tr
+                    className="border-b border-border/30 cursor-pointer hover:bg-muted/30 transition-colors"
+                    onClick={() => setPlanningCollapsed(!planningCollapsed)}
+                  >
                     <td className="px-3 py-1.5 sticky left-0 bg-card z-10">
                       <div className="flex items-center gap-2">
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                            planningCollapsed && "-rotate-90"
+                          )}
+                        />
                         <span className="font-bold text-xs uppercase tracking-wider text-primary">Planning</span>
                         <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-primary/10 text-primary">
                           {planningData.length}
                         </Badge>
+                        {isFiltered && (
+                          <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-amber-500/40 text-amber-500">
+                            Filtered
+                          </Badge>
+                        )}
                       </div>
                     </td>
                     {weekData?.dates?.map((_, i) => (
@@ -637,7 +840,7 @@ export default function SchedulingPage() {
                     <td className="px-2 py-1.5" />
                     <td className="px-3 py-1.5" />
                   </tr>
-                  {planningData.map((row) => (
+                  {!planningCollapsed && planningData.map((row) => (
                     <tr key={row.label} className="border-b border-border/20 hover:bg-muted/20 transition-colors">
                       <td className="px-3 py-1.5 sticky left-0 bg-card z-10">
                         <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
@@ -709,12 +912,7 @@ export default function SchedulingPage() {
                             .map((emp) => {
                               const workDays = countWorkingDays(emp);
                               const notes = emp.employee?.scheduleNotes || "";
-                              // Collect all day notes
-                              const dayNotes = Object.values(emp.days)
-                                .filter((d: DayData) => d.note)
-                                .map((d: DayData) => d.note)
-                                .join("; ");
-                              const displayNote = notes || dayNotes || "";
+                              const consecutiveWarnings = getConsecutiveWarnings(emp);
 
                               return (
                                 <tr
@@ -738,6 +936,7 @@ export default function SchedulingPage() {
                                     const style = getTypeStyle(displayValue);
                                     const matchedOpt = TYPE_MAP.get(displayValue.toLowerCase());
                                     const CellIcon = matchedOpt?.icon;
+                                    const warning = consecutiveWarnings.get(dayIdx);
 
                                     return (
                                       <td key={dayIdx} className="text-center px-1 py-1">
@@ -751,9 +950,17 @@ export default function SchedulingPage() {
                                                     style.bg,
                                                     style.text,
                                                     style.border,
-                                                    "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                                                    "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]",
+                                                    warning?.type === 'danger' && "ring-2 ring-red-500 ring-offset-1 ring-offset-card",
+                                                    warning?.type === 'caution' && "ring-2 ring-amber-400 ring-offset-1 ring-offset-card"
                                                   )}
                                                 >
+                                                  {warning && (
+                                                    <AlertTriangle className={cn(
+                                                      "h-3 w-3 shrink-0",
+                                                      warning.type === 'danger' ? "text-yellow-200" : "text-yellow-200"
+                                                    )} />
+                                                  )}
                                                   {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
                                                   <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
                                                 </div>
@@ -801,6 +1008,18 @@ export default function SchedulingPage() {
                                                   </>
                                                 )}
                                               </div>
+                                              {warning && (
+                                                <div className={cn(
+                                                  "mt-1 pt-1 border-t flex items-center gap-1.5 font-semibold text-[11px]",
+                                                  warning.type === 'danger' ? "text-red-400 border-red-500/30" : "text-amber-400 border-amber-500/30"
+                                                )}>
+                                                  <AlertTriangle className="h-3.5 w-3.5" />
+                                                  {warning.type === 'danger'
+                                                    ? `${warning.consecutive} consecutive work days!`
+                                                    : `${warning.consecutive} consecutive work days`
+                                                  }
+                                                </div>
+                                              )}
                                             </TooltipContent>
                                           </Tooltip>
                                           <DropdownMenuContent
@@ -852,9 +1071,11 @@ export default function SchedulingPage() {
                                     </span>
                                   </td>
                                   <td className="px-3 py-1.5">
-                                    <span className="text-[11px] text-muted-foreground truncate block max-w-[250px]">
-                                      {displayNote}
-                                    </span>
+                                    <EditableNote
+                                      value={notes}
+                                      employeeId={emp.employee?._id}
+                                      onSaved={(newNote) => handleNoteSaved(emp.transporterId, newNote)}
+                                    />
                                   </td>
                                 </tr>
                               );

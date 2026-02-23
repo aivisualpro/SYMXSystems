@@ -142,23 +142,62 @@ export async function PATCH(req: NextRequest) {
     await connectToDatabase();
 
     const body = await req.json();
-    const { scheduleId, type } = body;
+    const { scheduleId, type, employeeId, note } = body;
 
-    if (!scheduleId) {
-      return NextResponse.json({ error: "scheduleId is required" }, { status: 400 });
+    // Update employee-level schedule notes
+    if (employeeId && note !== undefined) {
+      const updated = await SymxEmployee.findByIdAndUpdate(
+        employeeId,
+        { $set: { ScheduleNotes: note } },
+        { new: true }
+      ).lean();
+
+      if (!updated) {
+        return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+      }
+
+      return NextResponse.json({ success: true, employee: updated });
     }
 
-    const updated = await SymxEmployeeSchedule.findByIdAndUpdate(
-      scheduleId,
-      { $set: { type: type || "" } },
-      { new: true }
-    ).lean();
+    // Update schedule entry type
+    if (scheduleId) {
+      const updated = await SymxEmployeeSchedule.findByIdAndUpdate(
+        scheduleId,
+        { $set: { type: type || "" } },
+        { new: true }
+      ).lean();
 
-    if (!updated) {
-      return NextResponse.json({ error: "Schedule entry not found" }, { status: 404 });
+      if (!updated) {
+        return NextResponse.json({ error: "Schedule entry not found" }, { status: 404 });
+      }
+
+      return NextResponse.json({ success: true, schedule: updated });
     }
 
-    return NextResponse.json({ success: true, schedule: updated });
+    // Create new schedule entry if no scheduleId but transporterId + date provided
+    const { transporterId, date, yearWeek, weekDay } = body;
+    if (transporterId && date && yearWeek) {
+      const created = await SymxEmployeeSchedule.findOneAndUpdate(
+        { transporterId, date: new Date(date) },
+        {
+          $set: {
+            type: type || "",
+            yearWeek,
+            weekDay: weekDay || "",
+            status: "Scheduled",
+          },
+          $setOnInsert: {
+            transporterId,
+            date: new Date(date),
+          },
+        },
+        { upsert: true, new: true }
+      ).lean();
+
+      return NextResponse.json({ success: true, schedule: created });
+    }
+
+    return NextResponse.json({ error: "scheduleId or transporterId+date+yearWeek is required" }, { status: 400 });
   } catch (error: any) {
     console.error("Schedule PATCH Error:", error);
     return NextResponse.json(
