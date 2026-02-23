@@ -365,6 +365,11 @@ export default function SchedulingPage() {
   const pathname = usePathname();
   const router = useRouter();
   const activeMainTab = pathname.includes("/messaging") ? "messaging" : "scheduling";
+  // Extract active sub-tab from URL: /scheduling/messaging/{subTab}
+  const activeSubTab = useMemo(() => {
+    const match = pathname.match(/\/scheduling\/messaging\/([^\/]+)/);
+    return match?.[1] || "future-shift";
+  }, [pathname]);
   const [weeks, setWeeks] = useState<string[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<string>("");
   const [weekData, setWeekData] = useState<WeekData | null>(null);
@@ -763,7 +768,7 @@ export default function SchedulingPage() {
             Scheduling
           </button>
           <button
-            onClick={() => router.push("/scheduling/messaging")}
+            onClick={() => router.push("/scheduling/messaging/future-shift")}
             className={cn(
               "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all",
               activeMainTab === "messaging"
@@ -785,6 +790,7 @@ export default function SchedulingPage() {
               setSelectedWeek={setSelectedWeek}
               searchQuery={searchQuery}
               selectAllTrigger={selectAllTrigger}
+              activeSubTab={activeSubTab}
             />
           </div>
         )}

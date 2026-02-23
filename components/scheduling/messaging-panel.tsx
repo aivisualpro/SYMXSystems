@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   Loader2,
@@ -116,27 +117,89 @@ function getDayOfWeek(dateStr: string): string {
   return FULL_DAY_NAMES[d.getUTCDay()];
 }
 
-function personalizeMessage(template: string, emp: EmployeeRecipient): string {
-  // Find the next working shift for this employee
+function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: string, selectedWeek?: string): string {
   const NON_WORKING = ["off", "close", "request off", ""];
-  const futureShift = emp.schedules?.find(
+
+  // Determine which schedule to use based on tab context
+  let targetShift = emp.schedules?.find(
     (s) => s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
   );
 
+  const now = new Date();
+
+  if (tabId === "shift") {
+    // Shift notification → use TODAY's schedule
+    const todayStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")}`;
+    const todayShift = emp.schedules?.find(
+      (s) => s.date?.startsWith(todayStr) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
+    );
+    if (todayShift) targetShift = todayShift;
+  } else if (tabId === "future-shift" || tabId === "off-tomorrow") {
+    // Future shift / off-tomorrow → use TOMORROW's schedule
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = `${tomorrow.getFullYear()}-${(tomorrow.getMonth() + 1).toString().padStart(2, "0")}-${tomorrow.getDate().toString().padStart(2, "0")}`;
+    const tomorrowShift = emp.schedules?.find(
+      (s) => s.date?.startsWith(tomorrowStr) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
+    );
+    if (tomorrowShift) targetShift = tomorrowShift;
+  }
+
   const name = emp.name || `${emp.firstName} ${emp.lastName}`.toUpperCase();
-  const startTime = futureShift?.startTime || "";
+  const startTime = targetShift?.startTime || "";
   const standupTime = startTime ? addMinutesToTime(startTime, 5) : "";
-  const shiftDate = futureShift?.date ? formatDateMMDDYYYY(futureShift.date) : "";
-  const dayOfWeek = futureShift?.date
-    ? getDayOfWeek(futureShift.date)
-    : futureShift?.weekDay || "";
+
+  // For 'shift' tab, use today's date; for 'future-shift'/'off-tomorrow', use tomorrow's; otherwise use schedule date
+  let shiftDate = "";
+  let dayOfWeek = "";
+
+  if (tabId === "shift") {
+    shiftDate = formatDateMMDDYYYY(now.toISOString());
+    dayOfWeek = FULL_DAY_NAMES[now.getDay()];
+  } else if (tabId === "future-shift" || tabId === "off-tomorrow") {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    shiftDate = formatDateMMDDYYYY(tomorrow.toISOString());
+    dayOfWeek = FULL_DAY_NAMES[tomorrow.getDay()];
+  } else {
+    shiftDate = targetShift?.date ? formatDateMMDDYYYY(targetShift.date) : "";
+    dayOfWeek = targetShift?.date
+      ? getDayOfWeek(targetShift.date)
+      : targetShift?.weekDay || "";
+  }
+
+  // Build {yearWeek} display string — "2026-W07" → "2026-7"
+  let yearWeekDisplay = selectedWeek || "";
+  const weekMatch = selectedWeek?.match(/(\d{4})-W(\d{2})/);
+  if (weekMatch) {
+    yearWeekDisplay = `${weekMatch[1]}-${parseInt(weekMatch[2])}`;
+  }
+
+  // Build {weekSchedule} — full 7-day breakdown for week-schedule tab
+  let weekSchedule = "";
+  if (tabId === "week-schedule" && emp.schedules && emp.schedules.length > 0) {
+    const sorted = [...emp.schedules].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    const lines = sorted.map((s) => {
+      const dn = s.weekDay || getDayOfWeek(s.date);
+      const df = formatDateMMDDYYYY(s.date);
+      const isWorking = s.type && !NON_WORKING.includes(s.type.toLowerCase().trim());
+      if (isWorking) {
+        return ` ${dn} ${df} ✅ ${s.startTime || ""}`;
+      } else {
+        return ` ${dn} ${df} ❌ OFF`;
+      }
+    });
+    weekSchedule = lines.join("\n");
+  }
 
   return template
     .replace(/\{name\}/gi, name)
     .replace(/\{startTime\}/gi, startTime)
     .replace(/\{standupTime\}/gi, standupTime)
     .replace(/\{date\}/gi, shiftDate)
-    .replace(/\{dayOfWeek\}/gi, dayOfWeek);
+    .replace(/\{dayOfWeek\}/gi, dayOfWeek)
+    .replace(/\{yearWeek\}/gi, yearWeekDisplay)
+    .replace(/\{weekSchedule\}/gi, weekSchedule);
 }
 
 // ── Sub Tab Config ──
@@ -186,8 +249,8 @@ const SUB_TABS = [
     iconColor: "text-violet-500",
     borderColor: "border-violet-500/30",
     defaultMessage:
-      "Hello {name}\n\nHere is your weekly schedule summary. Please review and confirm. Thank you!",
-    variables: ["name"],
+      "Hi {name}\n\nHere is your schedule for next week {yearWeek}\n----------------------\n\n{weekSchedule}\n\n----------------------\nPlease confirm with a Y.  Please check your start times!",
+    variables: ["name", "yearWeek", "weekSchedule"],
   },
   {
     id: "route-itinerary",
@@ -230,6 +293,53 @@ function MessagingSubTab({
   const [loadingPhones, setLoadingPhones] = useState(true);
   const [sendResults, setSendResults] = useState<SendResult[] | null>(null);
   const [composerTab, setComposerTab] = useState<"preview" | "compose">("preview");
+  const [templateLoaded, setTemplateLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load saved template from DB
+  useEffect(() => {
+    const loadTemplate = async () => {
+      try {
+        const res = await fetch(`/api/messaging/templates?type=${tab.id}`);
+        const data = await res.json();
+        if (data.template?.template) {
+          setMessage(data.template.template);
+        }
+      } catch {
+        // use default
+      } finally {
+        setTemplateLoaded(true);
+      }
+    };
+    loadTemplate();
+  }, [tab.id]);
+
+  // Auto-save template to DB with debounce
+  useEffect(() => {
+    if (!templateLoaded) return; // don't save on initial load
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        setSaving(true);
+        await fetch("/api/messaging/templates", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: tab.id, template: message }),
+        });
+      } catch {
+        // silently fail
+      } finally {
+        setSaving(false);
+      }
+    }, 1500);
+
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [message, tab.id, templateLoaded]);
 
   // Fetch phone numbers from Quo
   useEffect(() => {
@@ -342,7 +452,7 @@ function MessagingSubTab({
     const recipients = selectedEmployees.map((emp) => ({
       phone: emp.phoneNumber.startsWith("+") ? emp.phoneNumber : `+1${emp.phoneNumber.replace(/\D/g, "")}`,
       name: emp.name,
-      message: personalizeMessage(message.trim(), emp),
+      message: personalizeMessage(message.trim(), emp, tab.id, selectedWeek),
     }));
 
     setSending(true);
@@ -448,6 +558,15 @@ function MessagingSubTab({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
         {/* ── Left: Employee List ── */}
         <div className="rounded-xl border border-border/50 bg-card flex flex-col overflow-hidden">
+          {/* Table Header */}
+          <div className="grid grid-cols-[40px_1fr_100px_120px_120px] items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold sticky top-0 z-10">
+            <span></span>
+            <span>Name</span>
+            <span>Client Type</span>
+            <span>Phone</span>
+            <span>Schedule Type</span>
+          </div>
+
           {/* Employee Rows */}
           <div className="flex-1 overflow-auto">
             {loading ? (
@@ -465,7 +584,6 @@ function MessagingSubTab({
               filteredEmployees.map((emp) => {
                 const isSelected = selectedIds.has(emp._id);
 
-                // Determine the schedule summary for this employee
                 const nextShift = emp.schedules?.find(
                   (s) =>
                     s.type &&
@@ -474,99 +592,76 @@ function MessagingSubTab({
                     )
                 );
 
+                const sendResult = sendResults?.find(
+                  (r) =>
+                    r.to ===
+                    (emp.phoneNumber.startsWith("+")
+                      ? emp.phoneNumber
+                      : `+1${emp.phoneNumber.replace(/\D/g, "")}`)
+                );
+
                 return (
                   <div
                     key={emp._id}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2.5 border-b border-border/20 cursor-pointer transition-all hover:bg-muted/30",
+                      "grid grid-cols-[40px_1fr_100px_120px_120px] items-center gap-2 px-3 py-2 border-b border-border/20 cursor-pointer transition-all hover:bg-muted/30",
                       isSelected &&
                         "bg-primary/5 border-l-2 border-l-primary"
                     )}
                     onClick={() => toggleSelect(emp._id)}
                   >
-                    {/* Checkbox */}
-                    <div
-                      className={cn(
-                        "h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all",
-                        isSelected
-                          ? "bg-primary border-primary"
-                          : "border-muted-foreground/30"
-                      )}
-                    >
-                      {isSelected && (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-primary-foreground" />
-                      )}
-                    </div>
-
-                    {/* Employee Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold truncate">
-                          {emp.name}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className="text-[9px] h-4 px-1.5 shrink-0"
-                        >
-                          {emp.type}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <Phone className="h-3 w-3 text-muted-foreground/60" />
-                        <span className="text-[11px] text-muted-foreground">
-                          {emp.phoneNumber}
-                        </span>
-                        {nextShift && (
-                          <>
-                            <span className="text-muted-foreground/20">|</span>
-                            <span className="text-[10px] text-emerald-500 font-medium">
-                              {nextShift.type} — {nextShift.weekDay}
-                            </span>
-                          </>
+                    {/* Select */}
+                    <div className="flex items-center justify-center">
+                      <div
+                        className={cn(
+                          "h-4 w-4 rounded border-2 flex items-center justify-center shrink-0 transition-all",
+                          isSelected
+                            ? "bg-primary border-primary"
+                            : "border-muted-foreground/30"
+                        )}
+                      >
+                        {isSelected && (
+                          <CheckCircle2 className="h-3 w-3 text-primary-foreground" />
                         )}
                       </div>
                     </div>
 
-                    {/* Send result indicator */}
-                    {sendResults && (
-                      <div className="shrink-0">
-                        {sendResults.find(
-                          (r) =>
-                            r.to ===
-                            (emp.phoneNumber.startsWith("+")
-                              ? emp.phoneNumber
-                              : `+1${emp.phoneNumber.replace(/\D/g, "")}`)
-                        )?.success ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        ) : sendResults.find(
-                            (r) =>
-                              r.to ===
-                              (emp.phoneNumber.startsWith("+")
-                                ? emp.phoneNumber
-                                : `+1${emp.phoneNumber.replace(/\D/g, "")}`)
-                          ) ? (
+                    {/* Name */}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-semibold truncate">
+                        {emp.name}
+                      </span>
+                      {sendResult && (
+                        sendResult.success ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        ) : (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <XCircle className="h-4 w-4 text-red-500" />
+                              <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
                             </TooltipTrigger>
-                            <TooltipContent>
-                              {
-                                sendResults.find(
-                                  (r) =>
-                                    r.to ===
-                                    (emp.phoneNumber.startsWith("+")
-                                      ? emp.phoneNumber
-                                      : `+1${emp.phoneNumber.replace(
-                                          /\D/g,
-                                          ""
-                                        )}`)
-                                )?.error
-                              }
-                            </TooltipContent>
+                            <TooltipContent>{sendResult.error}</TooltipContent>
                           </Tooltip>
-                        ) : null}
-                      </div>
-                    )}
+                        )
+                      )}
+                    </div>
+
+                    {/* Client Type */}
+                    <span className="text-[11px] text-muted-foreground truncate">
+                      {emp.type}
+                    </span>
+
+                    {/* Phone */}
+                    <span className="text-[11px] text-muted-foreground truncate">
+                      {emp.phoneNumber}
+                    </span>
+
+                    {/* Schedule Type */}
+                    <span className={cn(
+                      "text-[11px] font-medium truncate",
+                      nextShift ? "text-emerald-500" : "text-muted-foreground/40"
+                    )}>
+                      {nextShift ? `${nextShift.type}` : "—"}
+                    </span>
                   </div>
                 );
               })
@@ -666,7 +761,7 @@ function MessagingSubTab({
                           </span>
                         </div>
                         <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">
-                          {personalizeMessage(message, emp)}
+                          {personalizeMessage(message, emp, tab.id, selectedWeek)}
                         </pre>
                       </div>
                     ))}
@@ -738,9 +833,21 @@ function MessagingSubTab({
                       </Badge>
                     ))}
                   </div>
-                  <span className="text-[10px] text-muted-foreground">
-                    {message.length} chars
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {saving && (
+                      <span className="text-[10px] text-amber-500 font-medium animate-pulse">
+                        Saving...
+                      </span>
+                    )}
+                    {!saving && templateLoaded && (
+                      <span className="text-[10px] text-emerald-500/60 font-medium">
+                        Auto-saved
+                      </span>
+                    )}
+                    <span className="text-[10px] text-muted-foreground">
+                      {message.length} chars
+                    </span>
+                  </div>
                 </div>
               </div>
             </>
@@ -789,20 +896,25 @@ function MessagingSubTab({
 }
 
 // ── Main Messaging Panel ──
+export { SUB_TABS };
+
 export default function MessagingPanel({
   weeks,
   selectedWeek,
   setSelectedWeek,
   searchQuery,
   selectAllTrigger,
+  activeSubTab,
 }: {
   weeks: string[];
   selectedWeek: string;
   setSelectedWeek: (w: string) => void;
   searchQuery: string;
   selectAllTrigger: number;
+  activeSubTab: string;
 }) {
-  const [activeSubTab, setActiveSubTab] = useState(SUB_TABS[0].id);
+  const router = useRouter();
+  const resolvedTab = SUB_TABS.find((t) => t.id === activeSubTab) ? activeSubTab : SUB_TABS[0].id;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -810,11 +922,11 @@ export default function MessagingPanel({
         {/* ── Sub-Tab Navigation ── */}
         <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
           {SUB_TABS.map((tab) => {
-            const isActive = activeSubTab === tab.id;
+            const isActive = resolvedTab === tab.id;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveSubTab(tab.id)}
+                onClick={() => router.push(`/scheduling/messaging/${tab.id}`)}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0",
                   isActive
@@ -832,7 +944,7 @@ export default function MessagingPanel({
         {/* ── Active Sub-Tab Content ── */}
         <div className="flex-1 min-h-0">
           {SUB_TABS.map((tab) =>
-            activeSubTab === tab.id ? (
+            resolvedTab === tab.id ? (
               <MessagingSubTab
                 key={tab.id}
                 tab={tab}
@@ -849,3 +961,4 @@ export default function MessagingPanel({
     </TooltipProvider>
   );
 }
+
