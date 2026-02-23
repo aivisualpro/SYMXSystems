@@ -98,7 +98,7 @@ export function DriversTab({
                         onClick={() => onSelectDriver(d)}
                       >
                         <TableCell className="text-center font-medium text-muted-foreground">{i + 1}</TableCell>
-                        <TableCell className="w-[180px] max-w-[180px]">
+                        <TableCell className="w-[180px] max-w-[220px]">
                           <div className="flex items-center gap-2">
                             {d.profileImage ? (
                               <Image src={d.profileImage} alt={d.name} width={28} height={28} className="h-7 w-7 rounded-full object-cover shrink-0" />
