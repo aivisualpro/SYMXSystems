@@ -227,7 +227,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           const data = await permRes.json();
           fetchedPermissions = data.permissions || [];
           setPermissions(fetchedPermissions);
-          
+
           if (data.role === 'Super Admin') {
             fetchedIsAdmin = true;
             setIsAdmin(true);
@@ -264,7 +264,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         setLoadingPermissions(false);
       }
     };
-    
+
     fetchData();
   }, []);
 
@@ -273,32 +273,32 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const filterItems = (items: any[], type: 'admin' | 'secondary') => {
     if (loadingPermissions) return [];
-    
+
     // First, filter by permissions
     const permFiltered = isAdmin ? items : items.filter(item => {
       const itemName = item.name || item.title;
-      if (itemName === "Dashboard" || type === 'secondary') return true; 
+      if (itemName === "Dashboard" || type === 'secondary') return true;
 
       const perm = permissions.find((p: any) => p.module === itemName);
       if (perm) {
         return perm.actions?.view === true;
       }
-      return true; 
+      return true;
     });
 
     // Then, filter by search query (including sub-modules)
     if (!searchQuery) return permFiltered;
 
     const lowerQuery = searchQuery.toLowerCase();
-    
+
     // For search results, we might want to return a slightly different structure or just the parents
     return permFiltered.reduce((acc: any[], item) => {
       const name = (item.name || item.title || "").toLowerCase();
       const subModules = (item.subModules || []) as any[];
-      const matchingSubs = subModules.filter((sm: any) => 
+      const matchingSubs = subModules.filter((sm: any) =>
         (typeof sm === 'string' ? sm : sm.name).toLowerCase().includes(lowerQuery)
       );
-      
+
       if (name.includes(lowerQuery) || matchingSubs.length > 0) {
         const bestMatch = matchingSubs.length > 0 ? matchingSubs[0] : null;
         const subName = bestMatch ? (typeof bestMatch === 'string' ? bestMatch : bestMatch.name) : null;
@@ -307,8 +307,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         acc.push({
           ...item,
           url: subUrl || item.url, // Override with sub-module URL if it's a valid route
-          displayName: subName && !name.includes(lowerQuery) 
-            ? `${item.name} (${subName})` 
+          displayName: subName && !name.includes(lowerQuery)
+            ? `${item.name} (${subName})`
             : item.name || item.title
         });
       }
@@ -318,7 +318,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const filteredAdmin = filterItems(adminItems, 'admin');
   // Secondary nav usually stays visible or matches its own titles
-  const filteredSecondary = data.navSecondary.map(item => 
+  const filteredSecondary = data.navSecondary.map(item =>
     item.title === "Search" ? { ...item, onClick: handleSearchClick } : item
   );
 
@@ -331,9 +331,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       // Add sub-modules
       if (item.subModules) {
         item.subModules.forEach((sm: any) => {
-          items.push({ 
-            name: typeof sm === 'string' ? sm : sm.name, 
-            url: (typeof sm === 'string' ? "#" : sm.url) || "#", 
+          items.push({
+            name: typeof sm === 'string' ? sm : sm.name,
+            url: (typeof sm === 'string' ? "#" : sm.url) || "#",
             icon: item.icon,
             parentName: item.name,
             type: 'Feature'
@@ -347,8 +347,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const searchResults = allSearchableItems.filter(item => {
     if (!searchQuery) return false;
     const lowerQuery = searchQuery.toLowerCase();
-    return item.name.toLowerCase().includes(lowerQuery) || 
-           (item.parentName && item.parentName.toLowerCase().includes(lowerQuery));
+    return item.name.toLowerCase().includes(lowerQuery) ||
+      (item.parentName && item.parentName.toLowerCase().includes(lowerQuery));
   });
 
   return (
@@ -360,13 +360,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="data-[slot=sidebar-menu-button]:!p-0 hover:bg-transparent active:bg-transparent"
               size="lg"
-              tooltip="Treetop Dashboard"
+              tooltip="Symx Systems Dashboard"
             >
               <Link href="/dashboard" className="flex items-center gap-3 p-2 group-data-[collapsible=icon]:justify-center overflow-hidden">
                 {/* Animated Icon Wrapper */}
                 <div className="relative flex-shrink-0 flex items-center justify-center">
-                   <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse-slow" />
-                   <Image
+                  <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse-slow" />
+                  <Image
                     src="/sidebar-icon.png"
                     alt="SYMX"
                     width={40}
@@ -375,7 +375,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     priority
                   />
                 </div>
-                
+
                 {/* Text Label - Hidden in collapsed mode */}
                 <div className="flex flex-col group-data-[collapsible=icon]:hidden opacity-100 group-data-[collapsible=icon]:opacity-0 transition-opacity duration-300">
                   <span className="font-bold text-base tracking-wide text-foreground leading-none">SYMX</span>
@@ -411,12 +411,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             <div className="flex items-center gap-1.5 ml-2">
-               <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
-                  <span className="text-xs">⌘</span>K
-               </kbd>
+              <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
+                <span className="text-xs">⌘</span>K
+              </kbd>
             </div>
           </div>
-          
+
           <ScrollArea className="max-h-[400px]">
             <div className="p-2">
               {searchQuery === "" ? (
@@ -426,7 +426,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </div>
               ) : searchResults.length === 0 ? (
                 <div className="px-4 py-8 text-center text-muted-foreground/50">
-                   <p className="text-xs">No results found for "{searchQuery}"</p>
+                  <p className="text-xs">No results found for "{searchQuery}"</p>
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -443,7 +443,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       }}
                     >
                       <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center group-hover:bg-primary/20 group-hover:text-primary transition-colors">
-                         <item.icon size={18} />
+                        <item.icon size={18} />
                       </div>
                       <div className="flex-1 flex flex-col min-w-0">
                         <span className="text-sm font-medium leading-none">
@@ -464,13 +464,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               )}
             </div>
           </ScrollArea>
-          
+
           <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-t text-[10px] text-muted-foreground">
-             <div className="flex gap-3">
-                <span className="flex items-center gap-1"><kbd className="bg-background border rounded px-1 group-hover:bg-muted">↑↓</kbd> to navigate</span>
-                <span className="flex items-center gap-1"><kbd className="bg-background border rounded px-1 group-hover:bg-muted">↵</kbd> to select</span>
-             </div>
-             <span>SYMX Search</span>
+            <div className="flex gap-3">
+              <span className="flex items-center gap-1"><kbd className="bg-background border rounded px-1 group-hover:bg-muted">↑↓</kbd> to navigate</span>
+              <span className="flex items-center gap-1"><kbd className="bg-background border rounded px-1 group-hover:bg-muted">↵</kbd> to select</span>
+            </div>
+            <span>SYMX Search</span>
           </div>
         </DialogContent>
       </Dialog>

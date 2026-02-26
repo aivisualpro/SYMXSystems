@@ -578,53 +578,6 @@ function MessagingSubTab({
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      {/* ── Header Card ── */}
-      <div
-        className={cn(
-          "relative overflow-hidden rounded-xl border p-4 bg-gradient-to-br",
-          tab.gradient,
-          tab.borderColor
-        )}
-      >
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className={cn(
-                "h-10 w-10 rounded-lg flex items-center justify-center bg-background/50 backdrop-blur-sm border border-border/50"
-              )}
-            >
-              <tab.icon className={cn("h-5 w-5", tab.iconColor)} />
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm">{tab.label}</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                {tab.description}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="secondary"
-              className="text-[10px] h-5 bg-background/60 backdrop-blur-sm"
-            >
-              <Users className="h-3 w-3 mr-1" />
-              {loading ? "..." : employees.length} eligible
-            </Badge>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={fetchEmployees}
-              disabled={loading}
-            >
-              <RefreshCw
-                className={cn("h-3.5 w-3.5", loading && "animate-spin")}
-              />
-            </Button>
-          </div>
-        </div>
-      </div>
-
       {/* ── Content Grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
         {/* ── Left: Employee List ── */}
@@ -989,6 +942,15 @@ function MessagingSubTab({
 // ── Main Messaging Panel ──
 export { SUB_TABS };
 
+export interface ActiveTabInfo {
+  label: string;
+  icon: typeof Bell;
+  iconColor: string;
+  eligibleCount: number;
+  loading: boolean;
+  refresh: () => void;
+}
+
 export default function MessagingPanel({
   weeks,
   selectedWeek,
@@ -997,6 +959,7 @@ export default function MessagingPanel({
   selectAllTrigger,
   activeSubTab,
   onSubTabChange,
+  onActiveTabInfo,
 }: {
   weeks: string[];
   selectedWeek: string;
@@ -1005,6 +968,7 @@ export default function MessagingPanel({
   selectAllTrigger: number;
   activeSubTab: string;
   onSubTabChange?: (tab: string) => void;
+  onActiveTabInfo?: (info: ActiveTabInfo) => void;
 }) {
   const resolvedTab = SUB_TABS.find((t) => t.id === activeSubTab) ? activeSubTab : SUB_TABS[0].id;
 
@@ -1094,6 +1058,39 @@ export default function MessagingPanel({
     return () => { cancelled = true; clearTimeout(bgTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWeek, fetchTabEmployees]); // intentionally exclude resolvedTab to avoid re-fetching on tab switch
+
+  // ── Report active tab info to parent ──────────────────────────────────────
+  const activeTabConfig = SUB_TABS.find(t => t.id === resolvedTab) || SUB_TABS[0];
+  const activeEligibleCount = employeesByTab[resolvedTab]?.length ?? 0;
+  const activeLoading = loadingTabs.has(resolvedTab);
+
+  const handleRefresh = useCallback(() => {
+    if (!selectedWeek) return;
+    setLoadingTabs(prev => {
+      const next = new Set(prev);
+      next.add(resolvedTab);
+      return next;
+    });
+    fetchTabEmployees(resolvedTab, selectedWeek).then((emps) => {
+      setEmployeesByTab(prev => ({ ...prev, [resolvedTab]: emps }));
+      setLoadingTabs(prev => {
+        const next = new Set(prev);
+        next.delete(resolvedTab);
+        return next;
+      });
+    });
+  }, [resolvedTab, selectedWeek, fetchTabEmployees]);
+
+  useEffect(() => {
+    onActiveTabInfo?.({
+      label: activeTabConfig.label,
+      icon: activeTabConfig.icon,
+      iconColor: activeTabConfig.iconColor,
+      eligibleCount: activeEligibleCount,
+      loading: activeLoading,
+      refresh: handleRefresh,
+    });
+  }, [resolvedTab, activeEligibleCount, activeLoading, handleRefresh]);
 
   // ── Prefetch ALL templates in parallel ────────────────────────────────────
   const [templatesByTab, setTemplatesByTab] = useState<Record<string, string>>({});

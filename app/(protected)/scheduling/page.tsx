@@ -35,6 +35,7 @@ import {
   Pencil,
   X,
   MessageSquare,
+  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import MessagingPanel from "@/components/scheduling/messaging-panel";
+import MessagingPanel, { type ActiveTabInfo } from "@/components/scheduling/messaging-panel";
 
 // ── Type Options with Icons & Colors ──
 interface TypeOption {
@@ -402,6 +403,7 @@ export default function SchedulingPage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [planningCollapsed, setPlanningCollapsed] = useState(true);
   const [selectAllTrigger, setSelectAllTrigger] = useState(0);
+  const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo | null>(null);
   const { setLeftContent, setRightContent } = useHeaderActions();
 
   // Fetch available weeks
@@ -480,7 +482,7 @@ export default function SchedulingPage() {
     setLeftContent(
       <div className="flex items-center gap-3">
         <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-          Scheduling
+          {activeMainTab === "messaging" && activeTabInfo ? activeTabInfo.label : "Scheduling"}
         </h1>
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -491,15 +493,35 @@ export default function SchedulingPage() {
             className="pl-8 h-8 w-[220px] text-sm"
           />
         </div>
-        {activeMainTab === "messaging" && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => setSelectAllTrigger((p) => p + 1)}
-          >
-            Select All
-          </Button>
+        {activeMainTab === "messaging" && activeTabInfo && (
+          <>
+            <Badge
+              variant="secondary"
+              className="text-[11px] h-6 px-2 gap-1.5"
+            >
+              <Users className="h-3.5 w-3.5" />
+              {activeTabInfo.loading ? "..." : activeTabInfo.eligibleCount} eligible
+            </Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={activeTabInfo.refresh}
+              disabled={activeTabInfo.loading}
+            >
+              <RefreshCw
+                className={cn("h-3.5 w-3.5", activeTabInfo.loading && "animate-spin")}
+              />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setSelectAllTrigger((p) => p + 1)}
+            >
+              Select All
+            </Button>
+          </>
         )}
       </div>
     );
@@ -508,7 +530,7 @@ export default function SchedulingPage() {
       setLeftContent(null);
       setRightContent(null);
     };
-  }, [setLeftContent, setRightContent, searchQuery, activeMainTab]);
+  }, [setLeftContent, setRightContent, searchQuery, activeMainTab, activeTabInfo]);
 
   // Update right content whenever week state changes
   useEffect(() => {
@@ -778,6 +800,7 @@ export default function SchedulingPage() {
             selectAllTrigger={selectAllTrigger}
             activeSubTab={activeSubTab}
             onSubTabChange={setActiveSubTab}
+            onActiveTabInfo={setActiveTabInfo}
           />
         </div>
 
