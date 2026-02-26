@@ -71,19 +71,19 @@ interface TypeOption {
 }
 
 const TYPE_OPTIONS: TypeOption[] = [
-  { label: "Route",         icon: Navigation,    bg: "bg-emerald-600",    text: "text-white",  border: "border-emerald-700",   dotColor: "bg-emerald-500" },
-  { label: "Open",          icon: DoorOpen,      bg: "bg-amber-400/80",   text: "text-white",  border: "border-amber-500/60",  dotColor: "bg-amber-400" },
-  { label: "Close",         icon: DoorClosed,    bg: "bg-rose-400/80",    text: "text-white",  border: "border-rose-500/60",   dotColor: "bg-rose-400" },
-  { label: "Off",           icon: Coffee,        bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600", dotColor: "bg-zinc-400" },
-  { label: "Call Out",      icon: PhoneOff,      bg: "bg-yellow-500",     text: "text-white",  border: "border-yellow-600",    dotColor: "bg-yellow-500" },
-  { label: "AMZ Training",  icon: GraduationCap, bg: "bg-indigo-600",     text: "text-white",  border: "border-indigo-700",    dotColor: "bg-indigo-500" },
-  { label: "Fleet",         icon: TruckIcon,     bg: "bg-blue-600",       text: "text-white",  border: "border-blue-700",      dotColor: "bg-blue-500" },
-  { label: "Request Off",   icon: CalendarOff,   bg: "bg-purple-600",     text: "text-white",  border: "border-purple-700",    dotColor: "bg-purple-500" },
-  { label: "Trainer",       icon: UserCheck,     bg: "bg-teal-600",       text: "text-white",  border: "border-teal-700",      dotColor: "bg-teal-500" },
-  { label: "Training OTR",  icon: BookOpen,      bg: "bg-violet-600",     text: "text-white",  border: "border-violet-700",    dotColor: "bg-violet-500" },
-  { label: "Suspension",    icon: Ban,           bg: "bg-rose-700",       text: "text-white",  border: "border-rose-800",      dotColor: "bg-rose-600" },
-  { label: "Modified Duty", icon: ShieldAlert,   bg: "bg-amber-600",      text: "text-white",  border: "border-amber-700",     dotColor: "bg-amber-500" },
-  { label: "Stand by",      icon: Clock,         bg: "bg-cyan-600",       text: "text-white",  border: "border-cyan-700",      dotColor: "bg-cyan-500" },
+  { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700", dotColor: "bg-emerald-500" },
+  { label: "Open", icon: DoorOpen, bg: "bg-amber-400/80", text: "text-white", border: "border-amber-500/60", dotColor: "bg-amber-400" },
+  { label: "Close", icon: DoorClosed, bg: "bg-rose-400/80", text: "text-white", border: "border-rose-500/60", dotColor: "bg-rose-400" },
+  { label: "Off", icon: Coffee, bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600", dotColor: "bg-zinc-400" },
+  { label: "Call Out", icon: PhoneOff, bg: "bg-yellow-500", text: "text-white", border: "border-yellow-600", dotColor: "bg-yellow-500" },
+  { label: "AMZ Training", icon: GraduationCap, bg: "bg-indigo-600", text: "text-white", border: "border-indigo-700", dotColor: "bg-indigo-500" },
+  { label: "Fleet", icon: TruckIcon, bg: "bg-blue-600", text: "text-white", border: "border-blue-700", dotColor: "bg-blue-500" },
+  { label: "Request Off", icon: CalendarOff, bg: "bg-purple-600", text: "text-white", border: "border-purple-700", dotColor: "bg-purple-500" },
+  { label: "Trainer", icon: UserCheck, bg: "bg-teal-600", text: "text-white", border: "border-teal-700", dotColor: "bg-teal-500" },
+  { label: "Training OTR", icon: BookOpen, bg: "bg-violet-600", text: "text-white", border: "border-violet-700", dotColor: "bg-violet-500" },
+  { label: "Suspension", icon: Ban, bg: "bg-rose-700", text: "text-white", border: "border-rose-800", dotColor: "bg-rose-600" },
+  { label: "Modified Duty", icon: ShieldAlert, bg: "bg-amber-600", text: "text-white", border: "border-amber-700", dotColor: "bg-amber-500" },
+  { label: "Stand by", icon: Clock, bg: "bg-cyan-600", text: "text-white", border: "border-cyan-700", dotColor: "bg-cyan-500" },
 ];
 
 const TYPE_MAP = new Map(TYPE_OPTIONS.map(opt => [opt.label.toLowerCase(), opt]));
@@ -221,7 +221,7 @@ function countWorkingDays(emp: EmployeeSchedule): number {
 // Returns a Map<dayIndex, { consecutive: number, type: 'caution' | 'danger' }>
 function getConsecutiveWarnings(emp: EmployeeSchedule): Map<number, { consecutive: number; type: 'caution' | 'danger' }> {
   const warnings = new Map<number, { consecutive: number; type: 'caution' | 'danger' }>();
-  
+
   // Check consecutive working (not just route — any working day counts)
   let consecutive = 0;
   for (let d = 0; d < 7; d++) {
@@ -237,7 +237,7 @@ function getConsecutiveWarnings(emp: EmployeeSchedule): Map<number, { consecutiv
       consecutive = 0;
     }
   }
-  
+
   return warnings;
 }
 
@@ -364,12 +364,33 @@ function EditableNote({
 export default function SchedulingPage() {
   const pathname = usePathname();
   const router = useRouter();
-  const activeMainTab = pathname.includes("/messaging") ? "messaging" : "scheduling";
-  // Extract active sub-tab from URL: /scheduling/messaging/{subTab}
-  const activeSubTab = useMemo(() => {
+
+  // ── State-driven tab switching — NO route navigation, instant!
+  const [activeMainTab, setActiveMainTab] = useState<"scheduling" | "messaging">(
+    () => (pathname.includes("/messaging") ? "messaging" : "scheduling")
+  );
+  const [activeSubTab, setActiveSubTab] = useState<string>(() => {
     const match = pathname.match(/\/scheduling\/messaging\/([^\/]+)/);
     return match?.[1] || "future-shift";
-  }, [pathname]);
+  });
+
+  // Keep router in a ref so it never triggers the sync effect
+  const routerRef = useRef(router);
+  routerRef.current = router;
+
+  // Sync URL when tabs change — runs ONLY when tab state actually changes, not on every render
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return; // skip the initial mount — URL is already correct
+    }
+    if (activeMainTab === "messaging") {
+      routerRef.current.replace(`/scheduling/messaging/${activeSubTab}`, { scroll: false });
+    } else {
+      routerRef.current.replace("/scheduling", { scroll: false });
+    }
+  }, [activeMainTab, activeSubTab]); // router intentionally excluded — held in ref
   const [weeks, setWeeks] = useState<string[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<string>("");
   const [weekData, setWeekData] = useState<WeekData | null>(null);
@@ -661,7 +682,7 @@ export default function SchedulingPage() {
 
   // Group data
   const grouped = useMemo(() => groupByType(filteredEmployees), [filteredEmployees]);
-  
+
   // Planning data now uses filtered employees when any filter is active
   const planningData = useMemo(
     () => computePlanningData(isFiltered ? filteredEmployees : (weekData?.employees || [])),
@@ -756,7 +777,7 @@ export default function SchedulingPage() {
         {/* ── Main Tabs: Scheduling | Messaging ── */}
         <div className="flex items-center gap-1 shrink-0">
           <button
-            onClick={() => router.push("/scheduling")}
+            onClick={() => setActiveMainTab("scheduling")}
             className={cn(
               "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all",
               activeMainTab === "scheduling"
@@ -768,7 +789,7 @@ export default function SchedulingPage() {
             Scheduling
           </button>
           <button
-            onClick={() => router.push("/scheduling/messaging/future-shift")}
+            onClick={() => setActiveMainTab("messaging")}
             className={cn(
               "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all",
               activeMainTab === "messaging"
@@ -781,437 +802,436 @@ export default function SchedulingPage() {
           </button>
         </div>
 
-        {/* ── Messaging Tab Content ── */}
-        {activeMainTab === "messaging" && (
-          <div className="flex-1 min-h-0 overflow-auto">
-            <MessagingPanel
-              weeks={weeks}
-              selectedWeek={selectedWeek}
-              setSelectedWeek={setSelectedWeek}
-              searchQuery={searchQuery}
-              selectAllTrigger={selectAllTrigger}
-              activeSubTab={activeSubTab}
-            />
-          </div>
-        )}
+        {/* ── Messaging Tab Content — always mounted, hidden when inactive ── */}
+        <div className={cn("flex-1 min-h-0 overflow-auto", activeMainTab !== "messaging" && "hidden")}>
+          <MessagingPanel
+            weeks={weeks}
+            selectedWeek={selectedWeek}
+            setSelectedWeek={setSelectedWeek}
+            searchQuery={searchQuery}
+            selectAllTrigger={selectAllTrigger}
+            activeSubTab={activeSubTab}
+            onSubTabChange={setActiveSubTab}
+          />
+        </div>
 
-        {/* ── Scheduling Tab Content ── */}
-        {activeMainTab === "scheduling" && (<>
+        {/* ── Scheduling Tab Content — always mounted, hidden when inactive ── */}
+        <div className={cn(activeMainTab !== "scheduling" && "hidden")}>
 
-        {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            {
-              label: "Employees",
-              value: totalEmployees,
-              icon: Users,
-              gradient: "from-blue-500/15 to-cyan-500/15",
-              iconColor: "text-blue-500",
-              borderColor: "border-blue-500/20",
-            },
+          {/* ── KPI Cards ── */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              {
+                label: "Employees",
+                value: totalEmployees,
+                icon: Users,
+                gradient: "from-blue-500/15 to-cyan-500/15",
+                iconColor: "text-blue-500",
+                borderColor: "border-blue-500/20",
+              },
 
-            {
-              label: "Routes",
-              value: totalRoutes,
-              icon: TruckIcon,
-              gradient: "from-violet-500/15 to-purple-500/15",
-              iconColor: "text-violet-500",
-              borderColor: "border-violet-500/20",
-            },
-            {
-              label: "Days Off",
-              value: totalOff,
-              icon: XCircle,
-              gradient: "from-zinc-500/15 to-gray-500/15",
-              iconColor: "text-zinc-400",
-              borderColor: "border-zinc-500/20",
-            },
-          ].map((kpi) => (
-            <div
-              key={kpi.label}
-              className={`relative overflow-hidden rounded-xl border ${kpi.borderColor} p-4 bg-gradient-to-br ${kpi.gradient}`}
-            >
+              {
+                label: "Routes",
+                value: totalRoutes,
+                icon: TruckIcon,
+                gradient: "from-violet-500/15 to-purple-500/15",
+                iconColor: "text-violet-500",
+                borderColor: "border-violet-500/20",
+              },
+              {
+                label: "Days Off",
+                value: totalOff,
+                icon: XCircle,
+                gradient: "from-zinc-500/15 to-gray-500/15",
+                iconColor: "text-zinc-400",
+                borderColor: "border-zinc-500/20",
+              },
+            ].map((kpi) => (
+              <div
+                key={kpi.label}
+                className={`relative overflow-hidden rounded-xl border ${kpi.borderColor} p-4 bg-gradient-to-br ${kpi.gradient}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{kpi.label}</p>
+                    <p className="text-2xl font-bold mt-1">{loadingData ? "—" : kpi.value}</p>
+                  </div>
+                  <kpi.icon className={`h-8 w-8 ${kpi.iconColor} opacity-50`} />
+                </div>
+              </div>
+            ))}
+            {/* Warnings Card */}
+            <div className="relative overflow-hidden rounded-xl border border-amber-500/30 p-4 bg-gradient-to-br from-zinc-500/10 to-zinc-500/5">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{kpi.label}</p>
-                  <p className="text-2xl font-bold mt-1">{loadingData ? "—" : kpi.value}</p>
-                </div>
-                <kpi.icon className={`h-8 w-8 ${kpi.iconColor} opacity-50`} />
-              </div>
-            </div>
-          ))}
-          {/* Warnings Card */}
-          <div className="relative overflow-hidden rounded-xl border border-amber-500/30 p-4 bg-gradient-to-br from-zinc-500/10 to-zinc-500/5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Warnings</p>
-                <div className="flex items-center gap-3 mt-1">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1.5 cursor-default">
-                        <span className="h-2.5 w-2.5 rounded-full bg-orange-400 animate-pulse" />
-                        <span className="text-lg font-bold text-orange-400">{loadingData ? "—" : warningCounts.caution}</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-[250px] bg-popover text-popover-foreground border shadow-lg">
-                      <p className="font-semibold text-amber-500 mb-1">6 Consecutive Days</p>
-                      {warningCounts.cautionNames.length > 0
-                        ? warningCounts.cautionNames.map(n => <p key={n} className="text-xs">{n}</p>)
-                        : <p className="text-xs text-muted-foreground">None</p>
-                      }
-                    </TooltipContent>
-                  </Tooltip>
-                  <span className="text-muted-foreground/30">|</span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1.5 cursor-default">
-                        <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-                        <span className="text-lg font-bold text-red-500">{loadingData ? "—" : warningCounts.danger}</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-[250px] bg-popover text-popover-foreground border shadow-lg">
-                      <p className="font-semibold text-red-500 mb-1">7+ Consecutive Days</p>
-                      {warningCounts.dangerNames.length > 0
-                        ? warningCounts.dangerNames.map(n => <p key={n} className="text-xs">{n}</p>)
-                        : <p className="text-xs text-muted-foreground">None</p>
-                      }
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
-              <AlertTriangle className="h-8 w-8 text-amber-500 opacity-50" />
-            </div>
-          </div>
-        </div>
-
-
-
-        {/* ── Main Schedule Table ── */}
-        {loadingData ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : (
-          <div className="rounded-xl border border-border/50 overflow-hidden bg-card flex-1 min-h-0 flex flex-col">
-            <div className="overflow-auto flex-1">
-              <table className="w-full text-sm">
-                {/* Table Header with Dates */}
-                <thead className="sticky top-0 z-20">
-                  <tr className="bg-muted border-b border-border/50">
-                    <th className="text-left font-semibold px-3 py-2.5 min-w-[180px] sticky left-0 bg-muted z-30 backdrop-blur-sm">
-                      Employee Name
-                    </th>
-                    {weekData?.dates?.map((date, i) => (
-                      <th key={date} className="text-center font-medium px-2 py-2.5 min-w-[110px]">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                            {DAY_NAMES[i]}
-                          </span>
-                          <span className="text-xs font-semibold">{formatDate(date)}</span>
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Warnings</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1.5 cursor-default">
+                          <span className="h-2.5 w-2.5 rounded-full bg-orange-400 animate-pulse" />
+                          <span className="text-lg font-bold text-orange-400">{loadingData ? "—" : warningCounts.caution}</span>
                         </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[250px] bg-popover text-popover-foreground border shadow-lg">
+                        <p className="font-semibold text-amber-500 mb-1">6 Consecutive Days</p>
+                        {warningCounts.cautionNames.length > 0
+                          ? warningCounts.cautionNames.map(n => <p key={n} className="text-xs">{n}</p>)
+                          : <p className="text-xs text-muted-foreground">None</p>
+                        }
+                      </TooltipContent>
+                    </Tooltip>
+                    <span className="text-muted-foreground/30">|</span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1.5 cursor-default">
+                          <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+                          <span className="text-lg font-bold text-red-500">{loadingData ? "—" : warningCounts.danger}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[250px] bg-popover text-popover-foreground border shadow-lg">
+                        <p className="font-semibold text-red-500 mb-1">7+ Consecutive Days</p>
+                        {warningCounts.dangerNames.length > 0
+                          ? warningCounts.dangerNames.map(n => <p key={n} className="text-xs">{n}</p>)
+                          : <p className="text-xs text-muted-foreground">None</p>
+                        }
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </div>
+                <AlertTriangle className="h-8 w-8 text-amber-500 opacity-50" />
+              </div>
+            </div>
+          </div>
+
+
+
+          {/* ── Main Schedule Table ── */}
+          {loadingData ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border/50 overflow-hidden bg-card flex-1 min-h-0 flex flex-col">
+              <div className="overflow-auto flex-1">
+                <table className="w-full text-sm">
+                  {/* Table Header with Dates */}
+                  <thead className="sticky top-0 z-20">
+                    <tr className="bg-muted border-b border-border/50">
+                      <th className="text-left font-semibold px-3 py-2.5 min-w-[180px] sticky left-0 bg-muted z-30 backdrop-blur-sm">
+                        Employee Name
                       </th>
-                    ))}
-                    <th className="text-center font-semibold px-2 py-2.5 min-w-[50px]">Days</th>
-                    <th className="text-left font-semibold px-3 py-2.5 min-w-[180px]">Note</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* ── Planning Section ── */}
-                  <tr
-                    className="border-b border-border/30 cursor-pointer hover:bg-muted/30 transition-colors"
-                    onClick={() => setPlanningCollapsed(!planningCollapsed)}
-                  >
-                    <td className="px-3 py-1.5 sticky left-0 bg-card z-10">
-                      <div className="flex items-center gap-2">
-                        <ChevronDown
-                          className={cn(
-                            "h-4 w-4 text-muted-foreground transition-transform duration-200",
-                            planningCollapsed && "-rotate-90"
-                          )}
-                        />
-                        <span className="font-bold text-xs uppercase tracking-wider text-primary">Planning</span>
-                        <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-primary/10 text-primary">
-                          {planningData.length}
-                        </Badge>
-                        {isFiltered && (
-                          <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-amber-500/40 text-amber-500">
-                            Filtered
-                          </Badge>
-                        )}
-                      </div>
-                    </td>
-                    {weekData?.dates?.map((_, i) => (
-                      <td key={`planning-header-${i}`} className="px-2 py-1.5" />
-                    ))}
-                    <td className="px-2 py-1.5" />
-                    <td className="px-3 py-1.5" />
-                  </tr>
-                  {!planningCollapsed && planningData.map((row) => (
-                    <tr key={row.label} className="border-b border-border/20 hover:bg-muted/20 transition-colors">
-                      <td className="px-3 py-1.5 sticky left-0 bg-card z-10">
-                        <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
-                      </td>
-                      {row.values.map((val, i) => (
-                        <td key={`${row.label}-${i}`} className="text-center px-2 py-1.5">
-                          <span className={cn(
-                            "inline-flex items-center justify-center h-7 min-w-[36px] rounded-md text-xs font-bold transition-all",
-                            val > 0
-                              ? `${row.color} bg-current/10 border border-current/20`
-                              : "text-zinc-500"
-                          )}
-                          style={val > 0 ? { backgroundColor: "rgba(255,255,255,0.05)" } : {}}
-                          >
-                            {val}
-                          </span>
-                        </td>
+                      {weekData?.dates?.map((date, i) => (
+                        <th key={date} className="text-center font-medium px-2 py-2.5 min-w-[110px]">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              {DAY_NAMES[i]}
+                            </span>
+                            <span className="text-xs font-semibold">{formatDate(date)}</span>
+                          </div>
+                        </th>
                       ))}
-                      <td className="text-center px-2 py-1.5">
-                        <span className={cn("text-xs font-bold", row.color)}>{row.total}</span>
+                      <th className="text-center font-semibold px-2 py-2.5 min-w-[50px]">Days</th>
+                      <th className="text-left font-semibold px-3 py-2.5 min-w-[180px]">Note</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* ── Planning Section ── */}
+                    <tr
+                      className="border-b border-border/30 cursor-pointer hover:bg-muted/30 transition-colors"
+                      onClick={() => setPlanningCollapsed(!planningCollapsed)}
+                    >
+                      <td className="px-3 py-1.5 sticky left-0 bg-card z-10">
+                        <div className="flex items-center gap-2">
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                              planningCollapsed && "-rotate-90"
+                            )}
+                          />
+                          <span className="font-bold text-xs uppercase tracking-wider text-primary">Planning</span>
+                          <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-primary/10 text-primary">
+                            {planningData.length}
+                          </Badge>
+                          {isFiltered && (
+                            <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-amber-500/40 text-amber-500">
+                              Filtered
+                            </Badge>
+                          )}
+                        </div>
                       </td>
+                      {weekData?.dates?.map((_, i) => (
+                        <td key={`planning-header-${i}`} className="px-2 py-1.5" />
+                      ))}
+                      <td className="px-2 py-1.5" />
                       <td className="px-3 py-1.5" />
                     </tr>
-                  ))}
-
-                  {/* ── Employee Groups ── */}
-                  {Object.entries(grouped)
-                    .sort(([a], [b]) => {
-                      if (a === "Operations") return -1;
-                      if (b === "Operations") return 1;
-                      return a.localeCompare(b);
-                    })
-                    .map(([groupName, emps]) => (
-                      <Fragment key={`group-${groupName}`}>
-                        {/* Group Header */}
-                        <tr
-                          className="border-b border-border/30 cursor-pointer hover:bg-muted/30 transition-colors"
-                          onClick={() => toggleGroup(groupName)}
-                        >
-                          <td
-                            colSpan={(weekData?.dates?.length || 7) + 3}
-                            className="px-3 py-2"
-                          >
-                            <div className="flex items-center gap-2">
-                              <ChevronDown
-                                className={cn(
-                                  "h-4 w-4 text-muted-foreground transition-transform duration-200",
-                                  collapsedGroups[groupName] && "-rotate-90"
-                                )}
-                              />
-                              <span className="font-bold text-xs uppercase tracking-wider text-amber-500">
-                                {groupName}
-                              </span>
-                              <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-amber-500/10 text-amber-500">
-                                {emps.length}
-                              </Badge>
-                            </div>
+                    {!planningCollapsed && planningData.map((row) => (
+                      <tr key={row.label} className="border-b border-border/20 hover:bg-muted/20 transition-colors">
+                        <td className="px-3 py-1.5 sticky left-0 bg-card z-10">
+                          <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
+                        </td>
+                        {row.values.map((val, i) => (
+                          <td key={`${row.label}-${i}`} className="text-center px-2 py-1.5">
+                            <span className={cn(
+                              "inline-flex items-center justify-center h-7 min-w-[36px] rounded-md text-xs font-bold transition-all",
+                              val > 0
+                                ? `${row.color} bg-current/10 border border-current/20`
+                                : "text-zinc-500"
+                            )}
+                              style={val > 0 ? { backgroundColor: "rgba(255,255,255,0.05)" } : {}}
+                            >
+                              {val}
+                            </span>
                           </td>
-                        </tr>
-
-                        {/* Employee Rows */}
-                        {!collapsedGroups[groupName] &&
-                          emps
-                            .sort((a, b) => {
-                              const nameA = a.employee?.name || "";
-                              const nameB = b.employee?.name || "";
-                              return nameA.localeCompare(nameB);
-                            })
-                            .map((emp) => {
-                              const workDays = countWorkingDays(emp);
-                              const notes = emp.employee?.scheduleNotes || "";
-                              const consecutiveWarnings = getConsecutiveWarnings(emp);
-
-                              return (
-                                <tr
-                                  key={`${groupName}-${emp.transporterId}`}
-                                  className="border-b border-border/10 hover:bg-muted/20 transition-colors group"
-                                >
-                                  <td className="px-3 py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs font-semibold truncate max-w-[160px]">
-                                        {emp.employee?.name || emp.transporterId}
-                                      </span>
-                                    </div>
-                                  </td>
-                                  {Array.from({ length: 7 }, (_, dayIdx) => {
-                                    const day = emp.days[dayIdx];
-                                    const status = day?.status || "";
-                                    const van = day?.van || "";
-                                    const startTime = day?.startTime || "";
-                                    const type = day?.type || "";
-                                    const displayValue = type || status || "";
-                                    const style = getTypeStyle(displayValue);
-                                    const matchedOpt = TYPE_MAP.get(displayValue.toLowerCase());
-                                    const CellIcon = matchedOpt?.icon;
-                                    const warning = consecutiveWarnings.get(dayIdx);
-
-                                    return (
-                                      <td key={dayIdx} className="text-center px-1 py-1">
-                                        <DropdownMenu>
-                                          <Tooltip>
-                                            <TooltipTrigger asChild>
-                                              <DropdownMenuTrigger asChild>
-                                                <div
-                                                  className={cn(
-                                                    "relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold transition-all border cursor-pointer select-none",
-                                                    style.bg,
-                                                    style.text,
-                                                    style.border,
-                                                    "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
-                                                  )}
-                                                >
-                                                  {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
-                                                  <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
-                                                  {warning && (
-                                                    <span className={cn(
-                                                      "absolute -top-1.5 -right-1.5 flex items-center justify-center h-3.5 min-w-[14px] rounded-full text-[8px] font-bold text-white leading-none px-0.5 shadow-sm",
-                                                      warning.type === 'danger'
-                                                        ? "bg-red-500 animate-pulse"
-                                                        : "bg-orange-400"
-                                                    )}>
-                                                      {warning.consecutive}
-                                                    </span>
-                                                  )}
-                                                </div>
-                                              </DropdownMenuTrigger>
-                                            </TooltipTrigger>
-                                            <TooltipContent
-                                              side="top"
-                                              className="max-w-[300px] text-xs space-y-1 bg-popover text-popover-foreground border shadow-xl"
-                                            >
-                                              <p className="font-semibold">{emp.employee?.name || emp.transporterId}</p>
-                                              <p className="text-muted-foreground">
-                                                {day?.weekDay || FULL_DAY_NAMES[dayIdx]} — {day?.date ? formatDate(day.date) : ""}
-                                              </p>
-                                              <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 pt-1 border-t border-border/50">
-                                                <span className="text-muted-foreground">Status:</span>
-                                                <span className="font-medium">{status}</span>
-                                                {type && (
-                                                  <>
-                                                    <span className="text-muted-foreground">Type:</span>
-                                                    <span>{type}</span>
-                                                  </>
-                                                )}
-                                                {day?.subType && (
-                                                  <>
-                                                    <span className="text-muted-foreground">Sub Type:</span>
-                                                    <span>{day.subType}</span>
-                                                  </>
-                                                )}
-                                                {startTime && (
-                                                  <>
-                                                    <span className="text-muted-foreground">Start:</span>
-                                                    <span>{startTime}</span>
-                                                  </>
-                                                )}
-                                                {van && (
-                                                  <>
-                                                    <span className="text-muted-foreground">Van:</span>
-                                                    <span>{van}</span>
-                                                  </>
-                                                )}
-                                                {day?.note && (
-                                                  <>
-                                                    <span className="text-muted-foreground">Note:</span>
-                                                    <span>{day.note}</span>
-                                                  </>
-                                                )}
-                                              </div>
-                                              {warning && (
-                                                <div className={cn(
-                                                  "mt-1 pt-1 border-t flex items-center gap-1.5 font-semibold text-[11px]",
-                                                  warning.type === 'danger' ? "text-red-400 border-red-500/30" : "text-amber-400 border-amber-500/30"
-                                                )}>
-                                                  <AlertTriangle className="h-3.5 w-3.5" />
-                                                  {warning.type === 'danger'
-                                                    ? `${warning.consecutive} consecutive work days!`
-                                                    : `${warning.consecutive} consecutive work days`
-                                                  }
-                                                </div>
-                                              )}
-                                            </TooltipContent>
-                                          </Tooltip>
-                                          <DropdownMenuContent
-                                            align="start"
-                                            side="bottom"
-                                            className="w-48 max-h-[320px] overflow-y-auto"
-                                          >
-                                            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                                              Change Type
-                                            </DropdownMenuLabel>
-                                            <DropdownMenuSeparator />
-                                            {TYPE_OPTIONS.map(opt => {
-                                              const Icon = opt.icon;
-                                              const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();
-                                              return (
-                                                <DropdownMenuItem
-                                                  key={opt.label}
-                                                  className={cn(
-                                                    "flex items-center gap-2 cursor-pointer text-xs",
-                                                    isActive && "bg-accent"
-                                                  )}
-                                                  onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx)}
-                                                >
-                                                  <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", opt.bg)}>
-                                                    <Icon className={cn("h-3 w-3", opt.text)} />
-                                                  </div>
-                                                  <span className="font-medium">{opt.label}</span>
-                                                  {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
-                                                </DropdownMenuItem>
-                                              );
-                                            })}
-                                          </DropdownMenuContent>
-                                        </DropdownMenu>
-                                      </td>
-                                    );
-                                  })}
-                                  <td className="text-center px-2 py-1.5">
-                                    <span className={cn(
-                                      "text-xs font-bold",
-                                      workDays >= 6
-                                        ? "text-red-400"
-                                        : workDays >= 5
-                                        ? "text-amber-400"
-                                        : workDays >= 3
-                                        ? "text-emerald-400"
-                                        : "text-muted-foreground"
-                                    )}>
-                                      {workDays}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-1.5">
-                                    <EditableNote
-                                      value={notes}
-                                      employeeId={emp.employee?._id}
-                                      onSaved={(newNote) => handleNoteSaved(emp.transporterId, newNote)}
-                                    />
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                      </Fragment>
+                        ))}
+                        <td className="text-center px-2 py-1.5">
+                          <span className={cn("text-xs font-bold", row.color)}>{row.total}</span>
+                        </td>
+                        <td className="px-3 py-1.5" />
+                      </tr>
                     ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
 
-        {/* ── Type Legend ── */}
-        <div className="flex flex-wrap items-center gap-2 px-1">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mr-2">Legend:</span>
-          {TYPE_OPTIONS.map(opt => {
-            const Icon = opt.icon;
-            return (
-              <div key={opt.label} className="flex items-center gap-1.5">
-                <div className={cn("h-4 w-4 rounded-sm flex items-center justify-center", opt.bg)}>
-                  <Icon className={cn("h-2.5 w-2.5", opt.text)} />
-                </div>
-                <span className="text-[10px] text-muted-foreground">{opt.label}</span>
+                    {/* ── Employee Groups ── */}
+                    {Object.entries(grouped)
+                      .sort(([a], [b]) => {
+                        if (a === "Operations") return -1;
+                        if (b === "Operations") return 1;
+                        return a.localeCompare(b);
+                      })
+                      .map(([groupName, emps]) => (
+                        <Fragment key={`group-${groupName}`}>
+                          {/* Group Header */}
+                          <tr
+                            className="border-b border-border/30 cursor-pointer hover:bg-muted/30 transition-colors"
+                            onClick={() => toggleGroup(groupName)}
+                          >
+                            <td
+                              colSpan={(weekData?.dates?.length || 7) + 3}
+                              className="px-3 py-2"
+                            >
+                              <div className="flex items-center gap-2">
+                                <ChevronDown
+                                  className={cn(
+                                    "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                                    collapsedGroups[groupName] && "-rotate-90"
+                                  )}
+                                />
+                                <span className="font-bold text-xs uppercase tracking-wider text-amber-500">
+                                  {groupName}
+                                </span>
+                                <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-amber-500/10 text-amber-500">
+                                  {emps.length}
+                                </Badge>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Employee Rows */}
+                          {!collapsedGroups[groupName] &&
+                            emps
+                              .sort((a, b) => {
+                                const nameA = a.employee?.name || "";
+                                const nameB = b.employee?.name || "";
+                                return nameA.localeCompare(nameB);
+                              })
+                              .map((emp) => {
+                                const workDays = countWorkingDays(emp);
+                                const notes = emp.employee?.scheduleNotes || "";
+                                const consecutiveWarnings = getConsecutiveWarnings(emp);
+
+                                return (
+                                  <tr
+                                    key={`${groupName}-${emp.transporterId}`}
+                                    className="border-b border-border/10 hover:bg-muted/20 transition-colors group"
+                                  >
+                                    <td className="px-3 py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-semibold truncate max-w-[160px]">
+                                          {emp.employee?.name || emp.transporterId}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    {Array.from({ length: 7 }, (_, dayIdx) => {
+                                      const day = emp.days[dayIdx];
+                                      const status = day?.status || "";
+                                      const van = day?.van || "";
+                                      const startTime = day?.startTime || "";
+                                      const type = day?.type || "";
+                                      const displayValue = type || status || "";
+                                      const style = getTypeStyle(displayValue);
+                                      const matchedOpt = TYPE_MAP.get(displayValue.toLowerCase());
+                                      const CellIcon = matchedOpt?.icon;
+                                      const warning = consecutiveWarnings.get(dayIdx);
+
+                                      return (
+                                        <td key={dayIdx} className="text-center px-1 py-1">
+                                          <DropdownMenu>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <DropdownMenuTrigger asChild>
+                                                  <div
+                                                    className={cn(
+                                                      "relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold transition-all border cursor-pointer select-none",
+                                                      style.bg,
+                                                      style.text,
+                                                      style.border,
+                                                      "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                                                    )}
+                                                  >
+                                                    {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
+                                                    <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
+                                                    {warning && (
+                                                      <span className={cn(
+                                                        "absolute -top-1.5 -right-1.5 flex items-center justify-center h-3.5 min-w-[14px] rounded-full text-[8px] font-bold text-white leading-none px-0.5 shadow-sm",
+                                                        warning.type === 'danger'
+                                                          ? "bg-red-500 animate-pulse"
+                                                          : "bg-orange-400"
+                                                      )}>
+                                                        {warning.consecutive}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                </DropdownMenuTrigger>
+                                              </TooltipTrigger>
+                                              <TooltipContent
+                                                side="top"
+                                                className="max-w-[300px] text-xs space-y-1 bg-popover text-popover-foreground border shadow-xl"
+                                              >
+                                                <p className="font-semibold">{emp.employee?.name || emp.transporterId}</p>
+                                                <p className="text-muted-foreground">
+                                                  {day?.weekDay || FULL_DAY_NAMES[dayIdx]} — {day?.date ? formatDate(day.date) : ""}
+                                                </p>
+                                                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 pt-1 border-t border-border/50">
+                                                  <span className="text-muted-foreground">Status:</span>
+                                                  <span className="font-medium">{status}</span>
+                                                  {type && (
+                                                    <>
+                                                      <span className="text-muted-foreground">Type:</span>
+                                                      <span>{type}</span>
+                                                    </>
+                                                  )}
+                                                  {day?.subType && (
+                                                    <>
+                                                      <span className="text-muted-foreground">Sub Type:</span>
+                                                      <span>{day.subType}</span>
+                                                    </>
+                                                  )}
+                                                  {startTime && (
+                                                    <>
+                                                      <span className="text-muted-foreground">Start:</span>
+                                                      <span>{startTime}</span>
+                                                    </>
+                                                  )}
+                                                  {van && (
+                                                    <>
+                                                      <span className="text-muted-foreground">Van:</span>
+                                                      <span>{van}</span>
+                                                    </>
+                                                  )}
+                                                  {day?.note && (
+                                                    <>
+                                                      <span className="text-muted-foreground">Note:</span>
+                                                      <span>{day.note}</span>
+                                                    </>
+                                                  )}
+                                                </div>
+                                                {warning && (
+                                                  <div className={cn(
+                                                    "mt-1 pt-1 border-t flex items-center gap-1.5 font-semibold text-[11px]",
+                                                    warning.type === 'danger' ? "text-red-400 border-red-500/30" : "text-amber-400 border-amber-500/30"
+                                                  )}>
+                                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                                    {warning.type === 'danger'
+                                                      ? `${warning.consecutive} consecutive work days!`
+                                                      : `${warning.consecutive} consecutive work days`
+                                                    }
+                                                  </div>
+                                                )}
+                                              </TooltipContent>
+                                            </Tooltip>
+                                            <DropdownMenuContent
+                                              align="start"
+                                              side="bottom"
+                                              className="w-48 max-h-[320px] overflow-y-auto"
+                                            >
+                                              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                                                Change Type
+                                              </DropdownMenuLabel>
+                                              <DropdownMenuSeparator />
+                                              {TYPE_OPTIONS.map(opt => {
+                                                const Icon = opt.icon;
+                                                const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();
+                                                return (
+                                                  <DropdownMenuItem
+                                                    key={opt.label}
+                                                    className={cn(
+                                                      "flex items-center gap-2 cursor-pointer text-xs",
+                                                      isActive && "bg-accent"
+                                                    )}
+                                                    onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx)}
+                                                  >
+                                                    <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", opt.bg)}>
+                                                      <Icon className={cn("h-3 w-3", opt.text)} />
+                                                    </div>
+                                                    <span className="font-medium">{opt.label}</span>
+                                                    {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
+                                                  </DropdownMenuItem>
+                                                );
+                                              })}
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        </td>
+                                      );
+                                    })}
+                                    <td className="text-center px-2 py-1.5">
+                                      <span className={cn(
+                                        "text-xs font-bold",
+                                        workDays >= 6
+                                          ? "text-red-400"
+                                          : workDays >= 5
+                                            ? "text-amber-400"
+                                            : workDays >= 3
+                                              ? "text-emerald-400"
+                                              : "text-muted-foreground"
+                                      )}>
+                                        {workDays}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-1.5">
+                                      <EditableNote
+                                        value={notes}
+                                        employeeId={emp.employee?._id}
+                                        onSaved={(newNote) => handleNoteSaved(emp.transporterId, newNote)}
+                                      />
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                        </Fragment>
+                      ))}
+                  </tbody>
+                </table>
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* ── Type Legend ── */}
+          <div className="flex flex-wrap items-center gap-2 px-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mr-2">Legend:</span>
+            {TYPE_OPTIONS.map(opt => {
+              const Icon = opt.icon;
+              return (
+                <div key={opt.label} className="flex items-center gap-1.5">
+                  <div className={cn("h-4 w-4 rounded-sm flex items-center justify-center", opt.bg)}>
+                    <Icon className={cn("h-2.5 w-2.5", opt.text)} />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">{opt.label}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
-        </>)}
       </div>
     </TooltipProvider>
   );

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectDB } from "@/lib/db";
+import connectToDatabase from "@/lib/db";
 import MessageLog from "@/lib/models/MessageLog";
 
 /**
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
         // }
         // ──────────────────────────────────────────────────────────────────────
 
-        await connectDB();
+        await connectToDatabase();
 
         // ── message.delivered ─────────────────────────────────────────────────
         if (eventType === "message.delivered") {

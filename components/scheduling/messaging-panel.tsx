@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   Loader2,
@@ -274,6 +273,12 @@ function MessagingSubTab({
   setSelectedWeek,
   searchQuery,
   selectAllTrigger,
+  phoneNumbers,
+  fromNumber,
+  fromNumberDisplay,
+  setFromNumber,
+  setFromNumberDisplay,
+  loadingPhones,
 }: {
   tab: (typeof SUB_TABS)[0];
   weeks: string[];
@@ -281,6 +286,12 @@ function MessagingSubTab({
   setSelectedWeek: (w: string) => void;
   searchQuery: string;
   selectAllTrigger: number;
+  phoneNumbers: QuoPhoneNumber[];
+  fromNumber: string;
+  fromNumberDisplay: string;
+  setFromNumber: (id: string) => void;
+  setFromNumberDisplay: (n: string) => void;
+  loadingPhones: boolean;
 }) {
   const [employees, setEmployees] = useState<EmployeeRecipient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -288,10 +299,6 @@ function MessagingSubTab({
   const [selectedAll, setSelectedAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState(tab.defaultMessage);
-  const [fromNumber, setFromNumber] = useState(""); // stores phoneNumberId
-  const [fromNumberDisplay, setFromNumberDisplay] = useState(""); // stores the actual phone number for display
-  const [phoneNumbers, setPhoneNumbers] = useState<QuoPhoneNumber[]>([]);
-  const [loadingPhones, setLoadingPhones] = useState(true);
   const [sendResults, setSendResults] = useState<SendResult[] | null>(null);
   const [composerTab, setComposerTab] = useState<"preview" | "compose">("preview");
   const [templateLoaded, setTemplateLoaded] = useState(false);
@@ -342,34 +349,7 @@ function MessagingSubTab({
     };
   }, [message, tab.id, templateLoaded]);
 
-  // Fetch phone numbers from Quo
-  useEffect(() => {
-    const fetchPhoneNumbers = async () => {
-      try {
-        const res = await fetch("/api/messaging/phone-numbers");
-        const data = await res.json();
-        if (data.data) {
-          setPhoneNumbers(
-            data.data.map((pn: any) => ({
-              id: pn.id,
-              phoneNumber: pn.phoneNumber,
-              name: pn.name || pn.phoneNumber,
-            }))
-          );
-          if (data.data.length > 0) {
-            // OpenPhone API requires phoneNumberId (e.g. PNxxxxxxx), not the phone number string
-            setFromNumber(data.data[0].id);
-            setFromNumberDisplay(data.data[0].phoneNumber);
-          }
-        }
-      } catch {
-        // silently fail
-      } finally {
-        setLoadingPhones(false);
-      }
-    };
-    fetchPhoneNumbers();
-  }, []);
+  // Phone numbers are now received as props — no per-tab fetch needed
 
   // Fetch employees for this filter
   const fetchEmployees = useCallback(async () => {
@@ -473,9 +453,10 @@ function MessagingSubTab({
       const sendPromises = recipients.map(async (r) => {
         try {
           const payload = {
-            recipients: [{ phone: r.phone, name: r.name }],
+            recipients: [{ phone: r.phone, name: r.name, message: r.message }],
             message: r.message,
-            from: fromNumber || undefined,
+            from: fromNumber,
+            messageType: tab.id,
           };
           console.log("[Messaging] Sending:", JSON.stringify(payload, null, 2));
 
@@ -924,6 +905,7 @@ export default function MessagingPanel({
   searchQuery,
   selectAllTrigger,
   activeSubTab,
+  onSubTabChange,
 }: {
   weeks: string[];
   selectedWeek: string;
@@ -931,9 +913,58 @@ export default function MessagingPanel({
   searchQuery: string;
   selectAllTrigger: number;
   activeSubTab: string;
+  onSubTabChange?: (tab: string) => void;
 }) {
-  const router = useRouter();
   const resolvedTab = SUB_TABS.find((t) => t.id === activeSubTab) ? activeSubTab : SUB_TABS[0].id;
+
+  // ── Phone numbers fetched ONCE here, shared via props to all sub-tabs ──────
+  const [phoneNumbers, setPhoneNumbers] = useState<QuoPhoneNumber[]>([]);
+  const [fromNumber, setFromNumber] = useState(""); // phoneNumberId
+  const [fromNumberDisplay, setFromNumberDisplay] = useState(""); // readable number
+  const [loadingPhones, setLoadingPhones] = useState(true);
+
+  useEffect(() => {
+    const fetchPhoneNumbers = async () => {
+      try {
+        const res = await fetch("/api/messaging/phone-numbers");
+        const data = await res.json();
+        if (data.data) {
+          setPhoneNumbers(
+            data.data.map((pn: any) => ({
+              id: pn.id,
+              phoneNumber: pn.phoneNumber,
+              name: pn.name || pn.phoneNumber,
+            }))
+          );
+          if (data.data.length > 0) {
+            setFromNumber(data.data[0].id);
+            setFromNumberDisplay(data.data[0].phoneNumber);
+          }
+        }
+      } catch {
+        // silently fail
+      } finally {
+        setLoadingPhones(false);
+      }
+    };
+    fetchPhoneNumbers();
+  }, []); // runs exactly once per panel mount
+
+  // ── Lazy keep-alive: only mount a sub-tab when first visited ─────────────
+  // After first mount, keep it in DOM (hidden) so state/data is preserved.
+  const [mountedTabs, setMountedTabs] = useState<Set<string>>(
+    () => new Set([resolvedTab]) // only mount the initial active tab
+  );
+
+  // When user switches to a new tab, add it to mountedTabs
+  useEffect(() => {
+    setMountedTabs((prev) => {
+      if (prev.has(resolvedTab)) return prev;
+      const next = new Set(prev);
+      next.add(resolvedTab);
+      return next;
+    });
+  }, [resolvedTab]);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -945,7 +976,7 @@ export default function MessagingPanel({
             return (
               <button
                 key={tab.id}
-                onClick={() => router.push(`/scheduling/messaging/${tab.id}`)}
+                onClick={() => onSubTabChange?.(tab.id)}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0",
                   isActive
@@ -960,21 +991,29 @@ export default function MessagingPanel({
           })}
         </div>
 
-        {/* ── Active Sub-Tab Content ── */}
+        {/* ── Lazy keep-alive sub-tabs: only render once visited, then stay mounted ── */}
         <div className="flex-1 min-h-0">
-          {SUB_TABS.map((tab) =>
-            resolvedTab === tab.id ? (
-              <MessagingSubTab
-                key={tab.id}
-                tab={tab}
-                weeks={weeks}
-                selectedWeek={selectedWeek}
-                setSelectedWeek={setSelectedWeek}
-                searchQuery={searchQuery}
-                selectAllTrigger={selectAllTrigger}
-              />
-            ) : null
-          )}
+          {SUB_TABS.map((tab) => {
+            if (!mountedTabs.has(tab.id)) return null; // not yet visited — don't mount
+            return (
+              <div key={tab.id} className={cn("h-full", resolvedTab !== tab.id && "hidden")}>
+                <MessagingSubTab
+                  tab={tab}
+                  weeks={weeks}
+                  selectedWeek={selectedWeek}
+                  setSelectedWeek={setSelectedWeek}
+                  searchQuery={searchQuery}
+                  selectAllTrigger={selectAllTrigger}
+                  phoneNumbers={phoneNumbers}
+                  fromNumber={fromNumber}
+                  fromNumberDisplay={fromNumberDisplay}
+                  setFromNumber={setFromNumber}
+                  setFromNumberDisplay={setFromNumberDisplay}
+                  loadingPhones={loadingPhones}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
     </TooltipProvider>
