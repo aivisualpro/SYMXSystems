@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Select,
@@ -362,6 +363,7 @@ function MessagingSubTab({
   employeesLoading,
   prefetchedTemplate,
   templatesLoaded,
+  onSelectionReport,
 }: {
   tab: (typeof SUB_TABS)[0];
   weeks: string[];
@@ -379,6 +381,7 @@ function MessagingSubTab({
   employeesLoading: boolean;
   prefetchedTemplate?: string;
   templatesLoaded: boolean;
+  onSelectionReport?: (count: number) => void;
 }) {
   // Use prefetched data from parent — stable reference to avoid infinite re-renders
   const EMPTY: EmployeeRecipient[] = useMemo(() => [], []);
@@ -439,6 +442,7 @@ function MessagingSubTab({
     setSelectedIds(new Set());
     setSelectedAll(false);
     setSendResults(null);
+    onSelectionReport?.(0);
   }, [prefetchedEmployees]);
 
   // Watch selectAllTrigger from header button
@@ -466,6 +470,7 @@ function MessagingSubTab({
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      onSelectionReport?.(next.size);
       return next;
     });
   };
@@ -474,9 +479,12 @@ function MessagingSubTab({
     if (selectedAll) {
       setSelectedIds(new Set());
       setSelectedAll(false);
+      onSelectionReport?.(0);
     } else {
-      setSelectedIds(new Set(filteredEmployees.map((e) => e._id)));
+      const newIds = new Set(filteredEmployees.map((e) => e._id));
+      setSelectedIds(newIds);
       setSelectedAll(true);
+      onSelectionReport?.(newIds.size);
     }
   };
 
@@ -584,7 +592,19 @@ function MessagingSubTab({
         <div className="rounded-xl border border-border/50 bg-card flex flex-col overflow-hidden">
           {/* Table Header */}
           <div className="grid grid-cols-[40px_1fr_100px_120px_120px] items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold sticky top-0 z-10">
-            <span></span>
+            <div className="flex items-center justify-center">
+              <Checkbox
+                checked={
+                  filteredEmployees.length > 0 && selectedIds.size === filteredEmployees.length
+                    ? true
+                    : selectedIds.size > 0
+                      ? "indeterminate"
+                      : false
+                }
+                onCheckedChange={toggleSelectAll}
+                className="h-3.5 w-3.5"
+              />
+            </div>
             <span>Name</span>
             <span>Client Type</span>
             <span>Phone</span>
@@ -947,6 +967,7 @@ export interface ActiveTabInfo {
   icon: typeof Bell;
   iconColor: string;
   eligibleCount: number;
+  selectedCount: number;
   loading: boolean;
   refresh: () => void;
 }
@@ -1063,6 +1084,10 @@ export default function MessagingPanel({
   const activeTabConfig = SUB_TABS.find(t => t.id === resolvedTab) || SUB_TABS[0];
   const activeEligibleCount = employeesByTab[resolvedTab]?.length ?? 0;
   const activeLoading = loadingTabs.has(resolvedTab);
+  const [activeSelectedCount, setActiveSelectedCount] = useState(0);
+
+  // Reset selection count when tab switches
+  useEffect(() => { setActiveSelectedCount(0); }, [resolvedTab]);
 
   const handleRefresh = useCallback(() => {
     if (!selectedWeek) return;
@@ -1087,10 +1112,11 @@ export default function MessagingPanel({
       icon: activeTabConfig.icon,
       iconColor: activeTabConfig.iconColor,
       eligibleCount: activeEligibleCount,
+      selectedCount: activeSelectedCount,
       loading: activeLoading,
       refresh: handleRefresh,
     });
-  }, [resolvedTab, activeEligibleCount, activeLoading, handleRefresh]);
+  }, [resolvedTab, activeEligibleCount, activeSelectedCount, activeLoading, handleRefresh]);
 
   // ── Prefetch ALL templates in parallel ────────────────────────────────────
   const [templatesByTab, setTemplatesByTab] = useState<Record<string, string>>({});
@@ -1164,6 +1190,7 @@ export default function MessagingPanel({
                 employeesLoading={loadingTabs.has(tab.id)}
                 prefetchedTemplate={templatesByTab[tab.id]}
                 templatesLoaded={templatesLoaded}
+                onSelectionReport={tab.id === resolvedTab ? setActiveSelectedCount : undefined}
               />
             </div>
           ))}

@@ -59,7 +59,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import MessagingPanel, { type ActiveTabInfo } from "@/components/scheduling/messaging-panel";
+import MessagingPanel, { type ActiveTabInfo, SUB_TABS } from "@/components/scheduling/messaging-panel";
 
 // ── Type Options with Icons & Colors ──
 interface TypeOption {
@@ -392,10 +392,11 @@ export default function SchedulingPage() {
       routerRef.current.replace("/scheduling", { scroll: false });
     }
   }, [activeMainTab, activeSubTab]); // router intentionally excluded — held in ref
+  const [mounted, setMounted] = useState(false);
   const [weeks, setWeeks] = useState<string[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<string>("");
   const [weekData, setWeekData] = useState<WeekData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -406,8 +407,15 @@ export default function SchedulingPage() {
   const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo | null>(null);
   const { setLeftContent, setRightContent } = useHeaderActions();
 
+  // Mark as mounted on client to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Fetch available weeks
   useEffect(() => {
+    if (!mounted) return;
+    setLoading(true);
     const fetchWeeks = async () => {
       try {
         const res = await fetch("/api/schedules?weeksList=true");
@@ -423,7 +431,7 @@ export default function SchedulingPage() {
       }
     };
     fetchWeeks();
-  }, []);
+  }, [mounted]);
 
   // Fetch week data
   useEffect(() => {
@@ -477,28 +485,37 @@ export default function SchedulingPage() {
     return { caution, danger, cautionNames, dangerNames };
   }, [weekData]);
 
-  // Push title + search into the main header
+  // Push title into left, all actions into right
   useEffect(() => {
     setLeftContent(
-      <div className="flex items-center gap-3">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-          {activeMainTab === "messaging" && activeTabInfo ? activeTabInfo.label : "Scheduling"}
-        </h1>
+      <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+        {activeMainTab === "messaging"
+          ? (SUB_TABS.find((t) => t.id === activeSubTab)?.label ?? "Messaging")
+          : "Scheduling"}
+      </h1>
+    );
+    return () => setLeftContent(null);
+  }, [setLeftContent, activeMainTab, activeSubTab]);
+
+  // Right content: search + messaging actions + week selector
+  useEffect(() => {
+    const idx = weeks.indexOf(selectedWeek);
+    setRightContent(
+      <div className="flex items-center gap-2">
+        {/* Search */}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             placeholder="Search employee..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 h-8 w-[220px] text-sm"
+            className="pl-8 h-8 w-[200px] text-sm"
           />
         </div>
+        {/* Messaging-only: eligible count + refresh */}
         {activeMainTab === "messaging" && activeTabInfo && (
           <>
-            <Badge
-              variant="secondary"
-              className="text-[11px] h-6 px-2 gap-1.5"
-            >
+            <Badge variant="secondary" className="text-[11px] h-6 px-2 gap-1.5">
               <Users className="h-3.5 w-3.5" />
               {activeTabInfo.loading ? "..." : activeTabInfo.eligibleCount} eligible
             </Badge>
@@ -509,79 +526,56 @@ export default function SchedulingPage() {
               onClick={activeTabInfo.refresh}
               disabled={activeTabInfo.loading}
             >
-              <RefreshCw
-                className={cn("h-3.5 w-3.5", activeTabInfo.loading && "animate-spin")}
-              />
+              <RefreshCw className={cn("h-3.5 w-3.5", activeTabInfo.loading && "animate-spin")} />
             </Button>
+          </>
+        )}
+        {/* Week selector — shown on both scheduling and messaging */}
+        {weeks.length > 0 && (
+          <>
+            <div className="w-px h-5 bg-border/60" />
             <Button
               variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => setSelectAllTrigger((p) => p + 1)}
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => {
+                const newIdx = idx + 1;
+                if (newIdx < weeks.length) setSelectedWeek(weeks[newIdx]);
+              }}
+              disabled={idx >= weeks.length - 1}
             >
-              Select All
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+              <SelectTrigger className="w-[170px] h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {weeks.map(w => (
+                  <SelectItem key={w} value={w}>
+                    {formatWeekLabel(w)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => {
+                const newIdx = idx - 1;
+                if (newIdx >= 0) setSelectedWeek(weeks[newIdx]);
+              }}
+              disabled={idx <= 0}
+            >
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </>
         )}
       </div>
     );
-
-    return () => {
-      setLeftContent(null);
-      setRightContent(null);
-    };
-  }, [setLeftContent, setRightContent, searchQuery, activeMainTab, activeTabInfo]);
-
-  // Update right content whenever week state changes
-  useEffect(() => {
-    if (weeks.length === 0) {
-      setRightContent(null);
-      return;
-    }
-
-    const idx = weeks.indexOf(selectedWeek);
-
-    setRightContent(
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => {
-            const newIdx = idx + 1;
-            if (newIdx < weeks.length) setSelectedWeek(weeks[newIdx]);
-          }}
-          disabled={idx >= weeks.length - 1}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Select value={selectedWeek} onValueChange={setSelectedWeek}>
-          <SelectTrigger className="w-[180px] h-8 text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {weeks.map(w => (
-              <SelectItem key={w} value={w}>
-                {formatWeekLabel(w)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => {
-            const newIdx = idx - 1;
-            if (newIdx >= 0) setSelectedWeek(weeks[newIdx]);
-          }}
-          disabled={idx <= 0}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-    );
-  }, [weeks, selectedWeek, setRightContent]);
+    return () => setRightContent(null);
+  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek]);
 
   // Handle type change via dropdown
   const handleTypeChange = useCallback(async (
@@ -757,6 +751,8 @@ export default function SchedulingPage() {
       return t === "off" || t === "";
     }).length;
   }, 0) || 0;
+
+  if (!mounted) return null;
 
   return (
     <TooltipProvider delayDuration={200}>

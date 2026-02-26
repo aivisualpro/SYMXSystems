@@ -18,7 +18,12 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         console.log("[Webhook] OpenPhone event received:", JSON.stringify(body, null, 2));
 
-        const eventType: string = body?.type ?? "";
+        // Quo sends webhook with top-level "event" key (not "type")
+        // Support both formats for safety
+        const eventType: string =
+            body?.event ?? body?.type ?? body?.object?.type ?? "";
+
+        // Quo wraps the message object in body.data.object
         const data = body?.data?.object ?? body?.data ?? {};
 
         await connectToDatabase();
@@ -180,17 +185,16 @@ async function pushStatusToSchedule(
             return;
         }
 
-        // Find the most recent schedule for this employee (today or the most recent date)
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const transporterId = (employee as any).transporterId;
 
+        // Find the most recent schedule for this employee
+        // — don't restrict by future date; delivery can come right after send
         const schedule = await SymxEmployeeSchedule.findOne({
-            transporterId: (employee as any).transporterId,
-            date: { $gte: today },
-        }).sort({ date: 1 });
+            transporterId,
+        }).sort({ date: -1 }); // most recently scheduled day
 
         if (!schedule) {
-            console.log(`[Webhook] No upcoming schedule for ${(employee as any).transporterId}, skipping`);
+            console.log(`[Webhook] No schedule found for ${transporterId}, skipping`);
             return;
         }
 
@@ -210,7 +214,7 @@ async function pushStatusToSchedule(
         );
 
         console.log(
-            `[Webhook] Pushed '${status}' to ${scheduleField} for ${(employee as any).transporterId} on ${schedule.date}`
+            `[Webhook] Pushed '${status}' to ${scheduleField} for ${transporterId} (schedule date: ${schedule.date})`
         );
     } catch (err: any) {
         console.error(`[Webhook] Schedule update error: ${err.message}`);

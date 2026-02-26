@@ -123,32 +123,42 @@ export async function POST(req: NextRequest) {
           }).catch(() => null);
 
           // ── Push "sent" status into the SymxEmployeeSchedule ──────────────
-          if (scheduleField && recipient.transporterId && recipient.scheduleDate) {
+          if (scheduleField && recipient.transporterId) {
             try {
-              await SymxEmployeeSchedule.updateOne(
-                {
-                  transporterId: recipient.transporterId,
-                  date: new Date(recipient.scheduleDate),
-                },
-                {
-                  $push: {
-                    [scheduleField]: {
-                      status: "sent",
-                      createdAt: new Date(),
-                      createdBy: senderEmail,
-                      messageLogId: msgLog?._id,
-                      openPhoneMessageId,
+              // Prefer exact date match; fall back to most recent schedule for this employee
+              const scheduleQuery: Record<string, any> = { transporterId: recipient.transporterId };
+              if (recipient.scheduleDate) {
+                scheduleQuery.date = new Date(recipient.scheduleDate);
+              }
+
+              const targetSchedule = await SymxEmployeeSchedule.findOne(scheduleQuery).sort({ date: -1 });
+
+              if (targetSchedule) {
+                await SymxEmployeeSchedule.updateOne(
+                  { _id: targetSchedule._id },
+                  {
+                    $push: {
+                      [scheduleField]: {
+                        status: "sent",
+                        createdAt: new Date(),
+                        createdBy: senderEmail,
+                        messageLogId: msgLog?._id,
+                        openPhoneMessageId,
+                      },
                     },
-                  },
-                }
-              );
-              console.log(
-                `[Messaging] Pushed 'sent' to ${scheduleField} for ${recipient.transporterId} on ${recipient.scheduleDate}`
-              );
+                  }
+                );
+                console.log(
+                  `[Messaging] Pushed 'sent' to ${scheduleField} for ${recipient.transporterId} (${targetSchedule.date})`
+                );
+              } else {
+                console.warn(`[Messaging] No schedule found for transporterId=${recipient.transporterId}, skipping`);
+              }
             } catch (schedErr: any) {
               console.error("[Messaging] Schedule update error:", schedErr.message);
             }
           }
+
 
           return {
             to: recipient.phone,
