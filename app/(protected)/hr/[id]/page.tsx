@@ -287,7 +287,22 @@ export default function EmployeeDetailPage(props: PageProps) {
                   <div className="relative shrink-0">
                      <div className="w-24 h-24 rounded-full overflow-hidden border border-zinc-100 dark:border-zinc-800 shadow-sm bg-muted/20">
                         {employee.profileImage ? (
-                           <img src={employee.profileImage} alt={employee.firstName} className="w-full h-full object-cover" />
+                           <>
+                             <img
+                               src={employee.profileImage}
+                               alt={employee.firstName}
+                               className="w-full h-full object-cover"
+                               onError={(e) => {
+                                 e.currentTarget.style.display = "none";
+                                 if (e.currentTarget.nextElementSibling) {
+                                   (e.currentTarget.nextElementSibling as HTMLElement).style.display = "flex";
+                                 }
+                               }}
+                             />
+                             <span className="w-full h-full items-center justify-center hidden">
+                               <User className="w-10 h-10 opacity-50" />
+                             </span>
+                           </>
                         ) : (
                            <div className="w-full h-full flex items-center justify-center bg-zinc-50 dark:bg-zinc-900 text-muted-foreground">
                               <User className="w-10 h-10 opacity-50" />

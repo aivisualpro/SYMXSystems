@@ -288,7 +288,8 @@ function MessagingSubTab({
   const [selectedAll, setSelectedAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState(tab.defaultMessage);
-  const [fromNumber, setFromNumber] = useState("");
+  const [fromNumber, setFromNumber] = useState(""); // stores phoneNumberId
+  const [fromNumberDisplay, setFromNumberDisplay] = useState(""); // stores the actual phone number for display
   const [phoneNumbers, setPhoneNumbers] = useState<QuoPhoneNumber[]>([]);
   const [loadingPhones, setLoadingPhones] = useState(true);
   const [sendResults, setSendResults] = useState<SendResult[] | null>(null);
@@ -356,11 +357,13 @@ function MessagingSubTab({
             }))
           );
           if (data.data.length > 0) {
-            setFromNumber(data.data[0].phoneNumber);
+            // OpenPhone API requires phoneNumberId (e.g. PNxxxxxxx), not the phone number string
+            setFromNumber(data.data[0].id);
+            setFromNumberDisplay(data.data[0].phoneNumber);
           }
         }
       } catch {
-        // silently fail — fromNumber is optional
+        // silently fail
       } finally {
         setLoadingPhones(false);
       }
@@ -445,6 +448,11 @@ function MessagingSubTab({
 
     if (!message.trim()) {
       toast.error("Please enter a message");
+      return;
+    }
+
+    if (!fromNumber) {
+      toast.error("No phone number configured. Please check your OpenPhone account.");
       return;
     }
 
@@ -721,12 +729,12 @@ function MessagingSubTab({
               <Pencil className="h-3.5 w-3.5" />
               Compose
             </button>
-            {fromNumber && (
+            {fromNumber && fromNumberDisplay && (
               <Badge
                 variant="outline"
                 className="text-[9px] h-4 px-1.5 ml-auto"
               >
-                From: {fromNumber}
+                From: {fromNumberDisplay}
               </Badge>
             )}
           </div>
@@ -789,22 +797,28 @@ function MessagingSubTab({
                     Loading phone numbers...
                   </div>
                 ) : phoneNumbers.length > 0 ? (
-                  <Select value={fromNumber} onValueChange={setFromNumber}>
+                  <Select
+                    value={fromNumber}
+                    onValueChange={(id) => {
+                      setFromNumber(id);
+                      const pn = phoneNumbers.find((p) => p.id === id);
+                      if (pn) setFromNumberDisplay(pn.phoneNumber);
+                    }}
+                  >
                     <SelectTrigger className="h-8 text-sm">
                       <SelectValue placeholder="Select a phone number" />
                     </SelectTrigger>
                     <SelectContent>
                       {phoneNumbers.map((pn) => (
-                        <SelectItem key={pn.id} value={pn.phoneNumber}>
+                        <SelectItem key={pn.id} value={pn.id}>
                           {pn.name} ({pn.phoneNumber})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="text-[11px] text-muted-foreground italic">
-                    No phone numbers found in Quo account. Messages will use default
-                    number.
+                  <p className="text-[11px] text-destructive italic">
+                    ⚠ No phone numbers found in OpenPhone account. Messages cannot be sent.
                   </p>
                 )}
               </div>
