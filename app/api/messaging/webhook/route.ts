@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import connectToDatabase from "@/lib/db";
 import MessageLog from "@/lib/models/MessageLog";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
@@ -9,22 +10,81 @@ import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
  * POST /api/messaging/webhook
  *
  * OpenPhone (Quo) webhook endpoint.
- * Events handled:
- *   - message.delivered  → marks outbound message as delivered + updates schedule
- *   - message.received   → records inbound reply + updates schedule
+ *
+ * Quo payload structure:
+ * {
+ *   "object": {
+ *     "id": "EVfc3c...",
+ *     "type": "message.delivered",   ← event type lives here
+ *     "data": {
+ *       "object": {                  ← the actual message object lives here
+ *         "id": "AC238...",
+ *         "from": "+1925...",
+ *         "to": "+1512...",
+ *         "status": "delivered",
+ *         ...
+ *       }
+ *     }
+ *   }
+ * }
  */
+
+// ── Verify Quo webhook signature ─────────────────────────────────────────────
+async function verifySignature(req: NextRequest, rawBody: string): Promise<boolean> {
+    const secret = process.env.QUO_WEBHOOK_SECRET;
+    if (!secret) return true; // skip if not configured
+
+    const signature = req.headers.get("x-openphone-signature") ?? "";
+    if (!signature) return false;
+
+    const hmac = crypto.createHmac("sha256", secret);
+    hmac.update(rawBody);
+    const expected = hmac.digest("hex");
+
+    // Constant-time comparison to prevent timing attacks
+    return crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expected)
+    );
+}
+
 export async function POST(req: NextRequest) {
+    // Read raw body for signature verification
+    const rawBody = await req.text();
+
+    // Verify signature if secret is configured
+    const sigValid = await verifySignature(req, rawBody);
+    if (!sigValid) {
+        console.warn("[Webhook] Invalid signature — rejecting");
+        return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 401 });
+    }
+
+    let body: any;
     try {
-        const body = await req.json();
-        console.log("[Webhook] OpenPhone event received:", JSON.stringify(body, null, 2));
+        body = JSON.parse(rawBody);
+    } catch {
+        return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+    }
 
-        // Quo sends webhook with top-level "event" key (not "type")
-        // Support both formats for safety
+    try {
+        console.log("[Webhook] Raw payload:", JSON.stringify(body, null, 2));
+
+        // ── Parse Quo's actual payload structure ──────────────────────────────
+        // Quo wraps everything under body.object
+        // body.object.type      → event type
+        // body.object.data.object → the message object
+        const eventObject = body?.object ?? body; // fallback: treat body itself as the event
         const eventType: string =
-            body?.event ?? body?.type ?? body?.object?.type ?? "";
+            eventObject?.type ?? body?.event ?? body?.type ?? "";
 
-        // Quo wraps the message object in body.data.object
-        const data = body?.data?.object ?? body?.data ?? {};
+        // The message data is nested under data.object inside the event object
+        const data =
+            eventObject?.data?.object ?? // Quo standard: body.object.data.object
+            body?.data?.object ??        // alternative flat format
+            body?.data ??                // bare data key
+            {};
+
+        console.log(`[Webhook] eventType="${eventType}" data.id="${data?.id}" data.status="${data?.status}"`);
 
         await connectToDatabase();
 
@@ -33,48 +93,49 @@ export async function POST(req: NextRequest) {
             const openPhoneMessageId: string = data?.id ?? "";
             const deliveredAt = data?.deliveredAt ? new Date(data.deliveredAt) : new Date();
 
-            if (openPhoneMessageId) {
-                const updated = await MessageLog.findOneAndUpdate(
-                    { openPhoneMessageId },
-                    {
-                        $set: {
-                            status: "delivered",
-                            deliveredAt,
-                            deliveryWebhookPayload: body,
-                        },
-                    },
-                    { new: true }
-                );
+            console.log(`[Webhook] Processing delivery for openPhoneMessageId="${openPhoneMessageId}"`);
 
-                if (updated) {
-                    console.log(`[Webhook] Marked message ${openPhoneMessageId} as DELIVERED`);
+            if (!openPhoneMessageId) {
+                console.warn("[Webhook] message.delivered received but no id found in data");
+                return NextResponse.json({ ok: true, event: "message.delivered", warn: "no message id" });
+            }
 
-                    // ── Push "delivered" status into the schedule ──────────────────
-                    await pushStatusToSchedule(
-                        updated.toNumber,
-                        updated.messageType,
-                        "delivered",
-                        "quo",
-                        openPhoneMessageId,
-                        updated._id
-                    );
-                } else {
-                    console.warn(
-                        `[Webhook] No matching log for message.delivered id=${openPhoneMessageId} — creating stub`
-                    );
-                    await MessageLog.create({
-                        openPhoneMessageId,
-                        fromNumber: data?.from ?? "",
-                        fromDisplay: data?.from ?? "",
-                        toNumber: Array.isArray(data?.to) ? (data.to[0] ?? "") : (data?.to ?? ""),
-                        recipientName: "",
-                        messageType: "unknown",
-                        content: data?.content ?? "",
+            const updated = await MessageLog.findOneAndUpdate(
+                { openPhoneMessageId },
+                {
+                    $set: {
                         status: "delivered",
                         deliveredAt,
                         deliveryWebhookPayload: body,
-                    });
-                }
+                    },
+                },
+                { new: true }
+            );
+
+            if (updated) {
+                console.log(`[Webhook] ✅ Marked message ${openPhoneMessageId} as DELIVERED`);
+                await pushStatusToSchedule(
+                    updated.toNumber,
+                    updated.messageType,
+                    "delivered",
+                    "quo",
+                    openPhoneMessageId,
+                    updated._id
+                );
+            } else {
+                console.warn(`[Webhook] No matching MessageLog for id="${openPhoneMessageId}" — storing stub`);
+                await MessageLog.create({
+                    openPhoneMessageId,
+                    fromNumber: data?.from ?? "",
+                    fromDisplay: data?.from ?? "",
+                    toNumber: Array.isArray(data?.to) ? (data.to[0] ?? "") : (data?.to ?? ""),
+                    recipientName: "",
+                    messageType: "unknown",
+                    content: data?.body ?? data?.content ?? "",
+                    status: "delivered",
+                    deliveredAt,
+                    deliveryWebhookPayload: body,
+                });
             }
 
             return NextResponse.json({ ok: true, event: "message.delivered" });
@@ -85,9 +146,9 @@ export async function POST(req: NextRequest) {
             const inboundFrom: string = Array.isArray(data?.from)
                 ? (data.from[0] ?? "")
                 : (data?.from ?? "");
-            const replyContent: string = data?.content ?? data?.text ?? "";
+            const replyContent: string = data?.body ?? data?.content ?? data?.text ?? "";
             const receivedAt = data?.createdAt ? new Date(data.createdAt) : new Date();
-            const to: string = data?.to ?? data?.phoneNumberId ?? "";
+            const to: string = Array.isArray(data?.to) ? (data.to[0] ?? "") : (data?.to ?? data?.phoneNumberId ?? "");
 
             console.log(`[Webhook] Inbound reply from ${inboundFrom}: "${replyContent}"`);
 
@@ -104,9 +165,8 @@ export async function POST(req: NextRequest) {
                     logEntry.replyContent = replyContent;
                     logEntry.replyWebhookPayload = body;
                     await logEntry.save();
-                    console.log(`[Webhook] Recorded reply for log ${logEntry._id}`);
+                    console.log(`[Webhook] ✅ Recorded reply for log ${logEntry._id}`);
 
-                    // ── Push "received" status into the schedule ────────────────
                     await pushStatusToSchedule(
                         logEntry.toNumber,
                         logEntry.messageType,
@@ -136,11 +196,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ok: true, event: "message.received" });
         }
 
-        // ── Unhandled event type ──────────────────────────────────────────────
-        console.log(`[Webhook] Unhandled event type: ${eventType}`);
+        // ── Unhandled event ───────────────────────────────────────────────────
+        console.log(`[Webhook] Unhandled event type: "${eventType}"`);
         return NextResponse.json({ ok: true, event: eventType, handled: false });
+
     } catch (err: any) {
-        console.error("[Webhook] Error processing OpenPhone webhook:", err);
+        console.error("[Webhook] Error processing webhook:", err);
         return NextResponse.json({ ok: false, error: err.message }, { status: 200 });
     }
 }
@@ -155,7 +216,7 @@ export async function GET() {
     });
 }
 
-// ── Helper: push status entry into the correct schedule field ──────────────────
+// ── Helper: push a status entry into the correct schedule field ───────────────
 async function pushStatusToSchedule(
     phoneNumber: string,
     messageType: string,
@@ -166,35 +227,31 @@ async function pushStatusToSchedule(
 ) {
     const scheduleField = TAB_TO_SCHEDULE_FIELD[messageType];
     if (!scheduleField) {
-        console.log(`[Webhook] No schedule field mapping for messageType=${messageType}, skipping`);
+        console.log(`[Webhook] No schedule field for messageType="${messageType}", skipping`);
         return;
     }
 
     try {
-        // Find the employee by phone number
         const cleanPhone = phoneNumber.replace(/\D/g, "").slice(-10);
         const employee = await SymxEmployee.findOne({
             $or: [
-                { phoneNumber: phoneNumber },
+                { phoneNumber },
                 { phoneNumber: { $regex: cleanPhone + "$" } },
             ],
         }).lean();
 
         if (!employee) {
-            console.log(`[Webhook] No employee found for phone ${phoneNumber}, skipping schedule update`);
+            console.log(`[Webhook] No employee for phone=${phoneNumber}, skipping schedule update`);
             return;
         }
 
         const transporterId = (employee as any).transporterId;
 
-        // Find the most recent schedule for this employee
-        // — don't restrict by future date; delivery can come right after send
-        const schedule = await SymxEmployeeSchedule.findOne({
-            transporterId,
-        }).sort({ date: -1 }); // most recently scheduled day
+        // Find most recent schedule — no date restriction so near-instant delivery works
+        const schedule = await SymxEmployeeSchedule.findOne({ transporterId }).sort({ date: -1 });
 
         if (!schedule) {
-            console.log(`[Webhook] No schedule found for ${transporterId}, skipping`);
+            console.log(`[Webhook] No schedule for transporterId=${transporterId}, skipping`);
             return;
         }
 
@@ -213,9 +270,7 @@ async function pushStatusToSchedule(
             }
         );
 
-        console.log(
-            `[Webhook] Pushed '${status}' to ${scheduleField} for ${transporterId} (schedule date: ${schedule.date})`
-        );
+        console.log(`[Webhook] ✅ Pushed "${status}" → ${scheduleField} for ${transporterId}`);
     } catch (err: any) {
         console.error(`[Webhook] Schedule update error: ${err.message}`);
     }
