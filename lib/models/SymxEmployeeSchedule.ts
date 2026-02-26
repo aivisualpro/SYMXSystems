@@ -1,5 +1,25 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
+// ── Messaging status entry (one per event in the lifecycle) ──
+export interface IMessageStatusEntry {
+  status: 'pending' | 'sent' | 'delivered' | 'received';
+  createdAt: Date;
+  createdBy: string; // user email / "system" / "quo" (webhook)
+  messageLogId?: mongoose.Types.ObjectId; // links to SYMXMessageLogs
+  openPhoneMessageId?: string;
+}
+
+const MessageStatusEntrySchema = new Schema<IMessageStatusEntry>(
+  {
+    status: { type: String, enum: ['pending', 'sent', 'delivered', 'received'], required: true },
+    createdAt: { type: Date, default: Date.now },
+    createdBy: { type: String, default: 'system' },
+    messageLogId: { type: Schema.Types.ObjectId, ref: 'MessageLog' },
+    openPhoneMessageId: { type: String },
+  },
+  { _id: false }
+);
+
 export interface ISymxEmployeeSchedule extends Document {
   transporterId: string;
   employeeId?: mongoose.Types.ObjectId;
@@ -16,6 +36,13 @@ export interface ISymxEmployeeSchedule extends Document {
   weekConfirmation?: string;
   van?: string;
   note?: string;
+
+  // ── Messaging status tracking arrays ──
+  futureShift: IMessageStatusEntry[];
+  shiftNotification: IMessageStatusEntry[];
+  offTodayScheduleTom: IMessageStatusEntry[];
+  weekSchedule: IMessageStatusEntry[];
+  routeItinerary: IMessageStatusEntry[];
 }
 
 const SymxEmployeeScheduleSchema: Schema = new Schema({
@@ -34,6 +61,13 @@ const SymxEmployeeScheduleSchema: Schema = new Schema({
   weekConfirmation: { type: String, default: '' },
   van: { type: String, default: '' },
   note: { type: String, default: '' },
+
+  // ── Messaging status arrays ──
+  futureShift: { type: [MessageStatusEntrySchema], default: [] },
+  shiftNotification: { type: [MessageStatusEntrySchema], default: [] },
+  offTodayScheduleTom: { type: [MessageStatusEntrySchema], default: [] },
+  weekSchedule: { type: [MessageStatusEntrySchema], default: [] },
+  routeItinerary: { type: [MessageStatusEntrySchema], default: [] },
 }, { timestamps: true, collection: 'SYMXEmployeeSchedules' });
 
 // Compound index for upsert

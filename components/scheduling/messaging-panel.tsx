@@ -46,6 +46,7 @@ interface EmployeeRecipient {
   phoneNumber: string;
   type: string;
   email: string;
+  messagingStatus?: Record<string, { status: string; createdAt: string } | null>;
   schedules?: {
     date: string;
     weekDay: string;
@@ -199,6 +200,84 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
     .replace(/\{dayOfWeek\}/gi, dayOfWeek)
     .replace(/\{yearWeek\}/gi, yearWeekDisplay)
     .replace(/\{weekSchedule\}/gi, weekSchedule);
+}
+
+// ── Message Status Badge Component ──
+const STATUS_CONFIG: Record<string, {
+  icon: typeof CheckCircle2;
+  color: string;
+  bg: string;
+  label: string;
+  pulse?: boolean;
+}> = {
+  pending: {
+    icon: Loader2,
+    color: "text-amber-400",
+    bg: "bg-amber-400/15 ring-amber-400/30",
+    label: "Pending",
+    pulse: true,
+  },
+  sent: {
+    icon: Send,
+    color: "text-blue-400",
+    bg: "bg-blue-400/15 ring-blue-400/30",
+    label: "Sent",
+  },
+  delivered: {
+    icon: CheckCircle2,
+    color: "text-emerald-400",
+    bg: "bg-emerald-400/15 ring-emerald-400/30",
+    label: "Delivered",
+  },
+  received: {
+    icon: MessageSquare,
+    color: "text-violet-400",
+    bg: "bg-violet-400/15 ring-violet-400/30",
+    label: "Reply Received",
+  },
+};
+
+function MessageStatusBadge({
+  status,
+  createdAt,
+}: {
+  status: string;
+  createdAt?: string;
+}) {
+  const config = STATUS_CONFIG[status];
+  if (!config) return null;
+
+  const Icon = config.icon;
+  const timeAgo = createdAt
+    ? new Date(createdAt).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    })
+    : "";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={cn(
+            "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ring-1 text-[9px] font-semibold uppercase tracking-wider shrink-0",
+            config.bg,
+            config.color,
+            config.pulse && "animate-pulse"
+          )}
+        >
+          <Icon className={cn("h-2.5 w-2.5", config.pulse && "animate-spin")} />
+          {config.label}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        <span className="font-semibold">{config.label}</span>
+        {timeAgo && <span className="text-muted-foreground ml-1">• {timeAgo}</span>}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 // ── Sub Tab Config ──
@@ -421,11 +500,19 @@ function MessagingSubTab({
     }
 
     // Build per-employee personalized messages
-    const recipients = selectedEmployees.map((emp) => ({
-      phone: emp.phoneNumber.startsWith("+") ? emp.phoneNumber : `+1${emp.phoneNumber.replace(/\D/g, "")}`,
-      name: emp.name,
-      message: personalizeMessage(message.trim(), emp, tab.id, selectedWeek),
-    }));
+    const recipients = selectedEmployees.map((emp) => {
+      // Find the first relevant schedule date for this employee
+      const relevantSchedule = emp.schedules?.find(
+        (s) => s.type && !["off", "close", "request off", ""].includes(s.type.toLowerCase().trim())
+      );
+      return {
+        phone: emp.phoneNumber.startsWith("+") ? emp.phoneNumber : `+1${emp.phoneNumber.replace(/\D/g, "")}`,
+        name: emp.name,
+        message: personalizeMessage(message.trim(), emp, tab.id, selectedWeek),
+        transporterId: emp.transporterId,
+        scheduleDate: relevantSchedule?.date || undefined,
+      };
+    });
 
     setSending(true);
     setSendResults(null);
@@ -437,7 +524,13 @@ function MessagingSubTab({
       const sendPromises = recipients.map(async (r) => {
         try {
           const payload = {
-            recipients: [{ phone: r.phone, name: r.name, message: r.message }],
+            recipients: [{
+              phone: r.phone,
+              name: r.name,
+              message: r.message,
+              transporterId: r.transporterId,
+              scheduleDate: r.scheduleDate,
+            }],
             message: r.message,
             from: fromNumber,
             messageType: tab.id,
@@ -604,14 +697,28 @@ function MessagingSubTab({
                       </div>
                     </div>
 
-                    {/* Name */}
+                    {/* Name + Status */}
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xs font-semibold truncate">
                         {emp.name}
                       </span>
+                      {/* Messaging status from DB (persistent across sessions) */}
+                      {(() => {
+                        const msgStatus = emp.messagingStatus?.[tab.id];
+                        if (msgStatus && !sendResult) {
+                          return (
+                            <MessageStatusBadge
+                              status={msgStatus.status}
+                              createdAt={msgStatus.createdAt}
+                            />
+                          );
+                        }
+                        return null;
+                      })()}
+                      {/* Live send result (this session only) */}
                       {sendResult && (
                         sendResult.success ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                          <MessageStatusBadge status="sent" />
                         ) : (
                           <Tooltip>
                             <TooltipTrigger asChild>

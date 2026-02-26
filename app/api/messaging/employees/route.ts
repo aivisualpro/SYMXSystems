@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
 export async function GET(req: NextRequest) {
   try {
@@ -66,9 +67,32 @@ export async function GET(req: NextRequest) {
       scheduleMap[s.transporterId].push(s);
     });
 
-    // Merge employee data with schedule data
+    // Merge employee data with schedule data + messaging statuses
     const enrichedEmployees = employees.map((emp: any) => {
       const empSchedules = scheduleMap[emp.transporterId] || [];
+
+      // Compute last messaging status per tab from ALL schedules
+      const messagingStatus: Record<string, { status: string; createdAt: string } | null> = {};
+      if (filter) {
+        const field = TAB_TO_SCHEDULE_FIELD[filter];
+        if (field) {
+          // Find the latest status entry across all schedules for this employee
+          let latestEntry: any = null;
+          empSchedules.forEach((s: any) => {
+            const entries = s[field];
+            if (Array.isArray(entries) && entries.length > 0) {
+              const last = entries[entries.length - 1];
+              if (!latestEntry || new Date(last.createdAt) > new Date(latestEntry.createdAt)) {
+                latestEntry = last;
+              }
+            }
+          });
+          messagingStatus[filter] = latestEntry
+            ? { status: latestEntry.status, createdAt: latestEntry.createdAt }
+            : null;
+        }
+      }
+
       return {
         _id: emp._id,
         name: `${emp.firstName} ${emp.lastName}`.toUpperCase(),
@@ -78,6 +102,7 @@ export async function GET(req: NextRequest) {
         phoneNumber: emp.phoneNumber,
         type: emp.type || "Unassigned",
         email: emp.email,
+        messagingStatus,
         schedules: empSchedules.map((s: any) => ({
           date: s.date,
           weekDay: s.weekDay,

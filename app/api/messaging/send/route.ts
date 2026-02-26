@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import MessageLog from "@/lib/models/MessageLog";
+import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
 const QUO_API_BASE = "https://api.openphone.com/v1";
 
@@ -46,10 +48,19 @@ export async function POST(req: NextRequest) {
 
     await connectToDatabase();
 
+    const senderEmail = (session as any)?.user?.email || "system";
+    const scheduleField = TAB_TO_SCHEDULE_FIELD[messageType];
+
     // Send messages in parallel
     const sendPromises = recipients.map(
-      async (recipient: { phone: string; name?: string; message?: string }) => {
-        // Support per-recipient personalized message passed from messaging panel
+      async (recipient: {
+        phone: string;
+        name?: string;
+        message?: string;
+        transporterId?: string;
+        scheduleDate?: string;
+        yearWeek?: string;
+      }) => {
         const personalizedContent = recipient.message ?? message;
 
         try {
@@ -75,7 +86,6 @@ export async function POST(req: NextRequest) {
           if (!res.ok) {
             console.error("[Messaging] OpenPhone error:", res.status, JSON.stringify(responseData));
 
-            // Log failed attempt — don't throw if logging fails
             await MessageLog.create({
               fromNumber: from,
               toNumber: recipient.phone,
@@ -99,8 +109,8 @@ export async function POST(req: NextRequest) {
 
           const openPhoneMessageId: string = responseData?.data?.id ?? "";
 
-          // Persist to DB so the webhook can find and update this record by its OpenPhone message ID
-          await MessageLog.create({
+          // Persist to SYMXMessageLogs
+          const msgLog = await MessageLog.create({
             openPhoneMessageId,
             fromNumber: from,
             fromDisplay: responseData?.data?.from ?? from,
@@ -110,7 +120,35 @@ export async function POST(req: NextRequest) {
             content: personalizedContent,
             status: "sent",
             sentAt: new Date(),
-          }).catch(() => { });
+          }).catch(() => null);
+
+          // ── Push "sent" status into the SymxEmployeeSchedule ──────────────
+          if (scheduleField && recipient.transporterId && recipient.scheduleDate) {
+            try {
+              await SymxEmployeeSchedule.updateOne(
+                {
+                  transporterId: recipient.transporterId,
+                  date: new Date(recipient.scheduleDate),
+                },
+                {
+                  $push: {
+                    [scheduleField]: {
+                      status: "sent",
+                      createdAt: new Date(),
+                      createdBy: senderEmail,
+                      messageLogId: msgLog?._id,
+                      openPhoneMessageId,
+                    },
+                  },
+                }
+              );
+              console.log(
+                `[Messaging] Pushed 'sent' to ${scheduleField} for ${recipient.transporterId} on ${recipient.scheduleDate}`
+              );
+            } catch (schedErr: any) {
+              console.error("[Messaging] Schedule update error:", schedErr.message);
+            }
+          }
 
           return {
             to: recipient.phone,
