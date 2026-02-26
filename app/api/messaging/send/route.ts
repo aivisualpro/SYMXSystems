@@ -40,35 +40,45 @@ export async function POST(req: NextRequest) {
 
     const sendPromises = recipients.map(async (recipient: { phone: string; name?: string }) => {
       try {
+        const requestBody = {
+          content: message,
+          from: from || undefined,
+          to: [recipient.phone],
+        };
+
+        console.log("[Messaging] Sending to OpenPhone:", JSON.stringify(requestBody, null, 2));
+
         const res = await fetch(`${QUO_API_BASE}/messages`, {
           method: "POST",
           headers: {
             Authorization: apiKey,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            content: message,
-            from: from || undefined,
-            to: [recipient.phone],
-          }),
+          body: JSON.stringify(requestBody),
         });
 
+        const responseData = await res.json().catch(() => ({}));
+
         if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
+          console.error("[Messaging] OpenPhone error response:", res.status, JSON.stringify(responseData));
           return {
             to: recipient.phone,
             name: recipient.name || "",
             success: false,
-            error: errorData.message || `HTTP ${res.status}`,
+            error: responseData.message || responseData.error || `HTTP ${res.status}`,
           };
         }
+
+        console.log("[Messaging] OpenPhone success response:", JSON.stringify(responseData, null, 2));
 
         return {
           to: recipient.phone,
           name: recipient.name || "",
           success: true,
+          data: responseData.data,
         };
       } catch (err: any) {
+        console.error("[Messaging] Network/fetch error:", err.message);
         return {
           to: recipient.phone,
           name: recipient.name || "",

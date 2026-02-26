@@ -464,21 +464,26 @@ function MessagingSubTab({
 
       const sendPromises = recipients.map(async (r) => {
         try {
+          const payload = {
+            recipients: [{ phone: r.phone, name: r.name }],
+            message: r.message,
+            from: fromNumber || undefined,
+          };
+          console.log("[Messaging] Sending:", JSON.stringify(payload, null, 2));
+
           const res = await fetch("/api/messaging/send", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              recipients: [{ phone: r.phone, name: r.name }],
-              message: r.message,
-              from: fromNumber || undefined,
-            }),
+            body: JSON.stringify(payload),
           });
 
           const data = await res.json();
+          console.log("[Messaging] Response:", res.status, JSON.stringify(data, null, 2));
           if (!res.ok) throw new Error(data.error || "Failed");
 
           return { to: r.phone, name: r.name, success: true };
         } catch (err: any) {
+          console.error("[Messaging] Error for", r.name, ":", err.message);
           return { to: r.phone, name: r.name, success: false, error: err.message };
         }
       });
@@ -606,7 +611,7 @@ function MessagingSubTab({
                     className={cn(
                       "grid grid-cols-[40px_1fr_100px_120px_120px] items-center gap-2 px-3 py-2 border-b border-border/20 cursor-pointer transition-all hover:bg-muted/30",
                       isSelected &&
-                        "bg-primary/5 border-l-2 border-l-primary"
+                      "bg-primary/5 border-l-2 border-l-primary"
                     )}
                     onClick={() => toggleSelect(emp._id)}
                   >
