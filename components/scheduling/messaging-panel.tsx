@@ -279,6 +279,10 @@ function MessagingSubTab({
   setFromNumber,
   setFromNumberDisplay,
   loadingPhones,
+  prefetchedEmployees,
+  employeesLoading,
+  prefetchedTemplate,
+  templatesLoaded,
 }: {
   tab: (typeof SUB_TABS)[0];
   weeks: string[];
@@ -292,9 +296,16 @@ function MessagingSubTab({
   setFromNumber: (id: string) => void;
   setFromNumberDisplay: (n: string) => void;
   loadingPhones: boolean;
+  prefetchedEmployees?: EmployeeRecipient[];
+  employeesLoading: boolean;
+  prefetchedTemplate?: string;
+  templatesLoaded: boolean;
 }) {
-  const [employees, setEmployees] = useState<EmployeeRecipient[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use prefetched data from parent — stable reference to avoid infinite re-renders
+  const EMPTY: EmployeeRecipient[] = useMemo(() => [], []);
+  const employees = prefetchedEmployees ?? EMPTY;
+  const loading = employeesLoading;
+
   const [sending, setSending] = useState(false);
   const [selectedAll, setSelectedAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -305,27 +316,17 @@ function MessagingSubTab({
   const [saving, setSaving] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load saved template from DB
+  // Sync template from parent prefetch when it arrives
   useEffect(() => {
-    const loadTemplate = async () => {
-      try {
-        const res = await fetch(`/api/messaging/templates?type=${tab.id}`);
-        const data = await res.json();
-        if (data.template?.template) {
-          setMessage(data.template.template);
-        }
-      } catch {
-        // use default
-      } finally {
-        setTemplateLoaded(true);
-      }
-    };
-    loadTemplate();
-  }, [tab.id]);
+    if (templatesLoaded && prefetchedTemplate && !templateLoaded) {
+      setMessage(prefetchedTemplate);
+      setTemplateLoaded(true);
+    }
+  }, [templatesLoaded, prefetchedTemplate, templateLoaded]);
 
   // Auto-save template to DB with debounce
   useEffect(() => {
-    if (!templateLoaded) return; // don't save on initial load
+    if (!templateLoaded) return;
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
@@ -349,34 +350,17 @@ function MessagingSubTab({
     };
   }, [message, tab.id, templateLoaded]);
 
-  // Phone numbers are now received as props — no per-tab fetch needed
-
-  // Fetch employees for this filter
+  // Refresh callback for manual refresh button
   const fetchEmployees = useCallback(async () => {
-    setLoading(true);
-    setSendResults(null);
-    try {
-      const params = new URLSearchParams({ filter: tab.id });
-      if (selectedWeek) params.append("yearWeek", selectedWeek);
-      const res = await fetch(`/api/messaging/employees?${params.toString()}`);
-      const data = await res.json();
-      setEmployees(data.employees || []);
-    } catch {
-      toast.error("Failed to load employees");
-    } finally {
-      setLoading(false);
-    }
-  }, [tab.id, selectedWeek]);
+    // Parent handles data fetching
+  }, []);
 
-  useEffect(() => {
-    fetchEmployees();
-  }, [fetchEmployees]);
-
-  // Reset selections when employees change
+  // Reset selections when the actual employee data reference changes (stable from parent)
   useEffect(() => {
     setSelectedIds(new Set());
     setSelectedAll(false);
-  }, [employees]);
+    setSendResults(null);
+  }, [prefetchedEmployees]);
 
   // Watch selectAllTrigger from header button
   useEffect(() => {
@@ -948,23 +932,87 @@ export default function MessagingPanel({
       }
     };
     fetchPhoneNumbers();
-  }, []); // runs exactly once per panel mount
+  }, []);
 
-  // ── Lazy keep-alive: only mount a sub-tab when first visited ─────────────
-  // After first mount, keep it in DOM (hidden) so state/data is preserved.
-  const [mountedTabs, setMountedTabs] = useState<Set<string>>(
-    () => new Set([resolvedTab]) // only mount the initial active tab
-  );
+  // ── Prefetch employees for ALL tabs in parallel ───────────────────────────
+  const [employeesByTab, setEmployeesByTab] = useState<Record<string, EmployeeRecipient[]>>({});
+  const [loadingTabs, setLoadingTabs] = useState<Set<string>>(new Set(SUB_TABS.map(t => t.id)));
 
-  // When user switches to a new tab, add it to mountedTabs
+  const fetchTabEmployees = useCallback(async (tabId: string, yearWeek: string) => {
+    try {
+      const params = new URLSearchParams({ filter: tabId });
+      if (yearWeek) params.append("yearWeek", yearWeek);
+      const res = await fetch(`/api/messaging/employees?${params.toString()}`);
+      const data = await res.json();
+      return data.employees || [];
+    } catch {
+      return [];
+    }
+  }, []);
+
   useEffect(() => {
-    setMountedTabs((prev) => {
-      if (prev.has(resolvedTab)) return prev;
-      const next = new Set(prev);
-      next.add(resolvedTab);
-      return next;
+    if (!selectedWeek) return;
+    let cancelled = false;
+
+    // Fetch active tab first for fastest UX
+    setLoadingTabs(new Set(SUB_TABS.map(t => t.id)));
+
+    fetchTabEmployees(resolvedTab, selectedWeek).then((emps) => {
+      if (cancelled) return;
+      setEmployeesByTab(prev => ({ ...prev, [resolvedTab]: emps }));
+      setLoadingTabs(prev => {
+        const next = new Set(prev);
+        next.delete(resolvedTab);
+        return next;
+      });
     });
-  }, [resolvedTab]);
+
+    // Background-fetch remaining tabs after 100ms so active tab gets priority
+    const bgTimer = setTimeout(() => {
+      SUB_TABS
+        .filter(t => t.id !== resolvedTab)
+        .forEach((tab) => {
+          fetchTabEmployees(tab.id, selectedWeek).then((emps) => {
+            if (cancelled) return;
+            setEmployeesByTab(prev => ({ ...prev, [tab.id]: emps }));
+            setLoadingTabs(prev => {
+              const next = new Set(prev);
+              next.delete(tab.id);
+              return next;
+            });
+          });
+        });
+    }, 100);
+
+    return () => { cancelled = true; clearTimeout(bgTimer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWeek, fetchTabEmployees]); // intentionally exclude resolvedTab to avoid re-fetching on tab switch
+
+  // ── Prefetch ALL templates in parallel ────────────────────────────────────
+  const [templatesByTab, setTemplatesByTab] = useState<Record<string, string>>({});
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      SUB_TABS.map(async (tab) => {
+        try {
+          const res = await fetch(`/api/messaging/templates?type=${tab.id}`);
+          const data = await res.json();
+          return { tabId: tab.id, template: data.template?.template || tab.defaultMessage };
+        } catch {
+          return { tabId: tab.id, template: tab.defaultMessage };
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const map: Record<string, string> = {};
+      results.forEach(r => { map[r.tabId] = r.template; });
+      setTemplatesByTab(map);
+      setTemplatesLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -991,29 +1039,30 @@ export default function MessagingPanel({
           })}
         </div>
 
-        {/* ── Lazy keep-alive sub-tabs: only render once visited, then stay mounted ── */}
+        {/* ── Sub-tab panels — all mounted, data pre-loaded ── */}
         <div className="flex-1 min-h-0">
-          {SUB_TABS.map((tab) => {
-            if (!mountedTabs.has(tab.id)) return null; // not yet visited — don't mount
-            return (
-              <div key={tab.id} className={cn("h-full", resolvedTab !== tab.id && "hidden")}>
-                <MessagingSubTab
-                  tab={tab}
-                  weeks={weeks}
-                  selectedWeek={selectedWeek}
-                  setSelectedWeek={setSelectedWeek}
-                  searchQuery={searchQuery}
-                  selectAllTrigger={selectAllTrigger}
-                  phoneNumbers={phoneNumbers}
-                  fromNumber={fromNumber}
-                  fromNumberDisplay={fromNumberDisplay}
-                  setFromNumber={setFromNumber}
-                  setFromNumberDisplay={setFromNumberDisplay}
-                  loadingPhones={loadingPhones}
-                />
-              </div>
-            );
-          })}
+          {SUB_TABS.map((tab) => (
+            <div key={tab.id} className={cn("h-full", resolvedTab !== tab.id && "hidden")}>
+              <MessagingSubTab
+                tab={tab}
+                weeks={weeks}
+                selectedWeek={selectedWeek}
+                setSelectedWeek={setSelectedWeek}
+                searchQuery={searchQuery}
+                selectAllTrigger={selectAllTrigger}
+                phoneNumbers={phoneNumbers}
+                fromNumber={fromNumber}
+                fromNumberDisplay={fromNumberDisplay}
+                setFromNumber={setFromNumber}
+                setFromNumberDisplay={setFromNumberDisplay}
+                loadingPhones={loadingPhones}
+                prefetchedEmployees={employeesByTab[tab.id]}
+                employeesLoading={loadingTabs.has(tab.id)}
+                prefetchedTemplate={templatesByTab[tab.id]}
+                templatesLoaded={templatesLoaded}
+              />
+            </div>
+          ))}
         </div>
       </div>
     </TooltipProvider>
