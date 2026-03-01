@@ -170,7 +170,9 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const isVehiclesPage = pathname === "/fleet/vehicles";
   const isRepairsPage = pathname === "/fleet/repairs";
   const isInspectionsPage = pathname === "/fleet/inspections";
+  const isRentalsPage = pathname === "/fleet/rentals";
   const vehicleCount = data?.vehicles?.length ?? 0;
+  const rentalsCount = rentalsSeed?.length ?? 0;
 
   // Stable ref so search input's onChange never needs to recreate
   const setSearchRef = useRef(setSearch);
@@ -185,7 +187,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
 
   // Inject header content — only re-runs on page/count changes, NOT on every keystroke
   useEffect(() => {
-    // Left: vehicles page shows count; repairs page is handled by repairs page itself
+    // Left: page title with count
     if (isVehiclesPage) {
       setLeftContent(
         <div className="flex items-center gap-2.5">
@@ -197,8 +199,18 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
           </span>
         </div>
       );
+    } else if (isRentalsPage) {
+      setLeftContent(
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+            Fleet – Rental Agreements
+          </h1>
+          <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
+            {rentalsCount}
+          </span>
+        </div>
+      );
     } else if (!isRepairsPage && !isInspectionsPage) {
-      // Only clear for pages that manage their own leftContent
       setLeftContent(null);
     }
 
@@ -233,13 +245,22 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
             <span className="hidden sm:inline">Add Repair</span>
           </button>
         )}
+        {isRentalsPage && (
+          <button
+            onClick={() => openCreateModal("rental")}
+            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm flex-shrink-0"
+          >
+            <IconPlus size={14} />
+            <span className="hidden sm:inline">Add Rental</span>
+          </button>
+        )}
       </div>
     );
     return () => {
       setRightContent(null);
       setLeftContent(null);
     };
-  }, [setRightContent, setLeftContent, isVehiclesPage, isRepairsPage, isInspectionsPage, vehicleCount, openCreateModal, pathname]);
+  }, [setRightContent, setLeftContent, isVehiclesPage, isRepairsPage, isInspectionsPage, isRentalsPage, vehicleCount, rentalsCount, openCreateModal, pathname]);
 
   // Determine active tab from pathname
   const activeTab = (() => {
