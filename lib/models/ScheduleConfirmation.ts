@@ -33,7 +33,7 @@ const ScheduleConfirmationSchema = new Schema<IScheduleConfirmation>(
         transporterId: { type: String, required: true, index: true },
         employeeName: { type: String, default: "" },
         scheduleDate: { type: String },
-        yearWeek: { type: String, required: true },
+        yearWeek: { type: String, default: "" },
         messageType: { type: String, required: true },
         messageLogId: { type: Schema.Types.ObjectId, ref: "MessageLog" },
         status: {

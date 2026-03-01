@@ -15,6 +15,7 @@ import {
   Wrench,
   ClipboardCheck,
   FileText,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import Papa from "papaparse";
@@ -30,6 +31,27 @@ interface ImportResult {
 const CHUNK_SIZE = 500; // Rows per batch to stay under Vercel's 4.5MB limit
 
 const importTypes = [
+  {
+    id: "employees",
+    name: "Employees",
+    description: "Import employee records from CSV. Upserts on Email — existing employees are updated, new ones are created.",
+    icon: Users,
+    color: "from-indigo-500 to-blue-500",
+    bgColor: "bg-indigo-500/10",
+    borderColor: "border-indigo-500/20",
+    iconColor: "text-indigo-500",
+    fields: [
+      "firstName", "lastName", "email", "transporterId", "eeCode",
+      "badgeNumber", "gender", "type", "phoneNumber",
+      "streetAddress", "city", "state", "zipCode",
+      "hiredDate", "dob", "hourlyStatus", "rate",
+      "gasCardPin", "dlExpiration", "motorVehicleReportDate",
+      "status", "sunday", "monday", "tuesday", "wednesday",
+      "thursday", "friday", "saturday",
+      "defaultVan1", "defaultVan2", "defaultVan3",
+      "routesComp", "ScheduleNotes",
+    ],
+  },
   {
     id: "employee-schedules",
     name: "Employee Schedules",
