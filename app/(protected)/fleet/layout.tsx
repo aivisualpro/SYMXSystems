@@ -1,13 +1,11 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { toast } from "sonner";
-import Papa from "papaparse";
 import {
   IconChartDonut, IconCar, IconTool, IconClipboardCheck,
-  IconFileInvoice, IconActivity, IconRefresh, IconSearch, IconPlus, IconUpload,
+  IconFileInvoice, IconActivity, IconSearch, IconPlus,
 } from "@tabler/icons-react";
 
 // ── Fleet Context ─────────────────────────────────────────────────────
@@ -138,65 +136,6 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const updateForm = (key: string, value: any) =>
     setFormData((prev: any) => ({ ...prev, [key]: value }));
 
-  // ── Fleet Repairs CSV Import ──────────────────────────────────────────
-  const repairFileRef = useRef<HTMLInputElement>(null);
-  const [importingRepairs, setImportingRepairs] = useState(false);
-
-  const handleRepairImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-
-    setImportingRepairs(true);
-    try {
-      const parsed: any[] = await new Promise((resolve, reject) => {
-        Papa.parse(file, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => resolve(results.data as any[]),
-          error: (err) => reject(err),
-        });
-      });
-
-      if (parsed.length === 0) {
-        toast.error("CSV file is empty or has no valid rows");
-        setImportingRepairs(false);
-        return;
-      }
-
-      const CHUNK_SIZE = 500;
-      const chunks: any[][] = [];
-      for (let i = 0; i < parsed.length; i += CHUNK_SIZE) {
-        chunks.push(parsed.slice(i, i + CHUNK_SIZE));
-      }
-
-      let totalInserted = 0;
-      let totalUpdated = 0;
-      let totalCount = 0;
-
-      for (let i = 0; i < chunks.length; i++) {
-        toast.info(`Uploading batch ${i + 1} of ${chunks.length}...`);
-        const res = await fetch("/api/admin/imports", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "fleet-repairs", data: chunks[i] }),
-        });
-        const result = await res.json();
-        if (!res.ok) throw new Error(result.error || `Import failed on batch ${i + 1}`);
-        totalInserted += result.inserted || 0;
-        totalUpdated += result.updated || 0;
-        totalCount += result.count || 0;
-      }
-
-      toast.success(`Imported ${totalCount} repairs (${totalInserted} new, ${totalUpdated} updated)`);
-      fetchData();
-    } catch (err: any) {
-      toast.error(err.message || "Fleet repairs import failed");
-    } finally {
-      setImportingRepairs(false);
-    }
-  };
-
   // Determine active tab from pathname (used for header content)
   const isVehiclesPage = pathname === "/fleet/vehicles";
   const vehicleCount = data?.vehicles?.length ?? 0;
@@ -231,50 +170,21 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
           />
         </div>
         {isVehiclesPage && (
-          <>
-            <button
-              onClick={() => repairFileRef.current?.click()}
-              disabled={importingRepairs}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              title="Import Fleet Repairs CSV"
-            >
-              <IconUpload size={14} className={importingRepairs ? "animate-pulse" : ""} />
-              {importingRepairs ? "Importing..." : "Import Repairs"}
-            </button>
-            <button
-              onClick={() => openCreateModal("vehicle")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm"
-            >
-              <IconPlus size={14} />
-              Add
-            </button>
-          </>
+          <button
+            onClick={() => openCreateModal("vehicle")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm"
+          >
+            <IconPlus size={14} />
+            Add
+          </button>
         )}
-        <button
-          onClick={() => fetchData()}
-          className="p-1.5 rounded-lg bg-muted/50 border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          title="Refresh"
-        >
-          <IconRefresh size={14} />
-        </button>
       </div>
     );
     return () => {
       setRightContent(null);
       setLeftContent(null);
     };
-  }, [search, setRightContent, setLeftContent, fetchData, isVehiclesPage, vehicleCount, openCreateModal, importingRepairs]);
-
-  // Hidden file input for repair CSV import
-  const repairImportInput = (
-    <input
-      type="file"
-      ref={repairFileRef}
-      className="hidden"
-      accept=".csv"
-      onChange={handleRepairImport}
-    />
-  );
+  }, [search, setRightContent, setLeftContent, fetchData, isVehiclesPage, vehicleCount, openCreateModal, pathname]);
 
   // Determine active tab from pathname
   const activeTab = (() => {
@@ -289,12 +199,10 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       openCreateModal, openEditModal, handleDelete,
       modalOpen, setModalOpen, modalType, formData, updateForm, handleSave, saving, editId,
     }}>
-      <div className="space-y-4 max-w-[1600px] mx-auto">
-        {/* Hidden file input for fleet repairs CSV import */}
-        {repairImportInput}
+      <div className="flex flex-col max-w-[1600px] mx-auto h-[calc(100vh-var(--header-height)-2rem)]">
 
-        {/* ── Tab Navigation ─────────────────────────────────────── */}
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
+        {/* ── Tab Navigation (sticky) ──────────────────────────── */}
+        <div className="flex-shrink-0 flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -310,8 +218,10 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
           ))}
         </div>
 
-        {/* ── Page Content ────────────────────────────────────────── */}
-        {children}
+        {/* ── Page Content (fills remaining height) ──────────── */}
+        <div className="flex-1 min-h-0 mt-4">
+          {children}
+        </div>
       </div>
     </FleetContext.Provider>
   );
