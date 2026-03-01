@@ -13,6 +13,7 @@ import {
   Receipt,
   Truck,
   Wrench,
+  ClipboardCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import Papa from "papaparse";
@@ -86,7 +87,24 @@ const importTypes = [
     iconColor: "text-rose-500",
     fields: [
       "VIN", "Description", "Current Status", "Estimated Date",
-      "Image", "Creation Date", "LastEditOn", "Repair", "Duration",
+      "Image", "Creation Date", "LastEditOn", "Repair", "Repair Duration",
+    ],
+  },
+  {
+    id: "daily-inspections",
+    name: "Daily Inspections",
+    description: "Import daily vehicle inspection records from CSV. Upserts on Routes ID + VIN + Route Date. Links vehicles by VIN automatically.",
+    icon: ClipboardCheck,
+    color: "from-violet-500 to-purple-500",
+    bgColor: "bg-violet-500/10",
+    borderColor: "border-violet-500/20",
+    iconColor: "text-violet-500",
+    fields: [
+      "Routes ID", "Driver", "Route Date", "Vin",
+      "Vehicle Picture 1", "Vehicle Picture 2", "Vehicle Picture 3", "Vehicle Picture 4",
+      "Mileage", "Dashboard Image", "Comments", "Additional Picture",
+      "Inspected By", "TimeStamp", "Any Repairs",
+      "Description", "Current Status", "Estimated Date", "Image", "iSCompared?",
     ],
   },
 ];

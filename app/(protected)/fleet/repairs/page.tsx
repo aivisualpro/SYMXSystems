@@ -116,16 +116,16 @@ const PAGE_SIZE = 100;
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function FleetRepairsPage() {
-  const { search, openEditModal, handleDelete, openCreateModal } = useFleet();
+  const { search, openEditModal, handleDelete, openCreateModal, repairsSeed } = useFleet();
   const { setLeftContent } = useHeaderActions();
 
-  // All loaded repairs + pagination state
-  const [repairs, setRepairs] = useState<any[]>([]);
-  const [total, setTotal] = useState<number | null>(null); // null = not yet known
-  const [hasMore, setHasMore] = useState(true);
-  const [isFetching, setIsFetching] = useState(true);   // first load
-  const [isLoadingMore, setIsLoadingMore] = useState(false); // scroll loads
-  const skipRef = useRef(0);
+  // Start with seed data if already prefetched by the layout — instant first paint
+  const [repairs, setRepairs] = useState<any[]>(() => repairsSeed?.data ?? []);
+  const [total, setTotal] = useState<number | null>(() => repairsSeed?.total ?? null);
+  const [hasMore, setHasMore] = useState(() => repairsSeed?.hasMore ?? true);
+  const [isFetching, setIsFetching] = useState(() => !repairsSeed); // skip skeleton if seeded
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const skipRef = useRef(repairsSeed?.data.length ?? 0); // start pagination after seed
   const abortRef = useRef<AbortController | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 

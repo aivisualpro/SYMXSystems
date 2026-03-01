@@ -10,35 +10,34 @@ import {
 
 // ── Fleet Context ─────────────────────────────────────────────────────
 interface FleetData {
-  kpis: any;
-  statusBreakdown: any[];
-  ownershipBreakdown: any[];
-  repairStatusBreakdown: any[];
-  openRepairs: any[];
-  recentActivity: any[];
-  recentInspections: any[];
-  rentalAgreements: any[];
-  vehicles: any[];
-
+  [key: string]: any;
 }
 
+interface SeedPage {
+  data: any[];
+  total: number;
+  hasMore: boolean;
+  fetchedAt: number; // timestamp for cache freshness
+}
 interface FleetContextType {
   data: FleetData | null;
   loading: boolean;
   search: string;
   setSearch: (s: string) => void;
-  fetchData: () => Promise<void>;
+  fetchData: () => void;
   openCreateModal: (type: string) => void;
   openEditModal: (type: string, item: any) => void;
   handleDelete: (type: string, id: string) => void;
   modalOpen: boolean;
-  setModalOpen: (v: boolean) => void;
+  setModalOpen: (open: boolean) => void;
   modalType: string;
   formData: any;
   updateForm: (key: string, value: any) => void;
-  handleSave: () => Promise<void>;
+  handleSave: () => void;
   saving: boolean;
   editId: string | null;
+  repairsSeed: SeedPage | null;
+  inspectionsSeed: SeedPage | null;
 }
 
 const FleetContext = createContext<FleetContextType | null>(null);
@@ -75,6 +74,10 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
 
+  // Prefetched first pages — populated on layout mount, consumed by tab pages
+  const [repairsSeed, setRepairsSeed] = useState<SeedPage | null>(null);
+  const [inspectionsSeed, setInspectionsSeed] = useState<SeedPage | null>(null);
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -87,7 +90,22 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Prefetch first 100 repairs + 100 inspections once on mount — data ready before user navigates
+  useEffect(() => {
+    fetchData();
+    // Fire both seed fetches in parallel
+    Promise.all([
+      fetch("/api/fleet?section=repairs&skip=0&limit=100")
+        .then(r => r.ok ? r.json() : null)
+        .then(j => { if (j) setRepairsSeed({ data: j.repairs ?? [], total: j.total ?? 0, hasMore: j.hasMore ?? false, fetchedAt: Date.now() }); })
+        .catch(() => { }),
+      fetch("/api/fleet?section=inspections&skip=0&limit=100")
+        .then(r => r.ok ? r.json() : null)
+        .then(j => { if (j) setInspectionsSeed({ data: j.inspections ?? [], total: j.total ?? 0, hasMore: j.hasMore ?? false, fetchedAt: Date.now() }); })
+        .catch(() => { }),
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // mount only
 
   const openCreateModal = useCallback((type: string) => {
     setModalType(type);
@@ -139,6 +157,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   // Determine active tab from pathname (used for header content)
   const isVehiclesPage = pathname === "/fleet/vehicles";
   const isRepairsPage = pathname === "/fleet/repairs";
+  const isInspectionsPage = pathname === "/fleet/inspections";
   const vehicleCount = data?.vehicles?.length ?? 0;
 
   // Stable ref so search input's onChange never needs to recreate
@@ -166,8 +185,8 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
           </span>
         </div>
       );
-    } else if (!isRepairsPage) {
-      // Only clear for other pages; repairs page sets its own leftContent
+    } else if (!isRepairsPage && !isInspectionsPage) {
+      // Only clear for pages that manage their own leftContent
       setLeftContent(null);
     }
 
@@ -208,7 +227,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       setRightContent(null);
       setLeftContent(null);
     };
-  }, [setRightContent, setLeftContent, isVehiclesPage, isRepairsPage, vehicleCount, openCreateModal, pathname]);
+  }, [setRightContent, setLeftContent, isVehiclesPage, isRepairsPage, isInspectionsPage, vehicleCount, openCreateModal, pathname]);
 
   // Determine active tab from pathname
   const activeTab = (() => {
@@ -222,6 +241,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       data, loading, search, setSearch, fetchData,
       openCreateModal, openEditModal, handleDelete,
       modalOpen, setModalOpen, modalType, formData, updateForm, handleSave, saving, editId,
+      repairsSeed, inspectionsSeed,
     }}>
       <div className="flex flex-col max-w-[1600px] mx-auto h-[calc(100vh-var(--header-height)-2rem)]">
 

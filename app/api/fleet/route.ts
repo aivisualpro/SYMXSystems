@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import Vehicle from "@/lib/models/Vehicle";
-
 import VehicleRepair from "@/lib/models/VehicleRepair";
-import VehicleActivityLog from "@/lib/models/VehicleActivityLog";
+import DailyInspection from "@/lib/models/DailyInspection";
 import VehicleInspection from "@/lib/models/VehicleInspection";
+import VehicleActivityLog from "@/lib/models/VehicleActivityLog";
 import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
+import SymxEmployee from "@/lib/models/SymxEmployee";
+import SymxUser from "@/lib/models/SymxUser";
 
 // GET: Fleet dashboard summary + all data
 export async function GET(req: NextRequest) {
@@ -139,8 +141,130 @@ export async function GET(req: NextRequest) {
     }
 
     if (section === "inspections") {
-      const inspections = await VehicleInspection.find({}).sort({ inspectionDate: -1 }).lean();
-      return NextResponse.json({ inspections });
+      const q = searchParams.get("q") || "";
+      const skip = Math.max(0, parseInt(searchParams.get("skip") || "0"));
+      const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "100")), 1000);
+
+      const filter = q
+        ? {
+          $or: [
+            { vin: { $regex: q, $options: "i" } },
+            { driver: { $regex: q, $options: "i" } },
+            { routeId: { $regex: q, $options: "i" } },
+            { inspectedBy: { $regex: q, $options: "i" } },
+            { comments: { $regex: q, $options: "i" } },
+          ],
+        }
+        : {};
+
+      const [inspections, total] = await Promise.all([
+        DailyInspection.find(filter).sort({ routeDate: -1 }).skip(skip).limit(limit).lean(),
+        DailyInspection.countDocuments(filter),
+      ]);
+
+      return NextResponse.json({
+        inspections,
+        total,
+        hasMore: skip + inspections.length < total,
+      });
+    }
+
+    if (section === "inspection-detail") {
+      const id = searchParams.get("id");
+      if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+      const inspection = await DailyInspection.findById(id).lean() as any;
+      if (!inspection) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+      // Enrich with references
+      const enriched = { ...inspection } as any;
+
+      // Driver name from SymxEmployee by transporterId
+      if (inspection.driver) {
+        const emp = await SymxEmployee.findOne(
+          { transporterId: inspection.driver },
+          { firstName: 1, lastName: 1 }
+        ).lean() as any;
+        if (emp) enriched.driverName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
+      }
+
+      // Inspected by name from SYMXUsers by email
+      if (inspection.inspectedBy) {
+        const user = await SymxUser.findOne(
+          { email: { $regex: `^${inspection.inspectedBy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } },
+          { name: 1 }
+        ).lean() as any;
+        if (user) enriched.inspectedByName = user.name;
+      }
+
+      // Vehicle image from Vehicle by VIN
+      if (inspection.vin) {
+        const vehicle = await Vehicle.findOne(
+          { vin: inspection.vin },
+          { image: 1, vehicleName: 1, unitNumber: 1 }
+        ).lean() as any;
+        if (vehicle) {
+          enriched.vehicleImage = vehicle.image || "";
+          enriched.vehicleName = vehicle.vehicleName || "";
+        }
+      }
+
+      return NextResponse.json({ inspection: enriched });
+    }
+
+    if (section === "inspection-compare") {
+      const id = searchParams.get("id");
+      if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+      const current = await DailyInspection.findById(id).lean() as any;
+      if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+      // Enrich current
+      const enrichedCurrent = { ...current } as any;
+      if (current.driver) {
+        const emp = await SymxEmployee.findOne({ transporterId: current.driver }, { firstName: 1, lastName: 1 }).lean() as any;
+        if (emp) enrichedCurrent.driverName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
+      }
+      if (current.inspectedBy) {
+        const user = await SymxUser.findOne(
+          { email: { $regex: `^${current.inspectedBy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } },
+          { name: 1 }
+        ).lean() as any;
+        if (user) enrichedCurrent.inspectedByName = user.name;
+      }
+      if (current.vin) {
+        const vehicle = await Vehicle.findOne({ vin: current.vin }, { image: 1, vehicleName: 1 }).lean() as any;
+        if (vehicle) {
+          enrichedCurrent.vehicleImage = vehicle.image || "";
+          enrichedCurrent.vehicleName = vehicle.vehicleName || "";
+        }
+      }
+
+      // Find previous
+      const previous = current.vin && current.routeDate
+        ? await DailyInspection.findOne({
+          vin: current.vin,
+          _id: { $ne: current._id },
+          routeDate: { $lt: current.routeDate },
+        }).sort({ routeDate: -1 }).lean() as any
+        : null;
+
+      // Enrich previous
+      let enrichedPrevious = null;
+      if (previous) {
+        enrichedPrevious = { ...previous } as any;
+        if (previous.driver) {
+          const emp = await SymxEmployee.findOne({ transporterId: previous.driver }, { firstName: 1, lastName: 1 }).lean() as any;
+          if (emp) enrichedPrevious.driverName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
+        }
+        if (previous.inspectedBy) {
+          const user = await SymxUser.findOne(
+            { email: { $regex: `^${previous.inspectedBy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } },
+            { name: 1 }
+          ).lean() as any;
+          if (user) enrichedPrevious.inspectedByName = user.name;
+        }
+      }
+
+      return NextResponse.json({ current: enrichedCurrent, previous: enrichedPrevious });
     }
 
     if (section === "rentals") {
