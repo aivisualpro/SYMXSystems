@@ -180,8 +180,14 @@ export default function FleetRepairsPage() {
     }
   }, []);
 
-  // Re-fetch from scratch on search change
+  // Re-fetch from scratch on search change — but skip initial mount if we have seed data
+  const initializedRef = useRef(false);
   useEffect(() => {
+    // On first mount with no search and seed data exists → skip fetch, data is already loaded
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      if (!debouncedSearch && repairsSeed) return;
+    }
     skipRef.current = 0;
     setHasMore(true);
     setRepairs([]);

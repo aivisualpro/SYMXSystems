@@ -215,7 +215,13 @@ export default function FleetInspectionsPage() {
     } finally { setIsFetching(false); setIsLoadingMore(false); }
   }, []);
 
+  // Re-fetch on search change — skip initial mount if seed data exists
+  const initializedRef = useRef(false);
   useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      if (!debouncedSearch && inspectionsSeed) return;
+    }
     skipRef.current = 0;
     setHasMore(true);
     setInspections([]);
