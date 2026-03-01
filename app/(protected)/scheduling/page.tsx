@@ -150,6 +150,7 @@ interface WeekData {
   dates: string[];
   employees: EmployeeSchedule[];
   totalEmployees: number;
+  prevWeekTrailing?: Record<string, number>;
 }
 
 // ── Planning Row Data ──
@@ -219,12 +220,13 @@ function countWorkingDays(emp: EmployeeSchedule): number {
 }
 
 // Detect consecutive working days and return warnings per day index
+// carryOver = how many consecutive working days the employee had at the END of the previous week
 // Returns a Map<dayIndex, { consecutive: number, type: 'caution' | 'danger' }>
-function getConsecutiveWarnings(emp: EmployeeSchedule): Map<number, { consecutive: number; type: 'caution' | 'danger' }> {
+function getConsecutiveWarnings(emp: EmployeeSchedule, carryOver: number = 0): Map<number, { consecutive: number; type: 'caution' | 'danger' }> {
   const warnings = new Map<number, { consecutive: number; type: 'caution' | 'danger' }>();
 
-  // Check consecutive working (not just route — any working day counts)
-  let consecutive = 0;
+  // Start with carry-over from previous week
+  let consecutive = carryOver;
   for (let d = 0; d < 7; d++) {
     const day = emp.days[d];
     if (day && isWorkingDay(day.type)) {
@@ -471,7 +473,7 @@ export default function SchedulingPage() {
     const cautionNames: string[] = [];
     const dangerNames: string[] = [];
     weekData.employees.forEach(emp => {
-      const warnings = getConsecutiveWarnings(emp);
+      const warnings = getConsecutiveWarnings(emp, weekData.prevWeekTrailing?.[emp.transporterId] || 0);
       let hasCaution = false;
       let hasDanger = false;
       warnings.forEach(w => {
@@ -585,6 +587,7 @@ export default function SchedulingPage() {
     dayIdx: number
   ) => {
     // Optimistic update
+    const isWorking = !NON_WORKING_TYPES.has(newType.trim().toLowerCase());
     setWeekData(prev => {
       if (!prev) return prev;
       const updated = { ...prev };
@@ -597,6 +600,7 @@ export default function SchedulingPage() {
             [dayIdx]: {
               ...(emp.days[dayIdx] || {}),
               type: newType,
+              ...(isWorking ? { status: "Scheduled" } : {}),
             } as DayData,
           },
         };
@@ -756,10 +760,10 @@ export default function SchedulingPage() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-3">
+      <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-4">
 
         {/* ── Main Tabs: Scheduling | Messaging ── */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border shrink-0">
           <button
             onClick={() => setActiveMainTab("scheduling")}
             className={cn(
@@ -801,7 +805,7 @@ export default function SchedulingPage() {
         </div>
 
         {/* ── Scheduling Tab Content — always mounted, hidden when inactive ── */}
-        <div className={cn(activeMainTab !== "scheduling" && "hidden")}>
+        <div className={cn("flex-1 min-h-0 flex flex-col gap-4 overflow-auto", activeMainTab !== "scheduling" && "hidden")}>
 
           {loading ? (
             <div className="flex items-center justify-center h-[60vh]">
@@ -832,7 +836,7 @@ export default function SchedulingPage() {
           ) : (<>
 
             {/* ── KPI Cards ── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
               {[
                 {
                   label: "Employees",
@@ -1051,7 +1055,7 @@ export default function SchedulingPage() {
                                 .map((emp) => {
                                   const workDays = countWorkingDays(emp);
                                   const notes = emp.employee?.scheduleNotes || "";
-                                  const consecutiveWarnings = getConsecutiveWarnings(emp);
+                                  const consecutiveWarnings = getConsecutiveWarnings(emp, weekData?.prevWeekTrailing?.[emp.transporterId] || 0);
 
                                   return (
                                     <tr
@@ -1085,7 +1089,7 @@ export default function SchedulingPage() {
                                                   <DropdownMenuTrigger asChild>
                                                     <div
                                                       className={cn(
-                                                        "relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold transition-all border cursor-pointer select-none",
+                                                        "relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold transition-all border cursor-pointer select-none px-1.5",
                                                         style.bg,
                                                         style.text,
                                                         style.border,
@@ -1096,7 +1100,7 @@ export default function SchedulingPage() {
                                                       <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
                                                       {warning && (
                                                         <span className={cn(
-                                                          "absolute -top-1.5 -right-1.5 flex items-center justify-center h-3.5 min-w-[14px] rounded-full text-[8px] font-bold text-white leading-none px-0.5 shadow-sm",
+                                                          "flex items-center justify-center h-4 min-w-[16px] rounded-full text-[9px] font-bold text-white leading-none px-1 ml-0.5 shrink-0",
                                                           warning.type === 'danger'
                                                             ? "bg-red-500 animate-pulse"
                                                             : "bg-orange-400"

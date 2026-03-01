@@ -40,10 +40,12 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     const [loadingUsers, setLoadingUsers] = useState(true);
     const [search, setSearch] = useState("");
     const [addUserOpen, setAddUserOpen] = useState(false);
+    const hasFetchedRef = useRef(false);
 
     const fetchUsers = useCallback(async () => {
         try {
-            setLoadingUsers(true);
+            // Only show spinner on the very first fetch — subsequent refetches are silent
+            if (!hasFetchedRef.current) setLoadingUsers(true);
             const res = await fetch("/api/admin/users");
             if (res.ok) {
                 const data = await res.json();
@@ -67,6 +69,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
         } catch (err) {
             console.error("Failed to fetch users:", err);
         } finally {
+            hasFetchedRef.current = true;
             setLoadingUsers(false);
         }
     }, []);

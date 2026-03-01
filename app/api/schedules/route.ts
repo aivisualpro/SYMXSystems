@@ -69,14 +69,14 @@ export async function GET(req: NextRequest) {
           transporterId: s.transporterId,
           employee: emp
             ? {
-                _id: emp._id,
-                firstName: emp.firstName,
-                lastName: emp.lastName,
-                name: `${emp.firstName} ${emp.lastName}`.toUpperCase(),
-                type: emp.type || '',
-                status: emp.status || '',
-                scheduleNotes: emp.ScheduleNotes || '',
-              }
+              _id: emp._id,
+              firstName: emp.firstName,
+              lastName: emp.lastName,
+              name: `${emp.firstName} ${emp.lastName}`.toUpperCase(),
+              type: emp.type || '',
+              status: emp.status || '',
+              scheduleNotes: emp.ScheduleNotes || '',
+            }
             : null,
           days: {},
         };
@@ -104,16 +104,56 @@ export async function GET(req: NextRequest) {
     // Get the date range for the week
     const dates: string[] = [];
     if (schedules.length > 0) {
-      // Find the Sunday of this week from the first schedule entry
       const firstDate = new Date(schedules[0].date);
       const dayOfWeek = firstDate.getUTCDay();
       const sunday = new Date(firstDate);
       sunday.setUTCDate(firstDate.getUTCDate() - dayOfWeek);
-
       for (let i = 0; i < 7; i++) {
         const d = new Date(sunday);
         d.setUTCDate(sunday.getUTCDate() + i);
         dates.push(d.toISOString().split('T')[0]);
+      }
+    }
+
+    // ── Compute previous week's trailing consecutive working days ──
+    // This allows cross-week detection of 6+ consecutive working days
+    const NON_WORKING = new Set(["off", "close", "request off", ""]);
+    const prevWeekTrailing: Record<string, number> = {};
+
+    // Compute previous yearWeek string (e.g., "2026-W08" → "2026-W07")
+    const weekMatch = yearWeek.match(/(\d{4})-W(\d{2})/);
+    if (weekMatch) {
+      const yr = parseInt(weekMatch[1]);
+      const wk = parseInt(weekMatch[2]);
+      let prevYr = yr, prevWk = wk - 1;
+      if (prevWk <= 0) { prevYr--; prevWk = 52; }
+      const prevYearWeek = `${prevYr}-W${String(prevWk).padStart(2, "0")}`;
+
+      // Fetch previous week's schedules for the same employees
+      const prevSchedules = await SymxEmployeeSchedule.find({
+        yearWeek: prevYearWeek,
+        transporterId: { $in: transporterIds },
+      }).sort({ date: 1 }).lean();
+
+      // Group prev week by transporter → days
+      const prevGrouped: Record<string, Record<number, string>> = {};
+      prevSchedules.forEach((s: any) => {
+        if (!prevGrouped[s.transporterId]) prevGrouped[s.transporterId] = {};
+        const dayIndex = new Date(s.date).getUTCDay();
+        prevGrouped[s.transporterId][dayIndex] = (s.type || "").trim().toLowerCase();
+      });
+
+      // Count trailing consecutive working days from Saturday backwards
+      for (const tid of transporterIds as string[]) {
+        const days = prevGrouped[tid];
+        if (!days) continue;
+        let count = 0;
+        for (let d = 6; d >= 0; d--) { // 6=Sat, 5=Fri, ...
+          const type = days[d] || "";
+          if (NON_WORKING.has(type)) break;
+          count++;
+        }
+        if (count > 0) prevWeekTrailing[tid] = count;
       }
     }
 
@@ -122,6 +162,7 @@ export async function GET(req: NextRequest) {
       dates,
       employees: Object.values(grouped),
       totalEmployees: Object.keys(grouped).length,
+      prevWeekTrailing,
     });
   } catch (error: any) {
     console.error("Schedules API Error:", error);
@@ -161,9 +202,14 @@ export async function PATCH(req: NextRequest) {
 
     // Update schedule entry type
     if (scheduleId) {
+      const newType = (type || "").trim().toLowerCase();
+      const isWorking = !["off", "close", "request off", ""].includes(newType);
+      const updateFields: Record<string, any> = { type: type || "" };
+      if (isWorking) updateFields.status = "Scheduled";
+
       const updated = await SymxEmployeeSchedule.findByIdAndUpdate(
         scheduleId,
-        { $set: { type: type || "" } },
+        { $set: updateFields },
         { new: true }
       ).lean();
 
