@@ -106,8 +106,31 @@ export async function GET(req: NextRequest) {
 
 
     if (section === "repairs") {
-      const repairs = await VehicleRepair.find({}).sort({ creationDate: -1 }).lean();
-      return NextResponse.json({ repairs });
+      const q = searchParams.get("q") || "";
+      const skip = Math.max(0, parseInt(searchParams.get("skip") || "0"));
+      const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "100")), 1000);
+
+      const filter = q
+        ? {
+          $or: [
+            { vin: { $regex: q, $options: "i" } },
+            { description: { $regex: q, $options: "i" } },
+            { currentStatus: { $regex: q, $options: "i" } },
+            { unitNumber: { $regex: q, $options: "i" } },
+          ],
+        }
+        : {};
+
+      const [repairs, total] = await Promise.all([
+        VehicleRepair.find(filter).sort({ creationDate: -1 }).skip(skip).limit(limit).lean(),
+        VehicleRepair.countDocuments(filter),
+      ]);
+
+      return NextResponse.json({
+        repairs,
+        total,
+        hasMore: skip + repairs.length < total,
+      });
     }
 
     if (section === "activity") {

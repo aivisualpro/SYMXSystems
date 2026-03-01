@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import {
@@ -138,11 +138,23 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
 
   // Determine active tab from pathname (used for header content)
   const isVehiclesPage = pathname === "/fleet/vehicles";
+  const isRepairsPage = pathname === "/fleet/repairs";
   const vehicleCount = data?.vehicles?.length ?? 0;
 
-  // Inject search + refresh + add into site header
+  // Stable ref so search input's onChange never needs to recreate
+  const setSearchRef = useRef(setSearch);
+  setSearchRef.current = setSearch;
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Clear search when navigating between fleet pages
   useEffect(() => {
-    // Show counter in left header on the vehicles page
+    setSearch("");
+    if (searchInputRef.current) searchInputRef.current.value = "";
+  }, [pathname, setSearch]);
+
+  // Inject header content — only re-runs on page/count changes, NOT on every keystroke
+  useEffect(() => {
+    // Left: vehicles page shows count; repairs page is handled by repairs page itself
     if (isVehiclesPage) {
       setLeftContent(
         <div className="flex items-center gap-2.5">
@@ -154,17 +166,20 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
           </span>
         </div>
       );
-    } else {
+    } else if (!isRepairsPage) {
+      // Only clear for other pages; repairs page sets its own leftContent
       setLeftContent(null);
     }
 
     setRightContent(
       <div className="flex items-center gap-2">
+        {/* Uncontrolled input — ref-driven so it never loses focus */}
         <div className="relative">
           <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            ref={searchInputRef}
+            defaultValue=""
+            onChange={(e) => setSearchRef.current(e.target.value)}
             placeholder="Search fleet..."
             className="pl-8 pr-3 py-1.5 rounded-lg bg-muted/50 border border-border text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 w-48"
           />
@@ -178,13 +193,22 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
             Add
           </button>
         )}
+        {isRepairsPage && (
+          <button
+            onClick={() => openCreateModal("repair")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm"
+          >
+            <IconPlus size={14} />
+            Add Repair
+          </button>
+        )}
       </div>
     );
     return () => {
       setRightContent(null);
       setLeftContent(null);
     };
-  }, [search, setRightContent, setLeftContent, fetchData, isVehiclesPage, vehicleCount, openCreateModal, pathname]);
+  }, [setRightContent, setLeftContent, isVehiclesPage, isRepairsPage, vehicleCount, openCreateModal, pathname]);
 
   // Determine active tab from pathname
   const activeTab = (() => {

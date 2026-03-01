@@ -1214,8 +1214,9 @@ export async function POST(req: NextRequest) {
                 "Image": "image",
                 "Creation Date": "creationDate",
                 "LastEditOn": "lastEditOn",
-                "Repair": "description",  // fallback if "Description" is absent
-                "Duration": "repairDuration",
+                "Repair": "description",        // fallback if "Description" is absent
+                "Repair Duration": "repairDuration", // actual CSV column name
+                "Duration": "repairDuration",   // fallback alias
             };
 
             const dateFields = new Set(["estimatedDate", "creationDate", "lastEditOn"]);

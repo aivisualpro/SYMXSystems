@@ -8,7 +8,7 @@ import {
 } from "@tabler/icons-react";
 import QRCode from "qrcode";
 import { useFleet } from "../layout";
-import { StatusBadge, FleetLoading } from "../components/fleet-ui";
+import { StatusBadge } from "../components/fleet-ui";
 import FleetFormModal from "../components/fleet-form-modal";
 
 /* ── helpers ─────────────────────────────────────────────────────── */
@@ -230,8 +230,7 @@ export default function FleetVehiclesPage() {
 
   const handleQrClose = useCallback(() => setQrVin(null), []);
 
-  if (loading) return <FleetLoading />;
-  if (!data) return <div className="text-center py-20 text-muted-foreground">Failed to load data</div>;
+  if (!data && !loading) return <div className="text-center py-20 text-muted-foreground">Failed to load data</div>;
 
   return (
     <>
@@ -286,7 +285,23 @@ export default function FleetVehiclesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40">
-            {filteredVehicles.map((v: any, idx: number) => (
+            {/* Skeleton shimmer rows while fleet data loads */}
+            {loading && Array.from({ length: 18 }).map((_, i) => (
+              <tr key={`sk-${i}`} className={`border-b border-border/20 ${i % 2 === 0 ? "" : "bg-muted/[0.015]"}`}>
+                {columns.map((col, j) => (
+                  <td key={col.key} className="px-3 py-[11px]">
+                    <div
+                      className="h-3 rounded-md bg-gradient-to-r from-muted/60 via-muted/40 to-muted/60 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
+                      style={{ width: `${[70, 40, 85, 65, 55, 60, 70, 50, 68, 42, 72, 55, 48, 58, 52, 45, 62, 50, 80, 55, 45, 60, 52][j] ?? 60}%`, animationDelay: `${(i * 23 + j) * 25}ms` }}
+                    />
+                  </td>
+                ))}
+                <td className="w-16" />
+              </tr>
+            ))}
+
+            {/* Real rows */}
+            {!loading && filteredVehicles.map((v: any, idx: number) => (
               <tr
                 key={v._id}
                 onClick={() => router.push(`/fleet/vehicles/${v._id}`)}
@@ -339,7 +354,7 @@ export default function FleetVehiclesPage() {
           </tbody>
         </table>
 
-        {filteredVehicles.length === 0 && (
+        {!loading && filteredVehicles.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center">
               <IconPhoto size={20} className="text-muted-foreground/30" />
