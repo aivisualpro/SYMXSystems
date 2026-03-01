@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import MessageLog from "@/lib/models/MessageLog";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
 const QUO_API_BASE = "https://api.openphone.com/v1";
@@ -61,7 +62,23 @@ export async function POST(req: NextRequest) {
         scheduleDate?: string;
         yearWeek?: string;
       }) => {
-        const personalizedContent = recipient.message ?? message;
+        let personalizedContent = recipient.message ?? message;
+
+        // ── Generate confirmation link if template uses {confirmationLink} ──
+        let confirmationDoc: any = null;
+        if (personalizedContent.includes("{confirmationLink}") && recipient.transporterId) {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+          confirmationDoc = await ScheduleConfirmation.create({
+            transporterId: recipient.transporterId,
+            employeeName: recipient.name || "",
+            scheduleDate: recipient.scheduleDate || "",
+            yearWeek: recipient.yearWeek || "",
+            messageType,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+          });
+          const confirmUrl = `${baseUrl}/confirm/${confirmationDoc.token}`;
+          personalizedContent = personalizedContent.replace(/\{confirmationLink\}/gi, confirmUrl);
+        }
 
         try {
           const requestBody = {
@@ -121,6 +138,14 @@ export async function POST(req: NextRequest) {
             status: "sent",
             sentAt: new Date(),
           }).catch(() => null);
+
+          // Link messageLog to confirmation record
+          if (confirmationDoc && msgLog) {
+            await ScheduleConfirmation.updateOne(
+              { _id: confirmationDoc._id },
+              { $set: { messageLogId: msgLog._id } }
+            ).catch(() => { });
+          }
 
           // ── Push "sent" status into the SymxEmployeeSchedule ──────────────
           if (scheduleField && recipient.transporterId) {

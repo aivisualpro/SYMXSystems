@@ -293,7 +293,7 @@ const SUB_TABS = [
     borderColor: "border-blue-500/30",
     defaultMessage:
       "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease reply Y to confirm your route. See you tomorrow!",
-    variables: ["name", "dayOfWeek", "date", "startTime", "standupTime"],
+    variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
   },
   {
     id: "shift",
@@ -305,7 +305,7 @@ const SUB_TABS = [
     borderColor: "border-emerald-500/30",
     defaultMessage:
       "Hello {name}\n\n{dayOfWeek} {date}\n\nYou have a shift scheduled today @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease check your schedule for details. Thank you!",
-    variables: ["name", "dayOfWeek", "date", "startTime", "standupTime"],
+    variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
   },
   {
     id: "off-tomorrow",
@@ -317,7 +317,7 @@ const SUB_TABS = [
     borderColor: "border-amber-500/30",
     defaultMessage:
       "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are off today. Reminder: you are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease reply Y to confirm your route. See you tomorrow!",
-    variables: ["name", "dayOfWeek", "date", "startTime", "standupTime"],
+    variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
   },
   {
     id: "week-schedule",
@@ -329,7 +329,7 @@ const SUB_TABS = [
     borderColor: "border-violet-500/30",
     defaultMessage:
       "Hi {name}\n\nHere is your schedule for next week {yearWeek}\n----------------------\n\n{weekSchedule}\n\n----------------------\nPlease confirm with a Y.  Please check your start times!",
-    variables: ["name", "yearWeek", "weekSchedule"],
+    variables: ["name", "yearWeek", "weekSchedule", "confirmationLink"],
   },
   {
     id: "route-itinerary",
@@ -341,7 +341,7 @@ const SUB_TABS = [
     borderColor: "border-rose-500/30",
     defaultMessage:
       "Hello {name}\n\n{dayOfWeek} {date}\n\nYour route itinerary has been updated. Please review your assigned route for today. Thank you!",
-    variables: ["name", "dayOfWeek", "date"],
+    variables: ["name", "dayOfWeek", "date", "confirmationLink"],
   },
 ];
 
@@ -442,7 +442,7 @@ function MessagingSubTab({
     setSelectedIds(new Set());
     setSelectedAll(false);
     setSendResults(null);
-    onSelectionReport?.(0);
+    queueMicrotask(() => onSelectionReport?.(0));
   }, [prefetchedEmployees]);
 
   // Watch selectAllTrigger from header button
@@ -519,6 +519,7 @@ function MessagingSubTab({
         message: personalizeMessage(message.trim(), emp, tab.id, selectedWeek),
         transporterId: emp.transporterId,
         scheduleDate: relevantSchedule?.date || undefined,
+        yearWeek: selectedWeek || undefined,
       };
     });
 
