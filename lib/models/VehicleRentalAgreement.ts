@@ -22,13 +22,13 @@ const VehicleRentalAgreementSchema: Schema = new Schema({
   invoiceNumber: { type: String, default: '' },
   agreementNumber: { type: String, default: '', index: true },
   registrationStartDate: { type: Date },
-  registrationEndDate: { type: Date },
+  registrationEndDate: { type: Date, index: true },
   dueDate: { type: Date },
   amount: { type: Number, default: 0 },
   rentalAgreementFilesImages: { type: [String], default: [] },
-}, { 
-  timestamps: true, 
-  collection: 'vehiclesRentalAgreements' 
+}, {
+  timestamps: true,
+  collection: 'vehiclesRentalAgreements'
 });
 
 const VehicleRentalAgreement: Model<IVehicleRentalAgreement> = mongoose.models.VehicleRentalAgreement || mongoose.model<IVehicleRentalAgreement>('VehicleRentalAgreement', VehicleRentalAgreementSchema);

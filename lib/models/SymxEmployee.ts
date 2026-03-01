@@ -23,7 +23,7 @@ export interface ISymxEmployee extends Document {
   dlExpiration?: Date;
   motorVehicleReportDate?: Date;
   profileImage?: string;
-  
+
   // Schedule availability
   sunday?: string;
   monday?: string;
@@ -32,23 +32,23 @@ export interface ISymxEmployee extends Document {
   thursday?: string;
   friday?: string;
   saturday?: string;
-  
+
   defaultVan1?: string;
   defaultVan2?: string;
   defaultVan3?: string;
-  
+
   finalCheckIssued?: boolean;
   status: string;
-  
+
   // Files
   offerLetterFile?: string;
   handbookFile?: string;
   driversLicenseFile?: string;
   i9File?: string;
   drugTestFile?: string;
-  
+
   routesComp?: string;
-  
+
   // Offboarding
   terminationDate?: Date;
   terminationLetter?: string;
@@ -62,7 +62,7 @@ export interface ISymxEmployee extends Document {
   amazonOffboarded?: boolean;
   finalCheck?: string; // changed from boolean to string
   lastDateWorked?: Date;
-  
+
   ScheduleNotes?: string;
 }
 
@@ -70,7 +70,7 @@ const SymxEmployeeSchema: Schema = new Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   eeCode: { type: String },
-  transporterId: { type: String },
+  transporterId: { type: String, index: true },
   badgeNumber: { type: String },
   gender: { type: String },
   type: { type: String },

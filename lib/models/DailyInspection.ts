@@ -84,6 +84,11 @@ const DailyInspectionSchema: Schema = new Schema(
 // Indexes for fast sorted pagination
 DailyInspectionSchema.index({ routeDate: -1 });
 DailyInspectionSchema.index({ routeId: 1, vin: 1, routeDate: 1 });
+// Compound index for comparison queries (find previous inspection by VIN + date)
+DailyInspectionSchema.index({ vin: 1, routeDate: -1 });
+// Indexes for search/filter on text fields
+DailyInspectionSchema.index({ driver: 1 });
+DailyInspectionSchema.index({ inspectedBy: 1 });
 
 const DailyInspection: Model<IDailyInspection> =
     mongoose.models.DailyInspection ||

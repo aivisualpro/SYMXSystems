@@ -178,8 +178,11 @@ export async function GET(req: NextRequest) {
         }
         : {};
 
+      // Only select fields needed for the list view — skip heavy image URLs
+      const listFields = "routeId driver routeDate vin unitNumber mileage comments inspectedBy timeStamp anyRepairs repairCurrentStatus isCompared";
+
       const [inspections, total] = await Promise.all([
-        DailyInspection.find(filter).sort({ routeDate: -1 }).skip(skip).limit(limit).lean(),
+        DailyInspection.find(filter).select(listFields).sort({ routeDate: -1 }).skip(skip).limit(limit).lean(),
         DailyInspection.countDocuments(filter),
       ]);
 
@@ -196,37 +199,26 @@ export async function GET(req: NextRequest) {
       const inspection = await DailyInspection.findById(id).lean() as any;
       if (!inspection) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-      // Enrich with references
+      // Enrich with references — ALL IN PARALLEL
       const enriched = { ...inspection } as any;
+      const [emp, user, vehicle] = await Promise.all([
+        inspection.driver
+          ? SymxEmployee.findOne({ transporterId: inspection.driver }, { firstName: 1, lastName: 1 }).lean()
+          : null,
+        inspection.inspectedBy
+          ? SymxUser.findOne({ email: inspection.inspectedBy }, { name: 1 }).lean()
+            .then(u => u || SymxUser.findOne({ email: { $regex: `^${inspection.inspectedBy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } }, { name: 1 }).lean())
+          : null,
+        inspection.vin
+          ? Vehicle.findOne({ vin: inspection.vin }, { image: 1, vehicleName: 1, unitNumber: 1 }).lean()
+          : null,
+      ]);
 
-      // Driver name from SymxEmployee by transporterId
-      if (inspection.driver) {
-        const emp = await SymxEmployee.findOne(
-          { transporterId: inspection.driver },
-          { firstName: 1, lastName: 1 }
-        ).lean() as any;
-        if (emp) enriched.driverName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
-      }
-
-      // Inspected by name from SYMXUsers by email
-      if (inspection.inspectedBy) {
-        const user = await SymxUser.findOne(
-          { email: { $regex: `^${inspection.inspectedBy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } },
-          { name: 1 }
-        ).lean() as any;
-        if (user) enriched.inspectedByName = user.name;
-      }
-
-      // Vehicle image from Vehicle by VIN
-      if (inspection.vin) {
-        const vehicle = await Vehicle.findOne(
-          { vin: inspection.vin },
-          { image: 1, vehicleName: 1, unitNumber: 1 }
-        ).lean() as any;
-        if (vehicle) {
-          enriched.vehicleImage = vehicle.image || "";
-          enriched.vehicleName = vehicle.vehicleName || "";
-        }
+      if (emp) enriched.driverName = `${(emp as any).firstName || ""} ${(emp as any).lastName || ""}`.trim();
+      if (user) enriched.inspectedByName = (user as any).name;
+      if (vehicle) {
+        enriched.vehicleImage = (vehicle as any).image || "";
+        enriched.vehicleName = (vehicle as any).vehicleName || "";
       }
 
       return NextResponse.json({ inspection: enriched });
@@ -238,51 +230,47 @@ export async function GET(req: NextRequest) {
       const current = await DailyInspection.findById(id).lean() as any;
       if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-      // Enrich current
+      // Fetch current enrichments + previous inspection — ALL IN PARALLEL
+      const [emp, user, vehicle, previous] = await Promise.all([
+        current.driver
+          ? SymxEmployee.findOne({ transporterId: current.driver }, { firstName: 1, lastName: 1 }).lean()
+          : null,
+        current.inspectedBy
+          ? SymxUser.findOne({ email: current.inspectedBy }, { name: 1 }).lean()
+            .then(u => u || SymxUser.findOne({ email: { $regex: `^${current.inspectedBy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } }, { name: 1 }).lean())
+          : null,
+        current.vin
+          ? Vehicle.findOne({ vin: current.vin }, { image: 1, vehicleName: 1 }).lean()
+          : null,
+        current.vin && current.routeDate
+          ? DailyInspection.findOne({ vin: current.vin, _id: { $ne: current._id }, routeDate: { $lt: current.routeDate } })
+            .sort({ routeDate: -1 }).lean()
+          : null,
+      ]);
+
       const enrichedCurrent = { ...current } as any;
-      if (current.driver) {
-        const emp = await SymxEmployee.findOne({ transporterId: current.driver }, { firstName: 1, lastName: 1 }).lean() as any;
-        if (emp) enrichedCurrent.driverName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
-      }
-      if (current.inspectedBy) {
-        const user = await SymxUser.findOne(
-          { email: { $regex: `^${current.inspectedBy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } },
-          { name: 1 }
-        ).lean() as any;
-        if (user) enrichedCurrent.inspectedByName = user.name;
-      }
-      if (current.vin) {
-        const vehicle = await Vehicle.findOne({ vin: current.vin }, { image: 1, vehicleName: 1 }).lean() as any;
-        if (vehicle) {
-          enrichedCurrent.vehicleImage = vehicle.image || "";
-          enrichedCurrent.vehicleName = vehicle.vehicleName || "";
-        }
+      if (emp) enrichedCurrent.driverName = `${(emp as any).firstName || ""} ${(emp as any).lastName || ""}`.trim();
+      if (user) enrichedCurrent.inspectedByName = (user as any).name;
+      if (vehicle) {
+        enrichedCurrent.vehicleImage = (vehicle as any).image || "";
+        enrichedCurrent.vehicleName = (vehicle as any).vehicleName || "";
       }
 
-      // Find previous
-      const previous = current.vin && current.routeDate
-        ? await DailyInspection.findOne({
-          vin: current.vin,
-          _id: { $ne: current._id },
-          routeDate: { $lt: current.routeDate },
-        }).sort({ routeDate: -1 }).lean() as any
-        : null;
-
-      // Enrich previous
+      // Enrich previous — parallel if exists
       let enrichedPrevious = null;
       if (previous) {
-        enrichedPrevious = { ...previous } as any;
-        if (previous.driver) {
-          const emp = await SymxEmployee.findOne({ transporterId: previous.driver }, { firstName: 1, lastName: 1 }).lean() as any;
-          if (emp) enrichedPrevious.driverName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
-        }
-        if (previous.inspectedBy) {
-          const user = await SymxUser.findOne(
-            { email: { $regex: `^${previous.inspectedBy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } },
-            { name: 1 }
-          ).lean() as any;
-          if (user) enrichedPrevious.inspectedByName = user.name;
-        }
+        enrichedPrevious = { ...(previous as any) } as any;
+        const [prevEmp, prevUser] = await Promise.all([
+          (previous as any).driver
+            ? SymxEmployee.findOne({ transporterId: (previous as any).driver }, { firstName: 1, lastName: 1 }).lean()
+            : null,
+          (previous as any).inspectedBy
+            ? SymxUser.findOne({ email: (previous as any).inspectedBy }, { name: 1 }).lean()
+              .then(u => u || SymxUser.findOne({ email: { $regex: `^${(previous as any).inspectedBy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } }, { name: 1 }).lean())
+            : null,
+        ]);
+        if (prevEmp) enrichedPrevious.driverName = `${(prevEmp as any).firstName || ""} ${(prevEmp as any).lastName || ""}`.trim();
+        if (prevUser) enrichedPrevious.inspectedByName = (prevUser as any).name;
       }
 
       return NextResponse.json({ current: enrichedCurrent, previous: enrichedPrevious });
