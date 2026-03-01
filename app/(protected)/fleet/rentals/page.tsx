@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { IconFileInvoice, IconEdit, IconTrash } from "@tabler/icons-react";
 import { format } from "date-fns";
 import { useFleet } from "../layout";
@@ -8,19 +8,12 @@ import { GlassCard, SectionHeader, FleetLoading } from "../components/fleet-ui";
 import FleetFormModal from "../components/fleet-form-modal";
 
 export default function FleetRentalsPage() {
-  const { loading: layoutLoading, openCreateModal, openEditModal, handleDelete } = useFleet();
-  const [rentals, setRentals] = useState<any[]>([]);
-  const [fetching, setFetching] = useState(true);
+  const { loading, rentalsSeed, openCreateModal, openEditModal, handleDelete } = useFleet();
 
-  useEffect(() => {
-    fetch("/api/fleet?section=rentals")
-      .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j) setRentals(j.rentals ?? []); })
-      .catch(() => { })
-      .finally(() => setFetching(false));
-  }, []);
+  // Use cached rentals from the layout — no separate fetch needed
+  const rentals = rentalsSeed ?? [];
 
-  if (fetching || layoutLoading) return <FleetLoading />;
+  if (loading) return <FleetLoading />;
 
   return (
     <>
@@ -59,4 +52,3 @@ export default function FleetRentalsPage() {
     </>
   );
 }
-

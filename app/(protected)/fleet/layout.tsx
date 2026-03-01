@@ -38,6 +38,7 @@ interface FleetContextType {
   editId: string | null;
   repairsSeed: SeedPage | null;
   inspectionsSeed: SeedPage | null;
+  rentalsSeed: any[] | null;
 }
 
 const FleetContext = createContext<FleetContextType | null>(null);
@@ -76,40 +77,45 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   // Prefetched first pages — populated on layout mount, consumed by tab pages
   const [repairsSeed, setRepairsSeed] = useState<SeedPage | null>(null);
   const [inspectionsSeed, setInspectionsSeed] = useState<SeedPage | null>(null);
+  const [rentalsSeed, setRentalsSeed] = useState<any[] | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      // Dashboard loads first — instant overview page
-      const dashRes = await fetch("/api/fleet?section=dashboard");
-      const dashData = dashRes.ok ? await dashRes.json() : {};
-      setData(dashData);
-      setLoading(false);
 
-      // Vehicles fetch runs after dashboard is painted — non-blocking
-      const vehRes = await fetch("/api/fleet?section=vehicles");
-      const vehData = vehRes.ok ? await vehRes.json() : {};
-      setData(prev => prev ? { ...prev, vehicles: vehData.vehicles || [] } : prev);
+      // Fire ALL fetches in parallel — everything loads at once
+      const [dashRes, vehRes, repRes, insRes, renRes] = await Promise.all([
+        fetch("/api/fleet?section=dashboard"),
+        fetch("/api/fleet?section=vehicles"),
+        fetch("/api/fleet?section=repairs&skip=0&limit=50"),
+        fetch("/api/fleet?section=inspections&skip=0&limit=50"),
+        fetch("/api/fleet?section=rentals"),
+      ]);
+
+      const [dashData, vehData, repData, insData, renData] = await Promise.all([
+        dashRes.ok ? dashRes.json() : {},
+        vehRes.ok ? vehRes.json() : {},
+        repRes.ok ? repRes.json() : null,
+        insRes.ok ? insRes.json() : null,
+        renRes.ok ? renRes.json() : null,
+      ]);
+
+      // Merge dashboard + vehicles into data
+      setData({ ...dashData, vehicles: (vehData as any).vehicles || [] });
+
+      // Populate seeds for sub-pages — instant display on tab switch
+      if (repData) setRepairsSeed({ data: repData.repairs ?? [], total: repData.total ?? 0, hasMore: repData.hasMore ?? false, fetchedAt: Date.now() });
+      if (insData) setInspectionsSeed({ data: insData.inspections ?? [], total: insData.total ?? 0, hasMore: insData.hasMore ?? false, fetchedAt: Date.now() });
+      if (renData) setRentalsSeed(renData.rentals ?? []);
     } catch (err) {
       console.error("Failed to fetch fleet data:", err);
+    } finally {
       setLoading(false);
     }
   }, []);
 
-  // Prefetch first 50 repairs + 50 inspections once on mount — data ready before user navigates
   useEffect(() => {
     fetchData();
-    // Fire both seed fetches in parallel (non-blocking, smaller batches for speed)
-    Promise.all([
-      fetch("/api/fleet?section=repairs&skip=0&limit=50")
-        .then(r => r.ok ? r.json() : null)
-        .then(j => { if (j) setRepairsSeed({ data: j.repairs ?? [], total: j.total ?? 0, hasMore: j.hasMore ?? false, fetchedAt: Date.now() }); })
-        .catch(() => { }),
-      fetch("/api/fleet?section=inspections&skip=0&limit=50")
-        .then(r => r.ok ? r.json() : null)
-        .then(j => { if (j) setInspectionsSeed({ data: j.inspections ?? [], total: j.total ?? 0, hasMore: j.hasMore ?? false, fetchedAt: Date.now() }); })
-        .catch(() => { }),
-    ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount only
 
@@ -247,7 +253,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       data, loading, search, setSearch, fetchData,
       openCreateModal, openEditModal, handleDelete,
       modalOpen, setModalOpen, modalType, formData, updateForm, handleSave, saving, editId,
-      repairsSeed, inspectionsSeed,
+      repairsSeed, inspectionsSeed, rentalsSeed,
     }}>
       <div className="flex flex-col max-w-[1600px] mx-auto h-[calc(100vh-var(--header-height)-2rem)]">
 
@@ -269,7 +275,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
         </div>
 
         {/* ── Page Content (fills remaining height) ──────────── */}
-        <div className="flex-1 min-h-0 mt-4">
+        <div className="flex-1 min-h-0 mt-3 rounded-[var(--radius-xl)] bg-card overflow-hidden">
           {children}
         </div>
       </div>
