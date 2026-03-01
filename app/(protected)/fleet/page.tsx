@@ -2,8 +2,8 @@
 
 import React from "react";
 import {
-  IconCar, IconCheck, IconTool, IconAlertTriangle, IconParking,
-  IconGasStation, IconChartDonut, IconSteeringWheel, IconEdit, IconTrash,
+  IconCheck, IconTool, IconAlertTriangle,
+  IconChartDonut, IconSteeringWheel, IconCar,
 } from "@tabler/icons-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { format } from "date-fns";
@@ -12,7 +12,7 @@ import { KPICard, GlassCard, SectionHeader, StatusBadge, FleetLoading } from "./
 import FleetFormModal from "./components/fleet-form-modal";
 
 export default function FleetOverviewPage() {
-  const { data, loading, search, openCreateModal, openEditModal, handleDelete } = useFleet();
+  const { data, loading, openCreateModal } = useFleet();
 
   if (loading) return <FleetLoading />;
   if (!data) return <div className="text-center py-20 text-muted-foreground">Failed to load fleet data</div>;
@@ -23,13 +23,11 @@ export default function FleetOverviewPage() {
     <>
       <div className="space-y-5">
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KPICard icon={IconCar} label="Total Fleet" value={kpis.totalVehicles} sub="All vehicles" color="bg-blue-500/15 text-blue-600 dark:text-blue-400" />
           <KPICard icon={IconCheck} label="Active" value={kpis.activeVehicles} sub="Operational" color="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" />
           <KPICard icon={IconTool} label="In Maintenance" value={kpis.maintenanceVehicles} sub="Under service" color="bg-amber-500/15 text-amber-600 dark:text-amber-400" />
           <KPICard icon={IconAlertTriangle} label="Grounded" value={kpis.groundedVehicles} sub="Non-operational" color="bg-red-500/15 text-red-600 dark:text-red-400" />
-          <KPICard icon={IconParking} label="Empty Slots" value={kpis.emptySlots} sub={`of ${kpis.totalSlots} total`} color="bg-purple-500/15 text-purple-600 dark:text-purple-400" />
-          <KPICard icon={IconGasStation} label="Utilization" value={`${kpis.utilizationRate}%`} sub="Fleet usage" color="bg-cyan-500/15 text-cyan-600 dark:text-cyan-400" />
         </div>
 
         {/* Charts & Repairs */}
@@ -108,48 +106,6 @@ export default function FleetOverviewPage() {
             </div>
           </GlassCard>
         </div>
-
-        {/* Vehicle List Quick View */}
-        <GlassCard className="p-4">
-          <SectionHeader title="Fleet Vehicles" icon={IconCar} count={data.vehicles.length} onAdd={() => openCreateModal("vehicle")} />
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  {["Unit #", "VIN", "Year", "Make", "Model", "License", "Status", "Location", "Ownership", ""].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.vehicles.filter((v: any) => {
-                  if (!search) return true;
-                  const s = search.toLowerCase();
-                  return (v.unitNumber?.toLowerCase().includes(s) || v.vin?.toLowerCase().includes(s) || v.make?.toLowerCase().includes(s) || v.licensePlate?.toLowerCase().includes(s));
-                }).slice(0, 15).map((v: any) => (
-                  <tr key={v._id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
-                    <td className="px-3 py-2.5 text-xs font-medium text-foreground">{v.unitNumber || "—"}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground font-mono">{v.vin?.slice(-6) || "—"}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.year || "—"}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.make || "—"}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.vehicleModel || "—"}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.licensePlate || "—"}</td>
-                    <td className="px-3 py-2.5"><StatusBadge status={v.status} /></td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.location || "—"}</td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.ownership || "—"}</td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => openEditModal("vehicle", v)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-blue-500"><IconEdit size={13} /></button>
-                        <button onClick={() => handleDelete("vehicle", v._id)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-red-500"><IconTrash size={13} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {data.vehicles.length === 0 && <p className="text-center py-10 text-xs text-muted-foreground/50">No vehicles added yet.</p>}
-          </div>
-        </GlassCard>
       </div>
       <FleetFormModal />
     </>

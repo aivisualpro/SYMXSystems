@@ -1,11 +1,13 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { toast } from "sonner";
+import Papa from "papaparse";
 import {
-  IconChartDonut, IconCar, IconParking, IconTool, IconClipboardCheck,
-  IconFileInvoice, IconActivity, IconRefresh, IconSearch,
+  IconChartDonut, IconCar, IconTool, IconClipboardCheck,
+  IconFileInvoice, IconActivity, IconRefresh, IconSearch, IconPlus, IconUpload,
 } from "@tabler/icons-react";
 
 // ── Fleet Context ─────────────────────────────────────────────────────
@@ -19,7 +21,7 @@ interface FleetData {
   recentInspections: any[];
   rentalAgreements: any[];
   vehicles: any[];
-  slots: any[];
+
 }
 
 interface FleetContextType {
@@ -53,7 +55,7 @@ export function useFleet() {
 const tabs = [
   { id: "overview", label: "Overview", icon: IconChartDonut, href: "/fleet" },
   { id: "vehicles", label: "Vehicles", icon: IconCar, href: "/fleet/vehicles" },
-  { id: "slots", label: "Vehicle Slots", icon: IconParking, href: "/fleet/slots" },
+
   { id: "repairs", label: "Repairs", icon: IconTool, href: "/fleet/repairs" },
   { id: "inspections", label: "Inspections", icon: IconClipboardCheck, href: "/fleet/inspections" },
   { id: "rentals", label: "Rental Agreements", icon: IconFileInvoice, href: "/fleet/rentals" },
@@ -64,7 +66,7 @@ const tabs = [
 export default function FleetLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { setRightContent } = useHeaderActions();
+  const { setRightContent, setLeftContent } = useHeaderActions();
 
   const [data, setData] = useState<FleetData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,18 +91,12 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openCreateModal = (type: string) => {
+  const openCreateModal = useCallback((type: string) => {
     setModalType(type);
     setEditId(null);
-    if (type === "slot" && data) {
-      const slotNumbers = data.slots.map((s: any) => parseInt(s.vehicleSlotNumber, 10) || 0);
-      const maxNum = slotNumbers.length > 0 ? Math.max(...slotNumbers) : 0;
-      setFormData({ vehicleSlotNumber: String(maxNum + 1).padStart(4, "0") });
-    } else {
-      setFormData({});
-    }
+    setFormData({});
     setModalOpen(true);
-  };
+  }, []);
 
   const openEditModal = (type: string, item: any) => {
     setModalType(type);
@@ -142,8 +138,87 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const updateForm = (key: string, value: any) =>
     setFormData((prev: any) => ({ ...prev, [key]: value }));
 
-  // Inject search + refresh into site header
+  // ── Fleet Repairs CSV Import ──────────────────────────────────────────
+  const repairFileRef = useRef<HTMLInputElement>(null);
+  const [importingRepairs, setImportingRepairs] = useState(false);
+
+  const handleRepairImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    setImportingRepairs(true);
+    try {
+      const parsed: any[] = await new Promise((resolve, reject) => {
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => resolve(results.data as any[]),
+          error: (err) => reject(err),
+        });
+      });
+
+      if (parsed.length === 0) {
+        toast.error("CSV file is empty or has no valid rows");
+        setImportingRepairs(false);
+        return;
+      }
+
+      const CHUNK_SIZE = 500;
+      const chunks: any[][] = [];
+      for (let i = 0; i < parsed.length; i += CHUNK_SIZE) {
+        chunks.push(parsed.slice(i, i + CHUNK_SIZE));
+      }
+
+      let totalInserted = 0;
+      let totalUpdated = 0;
+      let totalCount = 0;
+
+      for (let i = 0; i < chunks.length; i++) {
+        toast.info(`Uploading batch ${i + 1} of ${chunks.length}...`);
+        const res = await fetch("/api/admin/imports", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "fleet-repairs", data: chunks[i] }),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || `Import failed on batch ${i + 1}`);
+        totalInserted += result.inserted || 0;
+        totalUpdated += result.updated || 0;
+        totalCount += result.count || 0;
+      }
+
+      toast.success(`Imported ${totalCount} repairs (${totalInserted} new, ${totalUpdated} updated)`);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || "Fleet repairs import failed");
+    } finally {
+      setImportingRepairs(false);
+    }
+  };
+
+  // Determine active tab from pathname (used for header content)
+  const isVehiclesPage = pathname === "/fleet/vehicles";
+  const vehicleCount = data?.vehicles?.length ?? 0;
+
+  // Inject search + refresh + add into site header
   useEffect(() => {
+    // Show counter in left header on the vehicles page
+    if (isVehiclesPage) {
+      setLeftContent(
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+            Fleet - Vehicles
+          </h1>
+          <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
+            {vehicleCount}
+          </span>
+        </div>
+      );
+    } else {
+      setLeftContent(null);
+    }
+
     setRightContent(
       <div className="flex items-center gap-2">
         <div className="relative">
@@ -155,6 +230,26 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
             className="pl-8 pr-3 py-1.5 rounded-lg bg-muted/50 border border-border text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 w-48"
           />
         </div>
+        {isVehiclesPage && (
+          <>
+            <button
+              onClick={() => repairFileRef.current?.click()}
+              disabled={importingRepairs}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="Import Fleet Repairs CSV"
+            >
+              <IconUpload size={14} className={importingRepairs ? "animate-pulse" : ""} />
+              {importingRepairs ? "Importing..." : "Import Repairs"}
+            </button>
+            <button
+              onClick={() => openCreateModal("vehicle")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm"
+            >
+              <IconPlus size={14} />
+              Add
+            </button>
+          </>
+        )}
         <button
           onClick={() => fetchData()}
           className="p-1.5 rounded-lg bg-muted/50 border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -164,8 +259,22 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
         </button>
       </div>
     );
-    return () => setRightContent(null);
-  }, [search, setRightContent, fetchData]);
+    return () => {
+      setRightContent(null);
+      setLeftContent(null);
+    };
+  }, [search, setRightContent, setLeftContent, fetchData, isVehiclesPage, vehicleCount, openCreateModal, importingRepairs]);
+
+  // Hidden file input for repair CSV import
+  const repairImportInput = (
+    <input
+      type="file"
+      ref={repairFileRef}
+      className="hidden"
+      accept=".csv"
+      onChange={handleRepairImport}
+    />
+  );
 
   // Determine active tab from pathname
   const activeTab = (() => {
@@ -181,17 +290,19 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       modalOpen, setModalOpen, modalType, formData, updateForm, handleSave, saving, editId,
     }}>
       <div className="space-y-4 max-w-[1600px] mx-auto">
+        {/* Hidden file input for fleet repairs CSV import */}
+        {repairImportInput}
+
         {/* ── Tab Navigation ─────────────────────────────────────── */}
         <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => router.push(tab.href)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 ${
-                activeTab === tab.id
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 ${activeTab === tab.id
+                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
             >
               <tab.icon size={14} />
               {tab.label}

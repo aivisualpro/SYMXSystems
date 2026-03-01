@@ -1,19 +1,25 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface IVehicle extends Document {
-  vehicleSlotNumber: string;
   vin: string;
   year: string;
+  vehicleName: string;
   licensePlate: string;
   make: string;
   vehicleModel: string;
   status: 'Active' | 'Inactive' | 'Maintenance' | 'Grounded' | 'Decommissioned';
+  mileage: number;
+  serviceType: string;
   dashcam: string;
   vehicleProvider: string;
   ownership: 'Owned' | 'Leased' | 'Rented';
   unitNumber: string;
+  startDate: Date;
+  endDate: Date;
+  registrationExpiration: Date;
   state: string;
   location: string;
+  notes: string;
   info: string;
   image: string;
   locationFrom: string;
@@ -22,34 +28,40 @@ export interface IVehicle extends Document {
 }
 
 const VehicleSchema: Schema = new Schema({
-  vehicleSlotNumber: { type: String, default: '', index: true },
   vin: { type: String, required: true, unique: true, index: true },
   year: { type: String, default: '' },
+  vehicleName: { type: String, default: '' },
   licensePlate: { type: String, default: '', index: true },
   make: { type: String, default: '' },
   vehicleModel: { type: String, default: '' },
-  status: { 
-    type: String, 
+  status: {
+    type: String,
     enum: ['Active', 'Inactive', 'Maintenance', 'Grounded', 'Decommissioned'],
     default: 'Active',
-    index: true 
+    index: true
   },
+  mileage: { type: Number, default: 0 },
+  serviceType: { type: String, default: '' },
   dashcam: { type: String, default: '' },
   vehicleProvider: { type: String, default: '' },
-  ownership: { 
-    type: String, 
+  ownership: {
+    type: String,
     enum: ['Owned', 'Leased', 'Rented'],
-    default: 'Owned' 
+    default: 'Owned'
   },
   unitNumber: { type: String, default: '', index: true },
+  startDate: { type: Date },
+  endDate: { type: Date },
+  registrationExpiration: { type: Date },
   state: { type: String, default: '' },
   location: { type: String, default: '' },
+  notes: { type: String, default: '' },
   info: { type: String, default: '' },
   image: { type: String, default: '' },
   locationFrom: { type: String, default: '' },
-}, { 
-  timestamps: true, 
-  collection: 'vehicles' 
+}, {
+  timestamps: true,
+  collection: 'vehicles'
 });
 
 const Vehicle: Model<IVehicle> = mongoose.models.Vehicle || mongoose.model<IVehicle>('Vehicle', VehicleSchema);

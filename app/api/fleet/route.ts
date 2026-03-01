@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import Vehicle from "@/lib/models/Vehicle";
-import VehicleSlot from "@/lib/models/VehicleSlot";
+
 import VehicleRepair from "@/lib/models/VehicleRepair";
 import VehicleActivityLog from "@/lib/models/VehicleActivityLog";
 import VehicleInspection from "@/lib/models/VehicleInspection";
@@ -25,14 +25,12 @@ export async function GET(req: NextRequest) {
       // Parallel fetch all summary data
       const [
         vehicles,
-        slots,
         repairsOpen,
         recentActivity,
         inspections,
         rentalAgreements,
       ] = await Promise.all([
         Vehicle.find({}).lean(),
-        VehicleSlot.find({}).lean(),
         VehicleRepair.find({ currentStatus: { $ne: "Completed" } }).sort({ creationDate: -1 }).lean(),
         VehicleActivityLog.find({}).sort({ createdAt: -1 }).limit(20).lean(),
         VehicleInspection.find({}).sort({ inspectionDate: -1 }).limit(20).lean(),
@@ -45,11 +43,6 @@ export async function GET(req: NextRequest) {
       const maintenanceVehicles = vehicles.filter((v: any) => v.status === "Maintenance").length;
       const groundedVehicles = vehicles.filter((v: any) => v.status === "Grounded").length;
       const inactiveVehicles = vehicles.filter((v: any) => v.status === "Inactive").length;
-      const totalSlots = slots.length;
-      // Empty slots = slots whose vehicleSlotNumber is NOT assigned to any vehicle
-      const assignedSlotNumbers = new Set(vehicles.map((v: any) => v.vehicleSlotNumber).filter(Boolean));
-      const emptySlots = slots.filter((s: any) => !assignedSlotNumbers.has(s.vehicleSlotNumber)).length;
-      const utilizationRate = totalSlots > 0 ? ((totalSlots - emptySlots) / totalSlots * 100).toFixed(1) : "0";
 
       // Status breakdown for donut chart
       const statusBreakdown = [
@@ -75,8 +68,8 @@ export async function GET(req: NextRequest) {
       // Upcoming registrations (next 30 days)
       const now = new Date();
       const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-      const upcomingRegistrations = recentActivity.filter((a: any) => 
-        a.registrationExpiration && 
+      const upcomingRegistrations = recentActivity.filter((a: any) =>
+        a.registrationExpiration &&
         new Date(a.registrationExpiration) <= thirtyDaysFromNow &&
         new Date(a.registrationExpiration) >= now
       );
@@ -88,9 +81,6 @@ export async function GET(req: NextRequest) {
           maintenanceVehicles,
           groundedVehicles,
           inactiveVehicles,
-          totalSlots,
-          emptySlots,
-          utilizationRate: parseFloat(utilizationRate as string),
         },
         statusBreakdown,
         ownershipBreakdown: [
@@ -105,7 +95,6 @@ export async function GET(req: NextRequest) {
         rentalAgreements,
         upcomingRegistrations,
         vehicles,
-        slots,
       });
     }
 
@@ -114,10 +103,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ vehicles });
     }
 
-    if (section === "slots") {
-      const slots = await VehicleSlot.find({}).sort({ vehicleSlotNumber: 1 }).lean();
-      return NextResponse.json({ slots });
-    }
+
 
     if (section === "repairs") {
       const repairs = await VehicleRepair.find({}).sort({ creationDate: -1 }).lean();
@@ -164,17 +150,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ vehicle, message: "Vehicle created successfully" });
       }
 
-      case "slot": {
-        // Auto-generate slot number
-        const lastSlot = await VehicleSlot.findOne({}).sort({ vehicleSlotNumber: -1 }).lean();
-        let nextNumber = "0001";
-        if (lastSlot) {
-          const lastNum = parseInt((lastSlot as any).vehicleSlotNumber, 10);
-          nextNumber = String(lastNum + 1).padStart(4, "0");
-        }
-        const slot = await VehicleSlot.create({ ...data, vehicleSlotNumber: nextNumber });
-        return NextResponse.json({ slot, message: "Vehicle slot created successfully" });
-      }
+
 
       case "repair": {
         const repair = await VehicleRepair.create(data);
@@ -225,10 +201,7 @@ export async function PUT(req: NextRequest) {
         const vehicle = await Vehicle.findByIdAndUpdate(id, { $set: data }, { new: true });
         return NextResponse.json({ vehicle, message: "Vehicle updated successfully" });
       }
-      case "slot": {
-        const slot = await VehicleSlot.findByIdAndUpdate(id, { $set: data }, { new: true });
-        return NextResponse.json({ slot, message: "Slot updated successfully" });
-      }
+
       case "repair": {
         data.lastEditOn = new Date();
         const repair = await VehicleRepair.findByIdAndUpdate(id, { $set: data }, { new: true });
@@ -277,7 +250,7 @@ export async function DELETE(req: NextRequest) {
 
     switch (type) {
       case "vehicle": await Vehicle.findByIdAndDelete(id); break;
-      case "slot": await VehicleSlot.findByIdAndDelete(id); break;
+
       case "repair": await VehicleRepair.findByIdAndDelete(id); break;
       case "activity": await VehicleActivityLog.findByIdAndDelete(id); break;
       case "inspection": await VehicleInspection.findByIdAndDelete(id); break;

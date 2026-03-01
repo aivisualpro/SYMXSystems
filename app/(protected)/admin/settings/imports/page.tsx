@@ -11,6 +11,8 @@ import {
   AlertCircle,
   CalendarDays,
   Receipt,
+  Truck,
+  Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 import Papa from "papaparse";
@@ -54,6 +56,37 @@ const importTypes = [
     fields: [
       "_id", "transporterId", "date", "amount", "reason",
       "attachment", "status", "createdBy", "createdAt",
+    ],
+  },
+  {
+    id: "fleet-records",
+    name: "Fleet Records",
+    description: "Import fleet vehicle records from CSV. Upserts on VIN — existing vehicles are updated, new ones are created.",
+    icon: Truck,
+    color: "from-orange-500 to-amber-500",
+    bgColor: "bg-orange-500/10",
+    borderColor: "border-orange-500/20",
+    iconColor: "text-orange-500",
+    fields: [
+      "VIN", "Year", "Vehicle Name", "License Plate", "Make", "Model",
+      "Status", "Mileage", "Service Type", "Dashcam", "Vehicle Provider",
+      "Ownership", "Unit #", "Start Date", "End Date",
+      "Registration Expiration", "State", "Location", "Notes", "Info",
+      "Image", "Location From",
+    ],
+  },
+  {
+    id: "fleet-repairs",
+    name: "Fleet Repairs",
+    description: "Import fleet repair records from CSV. VIN is used to link repairs to vehicles. Upserts on VIN + Description + Creation Date.",
+    icon: Wrench,
+    color: "from-rose-500 to-pink-500",
+    bgColor: "bg-rose-500/10",
+    borderColor: "border-rose-500/20",
+    iconColor: "text-rose-500",
+    fields: [
+      "VIN", "Description", "Current Status", "Estimated Date",
+      "Image", "Creation Date", "LastEditOn", "Repair", "Duration",
     ],
   },
 ];
