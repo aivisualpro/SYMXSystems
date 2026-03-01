@@ -8,6 +8,7 @@ import {
     IconChevronLeft, IconChevronRight, IconArrowsLeftRight,
     IconX, IconCheck, IconMinus, IconMaximize,
 } from "@tabler/icons-react";
+import { useHeaderActions } from "@/components/providers/header-actions-provider";
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 const fmtDate = (d: any) => !d ? "—" : new Date(d).toLocaleDateString("en-US", {
@@ -173,6 +174,8 @@ export default function InspectionDetailPage() {
     const [previous, setPrevious] = useState<any>(null);
     const [compareError, setCompareError] = useState<string | null>(null);
 
+    const { setRightContent } = useHeaderActions();
+
     useEffect(() => {
         if (!id) return;
         fetch(`/api/fleet?section=inspection-detail&id=${id}`)
@@ -193,6 +196,26 @@ export default function InspectionDetailPage() {
         } catch { setCompareError("Failed to load comparison."); }
         finally { setCompareLoading(false); }
     }, [id, previous]);
+
+    // Inject compare button into the main header
+    useEffect(() => {
+        setRightContent(
+            <button
+                onClick={compareMode ? () => setCompareMode(false) : loadCompare}
+                disabled={compareLoading}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm border ${compareMode
+                    ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                    : "bg-card border-border hover:border-primary/50 hover:text-primary"
+                    }`}
+            >
+                {compareLoading
+                    ? <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                    : <IconArrowsLeftRight size={14} />}
+                {compareMode ? "Exit Compare" : "Compare with Previous"}
+            </button>
+        );
+        return () => setRightContent(null);
+    }, [setRightContent, compareMode, compareLoading, loadCompare]);
 
     if (loading) return (
         <div className="flex items-center justify-center h-full">
@@ -236,24 +259,7 @@ export default function InspectionDetailPage() {
         <div className="h-full overflow-auto">
             {lightbox && <Lightbox url={lightbox} onClose={() => setLightbox(null)} />}
 
-            <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-
-                {/* ── Compare toggle (top right) ──────────────────────── */}
-                <div className="flex items-center justify-end">
-                    <button
-                        onClick={compareMode ? () => setCompareMode(false) : loadCompare}
-                        disabled={compareLoading}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm border ${compareMode
-                                ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                                : "bg-card border-border hover:border-primary/50 hover:text-primary"
-                            }`}
-                    >
-                        {compareLoading
-                            ? <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
-                            : <IconArrowsLeftRight size={14} />}
-                        {compareMode ? "Exit Compare" : "Compare with Previous"}
-                    </button>
-                </div>
+            <div className="space-y-6">
 
                 {compareError && (
                     <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-500 flex items-center gap-2">
@@ -265,65 +271,166 @@ export default function InspectionDetailPage() {
             TOP SECTION: Date · VIN · Driver Name | Vehicle Image
            ══════════════════════════════════════════════════════════ */}
                 <div className="relative rounded-2xl overflow-hidden border border-border/40 shadow-lg bg-card">
-                    <div className="flex flex-col md:flex-row">
-                        {/* Left — info */}
+                    <div className="flex flex-row">
+                        {/* Left — info grid */}
                         <div className="flex-1 px-6 py-6 flex flex-col justify-center gap-4">
-                            <div className="flex items-center gap-2.5 flex-wrap">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-primary/70">Daily Inspection</span>
-                                {hasRepair && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/15 text-red-500 border border-red-500/20">
-                                        <IconTool size={9} /> Repair Logged
-                                    </span>
-                                )}
-                                {inspection.isCompared && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
-                                        <IconCheck size={9} /> Compared
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Date */}
-                            <div>
-                                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-0.5">Date</p>
-                                <p className="text-lg font-bold text-foreground flex items-center gap-2">
-                                    <IconCalendar size={16} className="text-primary" />
-                                    {fmtDate(inspection.routeDate)}
-                                </p>
-                            </div>
-
-                            {/* VIN */}
-                            <div>
-                                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-0.5">VIN</p>
-                                <p className="font-mono text-sm font-bold text-foreground">{inspection.vin || "—"}</p>
-                                {inspection.unitNumber && (
-                                    <p className="text-xs text-muted-foreground/50 mt-0.5">Unit #{inspection.unitNumber}</p>
-                                )}
-                                {inspection.vehicleName && (
-                                    <p className="text-xs text-muted-foreground/50">{inspection.vehicleName}</p>
-                                )}
-                            </div>
-
-                            {/* Driver Name */}
-                            <div>
-                                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-0.5">Driver</p>
-                                <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-                                    <IconUser size={14} className="text-primary" />
-                                    {driverDisplay}
-                                </p>
-                            </div>
-
-                            {/* Mileage */}
-                            {inspection.mileage > 0 && (
-                                <div className="flex items-center gap-2 rounded-lg bg-muted/30 border border-border/30 px-3 py-2 w-fit">
-                                    <IconGauge size={14} className="text-primary" />
-                                    <span className="text-sm font-bold text-foreground">{inspection.mileage.toLocaleString()}</span>
-                                    <span className="text-xs text-muted-foreground/50">mi</span>
+                            {/* Status badges */}
+                            {(hasRepair || inspection.isCompared) && (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {hasRepair && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/15 text-red-500 border border-red-500/20">
+                                            <IconTool size={9} /> Repair Logged
+                                        </span>
+                                    )}
+                                    {inspection.isCompared && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
+                                            <IconCheck size={9} /> Compared
+                                        </span>
+                                    )}
                                 </div>
                             )}
+
+                            {/* 3×2 grid — icon + value, with compare row when active */}
+                            <div className="grid grid-cols-3 gap-3">
+                                {/* Date */}
+                                <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                    <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                        <IconCalendar size={16} className="text-primary" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-bold text-foreground">{fmtDate(inspection.routeDate)}</p>
+                                        {compareMode && previous && (
+                                            <p className="text-xs text-muted-foreground/60 mt-1">{fmtDate(previous.routeDate)}</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* VIN */}
+                                <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                    <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                        <IconCamera size={16} className="text-primary" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="font-mono text-xs font-bold text-foreground break-all">
+                                            {inspection.vehicleName ? `${inspection.vehicleName} · ` : ""}{inspection.vin || "—"}
+                                        </p>
+                                        {compareMode && previous && (
+                                            <div className="flex items-center gap-1.5 mt-1">
+                                                <p className="font-mono text-[10px] text-muted-foreground/60 break-all">
+                                                    {previous.vin || "—"}
+                                                </p>
+                                                <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Driver */}
+                                {(() => {
+                                    const prevDriver = previous ? (previous.driverName || previous.driver || "—") : "—";
+                                    const driverChanged = compareMode && previous && driverDisplay !== prevDriver;
+                                    return (
+                                        <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                            <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                                <IconUser size={16} className="text-primary" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold text-foreground">{driverDisplay}</p>
+                                                {compareMode && previous && (
+                                                    <div className="flex items-center gap-1.5 mt-1">
+                                                        <p className="text-xs text-muted-foreground/60">{prevDriver}</p>
+                                                        {driverChanged
+                                                            ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
+                                                            : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Mileage */}
+                                {(() => {
+                                    const prevMileage = previous?.mileage || 0;
+                                    const mileageChanged = compareMode && previous && inspection.mileage !== prevMileage;
+                                    const mileageDiff = inspection.mileage - prevMileage;
+                                    return (
+                                        <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                            <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                                <IconGauge size={16} className="text-primary" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-bold text-foreground">
+                                                    {inspection.mileage > 0 ? `${inspection.mileage.toLocaleString()} mi` : "—"}
+                                                </p>
+                                                {compareMode && previous && (
+                                                    <div className="flex items-center gap-1.5 mt-1">
+                                                        <p className="text-xs text-muted-foreground/60">{prevMileage > 0 ? `${prevMileage.toLocaleString()} mi` : "—"}</p>
+                                                        {mileageChanged
+                                                            ? <span className={`text-[10px] font-semibold whitespace-nowrap ${mileageDiff > 0 ? "text-emerald-500" : "text-red-500"}`}>{mileageDiff > 0 ? "+" : ""}{mileageDiff.toLocaleString()}</span>
+                                                            : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Comments */}
+                                {(() => {
+                                    const prevComments = previous?.comments || "—";
+                                    const currComments = inspection.comments || "—";
+                                    const commentsChanged = compareMode && previous && currComments !== prevComments;
+                                    return (
+                                        <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                            <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                                <IconClock size={16} className="text-primary" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-sm text-foreground truncate">{currComments}</p>
+                                                {compareMode && previous && (
+                                                    <div className="flex items-center gap-1.5 mt-1">
+                                                        <p className="text-xs text-muted-foreground/60 truncate flex-1">{prevComments}</p>
+                                                        {commentsChanged
+                                                            ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
+                                                            : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Any Repairs */}
+                                {(() => {
+                                    const prevHasRepair = previous?.anyRepairs && previous.anyRepairs !== "FALSE" && previous.anyRepairs !== "false";
+                                    const repairsChanged = compareMode && previous && hasRepair !== prevHasRepair;
+                                    return (
+                                        <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                            <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                                <IconTool size={16} className="text-primary" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className={`text-sm font-semibold ${hasRepair ? "text-red-500" : "text-foreground"}`}>
+                                                    {hasRepair ? "Yes" : "No"}
+                                                </p>
+                                                {compareMode && previous && (
+                                                    <div className="flex items-center gap-1.5 mt-1">
+                                                        <p className={`text-xs ${prevHasRepair ? "text-red-500/60" : "text-muted-foreground/60"}`}>{prevHasRepair ? "Yes" : "No"}</p>
+                                                        {repairsChanged
+                                                            ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
+                                                            : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
                         </div>
 
                         {/* Right — Vehicle image from vehicles table */}
-                        <div className="md:w-80 lg:w-96 flex-shrink-0 relative group">
+                        <div className="w-80 lg:w-96 flex-shrink-0 relative group">
                             {inspection.vehicleImage ? (
                                 <img
                                     src={inspection.vehicleImage}
@@ -455,19 +562,6 @@ export default function InspectionDetailPage() {
                 {/* ── Comparison Mode ────────────────────────────────── */}
                 {compareMode && previous && (
                     <>
-                        <div className="grid grid-cols-2 gap-3">
-                            {[
-                                { label: "Current", date: inspection.routeDate, driver: driverDisplay, accent: "bg-primary/10 border-primary/20" },
-                                { label: "Previous", date: previous.routeDate, driver: previous.driverName || previous.driver || "—", accent: "bg-muted/40 border-border/40" },
-                            ].map(side => (
-                                <div key={side.label} className={`rounded-xl border px-4 py-3 ${side.accent}`}>
-                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-0.5">{side.label} Inspection</p>
-                                    <p className="text-base font-bold text-foreground">{fmtDateShort(side.date)}</p>
-                                    <p className="text-xs text-muted-foreground/70">{side.driver}</p>
-                                </div>
-                            ))}
-                        </div>
-
                         {/* Image comparisons */}
                         <div>
                             <h2 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
@@ -493,61 +587,6 @@ export default function InspectionDetailPage() {
                                         )}
                                     </div>
                                 ))}
-                            </div>
-                        </div>
-
-                        {/* Field diff table */}
-                        <div>
-                            <h2 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
-                                <IconAdjustmentsHorizontal size={14} className="text-primary" />
-                                Field Comparison
-                            </h2>
-                            <div className="rounded-xl border border-border/40 bg-card overflow-hidden shadow-sm">
-                                <table className="w-full border-collapse text-xs">
-                                    <thead>
-                                        <tr className="bg-muted/40 border-b border-border/40">
-                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 w-36">Field</th>
-                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-primary/70">
-                                                Current · {fmtDateShort(inspection.routeDate)}
-                                            </th>
-                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                                Previous · {fmtDateShort(previous.routeDate)}
-                                            </th>
-                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 w-24">Change</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border/30">
-                                        {[
-                                            { label: "Driver", curr: driverDisplay, prev: previous.driverName || previous.driver || "—" },
-                                            { label: "Inspected By", curr: inspectedByDisplay, prev: previous.inspectedByName || previous.inspectedBy || "—" },
-                                            { label: "Mileage", curr: inspection.mileage, prev: previous.mileage },
-                                            { label: "Comments", curr: inspection.comments, prev: previous.comments },
-                                            { label: "Any Repairs", curr: inspection.anyRepairs, prev: previous.anyRepairs },
-                                            { label: "Repair Status", curr: inspection.repairCurrentStatus, prev: previous.repairCurrentStatus },
-                                            { label: "Repair Desc.", curr: inspection.repairDescription, prev: previous.repairDescription },
-                                            { label: "Compared?", curr: inspection.isCompared ? "Yes" : "No", prev: previous.isCompared ? "Yes" : "No" },
-                                        ].map(({ label, curr, prev }) => {
-                                            const changed = curr !== prev && curr !== undefined && prev !== undefined;
-                                            return (
-                                                <tr key={label} className={`${changed ? "bg-amber-500/[0.04]" : ""} hover:bg-muted/30 transition-colors`}>
-                                                    <td className="px-4 py-2.5 text-muted-foreground/60 font-medium">{label}</td>
-                                                    <td className="px-4 py-2.5 text-foreground font-medium max-w-[200px] truncate">
-                                                        {curr !== undefined && curr !== "" && curr !== 0 ? String(curr) : <span className="text-muted-foreground/30">—</span>}
-                                                    </td>
-                                                    <td className="px-4 py-2.5 text-muted-foreground max-w-[200px] truncate">
-                                                        {prev !== undefined && prev !== "" && prev !== 0 ? String(prev) : <span className="text-muted-foreground/30">—</span>}
-                                                    </td>
-                                                    <td className="px-4 py-2.5">
-                                                        {changed
-                                                            ? <DiffBadge curr={curr} prev={prev} />
-                                                            : <span className="text-emerald-500/60 text-[10px] flex items-center gap-1"><IconCheck size={10} />Same</span>
-                                                        }
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
                             </div>
                         </div>
                     </>
