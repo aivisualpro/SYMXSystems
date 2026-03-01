@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { IconFileInvoice, IconEdit, IconTrash } from "@tabler/icons-react";
 import { format } from "date-fns";
 import { useFleet } from "../layout";
@@ -8,15 +8,24 @@ import { GlassCard, SectionHeader, FleetLoading } from "../components/fleet-ui";
 import FleetFormModal from "../components/fleet-form-modal";
 
 export default function FleetRentalsPage() {
-  const { data, loading, openCreateModal, openEditModal, handleDelete } = useFleet();
+  const { loading: layoutLoading, openCreateModal, openEditModal, handleDelete } = useFleet();
+  const [rentals, setRentals] = useState<any[]>([]);
+  const [fetching, setFetching] = useState(true);
 
-  if (loading) return <FleetLoading />;
-  if (!data) return <div className="text-center py-20 text-muted-foreground">Failed to load data</div>;
+  useEffect(() => {
+    fetch("/api/fleet?section=rentals")
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j) setRentals(j.rentals ?? []); })
+      .catch(() => { })
+      .finally(() => setFetching(false));
+  }, []);
+
+  if (fetching || layoutLoading) return <FleetLoading />;
 
   return (
     <>
       <GlassCard className="p-4">
-        <SectionHeader title="Rental Agreements" icon={IconFileInvoice} count={data.rentalAgreements.length} onAdd={() => openCreateModal("rental")} />
+        <SectionHeader title="Rental Agreements" icon={IconFileInvoice} count={rentals.length} onAdd={() => openCreateModal("rental")} />
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead><tr className="border-b border-border">
@@ -25,7 +34,7 @@ export default function FleetRentalsPage() {
               ))}
             </tr></thead>
             <tbody>
-              {data.rentalAgreements.map((ra: any) => (
+              {rentals.map((ra: any) => (
                 <tr key={ra._id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
                   <td className="px-3 py-2.5 text-xs font-medium text-foreground">{ra.unitNumber || "—"}</td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">{ra.agreementNumber || "—"}</td>
@@ -43,10 +52,11 @@ export default function FleetRentalsPage() {
               ))}
             </tbody>
           </table>
-          {data.rentalAgreements.length === 0 && <p className="text-center py-10 text-xs text-muted-foreground/50">No rental agreements.</p>}
+          {rentals.length === 0 && <p className="text-center py-10 text-xs text-muted-foreground/50">No rental agreements.</p>}
         </div>
       </GlassCard>
       <FleetFormModal />
     </>
   );
 }
+

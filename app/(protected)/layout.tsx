@@ -10,7 +10,7 @@ import { redirect } from "next/navigation";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
-  
+
   // Extra security: Verify status in database on every page load
   if (session && session.id) {
     try {
@@ -24,7 +24,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         }
       }
     } catch (error) {
-       console.error("Layout Auth Check Error:", error);
+      console.error("Layout Auth Check Error:", error);
     }
   }
 
@@ -43,7 +43,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         }
       >
         <AppSidebar variant="inset" />
-        <SidebarInset className="flex flex-col h-full overflow-hidden bg-background shadow-none border-none m-0">
+        <SidebarInset className="flex flex-col h-full overflow-hidden shadow-none border-none md:peer-data-[variant=inset]:m-0 md:peer-data-[variant=inset]:rounded-none">
           <SiteHeader />
           <div className="flex-1 overflow-auto p-[16px]">
             {children}
