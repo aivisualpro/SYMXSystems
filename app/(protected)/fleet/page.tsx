@@ -41,7 +41,7 @@ export default function FleetOverviewPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={data.statusBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value" stroke="none">
-                    {data.statusBreakdown.map((entry, i) => (
+                    {data.statusBreakdown.map((entry: any, i: number) => (
                       <Cell key={i} fill={entry.color} />
                     ))}
                   </Pie>
@@ -50,7 +50,7 @@ export default function FleetOverviewPage() {
               </ResponsiveContainer>
             </div>
             <div className="flex flex-wrap gap-3 mt-2 justify-center">
-              {data.statusBreakdown.map((s, i) => (
+              {data.statusBreakdown.map((s: any, i: number) => (
                 <div key={i} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
                   {s.name}: {s.value}
@@ -68,7 +68,7 @@ export default function FleetOverviewPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={data.ownershipBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value" stroke="none">
-                    {data.ownershipBreakdown.map((entry, i) => (
+                    {data.ownershipBreakdown.map((entry: any, i: number) => (
                       <Cell key={i} fill={entry.color} />
                     ))}
                   </Pie>
@@ -77,7 +77,7 @@ export default function FleetOverviewPage() {
               </ResponsiveContainer>
             </div>
             <div className="flex flex-wrap gap-3 mt-2 justify-center">
-              {data.ownershipBreakdown.map((s, i) => (
+              {data.ownershipBreakdown.map((s: any, i: number) => (
                 <div key={i} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
                   {s.name}: {s.value}
