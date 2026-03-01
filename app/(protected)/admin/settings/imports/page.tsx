@@ -14,6 +14,7 @@ import {
   Truck,
   Wrench,
   ClipboardCheck,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import Papa from "papaparse";
@@ -105,6 +106,21 @@ const importTypes = [
       "Mileage", "Dashboard Image", "Comments", "Additional Picture",
       "Inspected By", "TimeStamp", "Any Repairs",
       "Description", "Current Status", "Estimated Date", "Image", "iSCompared?",
+    ],
+  },
+  {
+    id: "rental-agreements",
+    name: "Rental Agreements",
+    description: "Import fleet rental agreement records from CSV. Upserts on Agreement # + VIN. Links vehicles by VIN automatically.",
+    icon: FileText,
+    color: "from-teal-500 to-cyan-500",
+    bgColor: "bg-teal-500/10",
+    borderColor: "border-teal-500/20",
+    iconColor: "text-teal-500",
+    fields: [
+      "Unit #", "Vin", "Invoice #", "Agreement #",
+      "R. Start Date", "R. End Date", "Due Date",
+      "Amount", "File", "Image",
     ],
   },
 ];

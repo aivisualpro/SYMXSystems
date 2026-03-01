@@ -17,6 +17,7 @@ import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import Vehicle from "@/lib/models/Vehicle";
 import VehicleRepair from "@/lib/models/VehicleRepair";
 import DailyInspection from "@/lib/models/DailyInspection";
+import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
 import { getISOWeek, getISOWeekYear, parseISO } from "date-fns";
 
 const reimbursementHeaderMap: Record<string, string> = {
@@ -1401,6 +1402,112 @@ export async function POST(req: NextRequest) {
 
             if (operations.length > 0) {
                 const result = await DailyInspection.bulkWrite(operations, { ordered: false });
+                return NextResponse.json({
+                    success: true,
+                    count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                    inserted: result.upsertedCount || 0,
+                    updated: result.modifiedCount || 0,
+                    matched: result.matchedCount || 0,
+                });
+            }
+
+            return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+        }
+
+        else if (type === "rental-agreements") {
+            const headerMap: Record<string, string> = {
+                "Unit #": "unitNumber",
+                "Unit": "unitNumber",
+                "Vin": "vin",
+                "VIN": "vin",
+                "Invoice #": "invoiceNumber",
+                "Invoice": "invoiceNumber",
+                "Agreement #": "agreementNumber",
+                "Agreement": "agreementNumber",
+                "R. Start Date": "registrationStartDate",
+                "R Start Date": "registrationStartDate",
+                "Start Date": "registrationStartDate",
+                "R. End Date": "registrationEndDate",
+                "R End Date": "registrationEndDate",
+                "End Date": "registrationEndDate",
+                "Due Date": "dueDate",
+                "Amount": "amount",
+                "File": "file",
+                "Image": "image",
+            };
+
+            const dateFields = new Set(["registrationStartDate", "registrationEndDate", "dueDate"]);
+            const numericFields = new Set(["amount"]);
+
+            // Gather VINs for vehicle lookup
+            const vins = [...new Set(
+                data
+                    .map((row: any) => ((row["Vin"] || row["VIN"] || "")).toString().trim())
+                    .filter((v: string) => v)
+            )];
+
+            const vehicles = vins.length
+                ? await Vehicle.find({ vin: { $in: vins } }, { _id: 1, vin: 1 }).lean()
+                : [];
+            const vehicleMap = new Map(
+                (vehicles as any[]).map((v: any) => [v.vin, v._id])
+            );
+
+            const operations: any[] = [];
+
+            for (const row of data) {
+                const doc: any = {};
+
+                for (const [header, value] of Object.entries(row)) {
+                    const key = headerMap[header.trim()];
+                    if (!key || value === undefined || value === null || value === "") continue;
+                    const val = value.toString().trim();
+                    if (!val) continue;
+
+                    if (dateFields.has(key)) {
+                        const parsed = new Date(val);
+                        if (!isNaN(parsed.getTime())) doc[key] = parsed;
+                    } else if (numericFields.has(key)) {
+                        const num = parseFloat(val.replace(/[^0-9.-]/g, ""));
+                        if (!isNaN(num)) doc[key] = num;
+                    } else {
+                        doc[key] = val;
+                    }
+                }
+
+                // Combine File and Image into rentalAgreementFilesImages array
+                const filesImages: string[] = [];
+                if (doc.file) { filesImages.push(doc.file); delete doc.file; }
+                if (doc.image) { filesImages.push(doc.image); delete doc.image; }
+                if (filesImages.length > 0) doc.rentalAgreementFilesImages = filesImages;
+
+                // Must have at minimum a VIN or agreementNumber
+                if (!doc.vin && !doc.agreementNumber) continue;
+
+                // Link to Vehicle if VIN found
+                if (doc.vin) {
+                    const vehicleId = vehicleMap.get(doc.vin);
+                    if (vehicleId) doc.vehicleId = vehicleId;
+                }
+
+                // Upsert key: agreementNumber + vin
+                const filter: any = {};
+                if (doc.agreementNumber) filter.agreementNumber = doc.agreementNumber;
+                if (doc.vin) filter.vin = doc.vin;
+
+                if (Object.keys(filter).length === 0) continue;
+
+                operations.push({
+                    updateOne: {
+                        filter,
+                        update: { $set: doc },
+                        upsert: true,
+                    },
+                });
+            }
+
+            if (operations.length > 0) {
+                const result = await VehicleRentalAgreement.bulkWrite(operations, { ordered: false });
                 return NextResponse.json({
                     success: true,
                     count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
