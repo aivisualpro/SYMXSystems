@@ -24,57 +24,71 @@ export async function GET(req: NextRequest) {
     const section = searchParams.get("section") || "dashboard";
 
     if (section === "dashboard") {
-      // Parallel fetch all summary data
-      const [
-        vehicles,
-        repairsOpen,
-        recentActivity,
-        inspections,
-        rentalAgreements,
-      ] = await Promise.all([
-        Vehicle.find({}).lean(),
-        VehicleRepair.find({ currentStatus: { $ne: "Completed" } }).sort({ creationDate: -1 }).lean(),
-        VehicleActivityLog.find({}).sort({ createdAt: -1 }).limit(20).lean(),
-        VehicleInspection.find({}).sort({ inspectionDate: -1 }).limit(20).lean(),
-        VehicleRentalAgreement.find({}).sort({ createdAt: -1 }).lean(),
-      ]);
-
-      // Compute KPIs
-      const totalVehicles = vehicles.length;
-      const activeVehicles = vehicles.filter((v: any) => v.status === "Active").length;
-      const maintenanceVehicles = vehicles.filter((v: any) => v.status === "Maintenance").length;
-      const groundedVehicles = vehicles.filter((v: any) => v.status === "Grounded").length;
-      const inactiveVehicles = vehicles.filter((v: any) => v.status === "Inactive").length;
-
-      // Status breakdown for donut chart
-      const statusBreakdown = [
-        { name: "Active", value: activeVehicles, color: "#10b981" },
-        { name: "Maintenance", value: maintenanceVehicles, color: "#f59e0b" },
-        { name: "Grounded", value: groundedVehicles, color: "#ef4444" },
-        { name: "Inactive", value: inactiveVehicles, color: "#6b7280" },
-      ];
-
-      // Ownership breakdown
-      const ownedCount = vehicles.filter((v: any) => v.ownership === "Owned").length;
-      const leasedCount = vehicles.filter((v: any) => v.ownership === "Leased").length;
-      const rentedCount = vehicles.filter((v: any) => v.ownership === "Rented").length;
-
-      // Repair status breakdown
-      const repairStatusBreakdown = [
-        { name: "Not Started", value: repairsOpen.filter((r: any) => r.currentStatus === "Not Started").length },
-        { name: "In Progress", value: repairsOpen.filter((r: any) => r.currentStatus === "In Progress").length },
-        { name: "Waiting for Parts", value: repairsOpen.filter((r: any) => r.currentStatus === "Waiting for Parts").length },
-        { name: "Sent to Shop", value: repairsOpen.filter((r: any) => r.currentStatus === "Sent to Repair Shop").length },
-      ];
-
-      // Upcoming registrations (next 30 days)
       const now = new Date();
       const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-      const upcomingRegistrations = recentActivity.filter((a: any) =>
-        a.registrationExpiration &&
-        new Date(a.registrationExpiration) <= thirtyDaysFromNow &&
-        new Date(a.registrationExpiration) >= now
-      );
+
+      // All counts + small fetches in parallel — no full collection scans
+      const [
+        totalVehicles,
+        activeVehicles,
+        maintenanceVehicles,
+        groundedVehicles,
+        inactiveVehicles,
+        ownedCount,
+        leasedCount,
+        rentedCount,
+        repairsOpen,
+        repairStatusAgg,
+        recentInspections,
+        totalRentals,
+        activeRentals,
+        expiredRentals,
+        expiringSoonCount,
+        rentalAmountAgg,
+        expiringSoonDocs,
+      ] = await Promise.all([
+        Vehicle.countDocuments({}),
+        Vehicle.countDocuments({ status: "Active" }),
+        Vehicle.countDocuments({ status: "Maintenance" }),
+        Vehicle.countDocuments({ status: "Grounded" }),
+        Vehicle.countDocuments({ status: "Inactive" }),
+        Vehicle.countDocuments({ ownership: "Owned" }),
+        Vehicle.countDocuments({ ownership: "Leased" }),
+        Vehicle.countDocuments({ ownership: "Rented" }),
+        VehicleRepair.find({ currentStatus: { $ne: "Completed" } })
+          .sort({ creationDate: -1 }).limit(6)
+          .select("description unitNumber estimatedDate currentStatus vin").lean(),
+        VehicleRepair.aggregate([
+          { $match: { currentStatus: { $ne: "Completed" } } },
+          { $group: { _id: "$currentStatus", count: { $sum: 1 } } },
+        ]),
+        DailyInspection.find({}).sort({ routeDate: -1 }).limit(6)
+          .select("vin unitNumber routeDate driver anyRepairs").lean(),
+        VehicleRentalAgreement.countDocuments({}),
+        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now } }),
+        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $lte: now } }),
+        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow } }),
+        VehicleRentalAgreement.aggregate([
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]),
+        VehicleRentalAgreement.find({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow } })
+          .sort({ registrationEndDate: 1 }).limit(6)
+          .select("agreementNumber vin registrationEndDate amount").lean(),
+      ]);
+
+      // Build repair status breakdown from aggregation
+      const repairStatusMap: Record<string, number> = {};
+      (repairStatusAgg as any[]).forEach((r: any) => { repairStatusMap[r._id] = r.count; });
+      const totalOpenRepairs = Object.values(repairStatusMap).reduce((a, b) => a + b, 0);
+
+      const repairStatusBreakdown = [
+        { name: "Not Started", value: repairStatusMap["Not Started"] || 0 },
+        { name: "In Progress", value: repairStatusMap["In Progress"] || 0 },
+        { name: "Waiting for Parts", value: repairStatusMap["Waiting for Parts"] || 0 },
+        { name: "Sent to Shop", value: repairStatusMap["Sent to Repair Shop"] || 0 },
+      ];
+
+      const totalRentalAmount = (rentalAmountAgg as any[])[0]?.total || 0;
 
       return NextResponse.json({
         kpis: {
@@ -84,7 +98,12 @@ export async function GET(req: NextRequest) {
           groundedVehicles,
           inactiveVehicles,
         },
-        statusBreakdown,
+        statusBreakdown: [
+          { name: "Active", value: activeVehicles, color: "#10b981" },
+          { name: "Maintenance", value: maintenanceVehicles, color: "#f59e0b" },
+          { name: "Grounded", value: groundedVehicles, color: "#ef4444" },
+          { name: "Inactive", value: inactiveVehicles, color: "#6b7280" },
+        ],
         ownershipBreakdown: [
           { name: "Owned", value: ownedCount, color: "#3b82f6" },
           { name: "Leased", value: leasedCount, color: "#8b5cf6" },
@@ -92,11 +111,16 @@ export async function GET(req: NextRequest) {
         ],
         repairStatusBreakdown,
         openRepairs: repairsOpen,
-        recentActivity,
-        recentInspections: inspections,
-        rentalAgreements,
-        upcomingRegistrations,
-        vehicles,
+        totalOpenRepairs,
+        recentInspections,
+        rentalStats: {
+          total: totalRentals,
+          active: activeRentals,
+          expired: expiredRentals,
+          expiringSoon: expiringSoonCount,
+          totalAmount: totalRentalAmount,
+        },
+        expiringSoonRentals: expiringSoonDocs,
       });
     }
 
@@ -135,10 +159,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    if (section === "activity") {
-      const activity = await VehicleActivityLog.find({}).sort({ createdAt: -1 }).lean();
-      return NextResponse.json({ activity });
-    }
+
 
     if (section === "inspections") {
       const q = searchParams.get("q") || "";

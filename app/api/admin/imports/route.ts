@@ -1453,7 +1453,7 @@ export async function POST(req: NextRequest) {
                 (vehicles as any[]).map((v: any) => [v.vin, v._id])
             );
 
-            const operations: any[] = [];
+            const docs: any[] = [];
 
             for (const row of data) {
                 const doc: any = {};
@@ -1490,30 +1490,16 @@ export async function POST(req: NextRequest) {
                     if (vehicleId) doc.vehicleId = vehicleId;
                 }
 
-                // Upsert key: agreementNumber + vin
-                const filter: any = {};
-                if (doc.agreementNumber) filter.agreementNumber = doc.agreementNumber;
-                if (doc.vin) filter.vin = doc.vin;
-
-                if (Object.keys(filter).length === 0) continue;
-
-                operations.push({
-                    updateOne: {
-                        filter,
-                        update: { $set: doc },
-                        upsert: true,
-                    },
-                });
+                docs.push(doc);
             }
 
-            if (operations.length > 0) {
-                const result = await VehicleRentalAgreement.bulkWrite(operations, { ordered: false });
+            if (docs.length > 0) {
+                const result = await VehicleRentalAgreement.insertMany(docs, { ordered: false });
                 return NextResponse.json({
                     success: true,
-                    count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
-                    inserted: result.upsertedCount || 0,
-                    updated: result.modifiedCount || 0,
-                    matched: result.matchedCount || 0,
+                    count: result.length,
+                    inserted: result.length,
+                    updated: 0,
                 });
             }
 

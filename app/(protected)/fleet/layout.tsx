@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import {
   IconChartDonut, IconCar, IconTool, IconClipboardCheck,
-  IconFileInvoice, IconActivity, IconSearch, IconPlus,
+  IconFileInvoice, IconSearch, IconPlus,
 } from "@tabler/icons-react";
 
 // ── Fleet Context ─────────────────────────────────────────────────────
@@ -56,7 +56,6 @@ const tabs = [
   { id: "repairs", label: "Repairs", icon: IconTool, href: "/fleet/repairs" },
   { id: "inspections", label: "Inspections", icon: IconClipboardCheck, href: "/fleet/inspections" },
   { id: "rentals", label: "Rental Agreements", icon: IconFileInvoice, href: "/fleet/rentals" },
-  { id: "activity", label: "Activity Logs", icon: IconActivity, href: "/fleet/activity" },
 ];
 
 // ── Layout ────────────────────────────────────────────────────────────
