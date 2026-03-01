@@ -190,34 +190,34 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
     }
 
     setRightContent(
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         {/* Uncontrolled input — ref-driven so it never loses focus */}
         <div className="relative">
-          <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <IconSearch size={14} className="absolute left-2 sm:left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             ref={searchInputRef}
             defaultValue=""
             onChange={(e) => setSearchRef.current(e.target.value)}
-            placeholder="Search fleet..."
-            className="pl-8 pr-3 py-1.5 rounded-lg bg-muted/50 border border-border text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 w-48"
+            placeholder="Search..."
+            className="pl-7 sm:pl-8 pr-2 sm:pr-3 py-1 sm:py-1.5 rounded-lg bg-muted/50 border border-border text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 w-24 sm:w-48"
           />
         </div>
         {isVehiclesPage && (
           <button
             onClick={() => openCreateModal("vehicle")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm"
+            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm flex-shrink-0"
           >
             <IconPlus size={14} />
-            Add
+            <span className="hidden sm:inline">Add</span>
           </button>
         )}
         {isRepairsPage && (
           <button
             onClick={() => openCreateModal("repair")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm"
+            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm flex-shrink-0"
           >
             <IconPlus size={14} />
-            Add Repair
+            <span className="hidden sm:inline">Add Repair</span>
           </button>
         )}
       </div>
