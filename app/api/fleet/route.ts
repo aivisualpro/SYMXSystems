@@ -125,7 +125,10 @@ export async function GET(req: NextRequest) {
     }
 
     if (section === "vehicles") {
-      const vehicles = await Vehicle.find({}).sort({ createdAt: -1 }).lean();
+      const vehicles = await Vehicle.find({})
+        .select("-notes -info -__v")
+        .sort({ createdAt: -1 })
+        .lean();
       return NextResponse.json({ vehicles });
     }
 
@@ -134,21 +137,33 @@ export async function GET(req: NextRequest) {
     if (section === "repairs") {
       const q = searchParams.get("q") || "";
       const skip = Math.max(0, parseInt(searchParams.get("skip") || "0"));
-      const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "100")), 1000);
+      const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "50")), 500);
 
-      const filter = q
-        ? {
-          $or: [
-            { vin: { $regex: q, $options: "i" } },
-            { description: { $regex: q, $options: "i" } },
-            { currentStatus: { $regex: q, $options: "i" } },
-            { unitNumber: { $regex: q, $options: "i" } },
-          ],
+      let filter: any = {};
+      if (q) {
+        // Use $text index for full-word matches (indexed, very fast)
+        // Fall back to $regex for partial substring matches
+        if (q.length >= 3 && !q.includes(' ')) {
+          // Short single term → use regex for partial matching
+          filter = {
+            $or: [
+              { vin: { $regex: q, $options: "i" } },
+              { description: { $regex: q, $options: "i" } },
+              { currentStatus: { $regex: q, $options: "i" } },
+              { unitNumber: { $regex: q, $options: "i" } },
+            ],
+          };
+        } else {
+          // Multi-word or longer queries → use $text index
+          filter = { $text: { $search: q } };
         }
-        : {};
+      }
+
+      // Select only fields needed for the list view
+      const listFields = "vin unitNumber description currentStatus estimatedDate creationDate lastEditOn repairDuration image";
 
       const [repairs, total] = await Promise.all([
-        VehicleRepair.find(filter).sort({ creationDate: -1 }).skip(skip).limit(limit).lean(),
+        VehicleRepair.find(filter).select(listFields).sort({ creationDate: -1 }).skip(skip).limit(limit).lean(),
         VehicleRepair.countDocuments(filter),
       ]);
 
@@ -164,19 +179,24 @@ export async function GET(req: NextRequest) {
     if (section === "inspections") {
       const q = searchParams.get("q") || "";
       const skip = Math.max(0, parseInt(searchParams.get("skip") || "0"));
-      const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "100")), 1000);
+      const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "50")), 500);
 
-      const filter = q
-        ? {
-          $or: [
-            { vin: { $regex: q, $options: "i" } },
-            { driver: { $regex: q, $options: "i" } },
-            { routeId: { $regex: q, $options: "i" } },
-            { inspectedBy: { $regex: q, $options: "i" } },
-            { comments: { $regex: q, $options: "i" } },
-          ],
+      let filter: any = {};
+      if (q) {
+        if (q.length >= 3 && !q.includes(' ')) {
+          filter = {
+            $or: [
+              { vin: { $regex: q, $options: "i" } },
+              { driver: { $regex: q, $options: "i" } },
+              { routeId: { $regex: q, $options: "i" } },
+              { inspectedBy: { $regex: q, $options: "i" } },
+              { comments: { $regex: q, $options: "i" } },
+            ],
+          };
+        } else {
+          filter = { $text: { $search: q } };
         }
-        : {};
+      }
 
       // Only select fields needed for the list view — skip heavy image URLs
       const listFields = "routeId driver routeDate vin unitNumber mileage comments inspectedBy timeStamp anyRepairs repairCurrentStatus isCompared";

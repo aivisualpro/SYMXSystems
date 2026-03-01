@@ -80,25 +80,32 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/fleet?section=dashboard");
-      if (res.ok) setData(await res.json());
+      // Dashboard loads first — instant overview page
+      const dashRes = await fetch("/api/fleet?section=dashboard");
+      const dashData = dashRes.ok ? await dashRes.json() : {};
+      setData(dashData);
+      setLoading(false);
+
+      // Vehicles fetch runs after dashboard is painted — non-blocking
+      const vehRes = await fetch("/api/fleet?section=vehicles");
+      const vehData = vehRes.ok ? await vehRes.json() : {};
+      setData(prev => prev ? { ...prev, vehicles: vehData.vehicles || [] } : prev);
     } catch (err) {
       console.error("Failed to fetch fleet data:", err);
-    } finally {
       setLoading(false);
     }
   }, []);
 
-  // Prefetch first 100 repairs + 100 inspections once on mount — data ready before user navigates
+  // Prefetch first 50 repairs + 50 inspections once on mount — data ready before user navigates
   useEffect(() => {
     fetchData();
-    // Fire both seed fetches in parallel
+    // Fire both seed fetches in parallel (non-blocking, smaller batches for speed)
     Promise.all([
-      fetch("/api/fleet?section=repairs&skip=0&limit=100")
+      fetch("/api/fleet?section=repairs&skip=0&limit=50")
         .then(r => r.ok ? r.json() : null)
         .then(j => { if (j) setRepairsSeed({ data: j.repairs ?? [], total: j.total ?? 0, hasMore: j.hasMore ?? false, fetchedAt: Date.now() }); })
         .catch(() => { }),
-      fetch("/api/fleet?section=inspections&skip=0&limit=100")
+      fetch("/api/fleet?section=inspections&skip=0&limit=50")
         .then(r => r.ok ? r.json() : null)
         .then(j => { if (j) setInspectionsSeed({ data: j.inspections ?? [], total: j.total ?? 0, hasMore: j.hasMore ?? false, fetchedAt: Date.now() }); })
         .catch(() => { }),

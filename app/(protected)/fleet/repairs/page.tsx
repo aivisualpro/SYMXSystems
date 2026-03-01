@@ -112,7 +112,7 @@ function SkeletonRows({ count = 15 }: { count?: number }) {
   );
 }
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 50;
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function FleetRepairsPage() {

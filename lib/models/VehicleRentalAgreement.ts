@@ -31,6 +31,10 @@ const VehicleRentalAgreementSchema: Schema = new Schema({
   collection: 'vehiclesRentalAgreements'
 });
 
+// Compound indexes for dashboard aggregate queries
+VehicleRentalAgreementSchema.index({ registrationEndDate: 1, amount: 1 });
+VehicleRentalAgreementSchema.index({ createdAt: -1 });
+
 const VehicleRentalAgreement: Model<IVehicleRentalAgreement> = mongoose.models.VehicleRentalAgreement || mongoose.model<IVehicleRentalAgreement>('VehicleRentalAgreement', VehicleRentalAgreementSchema);
 
 export default VehicleRentalAgreement;

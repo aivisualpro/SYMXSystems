@@ -89,6 +89,9 @@ DailyInspectionSchema.index({ vin: 1, routeDate: -1 });
 // Indexes for search/filter on text fields
 DailyInspectionSchema.index({ driver: 1 });
 DailyInspectionSchema.index({ inspectedBy: 1 });
+DailyInspectionSchema.index({ unitNumber: 1, routeDate: -1 });
+// Text index for full-text search (much faster than $regex)
+DailyInspectionSchema.index({ vin: 'text', driver: 'text', routeId: 'text', inspectedBy: 'text', comments: 'text' }, { name: 'inspection_text_search' });
 
 const DailyInspection: Model<IDailyInspection> =
     mongoose.models.DailyInspection ||

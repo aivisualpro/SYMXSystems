@@ -133,7 +133,7 @@ const columns: Column[] = [
 ];
 
 const DATE_KEYS = new Set(["routeDate", "timeStamp", "repairEstimatedDate"]);
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 50;
 
 /* ── Skeleton widths ─────────────────────────────────────────────── */
 const SK_WIDTHS = [60, 75, 55, 72, 80, 35, 30, 85, 30, 65, 70, 50, 80, 55, 45, 30, 40];

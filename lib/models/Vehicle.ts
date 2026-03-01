@@ -64,6 +64,11 @@ const VehicleSchema: Schema = new Schema({
   collection: 'vehicles'
 });
 
+// Compound indexes for dashboard aggregation + sorted pagination
+VehicleSchema.index({ ownership: 1 });
+VehicleSchema.index({ createdAt: -1 });
+VehicleSchema.index({ status: 1, vehicleName: 1 });
+
 const Vehicle: Model<IVehicle> = mongoose.models.Vehicle || mongoose.model<IVehicle>('Vehicle', VehicleSchema);
 
 export default Vehicle;

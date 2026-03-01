@@ -31,13 +31,18 @@ async function connectToDatabase() {
   if (!cached.promise) {
     const opts = {
       dbName: process.env.NODE_ENV === 'development' ? 'SYMXDevelopment' : undefined,
+      maxPoolSize: 10,              // More concurrent queries (default is 5)
+      minPoolSize: 2,               // Keep connections warm
+      socketTimeoutMS: 30000,       // 30s socket timeout
+      serverSelectionTimeoutMS: 5000, // Fail fast if DB is unreachable
+      autoIndex: process.env.NODE_ENV === 'development', // Auto-create indexes in dev
     };
 
     cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
       return mongoose;
     });
   }
-  
+
   try {
     cached.conn = await cached.promise;
   } catch (e) {

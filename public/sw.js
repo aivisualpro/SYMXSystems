@@ -1,5 +1,4 @@
-// SYMX Systems — Service Worker for PWA + Offline Support
-const CACHE_NAME = 'symx-v1';
+const CACHE_NAME = 'symx-v2';
 
 // Assets to pre-cache on install
 const PRECACHE_URLS = [
@@ -63,6 +62,9 @@ self.addEventListener('fetch', (event) => {
   // Skip browser extension requests
   if (!url.protocol.startsWith('http')) return;
 
+  // Skip Webpack HMR requests in development
+  if (url.pathname.includes('/_next/webpack-hmr') || url.pathname.includes('hot-update')) return;
+
   // For navigation requests (pages) — Network first, fallback to cache
   if (request.mode === 'navigate') {
     event.respondWith(
@@ -87,7 +89,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For static assets (JS, CSS, images, fonts) — Cache first, fallback to network
+  // For static assets (JS, CSS, images, fonts) — Stale-While-Revalidate
+  // Cache-first breaks Next.js Dev Server when chunks update without hashes!
   if (
     url.pathname.startsWith('/_next/static/') ||
     url.pathname.startsWith('/icons/') ||
@@ -102,14 +105,18 @@ self.addEventListener('fetch', (event) => {
   ) {
     event.respondWith(
       caches.match(request).then((cached) => {
-        if (cached) return cached;
-        return fetch(request).then((response) => {
+        const fetchPromise = fetch(request).then((response) => {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(request, responseClone);
           });
           return response;
+        }).catch(err => {
+          if (!cached) throw err;
         });
+
+        // Return cached immediately if available, but fetch in background to update cache
+        return cached || fetchPromise;
       })
     );
     return;
