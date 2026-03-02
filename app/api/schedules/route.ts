@@ -115,9 +115,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ── Compute previous week's trailing consecutive working days ──
-    // This allows cross-week detection of 6+ consecutive working days
-    const NON_WORKING = new Set(["off", "close", "request off", ""]);
+    // ── Compute previous week's trailing consecutive "Scheduled" days ──
+    // This allows cross-week detection of 6+ consecutive scheduled days
     const prevWeekTrailing: Record<string, number> = {};
 
     // Compute previous yearWeek string (e.g., "2026-W08" → "2026-W07")
@@ -140,7 +139,7 @@ export async function GET(req: NextRequest) {
       prevSchedules.forEach((s: any) => {
         if (!prevGrouped[s.transporterId]) prevGrouped[s.transporterId] = {};
         const dayIndex = new Date(s.date).getUTCDay();
-        prevGrouped[s.transporterId][dayIndex] = (s.type || "").trim().toLowerCase();
+        prevGrouped[s.transporterId][dayIndex] = (s.status || "").trim().toLowerCase();
       });
 
       // Count trailing consecutive working days from Saturday backwards
@@ -149,8 +148,8 @@ export async function GET(req: NextRequest) {
         if (!days) continue;
         let count = 0;
         for (let d = 6; d >= 0; d--) { // 6=Sat, 5=Fri, ...
-          const type = days[d] || "";
-          if (NON_WORKING.has(type)) break;
+          const status = days[d] || "";
+          if (status !== "scheduled") break;
           count++;
         }
         if (count > 0) prevWeekTrailing[tid] = count;

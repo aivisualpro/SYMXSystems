@@ -229,7 +229,7 @@ function getConsecutiveWarnings(emp: EmployeeSchedule, carryOver: number = 0): M
   let consecutive = carryOver;
   for (let d = 0; d < 7; d++) {
     const day = emp.days[d];
-    if (day && isWorkingDay(day.type)) {
+    if (day && (day.status || "").trim().toLowerCase() === "scheduled") {
       consecutive++;
       if (consecutive === 6) {
         warnings.set(d, { consecutive: 6, type: 'caution' });

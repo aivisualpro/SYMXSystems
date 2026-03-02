@@ -1,16 +1,14 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { buttonVariants } from "@/components/ui/button";
 import { Settings, Shield, Upload } from "lucide-react";
 
 interface SettingsLayoutProps {
   children: React.ReactNode;
 }
 
-const sidebarNavItems = [
+const tabs = [
   {
     title: "General",
     href: "/admin/settings/general",
@@ -30,34 +28,39 @@ const sidebarNavItems = [
 
 export default function SettingsLayout({ children }: SettingsLayoutProps) {
   const pathname = usePathname();
+  const router = useRouter();
 
   return (
-    <div className="flex h-full flex-col space-y-8 md:flex-row md:space-x-4 md:space-y-0">
-      <aside className="lg:w-1/5">
-        <nav
-          className={cn(
-            "flex space-x-2 lg:flex-col lg:space-x-0 lg:space-y-1",
-          )}
-        >
-          {sidebarNavItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
+    <div className="flex flex-col h-full">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 border-b border-border/50 px-1 pb-0">
+        {tabs.map((tab) => {
+          const isActive = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+          return (
+            <button
+              key={tab.href}
+              onClick={() => router.push(tab.href)}
               className={cn(
-                buttonVariants({ variant: "ghost" }),
-                pathname === item.href || pathname.startsWith(`${item.href}/`)
-                  ? "bg-primary/10 text-primary hover:bg-primary/20 font-medium"
-                  : "hover:bg-muted hover:text-foreground",
-                "justify-start"
+                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-all relative",
+                isActive
+                  ? "text-primary bg-primary/5"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
             >
-              <item.icon className="mr-2 h-4 w-4" />
-              {item.title}
-            </Link>
-          ))}
-        </nav>
-      </aside>
-      <div className="flex-1">{children}</div>
+              <tab.icon className="h-4 w-4" />
+              {tab.title}
+              {isActive && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t-full" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 pt-4 overflow-auto">
+        {children}
+      </div>
     </div>
   );
 }
