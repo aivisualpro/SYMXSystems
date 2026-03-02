@@ -1008,22 +1008,47 @@ export async function POST(req: NextRequest) {
                 const transporterId = processedData.transporterId;
                 if (!transporterId) return null;
 
-                // Parse the date field
+                // Parse the date field — timezone-safe, store as UTC midnight
                 let dateVal: Date | null = null;
                 if (processedData.date) {
-                    const parsed = new Date(processedData.date);
-                    if (!isNaN(parsed.getTime())) {
-                        const dateStr = parsed.toISOString().split('T')[0];
-                        dateVal = new Date(`${dateStr}T00:00:00.000Z`);
+                    const raw = processedData.date.toString().trim();
+                    // Try to parse common formats: MM/DD/YYYY, M/D/YYYY, YYYY-MM-DD
+                    let y: number, m: number, d: number;
+                    const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                    const dashMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+                    if (slashMatch) {
+                        m = parseInt(slashMatch[1]);
+                        d = parseInt(slashMatch[2]);
+                        y = parseInt(slashMatch[3]);
+                    } else if (dashMatch) {
+                        y = parseInt(dashMatch[1]);
+                        m = parseInt(dashMatch[2]);
+                        d = parseInt(dashMatch[3]);
+                    } else {
+                        // Fallback: parse with Date but extract UTC components
+                        const parsed = new Date(raw);
+                        if (!isNaN(parsed.getTime())) {
+                            // Extract date parts to avoid timezone shift
+                            const isoStr = parsed.toISOString().split('T')[0];
+                            const [yy, mm, dd] = isoStr.split('-').map(Number);
+                            y = yy; m = mm; d = dd;
+                        } else {
+                            y = 0; m = 0; d = 0;
+                        }
+                    }
+                    if (y! > 0 && m! > 0 && d! > 0) {
+                        dateVal = new Date(Date.UTC(y!, m! - 1, d!));
                         processedData.date = dateVal;
                     }
                 }
                 if (!dateVal) return null;
 
-                // Compute yearWeek from date (Sunday first day)
-                const computedWeek = dateToSundayWeek(dateVal.toISOString());
-                if (computedWeek) {
-                    processedData.yearWeek = computedWeek;
+                // Only compute yearWeek if NOT already present in CSV data
+                if (!processedData.yearWeek) {
+                    const computedWeek = dateToSundayWeek(dateVal.toISOString());
+                    if (computedWeek) {
+                        processedData.yearWeek = computedWeek;
+                    }
                 }
 
                 // Link Employee
