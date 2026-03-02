@@ -394,10 +394,9 @@ export async function POST(req: NextRequest) {
                     const result = await SymxEmployee.bulkWrite(operations, { ordered: false });
                     return NextResponse.json({
                         success: true,
-                        count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                        count: (result.upsertedCount || 0) + (result.matchedCount || 0),
                         inserted: result.upsertedCount || 0,
-                        updated: result.modifiedCount || 0,
-                        matched: result.matchedCount
+                        updated: result.matchedCount || 0,
                     });
                 } catch (bulkErr: any) {
                     // With ordered:false, partial success is possible
