@@ -421,10 +421,10 @@ export default function SchedulingPage() {
     return `${yr}-W${String(wk).padStart(2, "0")}`;
   };
 
-  // Generate default "Off" schedules for the next week
+  // Generate next week schedules
   const generateNextWeek = useCallback(async () => {
     if (generatingWeek || weeks.length === 0) return;
-    const nextWeek = getNextYearWeek(weeks[0]); // weeks[0] is the latest
+    const nextWeek = getNextYearWeek(weeks[0]);
     setGeneratingWeek(true);
     try {
       const res = await fetch("/api/schedules/generate", {
@@ -434,13 +434,15 @@ export default function SchedulingPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate");
-      if (data.alreadyExists) {
-        toast.info(`Week ${nextWeek} already exists`);
+      if (data.created === 0) {
+        toast.info(`Week ${nextWeek} — all ${data.employees} employees already have schedules`);
+      } else if (data.isNewWeek) {
+        toast.success(`Created week ${nextWeek} — ${data.created} records for ${data.employees} employees`);
       } else {
-        toast.success(`Created ${data.created} schedule records for ${data.employees} employees`);
+        toast.success(`Synced week ${nextWeek} — added ${data.created} records for ${data.missingEmployees} new employee(s)`);
       }
-      // Refresh weeks list and navigate to the new week
-      setWeeks(prev => [nextWeek, ...prev]);
+      // Add to weeks list and navigate
+      setWeeks(prev => prev.includes(nextWeek) ? prev : [nextWeek, ...prev]);
       setSelectedWeek(nextWeek);
     } catch (err: any) {
       toast.error(err.message || "Failed to generate next week");
@@ -484,7 +486,7 @@ export default function SchedulingPage() {
     fetchWeeks();
   }, [mounted]);
 
-  // Fetch week data
+  // Fetch week data + auto-sync missing employees
   useEffect(() => {
     if (!selectedWeek) return;
     const fetchData = async () => {
@@ -493,6 +495,21 @@ export default function SchedulingPage() {
         const res = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`);
         const data = await res.json();
         setWeekData(data);
+
+        // Auto-sync: fill in any missing employee records for this week
+        const syncRes = await fetch("/api/schedules/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ yearWeek: selectedWeek }),
+        });
+        const syncData = await syncRes.json();
+        if (syncRes.ok && syncData.created > 0) {
+          // New records were added — refetch to show them
+          toast.success(`Synced ${syncData.missingEmployees} new employee(s) — ${syncData.created} records added`);
+          const refetchRes = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`);
+          const refetchData = await refetchRes.json();
+          setWeekData(refetchData);
+        }
       } catch (err) {
         toast.error("Failed to load schedule data");
       } finally {

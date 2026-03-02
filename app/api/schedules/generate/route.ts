@@ -9,29 +9,18 @@ const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frid
 
 /**
  * Compute the 7 dates (Sun–Sat) for a given yearWeek string like "2026-W09".
- * Our weeks run Sunday–Saturday.
  */
 function getWeekDates(yearWeek: string): Date[] {
     const match = yearWeek.match(/(\d{4})-W(\d{2})/);
     if (!match) throw new Error("Invalid yearWeek format");
-
     const year = parseInt(match[1]);
     const week = parseInt(match[2]);
-
-    // Jan 1 of that year
     const jan1 = new Date(Date.UTC(year, 0, 1));
-    const jan1Day = jan1.getUTCDay(); // 0=Sun
-
-    // Sunday of week 1 = first Sunday on or before Jan 1
-    // If Jan 1 is a Sunday, week 1 starts Jan 1
-    // Otherwise week 1 starts the next Sunday after (week - 1) * 7 days
+    const jan1Day = jan1.getUTCDay();
     const firstSunday = new Date(jan1);
     firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
-
-    // The target week's Sunday
     const weekSunday = new Date(firstSunday);
     weekSunday.setUTCDate(firstSunday.getUTCDate() + (week - 1) * 7);
-
     const dates: Date[] = [];
     for (let i = 0; i < 7; i++) {
         const d = new Date(weekSunday);
@@ -42,7 +31,7 @@ function getWeekDates(yearWeek: string): Date[] {
 }
 
 /**
- * Compute next yearWeek string: "2026-W08" → "2026-W09"
+ * Compute next yearWeek: "2026-W08" → "2026-W09"
  */
 function getNextYearWeek(yearWeek: string): string {
     const match = yearWeek.match(/(\d{4})-W(\d{2})/);
@@ -55,11 +44,12 @@ function getNextYearWeek(yearWeek: string): string {
 
 /**
  * POST /api/schedules/generate
- * Body: { yearWeek: "2026-W09" } (optional — defaults to next week after latest)
+ * Body: { yearWeek: "2026-W09" }
  * 
- * Creates default "Off" schedule records for ALL active employees
- * for every day (Sun–Sat) of the specified week.
- * Skips if the week already has schedule data.
+ * Smart schedule generation:
+ * - Creates default "Off" records for ALL active employees
+ * - For existing weeks: only fills in MISSING employee records
+ * - Idempotent: calling twice is safe, existing data is never touched
  */
 export async function POST(req: NextRequest) {
     try {
@@ -81,7 +71,7 @@ export async function POST(req: NextRequest) {
             yearWeek = getNextYearWeek((latestWeek as any).week);
         }
 
-        // Get all active employees with transporterId
+        // Get ALL active employees
         const employees = await SymxEmployee.find(
             { status: "Active", transporterId: { $exists: true, $ne: "" } },
             { _id: 1, transporterId: 1 }
@@ -91,39 +81,63 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "No active employees found" }, { status: 400 });
         }
 
-        // Compute the 7 dates for the week
+        // Get the 7 dates for this week
         const dates = getWeekDates(yearWeek);
 
-        // Build bulkWrite operations — $setOnInsert only creates if record doesn't exist
-        const operations = (employees as any[]).flatMap((emp) =>
+        // Find which transporterIds already have records for this week
+        const existingRecords = await SymxEmployeeSchedule.find(
+            { yearWeek },
+            { transporterId: 1 }
+        ).lean();
+
+        const existingTransporterIds = new Set(
+            (existingRecords as any[]).map(r => r.transporterId)
+        );
+
+        // Only create operations for MISSING employees
+        const missingEmployees = (employees as any[]).filter(
+            emp => !existingTransporterIds.has(emp.transporterId)
+        );
+
+        const isNewWeek = existingRecords.length === 0;
+
+        if (missingEmployees.length === 0) {
+            // All employees already have records — nothing to do
+            return NextResponse.json({
+                success: true,
+                yearWeek,
+                created: 0,
+                employees: employees.length,
+                existingEmployees: existingTransporterIds.size,
+                missingEmployees: 0,
+                days: 7,
+                isNewWeek: false,
+                message: "All employees already have schedule records for this week",
+            });
+        }
+
+        // Build insert operations only for missing employees
+        const records = missingEmployees.flatMap((emp) =>
             dates.map((date, dayIdx) => ({
-                updateOne: {
-                    filter: { transporterId: emp.transporterId, date },
-                    update: {
-                        $setOnInsert: {
-                            transporterId: emp.transporterId,
-                            employeeId: emp._id,
-                            weekDay: DAY_NAMES[dayIdx],
-                            yearWeek,
-                            date,
-                            status: "Off",
-                            type: "Off",
-                            subType: "",
-                            trainingDay: "",
-                            startTime: "",
-                            dayBeforeConfirmation: "",
-                            dayOfConfirmation: "",
-                            weekConfirmation: "",
-                            van: "",
-                            note: "",
-                        },
-                    },
-                    upsert: true,
-                },
+                transporterId: emp.transporterId,
+                employeeId: emp._id,
+                weekDay: DAY_NAMES[dayIdx],
+                yearWeek,
+                date,
+                status: "Off",
+                type: "Off",
+                subType: "",
+                trainingDay: "",
+                startTime: "",
+                dayBeforeConfirmation: "",
+                dayOfConfirmation: "",
+                weekConfirmation: "",
+                van: "",
+                note: "",
             }))
         );
 
-        const result = await SymxEmployeeSchedule.bulkWrite(operations, { ordered: false });
+        await SymxEmployeeSchedule.insertMany(records, { ordered: false });
 
         // Register the week in available weeks
         await SymxAvailableWeek.updateOne(
@@ -132,15 +146,15 @@ export async function POST(req: NextRequest) {
             { upsert: true }
         );
 
-        const created = result.upsertedCount || 0;
-
         return NextResponse.json({
             success: true,
             yearWeek,
-            created,
+            created: records.length,
             employees: employees.length,
+            existingEmployees: existingTransporterIds.size,
+            missingEmployees: missingEmployees.length,
             days: 7,
-            alreadyExists: created === 0,
+            isNewWeek,
         });
     } catch (error: any) {
         console.error("Generate schedule error:", error);
