@@ -75,9 +75,9 @@ export async function GET(req: NextRequest) {
               name: `${emp.firstName} ${emp.lastName}`.toUpperCase(),
               type: emp.type || '',
               status: emp.status || '',
-              scheduleNotes: emp.ScheduleNotes || '',
             }
             : null,
+          weekNote: '',
           days: {},
         };
       }
@@ -99,6 +99,10 @@ export async function GET(req: NextRequest) {
         van: s.van,
         note: s.note,
       };
+      // Use the first non-empty note as the week note
+      if (s.note && !grouped[s.transporterId].weekNote) {
+        grouped[s.transporterId].weekNote = s.note;
+      }
     });
 
     // Get the date range for the week
@@ -184,8 +188,18 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const { scheduleId, type, employeeId, note, startTime } = body;
 
-    // Update employee-level schedule notes
+    // Update employee week note — updates all schedule entries for the employee+week
     if (employeeId && note !== undefined) {
+      const { yearWeek: noteYearWeek, transporterId: noteTransporterId } = body;
+      if (noteYearWeek && noteTransporterId) {
+        // Update all 7 day entries for this employee+week
+        await SymxEmployeeSchedule.updateMany(
+          { transporterId: noteTransporterId, yearWeek: noteYearWeek },
+          { $set: { note } }
+        );
+        return NextResponse.json({ success: true });
+      }
+      // Fallback: update employee-level note
       const updated = await SymxEmployee.findByIdAndUpdate(
         employeeId,
         { $set: { ScheduleNotes: note } },

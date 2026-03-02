@@ -141,8 +141,8 @@ interface EmployeeSchedule {
     name: string;
     type: string;
     status: string;
-    scheduleNotes: string;
   } | null;
+  weekNote: string;
   days: Record<number, DayData>;
 }
 
@@ -249,10 +249,14 @@ function getConsecutiveWarnings(emp: EmployeeSchedule, carryOver: number = 0): M
 function EditableNote({
   value,
   employeeId,
+  transporterId,
+  yearWeek,
   onSaved,
 }: {
   value: string;
   employeeId: string | undefined;
+  transporterId: string;
+  yearWeek: string;
   onSaved: (newNote: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -285,7 +289,7 @@ function EditableNote({
       const res = await fetch("/api/schedules", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId, note: draft }),
+        body: JSON.stringify({ employeeId, note: draft, yearWeek, transporterId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save");
@@ -412,7 +416,7 @@ export default function SchedulingPage() {
   const [routeTypeConfigs, setRouteTypeConfigs] = useState<Record<string, { color: string; startTime: string }>>({});
   const { setLeftContent, setRightContent } = useHeaderActions();
 
-  // Helper to compute next yearWeek string
+  // Helpers to compute next/prev yearWeek strings
   const getNextYearWeek = (yw: string): string => {
     const m = yw.match(/(\d{4})-W(\d{2})/);
     if (!m) return yw;
@@ -421,35 +425,46 @@ export default function SchedulingPage() {
     return `${yr}-W${String(wk).padStart(2, "0")}`;
   };
 
-  // Generate next week schedules
-  const generateNextWeek = useCallback(async () => {
-    if (generatingWeek || weeks.length === 0) return;
-    const nextWeek = getNextYearWeek(weeks[0]);
+  const getPrevYearWeek = (yw: string): string => {
+    const m = yw.match(/(\d{4})-W(\d{2})/);
+    if (!m) return yw;
+    let yr = parseInt(m[1]), wk = parseInt(m[2]) - 1;
+    if (wk < 1) { yr--; wk = 52; }
+    return `${yr}-W${String(wk).padStart(2, "0")}`;
+  };
+
+  // Generate week schedules (works for both next and prev)
+  const generateWeek = useCallback(async (targetWeek: string, direction: 'next' | 'prev') => {
+    if (generatingWeek) return;
     setGeneratingWeek(true);
     try {
       const res = await fetch("/api/schedules/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ yearWeek: nextWeek }),
+        body: JSON.stringify({ yearWeek: targetWeek }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate");
       if (data.created === 0) {
-        toast.info(`Week ${nextWeek} — all ${data.employees} employees already have schedules`);
+        toast.info(`Week ${targetWeek} — all ${data.employees} employees already have schedules`);
       } else if (data.isNewWeek) {
-        toast.success(`Created week ${nextWeek} — ${data.created} records for ${data.employees} employees`);
+        toast.success(`Created week ${targetWeek} — ${data.created} records for ${data.employees} employees`);
       } else {
-        toast.success(`Synced week ${nextWeek} — added ${data.created} records for ${data.missingEmployees} new employee(s)`);
+        toast.success(`Synced week ${targetWeek} — added ${data.created} records for ${data.missingEmployees} new employee(s)`);
       }
-      // Add to weeks list and navigate
-      setWeeks(prev => prev.includes(nextWeek) ? prev : [nextWeek, ...prev]);
-      setSelectedWeek(nextWeek);
+      // Add to weeks list in the right position and navigate
+      setWeeks(prev => {
+        if (prev.includes(targetWeek)) return prev;
+        const updated = [...prev, targetWeek].sort((a, b) => b.localeCompare(a));
+        return updated;
+      });
+      setSelectedWeek(targetWeek);
     } catch (err: any) {
-      toast.error(err.message || "Failed to generate next week");
+      toast.error(err.message || "Failed to generate week");
     } finally {
       setGeneratingWeek(false);
     }
-  }, [weeks, generatingWeek]);
+  }, [generatingWeek]);
 
   // Mark as mounted on client to avoid hydration mismatch
   useEffect(() => {
@@ -607,12 +622,23 @@ export default function SchedulingPage() {
               size="icon"
               className="h-8 w-8"
               onClick={() => {
-                const newIdx = idx + 1;
-                if (newIdx < weeks.length) setSelectedWeek(weeks[newIdx]);
+                if (idx >= weeks.length - 1) {
+                  // At oldest week — generate previous week
+                  const prevWeek = getPrevYearWeek(weeks[weeks.length - 1]);
+                  generateWeek(prevWeek, 'prev');
+                } else {
+                  setSelectedWeek(weeks[idx + 1]);
+                }
               }}
-              disabled={idx >= weeks.length - 1}
+              disabled={generatingWeek}
             >
-              <ChevronLeft className="h-4 w-4" />
+              {generatingWeek ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : idx >= weeks.length - 1 ? (
+                <Plus className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
             </Button>
             <Select value={selectedWeek} onValueChange={setSelectedWeek}>
               <SelectTrigger className="w-[170px] h-8 text-sm">
@@ -632,8 +658,8 @@ export default function SchedulingPage() {
               className="h-8 w-8"
               onClick={() => {
                 if (idx <= 0) {
-                  // At newest week — generate next week
-                  generateNextWeek();
+                  const nextWeek = getNextYearWeek(weeks[0]);
+                  generateWeek(nextWeek, 'next');
                 } else {
                   setSelectedWeek(weeks[idx - 1]);
                 }
@@ -653,7 +679,7 @@ export default function SchedulingPage() {
       </div>
     );
     return () => setRightContent(null);
-  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateNextWeek]);
+  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek]);
 
   // Handle type change via dropdown
   const handleTypeChange = useCallback(async (
@@ -744,7 +770,7 @@ export default function SchedulingPage() {
           if (emp.transporterId !== transporterId) return emp;
           return {
             ...emp,
-            employee: emp.employee ? { ...emp.employee, scheduleNotes: newNote } : emp.employee,
+            weekNote: newNote,
           };
         }),
       };
@@ -1134,7 +1160,7 @@ export default function SchedulingPage() {
                                 })
                                 .map((emp) => {
                                   const workDays = countWorkingDays(emp);
-                                  const notes = emp.employee?.scheduleNotes || "";
+                                  const notes = emp.weekNote || "";
                                   const consecutiveWarnings = getConsecutiveWarnings(emp, weekData?.prevWeekTrailing?.[emp.transporterId] || 0);
 
                                   return (
@@ -1299,6 +1325,8 @@ export default function SchedulingPage() {
                                         <EditableNote
                                           value={notes}
                                           employeeId={emp.employee?._id}
+                                          transporterId={emp.transporterId}
+                                          yearWeek={selectedWeek}
                                           onSaved={(newNote) => handleNoteSaved(emp.transporterId, newNote)}
                                         />
                                       </td>
