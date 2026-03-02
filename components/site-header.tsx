@@ -6,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
-import { ThemeSelector } from "./theme-selector";
+
 import { ModeSwitcher } from "./mode-switcher";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 
@@ -99,9 +99,7 @@ export function SiteHeader() {
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2 flex-shrink-0">
           {mounted && (headerCtx.rightContent || headerCtx.actions)}
-          <div className="hidden sm:block">
-            <ThemeSelector />
-          </div>
+
           <ModeSwitcher />
         </div>
       </div>

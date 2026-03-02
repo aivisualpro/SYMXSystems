@@ -36,6 +36,7 @@ import {
   X,
   MessageSquare,
   RefreshCw,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -407,7 +408,45 @@ export default function SchedulingPage() {
   const [planningCollapsed, setPlanningCollapsed] = useState(true);
   const [selectAllTrigger, setSelectAllTrigger] = useState(0);
   const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo | null>(null);
+  const [generatingWeek, setGeneratingWeek] = useState(false);
   const { setLeftContent, setRightContent } = useHeaderActions();
+
+  // Helper to compute next yearWeek string
+  const getNextYearWeek = (yw: string): string => {
+    const m = yw.match(/(\d{4})-W(\d{2})/);
+    if (!m) return yw;
+    let yr = parseInt(m[1]), wk = parseInt(m[2]) + 1;
+    if (wk > 52) { yr++; wk = 1; }
+    return `${yr}-W${String(wk).padStart(2, "0")}`;
+  };
+
+  // Generate default "Off" schedules for the next week
+  const generateNextWeek = useCallback(async () => {
+    if (generatingWeek || weeks.length === 0) return;
+    const nextWeek = getNextYearWeek(weeks[0]); // weeks[0] is the latest
+    setGeneratingWeek(true);
+    try {
+      const res = await fetch("/api/schedules/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yearWeek: nextWeek }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate");
+      if (data.alreadyExists) {
+        toast.info(`Week ${nextWeek} already exists`);
+      } else {
+        toast.success(`Created ${data.created} schedule records for ${data.employees} employees`);
+      }
+      // Refresh weeks list and navigate to the new week
+      setWeeks(prev => [nextWeek, ...prev]);
+      setSelectedWeek(nextWeek);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate next week");
+    } finally {
+      setGeneratingWeek(false);
+    }
+  }, [weeks, generatingWeek]);
 
   // Mark as mounted on client to avoid hydration mismatch
   useEffect(() => {
@@ -565,19 +604,29 @@ export default function SchedulingPage() {
               size="icon"
               className="h-8 w-8"
               onClick={() => {
-                const newIdx = idx - 1;
-                if (newIdx >= 0) setSelectedWeek(weeks[newIdx]);
+                if (idx <= 0) {
+                  // At newest week — generate next week
+                  generateNextWeek();
+                } else {
+                  setSelectedWeek(weeks[idx - 1]);
+                }
               }}
-              disabled={idx <= 0}
+              disabled={generatingWeek}
             >
-              <ChevronRight className="h-4 w-4" />
+              {generatingWeek ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : idx <= 0 ? (
+                <Plus className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
             </Button>
           </>
         )}
       </div>
     );
     return () => setRightContent(null);
-  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek]);
+  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateNextWeek]);
 
   // Handle type change via dropdown
   const handleTypeChange = useCallback(async (

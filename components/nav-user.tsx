@@ -1,11 +1,10 @@
 import * as React from "react"
 import { useState, useEffect } from "react"
 import {
-  IconCreditCard,
   IconDotsVertical,
   IconLogout,
-  IconNotification,
   IconUserCircle,
+  IconPalette,
 } from "@tabler/icons-react"
 
 import { useRouter } from "next/navigation"
@@ -17,6 +16,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -27,6 +29,17 @@ import {
 } from "@/components/ui/sidebar"
 
 import { Skeleton } from "@/components/ui/skeleton"
+import { useThemeConfig } from "@/components/active-theme"
+
+const THEMES = [
+  { name: "Default", value: "default", color: "bg-zinc-400" },
+  { name: "Blue", value: "blue", color: "bg-blue-500" },
+  { name: "Green", value: "green", color: "bg-emerald-500" },
+  { name: "Amber", value: "amber", color: "bg-amber-500" },
+  { name: "Scaled", value: "default-scaled", color: "bg-zinc-400" },
+  { name: "Blue Scaled", value: "blue-scaled", color: "bg-blue-500" },
+  { name: "Mono", value: "mono-scaled", color: "bg-neutral-500" },
+];
 
 export function NavUser({
   user: initialUser,
@@ -42,10 +55,11 @@ export function NavUser({
   const { isMobile } = useSidebar()
   const router = useRouter()
   const [isLoaded, setIsLoaded] = useState(false)
+  const { activeTheme, setActiveTheme } = useThemeConfig()
   const [user, setUser] = useState({
     ...initialUser,
-    id: "679e2a44ea73db1789c62981", // Fallback ID
-    role: "Administrator"         // Fallback Role
+    id: "679e2a44ea73db1789c62981",
+    role: "Administrator"
   })
 
   useEffect(() => {
@@ -105,7 +119,6 @@ export function NavUser({
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
               tooltip={user.name}
             >
-
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-black uppercase tracking-tight">{user.name}</span>
               </div>
@@ -120,7 +133,6 @@ export function NavUser({
           >
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-black uppercase text-[12px] tracking-tight">{user.role}</span>
                   <span className="text-muted-foreground truncate text-[10px] font-medium leading-none mt-1">
@@ -135,6 +147,24 @@ export function NavUser({
                 <IconUserCircle />
                 Profile
               </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <IconPalette className="mr-2 h-4 w-4" />
+                  Theme
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="min-w-[140px]">
+                  {THEMES.map((theme) => (
+                    <DropdownMenuItem
+                      key={theme.value}
+                      onClick={() => setActiveTheme(theme.value)}
+                      className="gap-2"
+                    >
+                      <span className={`h-3 w-3 rounded-full ${theme.color} ${activeTheme === theme.value ? "ring-2 ring-offset-1 ring-offset-background ring-primary" : ""}`} />
+                      <span className={activeTheme === theme.value ? "font-semibold" : ""}>{theme.name}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>
