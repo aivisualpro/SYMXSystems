@@ -409,6 +409,7 @@ export default function SchedulingPage() {
   const [selectAllTrigger, setSelectAllTrigger] = useState(0);
   const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo | null>(null);
   const [generatingWeek, setGeneratingWeek] = useState(false);
+  const [routeTypeConfigs, setRouteTypeConfigs] = useState<Record<string, { color: string; startTime: string }>>({});
   const { setLeftContent, setRightContent } = useHeaderActions();
 
   // Helper to compute next yearWeek string
@@ -451,6 +452,15 @@ export default function SchedulingPage() {
   // Mark as mounted on client to avoid hydration mismatch
   useEffect(() => {
     setMounted(true);
+    // Fetch route type configs for auto-filling startTime
+    fetch("/api/admin/settings/route-types")
+      .then(res => res.json())
+      .then((types: any[]) => {
+        const map: Record<string, { color: string; startTime: string }> = {};
+        types.forEach((t: any) => { map[t.name.toLowerCase()] = { color: t.color, startTime: t.startTime || "" }; });
+        setRouteTypeConfigs(map);
+      })
+      .catch(() => { });
   }, []);
 
   // Fetch available weeks
@@ -637,6 +647,8 @@ export default function SchedulingPage() {
   ) => {
     // Optimistic update
     const isWorking = !NON_WORKING_TYPES.has(newType.trim().toLowerCase());
+    const routeConfig = routeTypeConfigs[newType.trim().toLowerCase()];
+    const defaultStartTime = routeConfig?.startTime || "";
     setWeekData(prev => {
       if (!prev) return prev;
       const updated = { ...prev };
@@ -650,6 +662,7 @@ export default function SchedulingPage() {
               ...(emp.days[dayIdx] || {}),
               type: newType,
               ...(isWorking ? { status: "Scheduled" } : {}),
+              ...(defaultStartTime ? { startTime: defaultStartTime } : {}),
             } as DayData,
           },
         };
@@ -660,6 +673,7 @@ export default function SchedulingPage() {
     try {
       // Build payload — include creation fields when no scheduleId
       const payload: Record<string, string> = { type: newType };
+      if (defaultStartTime) payload.startTime = defaultStartTime;
       if (scheduleId) {
         payload.scheduleId = scheduleId;
       } else {

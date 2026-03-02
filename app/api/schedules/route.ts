@@ -182,7 +182,7 @@ export async function PATCH(req: NextRequest) {
     await connectToDatabase();
 
     const body = await req.json();
-    const { scheduleId, type, employeeId, note } = body;
+    const { scheduleId, type, employeeId, note, startTime } = body;
 
     // Update employee-level schedule notes
     if (employeeId && note !== undefined) {
@@ -205,6 +205,7 @@ export async function PATCH(req: NextRequest) {
       const isWorking = !["off", "close", "request off", ""].includes(newType);
       const updateFields: Record<string, any> = { type: type || "" };
       if (isWorking) updateFields.status = "Scheduled";
+      if (startTime !== undefined) updateFields.startTime = startTime;
 
       const updated = await SymxEmployeeSchedule.findByIdAndUpdate(
         scheduleId,
@@ -230,6 +231,7 @@ export async function PATCH(req: NextRequest) {
             yearWeek,
             weekDay: weekDay || "",
             status: "Scheduled",
+            ...(startTime !== undefined ? { startTime } : {}),
           },
           $setOnInsert: {
             transporterId,
