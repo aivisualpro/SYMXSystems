@@ -126,7 +126,7 @@ const SymxEmployeeSchema: Schema = new Schema({
   lastDateWorked: { type: Date },
 
   ScheduleNotes: { type: String },
-}, { timestamps: true, collection: 'SYMXEmployees' });
+}, { timestamps: true, collection: 'SYMXEmployees', autoIndex: false });
 
 const SymxEmployee: Model<ISymxEmployee> = mongoose.models.SymxEmployee || mongoose.model<ISymxEmployee>('SymxEmployee', SymxEmployeeSchema);
 
