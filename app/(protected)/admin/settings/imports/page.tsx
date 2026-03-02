@@ -1,14 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
-  Upload,
   Loader2,
-  CheckCircle2,
-  AlertCircle,
   CalendarDays,
   Receipt,
   Truck,
@@ -244,15 +238,7 @@ export default function ImportsSettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium">Imports</h3>
-        <p className="text-sm text-muted-foreground">
-          Import data from CSV files into the system.
-        </p>
-      </div>
-      <Separator />
-
+    <div className="space-y-4">
       {/* Hidden File Input */}
       <input
         type="file"
@@ -262,89 +248,42 @@ export default function ImportsSettingsPage() {
         onChange={handleFileSelect}
       />
 
-      <div className="grid gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
         {importTypes.map((importType) => {
           const isActive = isImporting === importType.id;
           const result = lastResult[importType.id];
 
           return (
-            <div
+            <button
               key={importType.id}
-              className={`relative overflow-hidden rounded-xl border ${importType.borderColor} bg-card p-6 transition-all hover:shadow-md`}
+              onClick={() => handleImportClick(importType.id)}
+              disabled={isActive}
+              className={`relative overflow-hidden rounded-xl border ${importType.borderColor} bg-card p-4 transition-all hover:shadow-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer text-left disabled:opacity-60 disabled:cursor-wait`}
             >
-              {/* Gradient accent */}
               <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${importType.color}`} />
 
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-4">
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${importType.bgColor}`}>
-                    <importType.icon className={`h-6 w-6 ${importType.iconColor}`} />
-                  </div>
-                  <div className="space-y-1">
-                    <h4 className="text-base font-semibold">{importType.name}</h4>
-                    <p className="text-sm text-muted-foreground max-w-lg">
-                      {importType.description}
-                    </p>
-                    {isActive && importProgress && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                        <span className="text-xs text-blue-500 font-medium">{importProgress}</span>
-                      </div>
-                    )}
-                    {result && !isActive && (
-                      <div className="flex items-center gap-2 mt-2">
-                        {result.success !== false ? (
-                          <>
-                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                            <span className="text-xs text-emerald-500 font-medium">
-                              {result.count} records processed ({result.inserted} new, {result.updated} updated)
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <AlertCircle className="h-4 w-4 text-red-500" />
-                            <span className="text-xs text-red-500 font-medium">Import failed</span>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleImportClick(importType.id)}
-                  disabled={isActive}
-                  className="shrink-0 gap-2"
-                >
+              <div className="flex items-center gap-3">
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${importType.bgColor}`}>
                   {isActive ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Importing...
-                    </>
+                    <Loader2 className={`h-4 w-4 animate-spin ${importType.iconColor}`} />
                   ) : (
-                    <>
-                      <Upload className="h-4 w-4" />
-                      Import CSV
-                    </>
+                    <importType.icon className={`h-4 w-4 ${importType.iconColor}`} />
                   )}
-                </Button>
+                </div>
+                <span className="text-sm font-semibold truncate">{importType.name}</span>
               </div>
 
-              {/* Expected CSV schema preview */}
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                {importType.fields.map((field) => (
-                  <Badge
-                    key={field}
-                    variant="secondary"
-                    className="text-[10px] font-mono bg-muted/50 text-muted-foreground"
-                  >
-                    {field}
-                  </Badge>
-                ))}
-              </div>
-            </div>
+              {isActive && importProgress && (
+                <p className="text-[10px] text-blue-500 font-medium mt-2 truncate">{importProgress}</p>
+              )}
+              {result && !isActive && (
+                <p className={`text-[10px] font-medium mt-2 truncate ${result.success !== false ? "text-emerald-500" : "text-red-500"}`}>
+                  {result.success !== false
+                    ? `✓ ${result.count} (${result.inserted} new, ${result.updated} updated)`
+                    : "✗ Import failed"}
+                </p>
+              )}
+            </button>
           );
         })}
       </div>
