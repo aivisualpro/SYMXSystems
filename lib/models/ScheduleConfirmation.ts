@@ -28,7 +28,15 @@ const ScheduleConfirmationSchema = new Schema<IScheduleConfirmation>(
             required: true,
             unique: true,
             index: true,
-            default: () => crypto.randomBytes(24).toString("hex"),
+            default: () => {
+                const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+                let token = '';
+                const bytes = crypto.randomBytes(8);
+                for (let i = 0; i < 8; i++) {
+                    token += chars[bytes[i] % chars.length];
+                }
+                return token;
+            },
         },
         transporterId: { type: String, required: true, index: true },
         employeeName: { type: String, default: "" },
