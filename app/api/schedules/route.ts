@@ -218,7 +218,7 @@ export async function PATCH(req: NextRequest) {
       const newType = (type || "").trim().toLowerCase();
       const isWorking = !["off", "close", "request off", ""].includes(newType);
       const updateFields: Record<string, any> = { type: type || "" };
-      if (isWorking) updateFields.status = "Scheduled";
+      updateFields.status = isWorking ? "Scheduled" : "Off";
       if (startTime !== undefined) updateFields.startTime = startTime;
 
       const updated = await SymxEmployeeSchedule.findByIdAndUpdate(

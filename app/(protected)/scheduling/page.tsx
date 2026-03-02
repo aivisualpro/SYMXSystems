@@ -704,8 +704,8 @@ export default function SchedulingPage() {
             [dayIdx]: {
               ...(emp.days[dayIdx] || {}),
               type: newType,
-              ...(isWorking ? { status: "Scheduled" } : {}),
-              ...(defaultStartTime ? { startTime: defaultStartTime } : {}),
+              status: isWorking ? "Scheduled" : "Off",
+              startTime: defaultStartTime,
             } as DayData,
           },
         };
@@ -715,8 +715,7 @@ export default function SchedulingPage() {
 
     try {
       // Build payload — include creation fields when no scheduleId
-      const payload: Record<string, string> = { type: newType };
-      if (defaultStartTime) payload.startTime = defaultStartTime;
+      const payload: Record<string, string> = { type: newType, startTime: defaultStartTime };
       if (scheduleId) {
         payload.scheduleId = scheduleId;
       } else {
