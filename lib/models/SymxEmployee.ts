@@ -74,7 +74,7 @@ const SymxEmployeeSchema: Schema = new Schema({
   badgeNumber: { type: String },
   gender: { type: String },
   type: { type: String },
-  email: { type: String, sparse: true, index: true },
+  email: { type: String },
   phoneNumber: { type: String },
   streetAddress: { type: String },
   city: { type: String },

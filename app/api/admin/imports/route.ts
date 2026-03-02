@@ -390,14 +390,29 @@ export async function POST(req: NextRequest) {
             }).filter((op): op is NonNullable<typeof op> => op !== null);
 
             if (operations.length > 0) {
-                const result = await SymxEmployee.bulkWrite(operations);
-                return NextResponse.json({
-                    success: true,
-                    count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
-                    inserted: result.upsertedCount || 0,
-                    updated: result.modifiedCount || 0,
-                    matched: result.matchedCount
-                });
+                try {
+                    const result = await SymxEmployee.bulkWrite(operations, { ordered: false });
+                    return NextResponse.json({
+                        success: true,
+                        count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                        inserted: result.upsertedCount || 0,
+                        updated: result.modifiedCount || 0,
+                        matched: result.matchedCount
+                    });
+                } catch (bulkErr: any) {
+                    // With ordered:false, partial success is possible
+                    console.error("Employee bulkWrite error:", bulkErr.message);
+                    if (bulkErr.result) {
+                        return NextResponse.json({
+                            success: true,
+                            count: (bulkErr.result.nUpserted || 0) + (bulkErr.result.nModified || 0),
+                            inserted: bulkErr.result.nUpserted || 0,
+                            updated: bulkErr.result.nModified || 0,
+                            errors: bulkErr.result.getWriteErrors?.()?.length || 0,
+                        });
+                    }
+                    return NextResponse.json({ error: bulkErr.message || "Import failed" }, { status: 500 });
+                }
             }
 
             return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
