@@ -3,6 +3,7 @@ import connectToDatabase from "@/lib/db";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import MessageLog from "@/lib/models/MessageLog";
+import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
 // GET — Load confirmation data (public, no auth)
 export async function GET(
@@ -59,6 +60,39 @@ export async function GET(
     }
 }
 
+// Helper: update the messaging status array in the schedule document
+async function updateScheduleMessagingStatus(
+    transporterId: string,
+    scheduleDate: string,
+    messageType: string,
+    newStatus: string,
+    replyContent: string
+) {
+    const field = TAB_TO_SCHEDULE_FIELD[messageType];
+    if (!field || !scheduleDate || !transporterId) return;
+
+    try {
+        const schedule = await SymxEmployeeSchedule.findOne({
+            transporterId,
+            date: new Date(scheduleDate),
+        });
+        if (!schedule) return;
+
+        const entries = (schedule as any)[field];
+        if (Array.isArray(entries) && entries.length > 0) {
+            // Update the last entry's status
+            entries[entries.length - 1].status = newStatus;
+            entries[entries.length - 1].repliedAt = new Date();
+            entries[entries.length - 1].replyContent = replyContent;
+            (schedule as any)[field] = entries;
+            schedule.markModified(field);
+            await schedule.save();
+        }
+    } catch (err: any) {
+        console.error("Failed to update schedule messaging status:", err.message);
+    }
+}
+
 // POST — Submit confirmation or change request (public, no auth)
 export async function POST(
     req: NextRequest,
@@ -103,6 +137,15 @@ export async function POST(
                 );
             }
 
+            // Update messaging status array in schedule → shows "received" in messaging panel
+            await updateScheduleMessagingStatus(
+                confirmation.transporterId,
+                confirmation.scheduleDate || "",
+                confirmation.messageType,
+                "received",
+                "✅ Confirmed via link"
+            );
+
             return NextResponse.json({ success: true, status: "confirmed" });
 
         } else if (action === "change_request") {
@@ -135,6 +178,15 @@ export async function POST(
                     }
                 );
             }
+
+            // Update messaging status array in schedule → shows "received" in messaging panel
+            await updateScheduleMessagingStatus(
+                confirmation.transporterId,
+                confirmation.scheduleDate || "",
+                confirmation.messageType,
+                "received",
+                `🔄 Change Requested: ${remarks || "No remarks"}`
+            );
 
             return NextResponse.json({ success: true, status: "change_requested" });
         }

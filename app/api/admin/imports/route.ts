@@ -324,7 +324,6 @@ export async function POST(req: NextRequest) {
 
             const operations = data.map((employee: any) => {
                 const { _id, ...rawData } = employee;
-                if (!rawData.email) return null;
 
                 const processedData: any = {};
 
@@ -371,9 +370,19 @@ export async function POST(req: NextRequest) {
                     }
                 });
 
+                // Determine upsert filter: prefer email, fallback to transporterId
+                let filter: Record<string, string> | null = null;
+                if (processedData.email && processedData.email.trim()) {
+                    filter = { email: processedData.email };
+                } else if (processedData.transporterId && processedData.transporterId.trim()) {
+                    filter = { transporterId: processedData.transporterId };
+                } else {
+                    return null; // Skip records with neither email nor transporterId
+                }
+
                 return {
                     updateOne: {
-                        filter: { email: processedData.email },
+                        filter,
                         update: { $set: processedData },
                         upsert: true,
                     },

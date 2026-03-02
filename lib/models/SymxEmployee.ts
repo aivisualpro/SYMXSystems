@@ -67,14 +67,14 @@ export interface ISymxEmployee extends Document {
 }
 
 const SymxEmployeeSchema: Schema = new Schema({
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
+  firstName: { type: String, default: "" },
+  lastName: { type: String, default: "" },
   eeCode: { type: String },
   transporterId: { type: String, index: true },
   badgeNumber: { type: String },
   gender: { type: String },
   type: { type: String },
-  email: { type: String, required: true, unique: true },
+  email: { type: String, sparse: true, index: true },
   phoneNumber: { type: String },
   streetAddress: { type: String },
   city: { type: String },
