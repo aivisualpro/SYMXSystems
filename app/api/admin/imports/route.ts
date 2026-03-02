@@ -280,6 +280,7 @@ function dateToSundayWeek(dateStr: string): string | null {
 }
 
 const employeeScheduleHeaderMap: Record<string, string> = {
+    // Spaced headers
     "Week Day": "weekDay",
     "Year Week": "yearWeek",
     "Transporter ID": "transporterId",
@@ -295,6 +296,20 @@ const employeeScheduleHeaderMap: Record<string, string> = {
     "Week Confirmation": "weekConfirmation",
     "Van": "van",
     "Note": "note",
+    // camelCase headers (from exported CSV)
+    "weekDay": "weekDay",
+    "yearWeek": "yearWeek",
+    "transporterId": "transporterId",
+    "date": "date",
+    "status": "status",
+    "subType": "subType",
+    "trainingDay": "trainingDay",
+    "startTime": "startTime",
+    "dayBeforeConfirmation": "dayBeforeConfirmation",
+    "dayOfConfirmation": "dayOfConfirmation",
+    "weekConfirmation": "weekConfirmation",
+    "van": "van",
+    "note": "note",
 };
 
 export async function POST(req: NextRequest) {
