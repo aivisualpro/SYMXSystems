@@ -8,7 +8,7 @@ import {
     IconActivity, IconFileInvoice, IconEdit, IconTrash,
     IconCalendar, IconMapPin, IconGauge, IconId, IconCreditCard,
     IconCheck, IconX, IconAlertTriangle, IconClock, IconHash,
-    IconEngine, IconSteeringWheel, IconLicense,
+    IconEngine, IconSteeringWheel, IconLicense, IconCamera,
 } from "@tabler/icons-react";
 import { StatusBadge, GlassCard } from "../../components/fleet-ui";
 
@@ -45,12 +45,10 @@ function MiniKPI({ icon: Icon, label, value, color }: { icon: any; label: string
 /* ─── Info Row ────────────────────────────────────── */
 function InfoRow({ icon: Icon, label, value }: { icon: any; label: string; value: any }) {
     return (
-        <div className="flex items-start gap-3 py-2.5 border-b border-border/50 last:border-0">
-            <Icon size={14} className="text-muted-foreground mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-                <p className="text-sm text-foreground mt-0.5 break-words">{value || "—"}</p>
-            </div>
+        <div className="flex items-center gap-2.5 py-1.5 border-b border-border/50 last:border-0">
+            <Icon size={13} className="text-muted-foreground shrink-0" />
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground w-20 shrink-0">{label}</p>
+            <p className="text-xs text-foreground break-words flex-1 min-w-0">{value || "—"}</p>
         </div>
     );
 }
@@ -93,7 +91,10 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
         (async () => {
             try {
                 const res = await fetch(`/api/fleet/vehicles/${id}`);
-                if (res.ok) setData(await res.json());
+                if (res.ok) {
+                    const json = await res.json();
+                    setData(json);
+                }
             } catch (err) {
                 console.error("Failed to fetch vehicle:", err);
             } finally {
@@ -132,7 +133,7 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
     const tabs = [
         { id: "overview", label: "Overview", icon: IconCar, count: 0 },
         { id: "repairs", label: "Repairs", icon: IconTool, count: data.repairs?.length || 0 },
-        { id: "inspections", label: "Inspections", icon: IconClipboardCheck, count: data.inspections?.length || 0 },
+        { id: "inspections", label: "Inspections", icon: IconClipboardCheck, count: data.dailyInspections?.length || 0 },
         { id: "activity", label: "Activity Logs", icon: IconActivity, count: data.activityLogs?.length || 0 },
         { id: "rentals", label: "Rental Agreements", icon: IconFileInvoice, count: data.rentalAgreements?.length || 0 },
     ];
@@ -188,9 +189,9 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
             </div>
 
             {/* ── Tab Content ───────────────────────────────── */}
-            {activeTab === "overview" && <OverviewTab v={v} />}
+            {activeTab === "overview" && <OverviewTab v={v} masterPhoto={data.masterPhotoInspection} />}
             {activeTab === "repairs" && <RepairsTab repairs={data.repairs} />}
-            {activeTab === "inspections" && <InspectionsTab inspections={data.inspections} />}
+            {activeTab === "inspections" && <InspectionsTab inspections={data.dailyInspections || []} />}
             {activeTab === "activity" && <ActivityTab logs={data.activityLogs} />}
             {activeTab === "rentals" && <RentalsTab rentals={data.rentalAgreements} />}
         </div>
@@ -200,67 +201,146 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
 /* ────────────────────────────────────────────────────
    TAB: Overview
    ──────────────────────────────────────────────────── */
-function OverviewTab({ v }: { v: any }) {
+function OverviewTab({ v, masterPhoto }: { v: any; masterPhoto: any }) {
+    const [lightbox, setLightbox] = useState<string | null>(null);
+
+    // Build the combined photo gallery: main image + master inspection photos
+    const allPhotos: { url: string; label: string; isMaster?: boolean }[] = [];
+    if (v.image) allPhotos.push({ url: v.image, label: "Vehicle Image" });
+    if (masterPhoto) {
+        const masterPhotos = [
+            { url: masterPhoto.vehiclePicture1, label: "Photo 1" },
+            { url: masterPhoto.vehiclePicture2, label: "Photo 2" },
+            { url: masterPhoto.vehiclePicture3, label: "Photo 3" },
+            { url: masterPhoto.vehiclePicture4, label: "Photo 4" },
+            { url: masterPhoto.dashboardImage, label: "Dashboard" },
+            { url: masterPhoto.additionalPicture, label: "Additional" },
+        ].filter(p => p.url);
+        masterPhotos.forEach(p => allPhotos.push({ ...p, isMaster: true }));
+    }
+
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Vehicle Identity */}
-            <GlassCard className="p-5">
-                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2"><IconCar size={16} className="text-blue-500" /> Vehicle Identity</h3>
-                <InfoRow icon={IconId} label="VIN" value={v.vin} />
-                <InfoRow icon={IconCar} label="Vehicle Name" value={v.vehicleName} />
-                <InfoRow icon={IconCalendar} label="Year" value={v.year} />
-                <InfoRow icon={IconEngine} label="Make" value={v.make} />
-                <InfoRow icon={IconSteeringWheel} label="Model" value={v.vehicleModel} />
-                <InfoRow icon={IconLicense} label="License Plate" value={v.licensePlate} />
-                <InfoRow icon={IconHash} label="Unit #" value={v.unitNumber} />
-            </GlassCard>
-
-            {/* Status & Operational */}
-            <GlassCard className="p-5">
-                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2"><IconAlertTriangle size={16} className="text-amber-500" /> Status & Operations</h3>
-                <InfoRow icon={IconCheck} label="Status" value={<StatusBadge status={v.status} />} />
-                <InfoRow icon={IconSteeringWheel} label="Ownership" value={v.ownership} />
-                <InfoRow icon={IconGauge} label="Mileage" value={v.mileage ? `${v.mileage.toLocaleString()} mi` : "—"} />
-                <InfoRow icon={IconTool} label="Service Type" value={v.serviceType} />
-                <InfoRow icon={IconCar} label="Dashcam" value={v.dashcam} />
-                <InfoRow icon={IconCar} label="Vehicle Provider" value={v.vehicleProvider} />
-                <InfoRow icon={IconCar} label="Image" value={v.image ? <a href={v.image} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">View Image</a> : "—"} />
-            </GlassCard>
-
-            {/* Location & Dates */}
-            <GlassCard className="p-5">
-                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2"><IconMapPin size={16} className="text-emerald-500" /> Location & Dates</h3>
-                <InfoRow icon={IconMapPin} label="State" value={v.state} />
-                <InfoRow icon={IconMapPin} label="Location" value={v.location} />
-                <InfoRow icon={IconMapPin} label="Location From" value={v.locationFrom} />
-                <InfoRow icon={IconCalendar} label="Start Date" value={fmtDate(v.startDate)} />
-                <InfoRow icon={IconCalendar} label="End Date" value={fmtDate(v.endDate)} />
-                <InfoRow icon={IconCalendar} label="Reg. Expiration" value={fmtDate(v.registrationExpiration)} />
-                <InfoRow icon={IconClock} label="Created" value={fmtDateTime(v.createdAt)} />
-                <InfoRow icon={IconClock} label="Last Updated" value={fmtDateTime(v.updatedAt)} />
-            </GlassCard>
-
-            {/* Notes & Info */}
-            {(v.notes || v.info) && (
-                <GlassCard className="p-5 lg:col-span-3">
-                    <h3 className="text-sm font-semibold text-foreground mb-3">Notes & Info</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {v.notes && (
-                            <div>
-                                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Notes</p>
-                                <p className="text-sm text-foreground whitespace-pre-wrap bg-muted/30 rounded-lg p-3 border border-border/50">{v.notes}</p>
-                            </div>
-                        )}
-                        {v.info && (
-                            <div>
-                                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Info</p>
-                                <p className="text-sm text-foreground whitespace-pre-wrap bg-muted/30 rounded-lg p-3 border border-border/50">{v.info}</p>
-                            </div>
-                        )}
-                    </div>
-                </GlassCard>
+        <>
+            {/* Lightbox */}
+            {lightbox && (
+                <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+                    <button className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors" onClick={() => setLightbox(null)}>
+                        <IconX size={18} />
+                    </button>
+                    <img src={lightbox} alt="full" className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
+                </div>
             )}
-        </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Column 1: Vehicle Details */}
+                <GlassCard className="p-4">
+                    <h3 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-2"><IconCar size={14} className="text-blue-500" /> Vehicle Details</h3>
+                    <InfoRow icon={IconCalendar} label="Year" value={v.year} />
+                    <InfoRow icon={IconEngine} label="Make" value={v.make} />
+                    <InfoRow icon={IconSteeringWheel} label="Model" value={v.vehicleModel} />
+                    <InfoRow icon={IconSteeringWheel} label="Ownership" value={v.ownership} />
+                    <InfoRow icon={IconGauge} label="Mileage" value={v.mileage ? `${v.mileage.toLocaleString()} mi` : "—"} />
+                    <InfoRow icon={IconTool} label="Service Type" value={v.serviceType} />
+                    <InfoRow icon={IconCar} label="Dashcam" value={v.dashcam} />
+                    <InfoRow icon={IconCar} label="Provider" value={v.vehicleProvider} />
+                </GlassCard>
+
+                {/* Column 2: Location & Dates */}
+                <GlassCard className="p-4">
+                    <h3 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-2"><IconMapPin size={14} className="text-emerald-500" /> Location & Dates</h3>
+                    <InfoRow icon={IconMapPin} label="State" value={v.state} />
+                    <InfoRow icon={IconMapPin} label="Location" value={v.location} />
+                    <InfoRow icon={IconMapPin} label="From" value={v.locationFrom} />
+                    <InfoRow icon={IconCalendar} label="Start" value={fmtDate(v.startDate)} />
+                    <InfoRow icon={IconCalendar} label="End" value={fmtDate(v.endDate)} />
+                    <InfoRow icon={IconCalendar} label="Reg. Exp." value={fmtDate(v.registrationExpiration)} />
+                    <InfoRow icon={IconClock} label="Created" value={fmtDateTime(v.createdAt)} />
+                    <InfoRow icon={IconClock} label="Updated" value={fmtDateTime(v.updatedAt)} />
+                </GlassCard>
+
+                {/* Column 3: Photo Gallery */}
+                {allPhotos.length > 0 && (
+                    <GlassCard className="p-4 flex flex-col gap-3">
+                        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                            <IconCamera size={16} className="text-purple-500" /> Photos
+                            {masterPhoto && (
+                                <span className="text-[10px] text-muted-foreground/60 font-normal flex items-center gap-1">
+                                    <span className="text-amber-500">★</span> Standard · {fmtDate(masterPhoto.routeDate)}
+                                </span>
+                            )}
+                        </h3>
+
+                        {/* Main vehicle image — large */}
+                        {v.image && (
+                            <button
+                                onClick={() => setLightbox(v.image)}
+                                className="relative w-full aspect-[16/10] rounded-xl overflow-hidden group border border-border/30 shadow-sm focus:outline-none transition-all hover:shadow-lg"
+                            >
+                                <img src={v.image} alt="Vehicle" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-sm text-[10px] font-semibold text-white border border-white/10">Vehicle</span>
+                                </div>
+                            </button>
+                        )}
+
+                        {/* Master inspection photos — 2-column grid */}
+                        {masterPhoto && (() => {
+                            const mPhotos = [
+                                { url: masterPhoto.vehiclePicture1, label: "Photo 1" },
+                                { url: masterPhoto.vehiclePicture2, label: "Photo 2" },
+                                { url: masterPhoto.vehiclePicture3, label: "Photo 3" },
+                                { url: masterPhoto.vehiclePicture4, label: "Photo 4" },
+                                { url: masterPhoto.dashboardImage, label: "Dashboard" },
+                                { url: masterPhoto.additionalPicture, label: "Additional" },
+                            ].filter(p => p.url);
+                            if (!mPhotos.length) return null;
+                            return (
+                                <div className="grid grid-cols-3 gap-2">
+                                    {mPhotos.map((p) => (
+                                        <button
+                                            key={p.label}
+                                            onClick={() => setLightbox(p.url)}
+                                            className="relative aspect-square rounded-lg overflow-hidden group border border-border/30 focus:outline-none transition-all hover:shadow-md hover:border-amber-500/30"
+                                        >
+                                            <img src={p.url} alt={p.label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            <div className="absolute bottom-1 left-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <span className="text-[8px] text-white font-medium">{p.label}</span>
+                                            </div>
+                                            <div className="absolute top-1 right-1">
+                                                <span className="text-amber-400 text-[8px]">★</span>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            );
+                        })()}
+                    </GlassCard>
+                )}
+
+                {/* Notes & Info */}
+                {(v.notes || v.info) && (
+                    <GlassCard className="p-4 lg:col-span-2">
+                        <h3 className="text-sm font-semibold text-foreground mb-3">Notes & Info</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {v.notes && (
+                                <div>
+                                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Notes</p>
+                                    <p className="text-sm text-foreground whitespace-pre-wrap bg-muted/30 rounded-lg p-3 border border-border/50">{v.notes}</p>
+                                </div>
+                            )}
+                            {v.info && (
+                                <div>
+                                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Info</p>
+                                    <p className="text-sm text-foreground whitespace-pre-wrap bg-muted/30 rounded-lg p-3 border border-border/50">{v.info}</p>
+                                </div>
+                            )}
+                        </div>
+                    </GlassCard>
+                )}
+            </div>
+        </>
     );
 }
 
@@ -304,34 +384,53 @@ function RepairsTab({ repairs }: { repairs: any[] }) {
    TAB: Inspections
    ──────────────────────────────────────────────────── */
 function InspectionsTab({ inspections }: { inspections: any[] }) {
+    const router = useRouter();
     if (!inspections?.length) return <NoData label="inspection" />;
+
+    const cols = [
+        { key: "isStandardPhoto", label: "★", className: "w-8 text-center", render: (r: any) => r.isStandardPhoto ? <span className="text-amber-500 text-sm leading-none" title="Standard Photo">★</span> : <span className="text-muted-foreground/15 text-sm leading-none">☆</span> },
+        { key: "routeDate", label: "Date", render: (r: any) => fmtDate(r.routeDate) },
+        { key: "driverName", label: "Driver", className: "font-medium text-foreground", render: (r: any) => r.driverName || r.driver || "—" },
+        { key: "mileage", label: "Mileage", render: (r: any) => r.mileage ? r.mileage.toLocaleString() : <span className="text-muted-foreground/30">—</span> },
+        { key: "comments", label: "Comments", className: "max-w-[260px] truncate", render: (r: any) => r.comments || "—" },
+        { key: "inspectedByName", label: "Inspected By", render: (r: any) => r.inspectedByName || r.inspectedBy || "—" },
+    ];
+
     return (
-        <GlassCard className="p-4">
-            <div className="overflow-x-auto">
-                <table className="w-full">
-                    <thead className="sticky top-0 bg-card z-10">
-                        <tr className="border-b border-border">
-                            {["Type", "Result", "Date", "Inspector", "Mileage", "Defects", "Notes"].map((h) => (
-                                <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">{h}</th>
+        <div className="overflow-auto rounded-xl border border-border/60 shadow-sm bg-card">
+            <table className="w-full border-collapse">
+                <thead className="sticky top-0 z-20">
+                    <tr className="bg-card/95 backdrop-blur-sm border-b border-border/80">
+                        {cols.map(col => (
+                            <th key={col.key} className={`px-3 py-3 text-left text-[10px] font-bold uppercase tracking-widest whitespace-nowrap text-muted-foreground/70`}>
+                                {col.label}
+                            </th>
+                        ))}
+                    </tr>
+                    <tr><td colSpan={cols.length} className="p-0">
+                        <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+                    </td></tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                    {inspections.map((r: any, idx: number) => (
+                        <tr
+                            key={r._id}
+                            onClick={() => router.push(`/fleet/inspections/${r._id}`)}
+                            className={`relative group cursor-pointer transition-all duration-150 hover:bg-primary/[0.035] hover:shadow-[inset_3px_0_0_hsl(var(--primary))] ${idx % 2 === 0 ? "bg-transparent" : "bg-muted/[0.015]"}`}
+                        >
+                            {cols.map(col => (
+                                <td key={col.key}
+                                    className={`px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap ${col.className || ""}`}
+                                    title={col.key === "comments" ? (r.comments || "") : undefined}
+                                >
+                                    {col.render(r)}
+                                </td>
                             ))}
                         </tr>
-                    </thead>
-                    <tbody>
-                        {inspections.map((i: any) => (
-                            <tr key={i._id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                                <td className="px-3 py-2.5 text-xs text-foreground font-medium">{i.inspectionType || "—"}</td>
-                                <td className="px-3 py-2.5"><StatusBadge status={i.overallResult} /></td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(i.inspectionDate)}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground">{i.inspectorName || "—"}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground">{i.mileage ? i.mileage.toLocaleString() : "—"}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground max-w-[200px] truncate" title={i.defectsFound}>{i.defectsFound || "None"}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground max-w-[200px] truncate" title={i.notes}>{i.notes || "—"}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </GlassCard>
+                    ))}
+                </tbody>
+            </table>
+        </div>
     );
 }
 

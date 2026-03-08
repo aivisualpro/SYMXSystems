@@ -4,11 +4,10 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation";
 import {
   IconEdit, IconTrash, IconArrowUp, IconArrowDown, IconArrowsSort,
-  IconPhoto, IconClipboardCheck, IconLoader2, IconExternalLink,
+  IconClipboardCheck, IconLoader2, IconExternalLink,
 } from "@tabler/icons-react";
 import { useFleet } from "../layout";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { StatusBadge } from "../components/fleet-ui";
 import FleetFormModal from "../components/fleet-form-modal";
 
 /* ── helpers ─────────────────────────────────────────────────────── */
@@ -21,29 +20,6 @@ const fmtDate = (d: string | Date | undefined) => {
   } catch { return "—"; }
 };
 
-const fmtDateTime = (d: string | Date | undefined) => {
-  if (!d) return "—";
-  try {
-    return new Date(d).toLocaleString("en-US", {
-      month: "short", day: "numeric", year: "numeric",
-      hour: "numeric", minute: "2-digit",
-    });
-  } catch { return "—"; }
-};
-
-/* ── Thumbnail helper ────────────────────────────────────────────── */
-function PhotoThumb({ url, label }: { url?: string; label?: string }) {
-  if (!url) return (
-    <div className="w-9 h-6 rounded bg-muted/40 border border-border/20 flex items-center justify-center">
-      <IconPhoto size={10} className="text-muted-foreground/30" />
-    </div>
-  );
-  return (
-    <a href={url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} title={label}>
-      <img src={url} alt={label ?? "photo"} className="w-9 h-6 object-cover rounded border border-border/40 hover:scale-110 transition-transform shadow-sm" />
-    </a>
-  );
-}
 
 /* ── Column definition ───────────────────────────────────────────── */
 type SortDir = "asc" | "desc" | null;
@@ -57,86 +33,39 @@ interface Column {
 }
 
 const columns: Column[] = [
-  { key: "routeId", label: "Route ID", accessor: r => r.routeId || "", className: "font-mono text-[11px]" },
-  { key: "driver", label: "Driver", accessor: r => r.driver || "" },
-  { key: "routeDate", label: "Route Date", accessor: r => r.routeDate || "", render: r => <>{fmtDate(r.routeDate)}</> },
-  { key: "vin", label: "VIN", accessor: r => r.vin || "", className: "font-mono text-[11px]" },
   {
-    key: "photos", label: "Photos", sortable: false,
-    accessor: r => [r.vehiclePicture1, r.vehiclePicture2, r.vehiclePicture3, r.vehiclePicture4].filter(Boolean).length,
-    render: r => (
-      <div className="flex gap-0.5">
-        <PhotoThumb url={r.vehiclePicture1} label="Photo 1" />
-        <PhotoThumb url={r.vehiclePicture2} label="Photo 2" />
-        <PhotoThumb url={r.vehiclePicture3} label="Photo 3" />
-        <PhotoThumb url={r.vehiclePicture4} label="Photo 4" />
-      </div>
-    ),
+    key: "isStandardPhoto", label: "★", sortable: false,
+    accessor: r => r.isStandardPhoto ? 1 : 0,
+    render: r => r.isStandardPhoto ? (
+      <span className="text-amber-500 text-sm leading-none" title="Standard Photo">★</span>
+    ) : <span className="text-muted-foreground/15 text-sm leading-none">☆</span>,
+    className: "w-8 text-center",
   },
+  {
+    key: "routeDate", label: "Date", accessor: r => r.routeDate || "",
+    render: r => <>{fmtDate(r.routeDate)}</>,
+  },
+  {
+    key: "driverName", label: "Driver", accessor: r => r.driverName || r.driver || "",
+    className: "font-medium text-foreground",
+  },
+  { key: "vin", label: "VIN", accessor: r => r.vin || "", className: "font-mono text-[11px]" },
   {
     key: "mileage", label: "Mileage", accessor: r => r.mileage ?? 0,
     render: r => r.mileage ? <>{r.mileage.toLocaleString()}</> : <span className="text-muted-foreground/30">—</span>,
   },
   {
-    key: "dashboardImage", label: "Dash", sortable: false,
-    accessor: r => r.dashboardImage || "",
-    render: r => <PhotoThumb url={r.dashboardImage} label="Dashboard" />,
-  },
-  {
     key: "comments", label: "Comments", accessor: r => r.comments || "",
-    className: "max-w-[180px] truncate",
+    className: "max-w-[260px] truncate",
   },
-  {
-    key: "additionalPicture", label: "Extra Photo", sortable: false,
-    accessor: r => r.additionalPicture || "",
-    render: r => <PhotoThumb url={r.additionalPicture} label="Extra" />,
-  },
-  { key: "inspectedBy", label: "Inspected By", accessor: r => r.inspectedBy || "" },
-  {
-    key: "timeStamp", label: "Timestamp", accessor: r => r.timeStamp || "",
-    render: r => <>{fmtDateTime(r.timeStamp)}</>,
-  },
-  { key: "anyRepairs", label: "Any Repairs", accessor: r => r.anyRepairs || "" },
-  {
-    key: "repairDescription", label: "Description", accessor: r => r.repairDescription || "",
-    className: "max-w-[180px] truncate",
-  },
-  {
-    key: "repairCurrentStatus", label: "Status", accessor: r => r.repairCurrentStatus || "",
-    render: r => r.repairCurrentStatus
-      ? <StatusBadge status={r.repairCurrentStatus} />
-      : <span className="text-muted-foreground/30">—</span>,
-  },
-  {
-    key: "repairEstimatedDate", label: "Est. Date", accessor: r => r.repairEstimatedDate || "",
-    render: r => <>{fmtDate(r.repairEstimatedDate)}</>,
-  },
-  {
-    key: "repairImage", label: "Repair Photo", sortable: false,
-    accessor: r => r.repairImage || "",
-    render: r => r.repairImage ? (
-      <a href={r.repairImage} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-        className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline">
-        <IconExternalLink size={10} /> View
-      </a>
-    ) : <span className="text-muted-foreground/30">—</span>,
-  },
-  {
-    key: "isCompared", label: "Compared?", accessor: r => r.isCompared,
-    render: r => (
-      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${r.isCompared ? "bg-emerald-500/10 text-emerald-500" : "bg-muted/40 text-muted-foreground/50"
-        }`}>
-        {r.isCompared ? "Yes" : "No"}
-      </span>
-    ),
-  },
+  { key: "inspectedByName", label: "Inspected By", accessor: r => r.inspectedByName || r.inspectedBy || "" },
 ];
 
-const DATE_KEYS = new Set(["routeDate", "timeStamp", "repairEstimatedDate"]);
+const DATE_KEYS = new Set(["routeDate"]);
 const PAGE_SIZE = 50;
 
 /* ── Skeleton widths ─────────────────────────────────────────────── */
-const SK_WIDTHS = [60, 75, 55, 72, 80, 35, 30, 85, 30, 65, 70, 50, 80, 55, 45, 30, 40];
+const SK_WIDTHS = [15, 55, 75, 72, 35, 85, 65];
 
 function SkeletonRows({ count = 15 }: { count?: number }) {
   return (
@@ -160,7 +89,7 @@ function SkeletonRows({ count = 15 }: { count?: number }) {
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function FleetInspectionsPage() {
-  const { search, openEditModal, handleDelete, inspectionsSeed } = useFleet();
+  const { search, openEditModal, handleDelete, openCreateModal, inspectionsSeed, showStandardOnly } = useFleet();
   const { setLeftContent } = useHeaderActions();
   const router = useRouter();
 
@@ -202,6 +131,7 @@ export default function FleetInspectionsPage() {
     try {
       const params = new URLSearchParams({ section: "inspections", skip: String(skip), limit: String(PAGE_SIZE) });
       if (q) params.set("q", q);
+      if (showStandardOnly) params.set("standardOnly", "true");
       const res = await fetch(`/api/fleet?${params}`, { signal: ctrl.signal });
       if (!res.ok) return;
       const json = await res.json();
@@ -213,7 +143,7 @@ export default function FleetInspectionsPage() {
     } catch (err: any) {
       if (err.name !== "AbortError") console.error("Inspections fetch:", err);
     } finally { setIsFetching(false); setIsLoadingMore(false); }
-  }, []);
+  }, [showStandardOnly]);
 
   // Re-fetch on search change — skip initial mount if seed data exists
   const initializedRef = useRef(false);
@@ -227,7 +157,7 @@ export default function FleetInspectionsPage() {
     setInspections([]);
     setTotal(null);
     fetchPage(0, debouncedSearch, false);
-  }, [debouncedSearch, fetchPage]);
+  }, [debouncedSearch, fetchPage, showStandardOnly]);
 
   /* ── Infinite scroll ─────────────────────────────────────── */
   useEffect(() => {
@@ -336,7 +266,7 @@ export default function FleetInspectionsPage() {
                 {columns.map(col => {
                   const val = col.accessor(r);
                   const display = col.render ? col.render(r) : (val || "—");
-                  const isTruncated = ["comments", "repairDescription"].includes(col.key);
+                  const isTruncated = col.key === "comments";
                   return (
                     <td key={col.key}
                       className={`px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap ${col.className || ""}`}

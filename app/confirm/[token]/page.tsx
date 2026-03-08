@@ -14,6 +14,7 @@ interface ConfirmData {
     confirmedAt?: string;
     changeRequestedAt?: string;
     changeRemarks?: string;
+    messageContent?: string;
     schedule?: {
         date: string;
         weekDay: string;
@@ -21,6 +22,13 @@ interface ConfirmData {
         startTime: string;
         van: string;
     };
+    weekSchedules?: {
+        date: string;
+        weekDay: string;
+        type: string;
+        startTime: string;
+        van: string;
+    }[];
 }
 
 function formatDate(d: string) {
@@ -30,9 +38,127 @@ function formatDate(d: string) {
     } catch { return d; }
 }
 
+function formatShortDate(d: string) {
+    try {
+        const date = new Date(d);
+        return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+    } catch { return d; }
+}
+
+function formatDayName(d: string) {
+    try {
+        const date = new Date(d);
+        return date.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+    } catch { return d; }
+}
+
+function formatFullDay(d: string) {
+    try {
+        const date = new Date(d);
+        return date.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+    } catch { return d; }
+}
+
 function formatTime(t: string) {
     if (!t) return "";
     return t;
+}
+
+function getShiftConfig(type: string) {
+    const t = (type || "").toLowerCase();
+    if (t === "off" || !type) return { label: "OFF", color: "text-red-400", bg: "bg-red-500/10 ring-red-500/20", isOff: true };
+    if (t === "route") return { label: "Route", color: "text-emerald-400", bg: "bg-emerald-500/10 ring-emerald-500/20", isOff: false };
+    if (t.includes("modified")) return { label: "Modified Duty", color: "text-blue-400", bg: "bg-blue-500/10 ring-blue-500/20", isOff: false };
+    if (t.includes("stand")) return { label: "Stand By", color: "text-amber-400", bg: "bg-amber-500/10 ring-amber-500/20", isOff: false };
+    if (t.includes("suspend")) return { label: "Suspension", color: "text-red-400", bg: "bg-red-500/10 ring-red-500/20", isOff: true };
+    if (t.includes("pending")) return { label: type, color: "text-amber-400", bg: "bg-amber-500/10 ring-amber-500/20", isOff: false };
+    return { label: type, color: "text-zinc-300", bg: "bg-zinc-500/10 ring-zinc-500/20", isOff: false };
+}
+
+function WeeklyScheduleCard({ weekSchedules, yearWeek }: { weekSchedules: ConfirmData["weekSchedules"]; yearWeek: string }) {
+    if (!weekSchedules || weekSchedules.length === 0) return null;
+
+    // Parse yearWeek for display
+    const weekMatch = yearWeek?.match(/(\d{4})-W?(\d{1,2})/);
+    const weekLabel = weekMatch ? `Week ${parseInt(weekMatch[2])}, ${weekMatch[1]}` : yearWeek;
+
+    const workDays = weekSchedules.filter(s => getShiftConfig(s.type).isOff === false);
+
+    return (
+        <div className="bg-zinc-800/60 rounded-2xl border border-zinc-700/50 overflow-hidden mb-5">
+            {/* Header */}
+            <div className="relative px-4 py-3 bg-gradient-to-r from-blue-600/20 via-violet-600/15 to-blue-600/10 border-b border-zinc-700/40">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center ring-1 ring-blue-500/30">
+                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-white">Weekly Schedule</h3>
+                            <p className="text-[10px] text-zinc-400">{weekLabel}</p>
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <span className="text-[9px] text-zinc-500 uppercase tracking-wider font-semibold">Working</span>
+                        <p className="text-sm font-bold text-emerald-400">{workDays.length} day{workDays.length !== 1 ? "s" : ""}</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Column Headers */}
+            <div className="flex items-center px-4 py-1.5 bg-zinc-800/40 border-b border-zinc-700/30 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                <span className="w-[68px] shrink-0">Date</span>
+                <span className="w-[52px] shrink-0">Day</span>
+                <span className="flex-1">Shift</span>
+                <span className="w-[60px] text-right shrink-0">Time</span>
+            </div>
+
+            {/* Schedule Rows */}
+            <div className="divide-y divide-zinc-700/20">
+                {weekSchedules.map((day, i) => {
+                    const config = getShiftConfig(day.type);
+                    const isToday = (() => {
+                        try {
+                            const d = new Date(day.date);
+                            const now = new Date();
+                            return d.toDateString() === now.toDateString();
+                        } catch { return false; }
+                    })();
+
+                    return (
+                        <div
+                            key={i}
+                            className={`flex items-center px-4 py-2 transition-all ${isToday ? "bg-blue-500/8" : ""} ${config.isOff ? "opacity-50" : ""}`}
+                        >
+                            {/* Date */}
+                            <span className={`w-[68px] shrink-0 text-[11px] font-medium ${isToday ? "text-blue-300" : "text-zinc-300"}`}>
+                                {formatShortDate(day.date)}
+                            </span>
+
+                            {/* Day */}
+                            <span className={`w-[52px] shrink-0 text-[11px] ${isToday ? "text-blue-400 font-semibold" : "text-zinc-400"}`}>
+                                {formatDayName(day.date)}
+                            </span>
+
+                            {/* Shift Type */}
+                            <div className="flex-1">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded ring-1 text-[9px] font-bold uppercase tracking-wider ${config.bg} ${config.color}`}>
+                                    {config.label}
+                                </span>
+                            </div>
+
+                            {/* Time */}
+                            <span className={`w-[60px] text-right shrink-0 text-[11px] font-medium ${!config.isOff && day.startTime ? "text-zinc-200" : "text-zinc-600"}`}>
+                                {!config.isOff && day.startTime ? day.startTime : "—"}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
 }
 
 export default function ConfirmPage({ params }: { params: Promise<{ token: string }> }) {
@@ -43,6 +169,19 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
     const [showRemarks, setShowRemarks] = useState(false);
     const [remarks, setRemarks] = useState("");
     const [successAction, setSuccessAction] = useState<"confirmed" | "change_requested" | null>(null);
+
+    // Override root layout's overflow-hidden so this public page can scroll
+    useEffect(() => {
+        const body = document.body;
+        const origOverflow = body.style.overflow;
+        const origHeight = body.style.height;
+        body.style.overflow = "auto";
+        body.style.height = "auto";
+        return () => {
+            body.style.overflow = origOverflow;
+            body.style.height = origHeight;
+        };
+    }, []);
 
     useEffect(() => {
         fetch(`/api/public/confirm/${token}`)
@@ -93,8 +232,48 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
         }
     };
 
+    // Helper: render the schedule card (weekly or single day)
+    const renderScheduleCard = () => {
+        if (data?.weekSchedules && data.weekSchedules.length > 0) {
+            return <WeeklyScheduleCard weekSchedules={data.weekSchedules} yearWeek={data.yearWeek} />;
+        }
+        if (data?.schedule) {
+            return (
+                <div className="bg-zinc-800/60 rounded-2xl p-5 border border-zinc-700/50 mb-6">
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <span className="text-zinc-200 text-sm font-semibold">Schedule Details</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                        <div>
+                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Day</span>
+                            <p className="text-zinc-200 font-medium mt-1">{data.schedule.weekDay || "—"}</p>
+                        </div>
+                        <div>
+                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Date</span>
+                            <p className="text-zinc-200 font-medium mt-1">{data.scheduleDate ? formatDate(data.scheduleDate) : "—"}</p>
+                        </div>
+                        <div>
+                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Shift Type</span>
+                            <p className="text-zinc-200 font-medium mt-1">{data.schedule.type || "—"}</p>
+                        </div>
+                        <div>
+                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Start Time</span>
+                            <p className="text-zinc-200 font-medium mt-1">{formatTime(data.schedule.startTime) || "—"}</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 flex items-center justify-center p-4">
+        <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 flex items-start justify-center p-4 overflow-y-auto">
             {/* Background decoration */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-[40%] -right-[20%] w-[600px] h-[600px] rounded-full bg-blue-500/5 blur-3xl" />
@@ -109,16 +288,13 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                     <div className="relative px-6 pt-8 pb-6 text-center">
                         <div className="absolute inset-0 bg-gradient-to-b from-blue-500/10 to-transparent" />
                         <div className="relative">
-                            {/* Logo/Brand */}
+                            {/* Logo */}
                             <div className="flex items-center justify-center mb-4">
-                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-                                    <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
+                                <div className="bg-white rounded-2xl px-5 py-2.5 shadow-lg shadow-blue-500/10">
+                                    <img src="/symx-logo.png" alt="SYMX Logistics" className="h-8 object-contain" />
                                 </div>
                             </div>
                             <h1 className="text-xl font-bold text-white tracking-tight">Schedule Confirmation</h1>
-                            <p className="text-zinc-400 text-sm mt-1">SYMX Systems</p>
                         </div>
                     </div>
 
@@ -171,26 +347,16 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                                     {data?.employeeName && <span className="text-emerald-400 font-medium">{data.employeeName}</span>}
                                     {successAction === "confirmed" ? ", your schedule has been confirmed. Thank you!" : ", this schedule was already confirmed."}
                                 </p>
-                                {data?.schedule && (
-                                    <div className="bg-zinc-800/60 rounded-2xl p-4 border border-zinc-700/50 text-left">
-                                        <div className="grid grid-cols-2 gap-3 text-xs">
-                                            <div>
-                                                <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold">Date</span>
-                                                <p className="text-zinc-200 font-medium mt-0.5">{data.schedule.weekDay} {data.scheduleDate ? formatDate(data.scheduleDate) : ""}</p>
-                                            </div>
-                                            <div>
-                                                <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold">Start Time</span>
-                                                <p className="text-zinc-200 font-medium mt-0.5">{formatTime(data.schedule.startTime) || "—"}</p>
-                                            </div>
-                                            <div>
-                                                <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold">Type</span>
-                                                <p className="text-zinc-200 font-medium mt-0.5">{data.schedule.type || "—"}</p>
-                                            </div>
-                                            <div>
-                                                <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold">Status</span>
-                                                <p className="text-emerald-400 font-semibold mt-0.5">✅ Confirmed</p>
-                                            </div>
+                                {renderScheduleCard()}
+                                {data?.messageContent && (
+                                    <div className="bg-zinc-800/60 rounded-2xl p-4 border border-zinc-700/50 text-left mt-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                            </svg>
+                                            <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider">Original Message</span>
                                         </div>
+                                        <pre className="text-zinc-400 text-[11px] whitespace-pre-wrap font-sans leading-relaxed">{data.messageContent}</pre>
                                     </div>
                                 )}
                             </div>
@@ -218,6 +384,18 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                                         <p className="text-zinc-300 text-sm mt-1 italic">&ldquo;{data?.changeRemarks || remarks}&rdquo;</p>
                                     </div>
                                 )}
+                                {renderScheduleCard()}
+                                {data?.messageContent && (
+                                    <div className="bg-zinc-800/60 rounded-2xl p-4 border border-zinc-700/50 text-left mt-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                            </svg>
+                                            <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider">Original Message</span>
+                                        </div>
+                                        <pre className="text-zinc-400 text-[11px] whitespace-pre-wrap font-sans leading-relaxed">{data.messageContent}</pre>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -241,37 +419,23 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                                 <p className="text-zinc-400 text-sm mt-1">Please confirm or request a change for your upcoming schedule.</p>
                             </div>
 
-                            {/* Schedule Info Card */}
-                            {data.schedule && (
-                                <div className="bg-zinc-800/60 rounded-2xl p-5 border border-zinc-700/50 mb-6">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            {/* Original Message */}
+                            {data.messageContent && (
+                                <div className="bg-zinc-800/60 rounded-2xl p-4 border border-zinc-700/50 mb-5">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <div className="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                                            <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                                             </svg>
                                         </div>
-                                        <span className="text-zinc-200 text-sm font-semibold">Schedule Details</span>
+                                        <span className="text-zinc-400 text-xs font-semibold">Message</span>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4 text-xs">
-                                        <div>
-                                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Day</span>
-                                            <p className="text-zinc-200 font-medium mt-1">{data.schedule.weekDay || "—"}</p>
-                                        </div>
-                                        <div>
-                                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Date</span>
-                                            <p className="text-zinc-200 font-medium mt-1">{data.scheduleDate ? formatDate(data.scheduleDate) : "—"}</p>
-                                        </div>
-                                        <div>
-                                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Shift Type</span>
-                                            <p className="text-zinc-200 font-medium mt-1">{data.schedule.type || "—"}</p>
-                                        </div>
-                                        <div>
-                                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Start Time</span>
-                                            <p className="text-zinc-200 font-medium mt-1">{formatTime(data.schedule.startTime) || "—"}</p>
-                                        </div>
-                                    </div>
+                                    <pre className="text-zinc-300 text-xs whitespace-pre-wrap font-sans leading-relaxed">{data.messageContent}</pre>
                                 </div>
                             )}
+
+                            {/* Schedule Card — Weekly or Single Day */}
+                            {renderScheduleCard()}
 
                             {/* Change Remarks Input */}
                             {showRemarks && (

@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       const superAdminData = {
         id: "super-admin",
         email: superAdminEmail.toLowerCase(),
-        name: "Super Admin",
+        name: superAdminEmail.split("@")[0].split(/[._-]/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" "),
         role: "Super Admin",
         avatar: "/logo.png",
       };
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     await connectToDatabase();
     const dbEnd = Date.now();
     console.log(`[Auth API] DB Connection took: ${dbEnd - start}ms`);
-    
+
     const user = await SymxUser.findOne({ email: email.toLowerCase() });
     const userEnd = Date.now();
     console.log(`[Auth API] User Lookup took: ${userEnd - dbEnd}ms`);
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, user: userData });
   } catch (error: any) {
     console.error("[Auth API] Login Error:", error);
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: error.message || "Authentication failed",
       details: process.env.NODE_ENV === "development" ? error.stack : undefined
     }, { status: 500 });

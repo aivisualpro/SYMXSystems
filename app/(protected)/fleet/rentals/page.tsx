@@ -31,8 +31,20 @@ function FilesModal({
   rentalId: string;
   onClose: () => void;
 }) {
-  const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(url);
-  const isPdf = (url: string) => /\.pdf(\?|$)/i.test(url);
+  // Check both path and query params for file extension (AppSheet URLs hide extension in params)
+  const getFileType = (url: string): "image" | "pdf" | "unknown" => {
+    const lower = decodeURIComponent(url).toLowerCase();
+    if (/\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$|&)/i.test(lower)) return "image";
+    if (/\.(pdf)(\?|$|&)/i.test(lower)) return "pdf";
+    // Check fileName parameter in query string (common in AppSheet URLs)
+    const fileNameMatch = lower.match(/filename[=:][^&]*\.(jpg|jpeg|png|gif|webp|svg|bmp|pdf)/i);
+    if (fileNameMatch) {
+      const ext = fileNameMatch[1].toLowerCase();
+      if (ext === "pdf") return "pdf";
+      return "image";
+    }
+    return "unknown";
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
@@ -63,54 +75,51 @@ function FilesModal({
         {/* Files list */}
         {files.length > 0 ? (
           <div className="space-y-4">
-            {files.map((url, idx) => (
-              <div
-                key={idx}
-                className="rounded-xl border border-border/60 overflow-hidden bg-muted/20 hover:border-primary/30 transition-all"
-              >
-                {/* Preview area */}
-                {isImage(url) ? (
-                  <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
-                    <img
-                      src={url}
-                      alt={`File ${idx + 1}`}
-                      className="w-full max-h-[400px] object-contain bg-black/5 dark:bg-white/5 group-hover:scale-[1.01] transition-transform duration-300"
-                    />
-                  </a>
-                ) : isPdf(url) ? (
-                  <div className="w-full h-[500px] bg-white dark:bg-zinc-900 rounded-t-xl overflow-hidden">
-                    <iframe
-                      src={url}
-                      title={`PDF Preview ${idx + 1}`}
-                      className="w-full h-full border-0"
-                    />
-                  </div>
-                ) : (
-                  <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
-                    <div className="w-full h-40 flex flex-col items-center justify-center gap-3 bg-muted/30">
-                      <IconFileText size={36} className="text-muted-foreground/40 group-hover:text-primary/60 transition-colors" />
-                      <span className="text-xs text-muted-foreground/60">Document file</span>
+            {files.map((url, idx) => {
+              const fileType = getFileType(url);
+              return (
+                <div
+                  key={idx}
+                  className="rounded-xl border border-border/60 overflow-hidden bg-muted/20 hover:border-primary/30 transition-all"
+                >
+                  {/* Preview area */}
+                  {fileType === "image" ? (
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
+                      <img
+                        src={url}
+                        alt={`File ${idx + 1}`}
+                        className="w-full max-h-[400px] object-contain bg-black/5 dark:bg-white/5 group-hover:scale-[1.01] transition-transform duration-300"
+                      />
+                    </a>
+                  ) : (
+                    /* PDF, AppSheet docs, and unknown files — render in iframe */
+                    <div className="w-full h-[500px] bg-white dark:bg-zinc-900 rounded-t-xl overflow-hidden">
+                      <iframe
+                        src={url}
+                        title={`File Preview ${idx + 1}`}
+                        className="w-full h-full border-0"
+                      />
                     </div>
-                  </a>
-                )}
+                  )}
 
-                {/* File footer */}
-                <div className="px-4 py-2.5 flex items-center justify-between bg-card border-t border-border/40">
-                  <span className="text-[11px] text-muted-foreground font-mono truncate max-w-[70%]">
-                    {url.split("/").pop()?.split("?")[0] || `File ${idx + 1}`}
-                  </span>
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors"
-                  >
-                    <IconExternalLink size={12} />
-                    Open
-                  </a>
+                  {/* File footer */}
+                  <div className="px-4 py-2.5 flex items-center justify-between bg-card border-t border-border/40">
+                    <span className="text-[11px] text-muted-foreground font-mono truncate max-w-[70%]">
+                      {url.split("/").pop()?.split("?")[0] || `File ${idx + 1}`}
+                    </span>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors"
+                    >
+                      <IconExternalLink size={12} />
+                      Open
+                    </a>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-16 gap-3">

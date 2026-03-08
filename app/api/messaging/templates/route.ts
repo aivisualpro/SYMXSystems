@@ -2,18 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import MessagingTemplate from "@/lib/models/MessagingTemplate";
 
-// GET — fetch all templates or a specific one by ?type=
+// GET — fetch all templates, a specific one by ?type=, or batch by ?types=a,b,c
 export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type");
+    const types = searchParams.get("types"); // comma-separated batch
 
+    // Single type
     if (type) {
       const template = await MessagingTemplate.findOne({ type }).lean();
       return NextResponse.json({ template });
     }
 
+    // Batch types (e.g. ?types=shift,future-shift,off-tomorrow)
+    if (types) {
+      const typeList = types.split(",").map(t => t.trim()).filter(Boolean);
+      const templates = await MessagingTemplate.find({ type: { $in: typeList } }).lean();
+      const templateMap: Record<string, any> = {};
+      templates.forEach((t: any) => { templateMap[t.type] = t; });
+      return NextResponse.json({ templates: templateMap });
+    }
+
+    // All templates
     const templates = await MessagingTemplate.find({}).lean();
     return NextResponse.json({ templates });
   } catch (err: any) {

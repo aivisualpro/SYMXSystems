@@ -6,6 +6,9 @@ import VehicleRepair from "@/lib/models/VehicleRepair";
 import VehicleActivityLog from "@/lib/models/VehicleActivityLog";
 import VehicleInspection from "@/lib/models/VehicleInspection";
 import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
+import DailyInspection from "@/lib/models/DailyInspection";
+import SymxEmployee from "@/lib/models/SymxEmployee";
+import SymxUser from "@/lib/models/SymxUser";
 import mongoose from "mongoose";
 
 // GET: Single vehicle + related data
@@ -45,7 +48,7 @@ export async function GET(
             ],
         };
 
-        const [repairs, activityLogs, inspections, rentalAgreements] =
+        const [repairs, activityLogs, inspections, rentalAgreements, masterPhotoInspection, dailyInspections] =
             await Promise.all([
                 VehicleRepair.find(matchByVinOrId).sort({ creationDate: -1 }).lean(),
                 VehicleActivityLog.find(matchByVinOrId).sort({ createdAt: -1 }).lean(),
@@ -55,6 +58,18 @@ export async function GET(
                 VehicleRentalAgreement.find(matchByVinOrId)
                     .sort({ createdAt: -1 })
                     .lean(),
+                vin
+                    ? DailyInspection.findOne(
+                        { vin, isStandardPhoto: true },
+                        { vehiclePicture1: 1, vehiclePicture2: 1, vehiclePicture3: 1, vehiclePicture4: 1, dashboardImage: 1, additionalPicture: 1, routeDate: 1, driver: 1, mileage: 1, comments: 1 }
+                    ).sort({ routeDate: -1 }).lean()
+                    : null,
+                vin
+                    ? DailyInspection.find(
+                        { vin },
+                        { routeDate: 1, driver: 1, mileage: 1, comments: 1, anyRepairs: 1, isStandardPhoto: 1, isCompared: 1, inspectedBy: 1 }
+                    ).sort({ routeDate: -1 }).lean()
+                    : [],
             ]);
 
         // Summary stats
@@ -76,17 +91,48 @@ export async function GET(
             0
         );
 
+        // Enrich daily inspections with driver & inspector names
+        const diArr = (dailyInspections || []) as any[];
+        let enrichedDailyInspections = diArr;
+        if (diArr.length > 0) {
+            const driverIds = [...new Set(diArr.map((i: any) => i.driver).filter(Boolean))];
+            const inspectorEmails = [...new Set(diArr.map((i: any) => i.inspectedBy).filter(Boolean))];
+            const [employees, inspectors] = await Promise.all([
+                driverIds.length > 0
+                    ? SymxEmployee.find({ transporterId: { $in: driverIds } }, { transporterId: 1, firstName: 1, lastName: 1 }).lean()
+                    : [],
+                inspectorEmails.length > 0
+                    ? SymxUser.find({ email: { $in: inspectorEmails } }, { email: 1, name: 1 }).lean()
+                    : [],
+            ]);
+            const driverMap: Record<string, string> = {};
+            for (const emp of employees as any[]) {
+                if (emp.transporterId) driverMap[emp.transporterId] = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
+            }
+            const inspectorMap: Record<string, string> = {};
+            for (const user of inspectors as any[]) {
+                if (user.email) inspectorMap[user.email.toLowerCase()] = user.name || user.email;
+            }
+            enrichedDailyInspections = diArr.map((insp: any) => ({
+                ...insp,
+                driverName: insp.driver ? (driverMap[insp.driver] || insp.driver) : "",
+                inspectedByName: insp.inspectedBy ? (inspectorMap[insp.inspectedBy.toLowerCase()] || insp.inspectedBy) : "",
+            }));
+        }
+
         return NextResponse.json({
             vehicle,
             repairs,
             activityLogs,
             inspections,
             rentalAgreements,
+            dailyInspections: enrichedDailyInspections,
+            masterPhotoInspection: masterPhotoInspection || null,
             stats: {
                 openRepairs,
                 completedRepairs,
                 totalRepairCost,
-                totalInspections: inspections.length,
+                totalInspections: (dailyInspections as any[])?.length || inspections.length,
                 passedInspections,
                 failedInspections,
                 totalActivityLogs: activityLogs.length,

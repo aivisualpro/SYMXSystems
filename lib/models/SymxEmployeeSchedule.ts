@@ -49,7 +49,7 @@ const SymxEmployeeScheduleSchema: Schema = new Schema({
   transporterId: { type: String, required: true, index: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'SymxEmployee' },
   weekDay: { type: String, required: true },
-  yearWeek: { type: String, required: true, index: true },
+  yearWeek: { type: String, required: true },
   date: { type: Date, required: true },
   status: { type: String, default: '' },
   type: { type: String, default: '' },

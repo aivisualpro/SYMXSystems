@@ -26,7 +26,66 @@ export async function GET(
 
         // Fetch schedule info for display
         let scheduleInfo: any = null;
-        if (confirmation.scheduleDate && confirmation.transporterId) {
+        let weekSchedules: any[] = [];
+
+        const isWeekSchedule = confirmation.messageType === "week-schedule";
+
+        if (isWeekSchedule && confirmation.transporterId) {
+            let schedules: any[] = [];
+
+            // Strategy 1: Find by yearWeek
+            if (confirmation.yearWeek) {
+                schedules = await SymxEmployeeSchedule.find({
+                    transporterId: confirmation.transporterId,
+                    yearWeek: confirmation.yearWeek,
+                }).sort({ date: 1 }).lean();
+                console.log(`[Confirm] Strategy 1 (yearWeek=${confirmation.yearWeek}): found ${schedules.length} schedules`);
+            }
+
+            // Strategy 2: If yearWeek didn't match, find by scheduleDate's week range
+            if (schedules.length === 0 && confirmation.scheduleDate) {
+                const baseDate = new Date(confirmation.scheduleDate);
+                // Get the Sunday of that week
+                const dayOfWeek = baseDate.getUTCDay();
+                const sunday = new Date(baseDate);
+                sunday.setUTCDate(baseDate.getUTCDate() - dayOfWeek);
+                sunday.setUTCHours(0, 0, 0, 0);
+                const saturday = new Date(sunday);
+                saturday.setUTCDate(sunday.getUTCDate() + 7);
+                schedules = await SymxEmployeeSchedule.find({
+                    transporterId: confirmation.transporterId,
+                    date: { $gte: sunday, $lt: saturday },
+                }).sort({ date: 1 }).lean();
+                console.log(`[Confirm] Strategy 2 (date range ${sunday.toISOString()} - ${saturday.toISOString()}): found ${schedules.length} schedules`);
+            }
+
+            // Strategy 3: If still nothing, get most recent 7 schedules for this employee
+            if (schedules.length === 0) {
+                schedules = await SymxEmployeeSchedule.find({
+                    transporterId: confirmation.transporterId,
+                }).sort({ date: -1 }).limit(7).lean();
+                schedules.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                console.log(`[Confirm] Strategy 3 (latest 7): found ${schedules.length} schedules`);
+            }
+
+            weekSchedules = schedules.map((s: any) => ({
+                date: s.date,
+                weekDay: s.weekDay || "",
+                type: s.type || "OFF",
+                startTime: s.startTime || "",
+                van: s.van || "",
+            }));
+
+            if (schedules.length > 0) {
+                scheduleInfo = {
+                    date: schedules[0].date,
+                    weekDay: schedules[0].weekDay,
+                    type: schedules[0].type,
+                    startTime: schedules[0].startTime,
+                    van: schedules[0].van,
+                };
+            }
+        } else if (confirmation.scheduleDate && confirmation.transporterId) {
             const schedule = await SymxEmployeeSchedule.findOne({
                 transporterId: confirmation.transporterId,
                 date: new Date(confirmation.scheduleDate),
@@ -42,6 +101,13 @@ export async function GET(
             }
         }
 
+        // Fetch the original sent message from MessageLog
+        let messageContent: string | null = null;
+        if (confirmation.messageLogId) {
+            const log = await MessageLog.findById(confirmation.messageLogId, { content: 1 }).lean();
+            if (log) messageContent = (log as any).content || null;
+        }
+
         return NextResponse.json({
             token: confirmation.token,
             employeeName: confirmation.employeeName,
@@ -53,6 +119,8 @@ export async function GET(
             changeRequestedAt: confirmation.changeRequestedAt,
             changeRemarks: confirmation.changeRemarks,
             schedule: scheduleInfo,
+            weekSchedules,
+            messageContent,
         });
     } catch (error: any) {
         console.error("Confirm GET error:", error);
@@ -66,16 +134,31 @@ async function updateScheduleMessagingStatus(
     scheduleDate: string,
     messageType: string,
     newStatus: string,
-    replyContent: string
+    replyContent: string,
+    yearWeek?: string
 ) {
     const field = TAB_TO_SCHEDULE_FIELD[messageType];
-    if (!field || !scheduleDate || !transporterId) return;
+    if (!field || !transporterId) return;
 
     try {
-        const schedule = await SymxEmployeeSchedule.findOne({
-            transporterId,
-            date: new Date(scheduleDate),
-        });
+        let schedule;
+
+        if (scheduleDate) {
+            // Look up by specific date
+            schedule = await SymxEmployeeSchedule.findOne({
+                transporterId,
+                date: new Date(scheduleDate),
+            });
+        }
+
+        // Fallback: for week-level messages (no date), find any schedule in the yearWeek
+        if (!schedule && yearWeek) {
+            schedule = await SymxEmployeeSchedule.findOne({
+                transporterId,
+                yearWeek,
+            });
+        }
+
         if (!schedule) return;
 
         const entries = (schedule as any)[field];
@@ -143,7 +226,8 @@ export async function POST(
                 confirmation.scheduleDate || "",
                 confirmation.messageType,
                 "received",
-                "✅ Confirmed via link"
+                "✅ Confirmed via link",
+                confirmation.yearWeek
             );
 
             return NextResponse.json({ success: true, status: "confirmed" });
@@ -185,7 +269,8 @@ export async function POST(
                 confirmation.scheduleDate || "",
                 confirmation.messageType,
                 "received",
-                `🔄 Change Requested: ${remarks || "No remarks"}`
+                `🔄 Change Requested: ${remarks || "No remarks"}`,
+                confirmation.yearWeek
             );
 
             return NextResponse.json({ success: true, status: "change_requested" });

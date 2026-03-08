@@ -21,6 +21,9 @@ import {
   RefreshCw,
   Eye,
   Pencil,
+  Clock,
+  ArrowUpRight,
+  ArrowDownLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -236,14 +239,34 @@ const STATUS_CONFIG: Record<string, {
     bg: "bg-violet-400/15 ring-violet-400/30",
     label: "Reply Received",
   },
+  confirmed: {
+    icon: CheckCircle2,
+    color: "text-emerald-400",
+    bg: "bg-emerald-400/15 ring-emerald-400/30",
+    label: "Confirmed",
+  },
+  change_requested: {
+    icon: RefreshCw,
+    color: "text-amber-400",
+    bg: "bg-amber-400/15 ring-amber-400/30",
+    label: "Change Requested",
+  },
+  received_reply: {
+    icon: MessageSquare,
+    color: "text-violet-400",
+    bg: "bg-violet-400/15 ring-violet-400/30",
+    label: "Reply Received",
+  },
 };
 
 function MessageStatusBadge({
   status,
   createdAt,
+  changeRemarks,
 }: {
   status: string;
   createdAt?: string;
+  changeRemarks?: string;
 }) {
   const config = STATUS_CONFIG[status];
   if (!config) return null;
@@ -273,9 +296,12 @@ function MessageStatusBadge({
           {config.label}
         </div>
       </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs">
+      <TooltipContent side="top" className="text-xs max-w-[250px]">
         <span className="font-semibold">{config.label}</span>
         {timeAgo && <span className="text-muted-foreground ml-1">• {timeAgo}</span>}
+        {changeRemarks && (
+          <p className="text-white/90 mt-1 italic">&ldquo;{changeRemarks}&rdquo;</p>
+        )}
       </TooltipContent>
     </Tooltip>
   );
@@ -345,6 +371,240 @@ const SUB_TABS = [
   },
 ];
 
+// ── Message History Tab Component ──
+interface HistoryLog {
+  _id: string;
+  recipientName: string;
+  toNumber: string;
+  messageType: string;
+  content: string;
+  status: string;
+  sentAt: string;
+  deliveredAt?: string;
+  repliedAt?: string;
+  replyContent?: string;
+  errorMessage?: string;
+  confirmation?: {
+    status: string;
+    confirmedAt?: string;
+    changeRequestedAt?: string;
+    changeRemarks?: string;
+    token?: string;
+  } | null;
+}
+
+function MessageHistoryTab({ messageType, selectedPhones, yearWeek }: { messageType: string; selectedPhones?: string[]; yearWeek?: string }) {
+  const [logs, setLogs] = useState<HistoryLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    const params = new URLSearchParams({ messageType, limit: "200" });
+    if (yearWeek) params.set("yearWeek", yearWeek);
+    fetch(`/api/messaging/history?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setLogs(data.logs || []);
+      })
+      .catch(() => setLogs([]))
+      .finally(() => setLoading(false));
+  }, [messageType, yearWeek]);
+
+  // Filter by selected phones
+  const filteredLogs = useMemo(() => {
+    if (!selectedPhones || selectedPhones.length === 0) return logs;
+    return logs.filter((log) => selectedPhones.includes(log.toNumber));
+  }, [logs, selectedPhones]);
+
+  const formatTime = (d: string) => {
+    try {
+      return new Date(d).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return d;
+    }
+  };
+
+  const getStatusConfig = (log: HistoryLog) => {
+    if (log.confirmation?.status === "confirmed") {
+      return { label: "Confirmed", color: "text-emerald-500", bg: "bg-emerald-500/10 ring-emerald-500/30", icon: CheckCircle2 };
+    }
+    if (log.confirmation?.status === "change_requested") {
+      return { label: "Change Requested", color: "text-amber-500", bg: "bg-amber-500/10 ring-amber-500/30", icon: RefreshCw };
+    }
+    if (log.status === "received_reply") {
+      return { label: "Reply Received", color: "text-violet-500", bg: "bg-violet-500/10 ring-violet-500/30", icon: MessageSquare };
+    }
+    if (log.status === "delivered") {
+      return { label: "Delivered", color: "text-blue-500", bg: "bg-blue-500/10 ring-blue-500/30", icon: CheckCircle2 };
+    }
+    if (log.status === "failed") {
+      return { label: "Failed", color: "text-red-500", bg: "bg-red-500/10 ring-red-500/30", icon: XCircle };
+    }
+    return { label: "Sent", color: "text-blue-400", bg: "bg-blue-400/10 ring-blue-400/30", icon: Send };
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (filteredLogs.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 gap-2">
+        <Clock className="h-8 w-8 text-muted-foreground/30" />
+        <p className="text-sm text-muted-foreground">
+          {selectedPhones && selectedPhones.length > 0
+            ? "No messages found for selected employees"
+            : "No messages sent yet"}
+        </p>
+        {selectedPhones && selectedPhones.length > 0 && (
+          <p className="text-[10px] text-muted-foreground/60">Select employees on the left to filter</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-auto">
+      {filteredLogs.map((log) => {
+        const config = getStatusConfig(log);
+        const StatusIcon = config.icon;
+        const isExpanded = expandedId === log._id;
+
+        return (
+          <div
+            key={log._id}
+            className="border-b border-border/30 last:border-0 hover:bg-muted/20 transition-colors"
+          >
+            {/* Summary Row */}
+            <div
+              className="flex items-center gap-3 px-3 py-2.5 cursor-pointer"
+              onClick={() => setExpandedId(isExpanded ? null : log._id)}
+            >
+              {/* Status Icon */}
+              <div className={cn("h-7 w-7 rounded-full flex items-center justify-center shrink-0 ring-1", config.bg)}>
+                <StatusIcon className={cn("h-3.5 w-3.5", config.color)} />
+              </div>
+
+              {/* Name + Phone */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold truncate">{log.recipientName}</span>
+                  <span className="text-[10px] text-muted-foreground">{log.toNumber}</span>
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className={cn("text-[10px] font-medium", config.color)}>
+                    {config.label}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    • {formatTime(log.sentAt)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Expand indicator */}
+              <ChevronDown className={cn(
+                "h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform",
+                isExpanded && "rotate-180"
+              )} />
+            </div>
+
+            {/* Expanded Detail */}
+            {isExpanded && (
+              <div className="px-3 pb-3 space-y-2">
+                {/* Sent Message */}
+                <div className="rounded-lg bg-primary/5 border border-primary/10 p-3 ml-6">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <ArrowUpRight className="h-3 w-3 text-primary" />
+                    <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Sent</span>
+                    <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.sentAt)}</span>
+                  </div>
+                  <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">{log.content}</pre>
+                </div>
+
+                {/* Delivery Status */}
+                {log.deliveredAt && (
+                  <div className="flex items-center gap-2 ml-6 px-3 py-1.5 rounded-md bg-blue-500/5 border border-blue-500/10">
+                    <CheckCircle2 className="h-3 w-3 text-blue-500" />
+                    <span className="text-[10px] text-blue-500 font-medium">Delivered</span>
+                    <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.deliveredAt)}</span>
+                  </div>
+                )}
+
+                {/* Confirmation Response */}
+                {log.confirmation?.status === "confirmed" && (
+                  <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3 ml-6">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <ArrowDownLeft className="h-3 w-3 text-emerald-500" />
+                      <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Confirmed</span>
+                      <span className="text-[10px] text-muted-foreground ml-auto">
+                        {log.confirmation.confirmedAt ? formatTime(log.confirmation.confirmedAt) : ""}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                      ✅ Employee confirmed their schedule via confirmation link
+                    </p>
+                  </div>
+                )}
+
+                {/* Change Request Response */}
+                {log.confirmation?.status === "change_requested" && (
+                  <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-3 ml-6">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <ArrowDownLeft className="h-3 w-3 text-amber-500" />
+                      <span className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider">Change Requested</span>
+                      <span className="text-[10px] text-muted-foreground ml-auto">
+                        {log.confirmation.changeRequestedAt ? formatTime(log.confirmation.changeRequestedAt) : ""}
+                      </span>
+                    </div>
+                    {log.confirmation.changeRemarks && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 italic mt-1">
+                        &ldquo;{log.confirmation.changeRemarks}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Reply Content (from webhook) */}
+                {log.replyContent && !log.confirmation && (
+                  <div className="rounded-lg bg-violet-500/5 border border-violet-500/15 p-3 ml-6">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <ArrowDownLeft className="h-3 w-3 text-violet-500" />
+                      <span className="text-[10px] font-semibold text-violet-500 uppercase tracking-wider">Reply</span>
+                      <span className="text-[10px] text-muted-foreground ml-auto">
+                        {log.repliedAt ? formatTime(log.repliedAt) : ""}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-foreground/80">{log.replyContent}</p>
+                  </div>
+                )}
+
+                {/* Failed */}
+                {log.status === "failed" && log.errorMessage && (
+                  <div className="flex items-center gap-2 ml-6 px-3 py-1.5 rounded-md bg-red-500/5 border border-red-500/10">
+                    <XCircle className="h-3 w-3 text-red-500" />
+                    <span className="text-[10px] text-red-500 font-medium">Error: {log.errorMessage}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Messaging Sub-Tab Content ──
 function MessagingSubTab({
   tab,
@@ -393,7 +653,7 @@ function MessagingSubTab({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState(tab.defaultMessage);
   const [sendResults, setSendResults] = useState<SendResult[] | null>(null);
-  const [composerTab, setComposerTab] = useState<"preview" | "compose">("preview");
+  const [composerTab, setComposerTab] = useState<"preview" | "compose" | "history">("preview");
   const [templateLoaded, setTemplateLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -442,7 +702,6 @@ function MessagingSubTab({
     setSelectedIds(new Set());
     setSelectedAll(false);
     setSendResults(null);
-    queueMicrotask(() => onSelectionReport?.(0));
   }, [prefetchedEmployees]);
 
   // Watch selectAllTrigger from header button
@@ -464,13 +723,18 @@ function MessagingSubTab({
     );
   }, [employees, searchQuery]);
 
+  // Report selection count to parent when it changes (deferred to avoid setState-during-render)
+  useEffect(() => {
+    onSelectionReport?.(selectedIds.size);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIds.size]);
+
   // Toggle select
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      onSelectionReport?.(next.size);
       return next;
     });
   };
@@ -479,12 +743,10 @@ function MessagingSubTab({
     if (selectedAll) {
       setSelectedIds(new Set());
       setSelectedAll(false);
-      onSelectionReport?.(0);
     } else {
       const newIds = new Set(filteredEmployees.map((e) => e._id));
       setSelectedIds(newIds);
       setSelectedAll(true);
-      onSelectionReport?.(newIds.size);
     }
   };
 
@@ -676,32 +938,34 @@ function MessagingSubTab({
                       <span className="text-xs font-semibold truncate">
                         {emp.name}
                       </span>
-                      {/* Messaging status from DB (persistent across sessions) */}
+                      {/* Messaging status — prioritize DB status (reflects real-time confirmations) */}
                       {(() => {
                         const msgStatus = emp.messagingStatus?.[tab.id];
-                        if (msgStatus && !sendResult) {
+                        // Show DB status if available (may have been updated by confirmation)
+                        if (msgStatus) {
                           return (
                             <MessageStatusBadge
                               status={msgStatus.status}
                               createdAt={msgStatus.createdAt}
+                              changeRemarks={(msgStatus as any).changeRemarks}
                             />
+                          );
+                        }
+                        // Fallback: show live send result from this session
+                        if (sendResult) {
+                          return sendResult.success ? (
+                            <MessageStatusBadge status="sent" />
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent>{sendResult.error}</TooltipContent>
+                            </Tooltip>
                           );
                         }
                         return null;
                       })()}
-                      {/* Live send result (this session only) */}
-                      {sendResult && (
-                        sendResult.success ? (
-                          <MessageStatusBadge status="sent" />
-                        ) : (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                            </TooltipTrigger>
-                            <TooltipContent>{sendResult.error}</TooltipContent>
-                          </Tooltip>
-                        )
-                      )}
                     </div>
 
                     {/* Client Type */}
@@ -774,6 +1038,18 @@ function MessagingSubTab({
             >
               <Pencil className="h-3.5 w-3.5" />
               Compose
+            </button>
+            <button
+              onClick={() => setComposerTab("history")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                composerTab === "history"
+                  ? "bg-background shadow-sm text-foreground border border-border/50"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              <Clock className="h-3.5 w-3.5" />
+              History
             </button>
             {fromNumber && fromNumberDisplay && (
               <Badge
@@ -916,6 +1192,21 @@ function MessagingSubTab({
                 </div>
               </div>
             </>
+          )}
+
+          {/* ── History Tab ── */}
+          {composerTab === "history" && (
+            <MessageHistoryTab
+              messageType={tab.id}
+              yearWeek={selectedWeek}
+              selectedPhones={
+                selectedIds.size > 0
+                  ? filteredEmployees
+                    .filter((e) => selectedIds.has(e._id))
+                    .map((e) => e.phoneNumber.startsWith("+") ? e.phoneNumber : `+1${e.phoneNumber.replace(/\D/g, "")}`)
+                  : undefined
+              }
+            />
           )}
 
           {/* Send Action */}
@@ -1125,23 +1416,28 @@ export default function MessagingPanel({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(
-      SUB_TABS.map(async (tab) => {
-        try {
-          const res = await fetch(`/api/messaging/templates?type=${tab.id}`);
-          const data = await res.json();
-          return { tabId: tab.id, template: data.template?.template || tab.defaultMessage };
-        } catch {
-          return { tabId: tab.id, template: tab.defaultMessage };
-        }
+    // Single batch fetch for ALL templates (instead of N individual calls)
+    const allTypes = SUB_TABS.map(t => t.id).join(",");
+    fetch(`/api/messaging/templates?types=${allTypes}`)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return;
+        const templateMap = data.templates || {};
+        const map: Record<string, string> = {};
+        SUB_TABS.forEach(tab => {
+          map[tab.id] = templateMap[tab.id]?.template || tab.defaultMessage;
+        });
+        setTemplatesByTab(map);
+        setTemplatesLoaded(true);
       })
-    ).then((results) => {
-      if (cancelled) return;
-      const map: Record<string, string> = {};
-      results.forEach(r => { map[r.tabId] = r.template; });
-      setTemplatesByTab(map);
-      setTemplatesLoaded(true);
-    });
+      .catch(() => {
+        if (cancelled) return;
+        // Fallback to defaults
+        const map: Record<string, string> = {};
+        SUB_TABS.forEach(tab => { map[tab.id] = tab.defaultMessage; });
+        setTemplatesByTab(map);
+        setTemplatesLoaded(true);
+      });
     return () => { cancelled = true; };
   }, []);
 

@@ -30,7 +30,6 @@ async function connectToDatabase() {
 
   if (!cached.promise) {
     const opts = {
-      dbName: process.env.NODE_ENV === 'development' ? 'SYMXDevelopment' : undefined,
       maxPoolSize: 10,              // More concurrent queries (default is 5)
       minPoolSize: 2,               // Keep connections warm
       socketTimeoutMS: 30000,       // 30s socket timeout

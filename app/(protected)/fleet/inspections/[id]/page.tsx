@@ -168,11 +168,18 @@ export default function InspectionDetailPage() {
     const [loading, setLoading] = useState(true);
     const [lightbox, setLightbox] = useState<string | null>(null);
 
+    // Standard Photo
+    const [isStandardPhoto, setIsStandardPhoto] = useState(false);
+    const [togglingStandard, setTogglingStandard] = useState(false);
+
     // Comparison
     const [compareMode, setCompareMode] = useState(false);
+    const [compareSource, setCompareSource] = useState<"previous" | "master">("previous");
     const [compareLoading, setCompareLoading] = useState(false);
     const [previous, setPrevious] = useState<any>(null);
+    const [master, setMaster] = useState<any>(null);
     const [compareError, setCompareError] = useState<string | null>(null);
+    const [showCompareMenu, setShowCompareMenu] = useState(false);
 
     const { setRightContent } = useHeaderActions();
 
@@ -180,42 +187,159 @@ export default function InspectionDetailPage() {
         if (!id) return;
         fetch(`/api/fleet?section=inspection-detail&id=${id}`)
             .then(r => r.json())
-            .then(j => { setInspection(j.inspection); setLoading(false); })
+            .then(j => {
+                setInspection(j.inspection);
+                setIsStandardPhoto(j.inspection?.isStandardPhoto || false);
+                setLoading(false);
+            })
             .catch(() => setLoading(false));
     }, [id]);
 
-    const loadCompare = useCallback(async () => {
-        if (previous !== null) { setCompareMode(true); return; }
-        setCompareLoading(true);
-        setCompareError(null);
+    const toggleStandardPhoto = useCallback(async () => {
+        setTogglingStandard(true);
         try {
-            const res = await fetch(`/api/fleet?section=inspection-compare&id=${id}`);
+            const res = await fetch("/api/fleet", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "toggle-standard-photo", id }),
+            });
             const j = await res.json();
-            if (j.previous) { setPrevious(j.previous); setCompareMode(true); }
-            else setCompareError("No previous inspection found for this VIN before this date.");
+            if (j.success) setIsStandardPhoto(j.isStandardPhoto);
+        } catch { }
+        finally { setTogglingStandard(false); }
+    }, [id]);
+
+    const loadCompare = useCallback(async (source: "previous" | "master") => {
+        setShowCompareMenu(false);
+        setCompareError(null);
+
+        if (source === "previous" && previous !== null) {
+            setCompareSource("previous"); setCompareMode(true); return;
+        }
+        if (source === "master" && master !== null) {
+            setCompareSource("master"); setCompareMode(true); return;
+        }
+
+        setCompareLoading(true);
+        try {
+            const section = source === "master" ? "inspection-master" : "inspection-compare";
+            const res = await fetch(`/api/fleet?section=${section}&id=${id}`);
+            const j = await res.json();
+            if (source === "previous") {
+                if (j.previous) { setPrevious(j.previous); setCompareSource("previous"); setCompareMode(true); }
+                else setCompareError("No previous inspection found for this VIN before this date.");
+            } else {
+                if (j.master) { setMaster(j.master); setCompareSource("master"); setCompareMode(true); }
+                else setCompareError("No standard photo inspection found for this VIN. Mark one as Standard Photo first.");
+            }
         } catch { setCompareError("Failed to load comparison."); }
         finally { setCompareLoading(false); }
-    }, [id, previous]);
+    }, [id, previous, master]);
 
-    // Inject compare button into the main header
+    // Get the active compare data based on source
+    const compareData = compareSource === "master" ? master : previous;
+
+    // Inject header buttons
     useEffect(() => {
         setRightContent(
-            <button
-                onClick={compareMode ? () => setCompareMode(false) : loadCompare}
-                disabled={compareLoading}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm border ${compareMode
-                    ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                    : "bg-card border-border hover:border-primary/50 hover:text-primary"
-                    }`}
-            >
-                {compareLoading
-                    ? <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
-                    : <IconArrowsLeftRight size={14} />}
-                {compareMode ? "Exit Compare" : "Compare with Previous"}
-            </button>
+            <div className="flex items-center gap-2 relative">
+                {/* Standard Photo toggle */}
+                <button
+                    onClick={toggleStandardPhoto}
+                    disabled={togglingStandard}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all shadow-sm border ${isStandardPhoto
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
+                        : "bg-card border-border hover:border-amber-500/50 hover:text-amber-600 dark:hover:text-amber-400"
+                        }`}
+                    title={isStandardPhoto ? "Remove as Standard Photo" : "Set as Standard Photo"}
+                >
+                    {togglingStandard
+                        ? <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                        : <span className="text-base leading-none">{isStandardPhoto ? "★" : "☆"}</span>}
+                    <span className="hidden sm:inline">Standard Photo</span>
+                </button>
+
+                {/* Compare button/dropdown */}
+                <div className="relative">
+                    <button
+                        onClick={() => setShowCompareMenu(!showCompareMenu)}
+                        disabled={compareLoading}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm border ${compareMode
+                            ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                            : "bg-card border-border hover:border-primary/50 hover:text-primary"
+                            }`}
+                    >
+                        {compareLoading
+                            ? <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                            : <IconArrowsLeftRight size={14} />}
+                        {compareMode
+                            ? (compareSource === "master" ? "vs Master" : "vs Previous")
+                            : "Compare"}
+                        <svg className={`w-3 h-3 ml-0.5 transition-transform ${showCompareMenu ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    {showCompareMenu && (
+                        <>
+                            <div className="fixed inset-0 z-40" onClick={() => setShowCompareMenu(false)} />
+                            <div className="absolute right-0 top-full mt-1.5 z-50 w-56 rounded-xl border border-border bg-card shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                                {/* Compare with Previous */}
+                                <button
+                                    onClick={() => loadCompare("previous")}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/60 transition-colors text-left ${compareMode && compareSource === "previous" ? "bg-primary/5 text-primary" : "text-foreground"}`}
+                                >
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${compareMode && compareSource === "previous" ? "bg-primary/15" : "bg-blue-500/10"}`}>
+                                        <IconArrowsLeftRight size={14} className={compareMode && compareSource === "previous" ? "text-primary" : "text-blue-500"} />
+                                    </div>
+                                    <div>
+                                        <p className="font-medium">Previous</p>
+                                        <p className="text-[10px] text-muted-foreground">Compare with last inspection</p>
+                                    </div>
+                                    {compareMode && compareSource === "previous" && (
+                                        <span className="ml-auto text-primary text-xs">●</span>
+                                    )}
+                                </button>
+                                <div className="h-px bg-border/60" />
+                                {/* Compare with Master */}
+                                <button
+                                    onClick={() => loadCompare("master")}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/60 transition-colors text-left ${compareMode && compareSource === "master" ? "bg-primary/5 text-primary" : "text-foreground"}`}
+                                >
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${compareMode && compareSource === "master" ? "bg-primary/15" : "bg-amber-500/10"}`}>
+                                        <span className={`text-base leading-none ${compareMode && compareSource === "master" ? "text-primary" : "text-amber-500"}`}>★</span>
+                                    </div>
+                                    <div>
+                                        <p className="font-medium">Master Photo</p>
+                                        <p className="text-[10px] text-muted-foreground">Compare with standard reference</p>
+                                    </div>
+                                    {compareMode && compareSource === "master" && (
+                                        <span className="ml-auto text-primary text-xs">●</span>
+                                    )}
+                                </button>
+                                {/* Exit Compare — only show when in compare mode */}
+                                {compareMode && (
+                                    <>
+                                        <div className="h-px bg-border/60" />
+                                        <button
+                                            onClick={() => { setCompareMode(false); setShowCompareMenu(false); }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-500/5 transition-colors text-left"
+                                        >
+                                            <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                                                <IconX size={14} className="text-red-500" />
+                                            </div>
+                                            <div>
+                                                <p className="font-medium">Exit Compare</p>
+                                                <p className="text-[10px] text-muted-foreground/70">Return to single view</p>
+                                            </div>
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
         );
         return () => setRightContent(null);
-    }, [setRightContent, compareMode, compareLoading, loadCompare]);
+    }, [setRightContent, compareMode, compareLoading, loadCompare, isStandardPhoto, togglingStandard, toggleStandardPhoto, showCompareMenu]);
 
     if (loading) return (
         <div className="flex items-center justify-center h-full">
@@ -246,13 +370,13 @@ export default function InspectionDetailPage() {
     ];
     const hasPhotos = photos.some(p => p.url);
 
-    const prevPhotos = previous ? [
-        { url: previous.vehiclePicture1, label: "Vehicle Photo 1" },
-        { url: previous.vehiclePicture2, label: "Vehicle Photo 2" },
-        { url: previous.vehiclePicture3, label: "Vehicle Photo 3" },
-        { url: previous.vehiclePicture4, label: "Vehicle Photo 4" },
-        { url: previous.dashboardImage, label: "Dashboard" },
-        { url: previous.additionalPicture, label: "Additional" },
+    const prevPhotos = compareData ? [
+        { url: compareData.vehiclePicture1, label: "Vehicle Photo 1" },
+        { url: compareData.vehiclePicture2, label: "Vehicle Photo 2" },
+        { url: compareData.vehiclePicture3, label: "Vehicle Photo 3" },
+        { url: compareData.vehiclePicture4, label: "Vehicle Photo 4" },
+        { url: compareData.dashboardImage, label: "Dashboard" },
+        { url: compareData.additionalPicture, label: "Additional" },
     ] : [];
 
     return (
@@ -299,8 +423,8 @@ export default function InspectionDetailPage() {
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-sm font-bold text-foreground">{fmtDate(inspection.routeDate)}</p>
-                                        {compareMode && previous && (
-                                            <p className="text-xs text-muted-foreground/60 mt-1">{fmtDate(previous.routeDate)}</p>
+                                        {compareMode && compareData && (
+                                            <p className="text-xs text-muted-foreground/60 mt-1">{fmtDate(compareData.routeDate)}</p>
                                         )}
                                     </div>
                                 </div>
@@ -314,10 +438,10 @@ export default function InspectionDetailPage() {
                                         <p className="font-mono text-xs font-bold text-foreground break-all">
                                             {inspection.vehicleName ? `${inspection.vehicleName} · ` : ""}{inspection.vin || "—"}
                                         </p>
-                                        {compareMode && previous && (
+                                        {compareMode && compareData && (
                                             <div className="flex items-center gap-1.5 mt-1">
                                                 <p className="font-mono text-[10px] text-muted-foreground/60 break-all">
-                                                    {previous.vin || "—"}
+                                                    {compareData.vin || "—"}
                                                 </p>
                                                 <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>
                                             </div>
@@ -327,8 +451,8 @@ export default function InspectionDetailPage() {
 
                                 {/* Driver */}
                                 {(() => {
-                                    const prevDriver = previous ? (previous.driverName || previous.driver || "—") : "—";
-                                    const driverChanged = compareMode && previous && driverDisplay !== prevDriver;
+                                    const prevDriver = compareData ? (compareData.driverName || compareData.driver || "—") : "—";
+                                    const driverChanged = compareMode && compareData && driverDisplay !== prevDriver;
                                     return (
                                         <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
                                             <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
@@ -336,7 +460,7 @@ export default function InspectionDetailPage() {
                                             </div>
                                             <div className="min-w-0">
                                                 <p className="text-sm font-semibold text-foreground">{driverDisplay}</p>
-                                                {compareMode && previous && (
+                                                {compareMode && compareData && (
                                                     <div className="flex items-center gap-1.5 mt-1">
                                                         <p className="text-xs text-muted-foreground/60">{prevDriver}</p>
                                                         {driverChanged
@@ -351,8 +475,8 @@ export default function InspectionDetailPage() {
 
                                 {/* Mileage */}
                                 {(() => {
-                                    const prevMileage = previous?.mileage || 0;
-                                    const mileageChanged = compareMode && previous && inspection.mileage !== prevMileage;
+                                    const prevMileage = compareData?.mileage || 0;
+                                    const mileageChanged = compareMode && compareData && inspection.mileage !== prevMileage;
                                     const mileageDiff = inspection.mileage - prevMileage;
                                     return (
                                         <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
@@ -363,7 +487,7 @@ export default function InspectionDetailPage() {
                                                 <p className="text-sm font-bold text-foreground">
                                                     {inspection.mileage > 0 ? `${inspection.mileage.toLocaleString()} mi` : "—"}
                                                 </p>
-                                                {compareMode && previous && (
+                                                {compareMode && compareData && (
                                                     <div className="flex items-center gap-1.5 mt-1">
                                                         <p className="text-xs text-muted-foreground/60">{prevMileage > 0 ? `${prevMileage.toLocaleString()} mi` : "—"}</p>
                                                         {mileageChanged
@@ -378,9 +502,9 @@ export default function InspectionDetailPage() {
 
                                 {/* Comments */}
                                 {(() => {
-                                    const prevComments = previous?.comments || "—";
+                                    const prevComments = compareData?.comments || "—";
                                     const currComments = inspection.comments || "—";
-                                    const commentsChanged = compareMode && previous && currComments !== prevComments;
+                                    const commentsChanged = compareMode && compareData && currComments !== prevComments;
                                     return (
                                         <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
                                             <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
@@ -388,7 +512,7 @@ export default function InspectionDetailPage() {
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <p className="text-sm text-foreground truncate">{currComments}</p>
-                                                {compareMode && previous && (
+                                                {compareMode && compareData && (
                                                     <div className="flex items-center gap-1.5 mt-1">
                                                         <p className="text-xs text-muted-foreground/60 truncate flex-1">{prevComments}</p>
                                                         {commentsChanged
@@ -403,8 +527,8 @@ export default function InspectionDetailPage() {
 
                                 {/* Any Repairs */}
                                 {(() => {
-                                    const prevHasRepair = previous?.anyRepairs && previous.anyRepairs !== "FALSE" && previous.anyRepairs !== "false";
-                                    const repairsChanged = compareMode && previous && hasRepair !== prevHasRepair;
+                                    const prevHasRepair = compareData?.anyRepairs && compareData.anyRepairs !== "FALSE" && compareData.anyRepairs !== "false";
+                                    const repairsChanged = compareMode && compareData && hasRepair !== prevHasRepair;
                                     return (
                                         <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
                                             <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
@@ -414,7 +538,7 @@ export default function InspectionDetailPage() {
                                                 <p className={`text-sm font-semibold ${hasRepair ? "text-red-500" : "text-foreground"}`}>
                                                     {hasRepair ? "Yes" : "No"}
                                                 </p>
-                                                {compareMode && previous && (
+                                                {compareMode && compareData && (
                                                     <div className="flex items-center gap-1.5 mt-1">
                                                         <p className={`text-xs ${prevHasRepair ? "text-red-500/60" : "text-muted-foreground/60"}`}>{prevHasRepair ? "Yes" : "No"}</p>
                                                         {repairsChanged
@@ -560,8 +684,17 @@ export default function InspectionDetailPage() {
                 )}
 
                 {/* ── Comparison Mode ────────────────────────────────── */}
-                {compareMode && previous && (
+                {compareMode && compareData && (
                     <>
+                        {/* Source indicator */}
+                        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 flex items-center gap-3 text-sm">
+                            {compareSource === "master" ? (
+                                <><span className="text-amber-500 text-base leading-none">★</span> Comparing with <strong>Standard Photo</strong> — {fmtDateShort(compareData.routeDate)}</>
+                            ) : (
+                                <><IconArrowsLeftRight size={14} className="text-primary" /> Comparing with <strong>Previous Inspection</strong> — {fmtDateShort(compareData.routeDate)}</>
+                            )}
+                        </div>
+
                         {/* Image comparisons */}
                         <div>
                             <h2 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
@@ -578,7 +711,7 @@ export default function InspectionDetailPage() {
                                                 before={curr.url}
                                                 after={prevPhotos[i]?.url}
                                                 beforeLabel={fmtDateShort(inspection.routeDate)}
-                                                afterLabel={fmtDateShort(previous.routeDate)}
+                                                afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)}
                                             />
                                         ) : (
                                             <div className="aspect-video rounded-xl bg-muted/10 border border-border/20 flex items-center justify-center text-muted-foreground/30">

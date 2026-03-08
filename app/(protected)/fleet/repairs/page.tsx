@@ -116,7 +116,7 @@ const PAGE_SIZE = 50;
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function FleetRepairsPage() {
-  const { search, openEditModal, handleDelete, openCreateModal, repairsSeed } = useFleet();
+  const { search, openEditModal, handleDelete, openCreateModal, repairsSeed, showCompleted } = useFleet();
   const { setLeftContent } = useHeaderActions();
 
   // Start with seed data if already prefetched by the layout — instant first paint
@@ -164,6 +164,7 @@ export default function FleetRepairsPage() {
     try {
       const params = new URLSearchParams({ section: "repairs", skip: String(skip), limit: String(PAGE_SIZE) });
       if (q) params.set("q", q);
+      if (!showCompleted) params.set("excludeCompleted", "true");
       const res = await fetch(`/api/fleet?${params}`, { signal: ctrl.signal });
       if (!res.ok) return;
       const json = await res.json();
@@ -178,7 +179,7 @@ export default function FleetRepairsPage() {
       setIsFetching(false);
       setIsLoadingMore(false);
     }
-  }, []);
+  }, [showCompleted]);
 
   // Re-fetch from scratch on search change — but skip initial mount if we have seed data
   const initializedRef = useRef(false);
@@ -193,7 +194,7 @@ export default function FleetRepairsPage() {
     setRepairs([]);
     setTotal(null);
     fetchPage(0, debouncedSearch, false);
-  }, [debouncedSearch, fetchPage]);
+  }, [debouncedSearch, fetchPage, showCompleted]);
 
   /* ── Infinite scroll via IntersectionObserver ────────────────── */
   useEffect(() => {

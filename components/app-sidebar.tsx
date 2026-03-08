@@ -24,6 +24,7 @@ import {
   IconTie,
   IconChartBar,
   IconTarget,
+  IconRoute,
 } from "@tabler/icons-react";
 
 import { NavDocuments } from "@/components/nav-documents";
@@ -69,6 +70,7 @@ const ICON_MAP: Record<string, any> = {
   IconBriefcase,
   IconUser,
   IconUsers,
+  IconRoute,
 };
 
 const data = {
@@ -134,6 +136,20 @@ const data = {
         { name: "Capacity Planning", url: "#" },
         { name: "Availability", url: "#" },
         { name: "Schedule Check", url: "#" },
+      ],
+    },
+    {
+      name: "Dispatching",
+      url: "/dispatching",
+      icon: IconRoute,
+      subModules: [
+        { name: "Roster", url: "/dispatching/roster" },
+        { name: "Opening", url: "/dispatching/opening" },
+        { name: "Attendance", url: "/dispatching/attendance" },
+        { name: "Repairs", url: "/dispatching/repairs" },
+        { name: "Time", url: "/dispatching/time" },
+        { name: "Closing", url: "/dispatching/closing" },
+        { name: "Efficiency", url: "/dispatching/efficiency" },
       ],
     },
     {

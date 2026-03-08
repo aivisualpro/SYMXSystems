@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+import MessageLog from "@/lib/models/MessageLog";
+import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
 export async function GET(req: NextRequest) {
@@ -13,31 +15,33 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const filter = searchParams.get("filter"); // future-shift, shift, off-tomorrow, week-schedule, route-itinerary
+    const filter = searchParams.get("filter");
     const yearWeek = searchParams.get("yearWeek");
-    const date = searchParams.get("date"); // specific date for filtering
+    const date = searchParams.get("date");
 
     await connectToDatabase();
 
-    // Base: get all active employees with phone numbers
-    const employees = await SymxEmployee.find(
+    // Run employee + schedule queries IN PARALLEL
+    const employeePromise = SymxEmployee.find(
       { status: "Active", phoneNumber: { $exists: true, $ne: "" } },
-      {
-        _id: 1,
-        firstName: 1,
-        lastName: 1,
-        transporterId: 1,
-        phoneNumber: 1,
-        type: 1,
-        status: 1,
-        email: 1,
-      }
+      { _id: 1, firstName: 1, lastName: 1, transporterId: 1, phoneNumber: 1, type: 1, status: 1, email: 1 }
     )
       .sort({ firstName: 1, lastName: 1 })
       .lean();
 
+    // Schedule query with PROJECTION — only fetch fields we actually use
+    const schedulePromise = yearWeek
+      ? SymxEmployeeSchedule.find(
+        { yearWeek },
+        { transporterId: 1, date: 1, weekDay: 1, type: 1, subType: 1, status: 1, startTime: 1, van: 1 }
+      )
+        .sort({ date: 1 })
+        .lean()
+      : Promise.resolve(null);
+
+    const [employees, schedules] = await Promise.all([employeePromise, schedulePromise]);
+
     if (!yearWeek && !date) {
-      // Return just employees list
       return NextResponse.json({
         employees: employees.map((emp: any) => ({
           _id: emp._id,
@@ -52,45 +56,89 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Fetch schedules for the week
-    const scheduleQuery: any = {};
-    if (yearWeek) scheduleQuery.yearWeek = yearWeek;
-
-    const schedules = await SymxEmployeeSchedule.find(scheduleQuery)
-      .sort({ date: 1 })
-      .lean();
-
     // Map schedules by transporterId
     const scheduleMap: Record<string, any[]> = {};
-    schedules.forEach((s: any) => {
-      if (!scheduleMap[s.transporterId]) scheduleMap[s.transporterId] = [];
-      scheduleMap[s.transporterId].push(s);
+    if (schedules) {
+      schedules.forEach((s: any) => {
+        if (!scheduleMap[s.transporterId]) scheduleMap[s.transporterId] = [];
+        scheduleMap[s.transporterId].push(s);
+      });
+    }
+
+    // ── Fetch latest MessageLog status per employee for this tab ──
+    // This is the source of truth (updated on confirmation/reply)
+    const allPhones = employees.map((emp: any) => {
+      const ph = emp.phoneNumber;
+      return ph.startsWith("+") ? ph : `+1${ph.replace(/\D/g, "")}`;
     });
+
+    let messageLogStatusMap: Record<string, { status: string; createdAt: string; changeRemarks?: string }> = {};
+    if (filter) {
+      let weekLogIdFilter: any = null;
+      if (yearWeek) {
+        const weekConfirmations = await ScheduleConfirmation.find(
+          { yearWeek, messageType: filter, messageLogId: { $exists: true } },
+          { messageLogId: 1 }
+        ).lean();
+        const wkLogIds = weekConfirmations.map((c: any) => c.messageLogId);
+        weekLogIdFilter = wkLogIds.length > 0 ? { $in: wkLogIds } : null;
+      }
+
+      // Build match: by messageType + phone numbers, optionally scoped to week's messageLogIds
+      const matchStage: any = { messageType: filter, toNumber: { $in: allPhones } };
+      if (weekLogIdFilter) matchStage._id = weekLogIdFilter;
+
+      const latestLogs = await MessageLog.aggregate([
+        { $match: matchStage },
+        { $sort: { sentAt: -1 } },
+        {
+          $group: {
+            _id: "$toNumber",
+            status: { $first: "$status" },
+            sentAt: { $first: "$sentAt" },
+            messageLogId: { $first: "$_id" },
+          }
+        },
+      ]);
+
+      // Also check for ScheduleConfirmation linked to these logs
+      const logIds = latestLogs.map((l: any) => l.messageLogId);
+      const confirmations = logIds.length > 0
+        ? await ScheduleConfirmation
+          .find({ messageLogId: { $in: logIds } }, { messageLogId: 1, status: 1, confirmedAt: 1, changeRequestedAt: 1, changeRemarks: 1 })
+          .lean()
+        : [];
+      const confirmMap: Record<string, any> = {};
+      confirmations.forEach((c: any) => {
+        confirmMap[c.messageLogId.toString()] = c;
+      });
+
+      latestLogs.forEach((log: any) => {
+        const confirmation = confirmMap[log.messageLogId.toString()];
+        let finalStatus = log.status; // "sent", "delivered", "failed", "received_reply"
+        let changeRemarks = "";
+        if (confirmation?.status === "confirmed") finalStatus = "confirmed";
+        else if (confirmation?.status === "change_requested") {
+          finalStatus = "change_requested";
+          changeRemarks = confirmation.changeRemarks || "";
+        }
+        messageLogStatusMap[log._id] = {
+          status: finalStatus,
+          createdAt: log.sentAt?.toISOString?.() || log.sentAt,
+          ...(changeRemarks ? { changeRemarks } : {}),
+        };
+      });
+    }
 
     // Merge employee data with schedule data + messaging statuses
     const enrichedEmployees = employees.map((emp: any) => {
       const empSchedules = scheduleMap[emp.transporterId] || [];
+      const normalizedPhone = emp.phoneNumber.startsWith("+") ? emp.phoneNumber : `+1${emp.phoneNumber.replace(/\D/g, "")}`;
 
-      // Compute last messaging status per tab from ALL schedules
+      // Get messaging status from MessageLog (source of truth)
       const messagingStatus: Record<string, { status: string; createdAt: string } | null> = {};
       if (filter) {
-        const field = TAB_TO_SCHEDULE_FIELD[filter];
-        if (field) {
-          // Find the latest status entry across all schedules for this employee
-          let latestEntry: any = null;
-          empSchedules.forEach((s: any) => {
-            const entries = s[field];
-            if (Array.isArray(entries) && entries.length > 0) {
-              const last = entries[entries.length - 1];
-              if (!latestEntry || new Date(last.createdAt) > new Date(latestEntry.createdAt)) {
-                latestEntry = last;
-              }
-            }
-          });
-          messagingStatus[filter] = latestEntry
-            ? { status: latestEntry.status, createdAt: latestEntry.createdAt }
-            : null;
-        }
+        messagingStatus[filter] = messageLogStatusMap[normalizedPhone] || null;
       }
 
       return {

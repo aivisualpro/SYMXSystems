@@ -37,6 +37,9 @@ import {
   MessageSquare,
   RefreshCw,
   Plus,
+  History,
+  FileText,
+  ArrowRight,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -103,7 +106,7 @@ const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 // Working types — anything NOT in this list is considered "not working"
-const NON_WORKING_TYPES = new Set(["off", "close", "request off", ""]);
+const NON_WORKING_TYPES = new Set(["off", ""]);
 
 function isWorkingDay(type: string): boolean {
   return !NON_WORKING_TYPES.has((type || "").trim().toLowerCase());
@@ -251,13 +254,15 @@ function EditableNote({
   employeeId,
   transporterId,
   yearWeek,
+  employeeName,
   onSaved,
 }: {
   value: string;
   employeeId: string | undefined;
   transporterId: string;
   yearWeek: string;
-  onSaved: (newNote: string) => void;
+  employeeName?: string;
+  onSaved: (newNote: string, employeeName?: string, oldNote?: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -289,12 +294,12 @@ function EditableNote({
       const res = await fetch("/api/schedules", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId, note: draft, yearWeek, transporterId }),
+        body: JSON.stringify({ employeeId, note: draft, yearWeek, transporterId, employeeName, oldNote: value }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save");
       toast.success("Note saved");
-      onSaved(draft);
+      onSaved(draft, employeeName, value);
       setEditing(false);
     } catch (err: any) {
       toast.error(err.message || "Failed to save note");
@@ -414,6 +419,11 @@ export default function SchedulingPage() {
   const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo | null>(null);
   const [generatingWeek, setGeneratingWeek] = useState(false);
   const [routeTypeConfigs, setRouteTypeConfigs] = useState<Record<string, { color: string; startTime: string }>>({});
+  const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
+  const [showAuditPanel, setShowAuditPanel] = useState(false);
+  const [auditEmployee, setAuditEmployee] = useState<{ transporterId: string; name: string } | null>(null);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
   const { setLeftContent, setRightContent } = useHeaderActions();
 
   // Helpers to compute next/prev yearWeek strings
@@ -501,37 +511,63 @@ export default function SchedulingPage() {
     fetchWeeks();
   }, [mounted]);
 
-  // Fetch week data + auto-sync missing employees
+  // Track which weeks have been auto-synced to avoid redundant generate calls
+  const syncedWeeksRef = useRef<Set<string>>(new Set());
+
+  // Fetch week data + audit counts (bundled) + auto-sync missing employees (once per week)
   useEffect(() => {
     if (!selectedWeek) return;
+    let cancelled = false;
+
     const fetchData = async () => {
       setLoadingData(true);
       try {
         const res = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`);
         const data = await res.json();
+        if (cancelled) return;
         setWeekData(data);
+        // Use audit counts from the bundled response
+        if (data.auditCounts) {
+          setAuditCounts(data.auditCounts);
+        }
 
-        // Auto-sync: fill in any missing employee records for this week
-        const syncRes = await fetch("/api/schedules/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ yearWeek: selectedWeek }),
-        });
-        const syncData = await syncRes.json();
-        if (syncRes.ok && syncData.created > 0) {
-          // New records were added — refetch to show them
-          toast.success(`Synced ${syncData.missingEmployees} new employee(s) — ${syncData.created} records added`);
-          const refetchRes = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`);
-          const refetchData = await refetchRes.json();
-          setWeekData(refetchData);
+        // Auto-sync only once per week per session
+        if (!syncedWeeksRef.current.has(selectedWeek)) {
+          syncedWeeksRef.current.add(selectedWeek);
+          // Run sync in background — don't block the UI
+          fetch("/api/schedules/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ yearWeek: selectedWeek }),
+          })
+            .then(r => r.json())
+            .then(syncData => {
+              if (cancelled) return;
+              if (syncData.created > 0) {
+                toast.success(`Synced ${syncData.missingEmployees} new employee(s) — ${syncData.created} records added`);
+                // Refetch to show the new records
+                fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`)
+                  .then(r => r.json())
+                  .then(refetchData => {
+                    if (cancelled) return;
+                    setWeekData(refetchData);
+                    if (refetchData.auditCounts) {
+                      setAuditCounts(refetchData.auditCounts);
+                    }
+                  });
+              }
+            })
+            .catch(() => { });
         }
       } catch (err) {
-        toast.error("Failed to load schedule data");
+        if (!cancelled) toast.error("Failed to load schedule data");
       } finally {
-        setLoadingData(false);
+        if (!cancelled) setLoadingData(false);
       }
     };
     fetchData();
+
+    return () => { cancelled = true; };
   }, [selectedWeek]);
 
   const navigateWeek = useCallback((direction: number) => {
@@ -584,21 +620,21 @@ export default function SchedulingPage() {
   useEffect(() => {
     const idx = weeks.indexOf(selectedWeek);
     setRightContent(
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Search employee..."
+            placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 h-8 w-[200px] text-sm"
+            className="pl-8 h-8 w-[120px] sm:w-[200px] text-sm"
           />
         </div>
         {/* Messaging-only: eligible count + refresh */}
         {activeMainTab === "messaging" && activeTabInfo && (
           <>
-            <Badge variant="secondary" className="text-[11px] h-6 px-2 gap-1.5">
+            <Badge variant="secondary" className="text-[11px] h-6 px-2 gap-1.5 hidden sm:inline-flex">
               <Users className="h-3.5 w-3.5" />
               {activeTabInfo.loading ? "..." : activeTabInfo.eligibleCount} eligible
             </Badge>
@@ -616,14 +652,13 @@ export default function SchedulingPage() {
         {/* Week selector — shown on both scheduling and messaging */}
         {weeks.length > 0 && (
           <>
-            <div className="w-px h-5 bg-border/60" />
+            <div className="w-px h-5 bg-border/60 hidden sm:block" />
             <Button
               variant="outline"
               size="icon"
               className="h-8 w-8"
               onClick={() => {
                 if (idx >= weeks.length - 1) {
-                  // At oldest week — generate previous week
                   const prevWeek = getPrevYearWeek(weeks[weeks.length - 1]);
                   generateWeek(prevWeek, 'prev');
                 } else {
@@ -641,7 +676,7 @@ export default function SchedulingPage() {
               )}
             </Button>
             <Select value={selectedWeek} onValueChange={setSelectedWeek}>
-              <SelectTrigger className="w-[170px] h-8 text-sm">
+              <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -686,7 +721,8 @@ export default function SchedulingPage() {
     scheduleId: string | undefined,
     newType: string,
     transporterId: string,
-    dayIdx: number
+    dayIdx: number,
+    employeeName?: string
   ) => {
     // Optimistic update
     const isWorking = !NON_WORKING_TYPES.has(newType.trim().toLowerCase());
@@ -716,6 +752,7 @@ export default function SchedulingPage() {
     try {
       // Build payload — include creation fields when no scheduleId
       const payload: Record<string, string> = { type: newType, startTime: defaultStartTime };
+      if (employeeName) payload.employeeName = employeeName;
       if (scheduleId) {
         payload.scheduleId = scheduleId;
       } else {
@@ -742,6 +779,9 @@ export default function SchedulingPage() {
       }
       toast.success(`Type updated to ${newType}`);
 
+      // Update audit count for this employee
+      setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
+
       // Refetch to get the new _id if we created a new entry
       if (!scheduleId) {
         const refetchRes = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`);
@@ -760,7 +800,7 @@ export default function SchedulingPage() {
   }, [selectedWeek, weekData]);
 
   // Handle note save — optimistic update
-  const handleNoteSaved = useCallback((transporterId: string, newNote: string) => {
+  const handleNoteSaved = useCallback((transporterId: string, newNote: string, employeeName?: string, oldNote?: string) => {
     setWeekData(prev => {
       if (!prev) return prev;
       return {
@@ -774,6 +814,8 @@ export default function SchedulingPage() {
         }),
       };
     });
+    // Update audit count optimistically
+    setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
   }, []);
 
   // Filter employees
@@ -865,7 +907,7 @@ export default function SchedulingPage() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-4">
+      <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-4">
 
         {/* ── Main Tabs: Scheduling | Messaging ── */}
         <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border shrink-0">
@@ -941,7 +983,7 @@ export default function SchedulingPage() {
           ) : (<>
 
             {/* ── KPI Cards ── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 shrink-0">
               {[
                 {
                   label: "Employees",
@@ -971,19 +1013,19 @@ export default function SchedulingPage() {
               ].map((kpi) => (
                 <div
                   key={kpi.label}
-                  className={`relative overflow-hidden rounded-xl border ${kpi.borderColor} p-4 bg-gradient-to-br ${kpi.gradient}`}
+                  className={`relative overflow-hidden rounded-xl border ${kpi.borderColor} p-3 sm:p-4 bg-gradient-to-br ${kpi.gradient}`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{kpi.label}</p>
-                      <p className="text-2xl font-bold mt-1">{loadingData ? "—" : kpi.value}</p>
+                      <p className="text-lg sm:text-2xl font-bold mt-1">{loadingData ? "—" : kpi.value}</p>
                     </div>
-                    <kpi.icon className={`h-8 w-8 ${kpi.iconColor} opacity-50`} />
+                    <kpi.icon className={`h-6 w-6 sm:h-8 sm:w-8 ${kpi.iconColor} opacity-50`} />
                   </div>
                 </div>
               ))}
               {/* Warnings Card */}
-              <div className="relative overflow-hidden rounded-xl border border-amber-500/30 p-4 bg-gradient-to-br from-zinc-500/10 to-zinc-500/5">
+              <div className="relative overflow-hidden rounded-xl border border-amber-500/30 p-3 sm:p-4 bg-gradient-to-br from-zinc-500/10 to-zinc-500/5">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Warnings</p>
@@ -1036,15 +1078,15 @@ export default function SchedulingPage() {
             ) : (
               <div className="rounded-xl border border-border/50 overflow-hidden bg-card flex-1 min-h-0 flex flex-col">
                 <div className="overflow-auto flex-1">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-xs sm:text-sm">
                     {/* Table Header with Dates */}
                     <thead className="sticky top-0 z-20">
                       <tr className="bg-muted border-b border-border/50">
-                        <th className="text-left font-semibold px-3 py-2.5 min-w-[180px] sticky left-0 bg-muted z-30 backdrop-blur-sm">
+                        <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[180px] sticky left-0 bg-muted z-30 backdrop-blur-sm">
                           Employee Name
                         </th>
                         {weekData?.dates?.map((date, i) => (
-                          <th key={date} className="text-center font-medium px-2 py-2.5 min-w-[110px]">
+                          <th key={date} className="text-center font-medium px-1 sm:px-2 py-2 sm:py-2.5 min-w-[70px] sm:min-w-[110px]">
                             <div className="flex flex-col items-center gap-0.5">
                               <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
                                 {DAY_NAMES[i]}
@@ -1053,8 +1095,14 @@ export default function SchedulingPage() {
                             </div>
                           </th>
                         ))}
-                        <th className="text-center font-semibold px-2 py-2.5 min-w-[50px]">Days</th>
-                        <th className="text-left font-semibold px-3 py-2.5 min-w-[180px]">Note</th>
+                        <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[36px] sm:min-w-[50px]">Days</th>
+                        <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[180px] hidden md:table-cell">Note</th>
+                        <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[40px] sm:min-w-[60px]">
+                          <div className="inline-flex items-center gap-1 text-violet-400">
+                            <History className="h-3 w-3" />
+                            <span className="text-[10px] font-semibold">Audit</span>
+                          </div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1063,7 +1111,7 @@ export default function SchedulingPage() {
                         className="border-b border-border/30 cursor-pointer hover:bg-muted/30 transition-colors"
                         onClick={() => setPlanningCollapsed(!planningCollapsed)}
                       >
-                        <td className="px-3 py-1.5 sticky left-0 bg-card z-10">
+                        <td className="px-2 sm:px-3 py-1.5 sticky left-0 bg-card z-10">
                           <div className="flex items-center gap-2">
                             <ChevronDown
                               className={cn(
@@ -1086,7 +1134,8 @@ export default function SchedulingPage() {
                           <td key={`planning-header-${i}`} className="px-2 py-1.5" />
                         ))}
                         <td className="px-2 py-1.5" />
-                        <td className="px-3 py-1.5" />
+                        <td className="px-2 sm:px-3 py-1.5 hidden md:table-cell" />
+                        <td className="px-1 sm:px-2 py-1.5" />
                       </tr>
                       {!planningCollapsed && planningData.map((row) => (
                         <tr key={row.label} className="border-b border-border/20 hover:bg-muted/20 transition-colors">
@@ -1110,7 +1159,8 @@ export default function SchedulingPage() {
                           <td className="text-center px-2 py-1.5">
                             <span className={cn("text-xs font-bold", row.color)}>{row.total}</span>
                           </td>
-                          <td className="px-3 py-1.5" />
+                          <td className="px-2 sm:px-3 py-1.5 hidden md:table-cell" />
+                          <td className="px-1 sm:px-2 py-1.5" />
                         </tr>
                       ))}
 
@@ -1129,7 +1179,7 @@ export default function SchedulingPage() {
                               onClick={() => toggleGroup(groupName)}
                             >
                               <td
-                                colSpan={(weekData?.dates?.length || 7) + 3}
+                                colSpan={(weekData?.dates?.length || 7) + 4}
                                 className="px-3 py-2"
                               >
                                 <div className="flex items-center gap-2">
@@ -1167,9 +1217,9 @@ export default function SchedulingPage() {
                                       key={`${groupName}-${emp.transporterId}`}
                                       className="border-b border-border/10 hover:bg-muted/20 transition-colors group"
                                     >
-                                      <td className="px-3 py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-xs font-semibold truncate max-w-[160px]">
+                                      <td className="px-2 sm:px-3 py-1 sm:py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors">
+                                        <div className="flex items-center gap-1 sm:gap-2">
+                                          <span className="text-[10px] sm:text-xs font-semibold truncate max-w-[80px] sm:max-w-[160px]">
                                             {emp.employee?.name || emp.transporterId}
                                           </span>
                                         </div>
@@ -1187,14 +1237,14 @@ export default function SchedulingPage() {
                                         const warning = consecutiveWarnings.get(dayIdx);
 
                                         return (
-                                          <td key={dayIdx} className="text-center px-1 py-1">
+                                          <td key={dayIdx} className="text-center px-0.5 sm:px-1 py-0.5 sm:py-1">
                                             <DropdownMenu>
                                               <Tooltip>
                                                 <TooltipTrigger asChild>
                                                   <DropdownMenuTrigger asChild>
                                                     <div
                                                       className={cn(
-                                                        "relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold transition-all border cursor-pointer select-none px-1.5",
+                                                        "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
                                                         style.bg,
                                                         style.text,
                                                         style.border,
@@ -1291,7 +1341,7 @@ export default function SchedulingPage() {
                                                         "flex items-center gap-2 cursor-pointer text-xs",
                                                         isActive && "bg-accent"
                                                       )}
-                                                      onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx)}
+                                                      onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name)}
                                                     >
                                                       <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", opt.bg)}>
                                                         <Icon className={cn("h-3 w-3", opt.text)} />
@@ -1320,14 +1370,51 @@ export default function SchedulingPage() {
                                           {workDays}
                                         </span>
                                       </td>
-                                      <td className="px-3 py-1.5">
+                                      <td className="px-2 sm:px-3 py-1.5 hidden md:table-cell">
                                         <EditableNote
                                           value={notes}
                                           employeeId={emp.employee?._id}
                                           transporterId={emp.transporterId}
                                           yearWeek={selectedWeek}
-                                          onSaved={(newNote) => handleNoteSaved(emp.transporterId, newNote)}
+                                          employeeName={emp.employee?.name}
+                                          onSaved={(newNote, eName, oldNote) => handleNoteSaved(emp.transporterId, newNote, eName, oldNote)}
                                         />
+                                      </td>
+                                      <td className="text-center px-0.5 sm:px-1 py-1 sm:py-1.5">
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              onClick={async () => {
+                                                setAuditEmployee({ transporterId: emp.transporterId, name: emp.employee?.name || emp.transporterId });
+                                                setShowAuditPanel(true);
+                                                setAuditLoading(true);
+                                                try {
+                                                  const res = await fetch(`/api/schedules/audit?yearWeek=${encodeURIComponent(selectedWeek)}&transporterId=${encodeURIComponent(emp.transporterId)}&limit=50`);
+                                                  const data = await res.json();
+                                                  setAuditLogs(data.logs || []);
+                                                } catch { }
+                                                setAuditLoading(false);
+                                              }}
+                                              className={cn(
+                                                "inline-flex items-center justify-center h-6 min-w-[24px] rounded-md transition-all",
+                                                (auditCounts[emp.transporterId] || 0) > 0
+                                                  ? "bg-violet-500/15 hover:bg-violet-500/25 ring-1 ring-violet-500/30 text-violet-400 hover:text-violet-300"
+                                                  : "text-muted-foreground/30 hover:text-muted-foreground/60 hover:bg-muted/30"
+                                              )}
+                                            >
+                                              {(auditCounts[emp.transporterId] || 0) > 0 ? (
+                                                <span className="text-[10px] font-bold">{auditCounts[emp.transporterId]}</span>
+                                              ) : (
+                                                <History className="h-3 w-3" />
+                                              )}
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="left" className="text-xs">
+                                            {(auditCounts[emp.transporterId] || 0) > 0
+                                              ? `${auditCounts[emp.transporterId]} change${auditCounts[emp.transporterId] !== 1 ? "s" : ""} this week`
+                                              : "No changes recorded"}
+                                          </TooltipContent>
+                                        </Tooltip>
                                       </td>
                                     </tr>
                                   );
@@ -1341,7 +1428,7 @@ export default function SchedulingPage() {
             )}
 
             {/* ── Type Legend ── */}
-            <div className="flex flex-wrap items-center gap-2 px-1">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 px-1">
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mr-2">Legend:</span>
               {TYPE_OPTIONS.map(opt => {
                 const Icon = opt.icon;
@@ -1358,6 +1445,137 @@ export default function SchedulingPage() {
           </>)}
         </div>
       </div>
+
+      {/* ── Audit Log Slide-out Panel ── */}
+      {showAuditPanel && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+            onClick={() => setShowAuditPanel(false)}
+          />
+          {/* Panel */}
+          <div className="relative w-full max-w-[100vw] sm:max-w-md bg-card border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right-full duration-300">
+            {/* Panel Header */}
+            <div className="shrink-0 px-5 py-4 border-b border-border bg-gradient-to-r from-violet-500/10 to-purple-500/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-violet-500/20 flex items-center justify-center ring-1 ring-violet-500/30">
+                    <History className="h-4.5 w-4.5 text-violet-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold">Audit Log</h2>
+                    <p className="text-[10px] text-muted-foreground">
+                      {auditEmployee?.name || ""} · {selectedWeek} · {auditLogs.length} change{auditLogs.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowAuditPanel(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Panel Content */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {auditLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="h-6 w-6 animate-spin text-violet-400" />
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center mb-3">
+                    <FileText className="h-7 w-7 text-muted-foreground/50" />
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">No changes recorded</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Changes will appear here when schedule modifications are made.</p>
+                </div>
+              ) : (
+                <div className="relative">
+                  {/* Timeline line */}
+                  <div className="absolute left-4 top-2 bottom-2 w-px bg-border" />
+
+                  <div className="space-y-1">
+                    {auditLogs.map((log, i) => {
+                      const actionConfig: Record<string, { icon: LucideIcon; color: string; bg: string; label: string }> = {
+                        type_changed: { icon: RefreshCw, color: "text-blue-400", bg: "bg-blue-500/15 ring-blue-500/30", label: "Type Changed" },
+                        note_updated: { icon: Pencil, color: "text-amber-400", bg: "bg-amber-500/15 ring-amber-500/30", label: "Note Updated" },
+                        start_time_changed: { icon: Clock, color: "text-emerald-400", bg: "bg-emerald-500/15 ring-emerald-500/30", label: "Start Time Changed" },
+                        schedule_created: { icon: Plus, color: "text-violet-400", bg: "bg-violet-500/15 ring-violet-500/30", label: "Schedule Created" },
+                      };
+                      const config = actionConfig[log.action] || actionConfig.type_changed;
+                      const ActionIcon = config.icon;
+                      const timeAgo = (() => {
+                        const diff = Date.now() - new Date(log.createdAt).getTime();
+                        const mins = Math.floor(diff / 60000);
+                        if (mins < 1) return "just now";
+                        if (mins < 60) return `${mins}m ago`;
+                        const hrs = Math.floor(mins / 60);
+                        if (hrs < 24) return `${hrs}h ago`;
+                        const days = Math.floor(hrs / 24);
+                        return `${days}d ago`;
+                      })();
+
+                      return (
+                        <div key={log._id || i} className="relative pl-10 py-2 group">
+                          {/* Timeline dot */}
+                          <div className={`absolute left-1.5 top-3.5 w-5 h-5 rounded-full ring-1 flex items-center justify-center ${config.bg}`}>
+                            <ActionIcon className={`h-2.5 w-2.5 ${config.color}`} />
+                          </div>
+
+                          {/* Content */}
+                          <div className="bg-muted/30 hover:bg-muted/50 rounded-xl px-3.5 py-2.5 transition-all border border-transparent hover:border-border/50">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`text-[10px] font-bold uppercase tracking-wider ${config.color}`}>
+                                {config.label}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground shrink-0">{timeAgo}</span>
+                            </div>
+
+                            <p className="text-xs font-semibold mt-1">
+                              {log.employeeName || log.transporterId}
+                            </p>
+
+                            {log.dayOfWeek && (
+                              <p className="text-[11px] text-muted-foreground">
+                                {log.dayOfWeek}
+                                {log.date && ` · ${new Date(log.date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`}
+                              </p>
+                            )}
+
+                            {/* Value change */}
+                            {(log.oldValue || log.newValue) && (
+                              <div className="flex items-center gap-1.5 mt-1.5">
+                                {log.oldValue && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-red-500/10 text-red-400 ring-1 ring-red-500/20 line-through">
+                                    {log.oldValue || "(empty)"}
+                                  </span>
+                                )}
+                                {log.oldValue && log.newValue && (
+                                  <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                )}
+                                {log.newValue && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
+                                    {log.newValue || "(empty)"}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+                              by {log.performedByName || log.performedBy}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </TooltipProvider>
   );
 }

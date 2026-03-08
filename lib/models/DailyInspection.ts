@@ -34,6 +34,7 @@ export interface IDailyInspection extends Document {
 
     // Misc
     isCompared: boolean;
+    isStandardPhoto: boolean;
 
     createdAt: Date;
     updatedAt: Date;
@@ -74,6 +75,7 @@ const DailyInspectionSchema: Schema = new Schema(
 
         // Misc
         isCompared: { type: Boolean, default: false },
+        isStandardPhoto: { type: Boolean, default: false },
     },
     {
         timestamps: true,
@@ -90,6 +92,7 @@ DailyInspectionSchema.index({ vin: 1, routeDate: -1 });
 DailyInspectionSchema.index({ driver: 1 });
 DailyInspectionSchema.index({ inspectedBy: 1 });
 DailyInspectionSchema.index({ unitNumber: 1, routeDate: -1 });
+DailyInspectionSchema.index({ vin: 1, isStandardPhoto: 1 });
 // Text index for full-text search (much faster than $regex)
 DailyInspectionSchema.index({ vin: 'text', driver: 'text', routeId: 'text', inspectedBy: 'text', comments: 'text' }, { name: 'inspection_text_search' });
 

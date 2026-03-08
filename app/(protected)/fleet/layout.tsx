@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import {
   IconChartDonut, IconCar, IconTool, IconClipboardCheck,
-  IconFileInvoice, IconSearch, IconPlus,
+  IconFileInvoice, IconSearch, IconPlus, IconRotate2, IconCheck,
 } from "@tabler/icons-react";
 
 // ── Fleet Context ─────────────────────────────────────────────────────
@@ -39,6 +39,12 @@ interface FleetContextType {
   repairsSeed: SeedPage | null;
   inspectionsSeed: SeedPage | null;
   rentalsSeed: any[] | null;
+  showReturned: boolean;
+  setShowReturned: (v: boolean) => void;
+  showCompleted: boolean;
+  setShowCompleted: (v: boolean) => void;
+  showStandardOnly: boolean;
+  setShowStandardOnly: (v: boolean) => void;
 }
 
 const FleetContext = createContext<FleetContextType | null>(null);
@@ -78,6 +84,9 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const [repairsSeed, setRepairsSeed] = useState<SeedPage | null>(null);
   const [inspectionsSeed, setInspectionsSeed] = useState<SeedPage | null>(null);
   const [rentalsSeed, setRentalsSeed] = useState<any[] | null>(null);
+  const [showReturned, setShowReturned] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [showStandardOnly, setShowStandardOnly] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -86,8 +95,8 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       // Fire ALL fetches in parallel — everything loads at once
       const [dashRes, vehRes, repRes, insRes, renRes] = await Promise.all([
         fetch("/api/fleet?section=dashboard"),
-        fetch("/api/fleet?section=vehicles"),
-        fetch("/api/fleet?section=repairs&skip=0&limit=50"),
+        fetch(`/api/fleet?section=vehicles${showReturned ? "&includeReturned=true" : ""}`),
+        fetch(`/api/fleet?section=repairs&skip=0&limit=50${showCompleted ? "" : "&excludeCompleted=true"}`),
         fetch("/api/fleet?section=inspections&skip=0&limit=50"),
         fetch("/api/fleet?section=rentals"),
       ]);
@@ -112,7 +121,23 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showReturned, showCompleted]);
+
+  // Re-fetch vehicles when showReturned changes (after initial mount)
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current) { mountedRef.current = true; return; }
+    // Only re-fetch vehicles, not the whole dashboard
+    (async () => {
+      try {
+        const vehRes = await fetch(`/api/fleet?section=vehicles${showReturned ? "&includeReturned=true" : ""}`);
+        const vehData = vehRes.ok ? await vehRes.json() : {};
+        setData((prev) => prev ? { ...prev, vehicles: (vehData as any).vehicles || [] } : prev);
+      } catch (err) {
+        console.error("Failed to re-fetch vehicles:", err);
+      }
+    })();
+  }, [showReturned]);
 
   useEffect(() => {
     fetchData();
@@ -228,21 +253,78 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
           />
         </div>
         {isVehiclesPage && (
-          <button
-            onClick={() => openCreateModal("vehicle")}
-            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm flex-shrink-0"
-          >
-            <IconPlus size={14} />
-            <span className="hidden sm:inline">Add</span>
-          </button>
+          <>
+            {/* Toggle for showing returned vehicles */}
+            <button
+              onClick={() => setShowReturned(!showReturned)}
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm flex-shrink-0 border ${showReturned
+                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
+                : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+                }`}
+              title={showReturned ? "Hide returned vehicles" : "Show returned vehicles"}
+            >
+              <IconRotate2 size={14} />
+              <span className="hidden sm:inline">Returned</span>
+              {/* Toggle indicator */}
+              <div className={`w-6 h-3.5 rounded-full transition-colors relative flex-shrink-0 ${showReturned ? "bg-amber-500" : "bg-muted-foreground/30"
+                }`}>
+                <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white shadow-sm transition-all ${showReturned ? "left-3" : "left-0.5"
+                  }`} />
+              </div>
+            </button>
+            <button
+              onClick={() => openCreateModal("vehicle")}
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm flex-shrink-0"
+            >
+              <IconPlus size={14} />
+              <span className="hidden sm:inline">Add</span>
+            </button>
+          </>
         )}
         {isRepairsPage && (
+          <>
+            {/* Toggle for showing completed repairs */}
+            <button
+              onClick={() => setShowCompleted(!showCompleted)}
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm flex-shrink-0 border ${showCompleted
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25"
+                : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+                }`}
+              title={showCompleted ? "Hide completed repairs" : "Show completed repairs"}
+            >
+              <IconCheck size={14} />
+              <span className="hidden sm:inline">Completed</span>
+              <div className={`w-6 h-3.5 rounded-full transition-colors relative flex-shrink-0 ${showCompleted ? "bg-emerald-500" : "bg-muted-foreground/30"
+                }`}>
+                <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white shadow-sm transition-all ${showCompleted ? "left-3" : "left-0.5"
+                  }`} />
+              </div>
+            </button>
+            <button
+              onClick={() => openCreateModal("repair")}
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm flex-shrink-0"
+            >
+              <IconPlus size={14} />
+              <span className="hidden sm:inline">Add Repair</span>
+            </button>
+          </>
+        )}
+        {isInspectionsPage && (
           <button
-            onClick={() => openCreateModal("repair")}
-            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm flex-shrink-0"
+            onClick={() => setShowStandardOnly(!showStandardOnly)}
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm flex-shrink-0 border ${showStandardOnly
+              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
+              : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+              }`}
+            title={showStandardOnly ? "Show all inspections" : "Show only standard photo inspections"}
           >
-            <IconPlus size={14} />
-            <span className="hidden sm:inline">Add Repair</span>
+            <span className="text-sm leading-none">{showStandardOnly ? "★" : "☆"}</span>
+            <span className="hidden sm:inline">Standard Only</span>
+            <div className={`w-6 h-3.5 rounded-full transition-colors relative flex-shrink-0 ${showStandardOnly ? "bg-amber-500" : "bg-muted-foreground/30"
+              }`}>
+              <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white shadow-sm transition-all ${showStandardOnly ? "left-3" : "left-0.5"
+                }`} />
+            </div>
           </button>
         )}
         {isRentalsPage && (
@@ -260,12 +342,12 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       setRightContent(null);
       setLeftContent(null);
     };
-  }, [setRightContent, setLeftContent, isVehiclesPage, isRepairsPage, isInspectionsPage, isRentalsPage, vehicleCount, rentalsCount, openCreateModal, pathname]);
+  }, [setRightContent, setLeftContent, isVehiclesPage, isRepairsPage, isInspectionsPage, isRentalsPage, vehicleCount, rentalsCount, openCreateModal, pathname, showReturned, showCompleted, showStandardOnly]);
 
-  // Determine active tab from pathname
+  // Determine active tab from pathname (first segment after /fleet/)
   const activeTab = (() => {
     if (pathname === "/fleet" || pathname === "/fleet/overview") return "overview";
-    const seg = pathname.replace("/fleet/", "");
+    const seg = pathname.replace("/fleet/", "").split("/")[0];
     return seg || "overview";
   })();
 
@@ -275,6 +357,9 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       openCreateModal, openEditModal, handleDelete,
       modalOpen, setModalOpen, modalType, formData, updateForm, handleSave, saving, editId,
       repairsSeed, inspectionsSeed, rentalsSeed,
+      showReturned, setShowReturned,
+      showCompleted, setShowCompleted,
+      showStandardOnly, setShowStandardOnly,
     }}>
       <div className="flex flex-col max-w-[1600px] mx-auto h-[calc(100vh-var(--header-height)-2rem)]">
 
@@ -295,8 +380,8 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
           ))}
         </div>
 
-        {/* ── Page Content (fills remaining height) ──────────── */}
-        <div className="flex-1 min-h-0 mt-3 rounded-[var(--radius-xl)] bg-card overflow-hidden">
+        {/* ── Page Content (fills remaining height, scrollable) ── */}
+        <div className="flex-1 min-h-0 mt-3 rounded-[var(--radius-xl)] bg-card overflow-y-auto p-4">
           {children}
         </div>
       </div>
