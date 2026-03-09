@@ -631,7 +631,7 @@ export default function InspectionDetailPage() {
                             </div>
                         )}
 
-                        {/* Photo gallery */}
+                        {/* Photo gallery — structured layout */}
                         {hasPhotos && (
                             <div>
                                 <div className="flex items-center gap-2 mb-3">
@@ -639,17 +639,64 @@ export default function InspectionDetailPage() {
                                     <h2 className="text-sm font-bold text-foreground">Inspection Photos</h2>
                                     <span className="text-[10px] text-muted-foreground/40">({photos.filter(p => p.url).length} of 6)</span>
                                 </div>
-                                <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
-                                    {photos[0]?.url && (
-                                        <div className="col-span-2 row-span-2 md:col-span-2 md:row-span-2">
-                                            <PhotoCard url={photos[0].url} label={photos[0].label} onClick={() => setLightbox(photos[0].url!)} />
-                                        </div>
-                                    )}
-                                    {photos.slice(photos[0]?.url ? 1 : 0).map((p) => (
-                                        <PhotoCard key={p.label} url={p.url} label={p.label}
-                                            onClick={p.url ? () => setLightbox(p.url!) : undefined} />
-                                    ))}
+
+                                {/* Row 1: Vehicle Photo 1 + Vehicle Photo 3 — horizontal/landscape */}
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                    <PhotoCard url={photos[0]?.url} label={photos[0]?.label || "Vehicle Photo 1"} onClick={photos[0]?.url ? () => setLightbox(photos[0].url!) : undefined} />
+                                    <PhotoCard url={photos[2]?.url} label={photos[2]?.label || "Vehicle Photo 3"} onClick={photos[2]?.url ? () => setLightbox(photos[2].url!) : undefined} />
                                 </div>
+
+                                {/* Row 2: Vehicle Photo 2 + Vehicle Photo 4 — vertical/portrait */}
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                    <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
+                                        {photos[1]?.url ? (
+                                            <button onClick={() => setLightbox(photos[1].url!)} className="w-full h-full group relative focus:outline-none">
+                                                <img src={photos[1].url} alt={photos[1].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
+                                                    <span className="text-[10px] text-white font-medium">{photos[1].label}</span>
+                                                    <IconMaximize size={12} className="text-white/70" />
+                                                </div>
+                                            </button>
+                                        ) : (
+                                            <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
+                                                <IconCamera size={20} />
+                                                <span className="text-[10px]">{photos[1]?.label || "Vehicle Photo 2"}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
+                                        {photos[3]?.url ? (
+                                            <button onClick={() => setLightbox(photos[3].url!)} className="w-full h-full group relative focus:outline-none">
+                                                <img src={photos[3].url} alt={photos[3].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
+                                                    <span className="text-[10px] text-white font-medium">{photos[3].label}</span>
+                                                    <IconMaximize size={12} className="text-white/70" />
+                                                </div>
+                                            </button>
+                                        ) : (
+                                            <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
+                                                <IconCamera size={20} />
+                                                <span className="text-[10px]">{photos[3]?.label || "Vehicle Photo 4"}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Row 3: Dashboard — full width, horizontal */}
+                                {photos[4]?.url && (
+                                    <div className="mb-2">
+                                        <PhotoCard url={photos[4].url} label={photos[4].label || "Dashboard"} onClick={() => setLightbox(photos[4].url!)} />
+                                    </div>
+                                )}
+
+                                {/* Additional picture if exists */}
+                                {photos[5]?.url && (
+                                    <div>
+                                        <PhotoCard url={photos[5].url} label={photos[5].label || "Additional"} onClick={() => setLightbox(photos[5].url!)} />
+                                    </div>
+                                )}
                             </div>
                         )}
 

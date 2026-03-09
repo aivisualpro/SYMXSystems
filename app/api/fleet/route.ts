@@ -414,7 +414,7 @@ export async function POST(req: NextRequest) {
       }
 
       case "inspection": {
-        const inspection = await VehicleInspection.create(data);
+        const inspection = await DailyInspection.create({ ...data, timeStamp: data.timeStamp || new Date() });
         return NextResponse.json({ inspection, message: "Inspection created successfully" });
       }
 

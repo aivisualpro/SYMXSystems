@@ -78,19 +78,41 @@ export default function FleetFormModal() {
 
             {modalType === "inspection" && (<>
               <div className="grid grid-cols-2 gap-3">
+                <FormField label="Driver (Transporter ID)"><input className={inputClass} value={formData.driver || ""} onChange={e => updateForm("driver", e.target.value)} placeholder="e.g. DA123" /></FormField>
+                <FormField label="VIN"><input className={inputClass} value={formData.vin || ""} onChange={e => updateForm("vin", e.target.value)} placeholder="Vehicle VIN" /></FormField>
                 <FormField label="Unit Number"><input className={inputClass} value={formData.unitNumber || ""} onChange={e => updateForm("unitNumber", e.target.value)} /></FormField>
-                <FormField label="Inspector Name"><input className={inputClass} value={formData.inspectorName || ""} onChange={e => updateForm("inspectorName", e.target.value)} /></FormField>
-                <FormField label="Type"><select className={inputClass} value={formData.inspectionType || "Pre-Trip"} onChange={e => updateForm("inspectionType", e.target.value)}>
-                  {["Pre-Trip", "Post-Trip", "Monthly", "Annual", "DOT", "Safety"].map(s => <option key={s} value={s}>{s}</option>)}
-                </select></FormField>
-                <FormField label="Result"><select className={inputClass} value={formData.overallResult || "Pass"} onChange={e => updateForm("overallResult", e.target.value)}>
-                  {["Pass", "Fail", "Needs Attention"].map(s => <option key={s} value={s}>{s}</option>)}
-                </select></FormField>
-                <FormField label="Date"><input type="date" className={inputClass} value={formData.inspectionDate ? formData.inspectionDate.split("T")[0] : ""} onChange={e => updateForm("inspectionDate", e.target.value)} /></FormField>
+                <FormField label="Route ID"><input className={inputClass} value={formData.routeId || ""} onChange={e => updateForm("routeId", e.target.value)} /></FormField>
+                <FormField label="Route Date"><input type="date" className={inputClass} value={formData.routeDate ? (typeof formData.routeDate === "string" ? formData.routeDate.split("T")[0] : "") : ""} onChange={e => updateForm("routeDate", e.target.value)} /></FormField>
                 <FormField label="Mileage"><input type="number" className={inputClass} value={formData.mileage || ""} onChange={e => updateForm("mileage", parseInt(e.target.value) || 0)} /></FormField>
+                <FormField label="Inspected By (Email)"><input className={inputClass} value={formData.inspectedBy || ""} onChange={e => updateForm("inspectedBy", e.target.value)} placeholder="email@domain.com" /></FormField>
+                <FormField label="Any Repairs?"><select className={inputClass} value={formData.anyRepairs || ""} onChange={e => updateForm("anyRepairs", e.target.value)}>
+                  <option value="">No</option>
+                  <option value="TRUE">Yes</option>
+                </select></FormField>
               </div>
-              <FormField label="Defects Found"><textarea className={inputClass} rows={2} value={formData.defectsFound || ""} onChange={e => updateForm("defectsFound", e.target.value)} /></FormField>
-              <FormField label="Notes"><textarea className={inputClass} rows={2} value={formData.notes || ""} onChange={e => updateForm("notes", e.target.value)} /></FormField>
+              <FormField label="Comments"><textarea className={inputClass} rows={2} value={formData.comments || ""} onChange={e => updateForm("comments", e.target.value)} /></FormField>
+              {formData.anyRepairs === "TRUE" && (
+                <div className="space-y-3 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                  <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Repair Details</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField label="Repair Description"><input className={inputClass} value={formData.repairDescription || ""} onChange={e => updateForm("repairDescription", e.target.value)} /></FormField>
+                    <FormField label="Repair Status"><input className={inputClass} value={formData.repairCurrentStatus || ""} onChange={e => updateForm("repairCurrentStatus", e.target.value)} placeholder="e.g. In Progress" /></FormField>
+                    <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.repairEstimatedDate ? formData.repairEstimatedDate.split("T")[0] : ""} onChange={e => updateForm("repairEstimatedDate", e.target.value)} /></FormField>
+                  </div>
+                  <FormField label="Repair Image URL"><input className={inputClass} value={formData.repairImage || ""} onChange={e => updateForm("repairImage", e.target.value)} placeholder="https://..." /></FormField>
+                </div>
+              )}
+              <div className="space-y-3 rounded-lg border border-border/50 bg-muted/20 p-3">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Photos</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField label="Vehicle Picture 1"><input className={inputClass} value={formData.vehiclePicture1 || ""} onChange={e => updateForm("vehiclePicture1", e.target.value)} placeholder="https://..." /></FormField>
+                  <FormField label="Vehicle Picture 2"><input className={inputClass} value={formData.vehiclePicture2 || ""} onChange={e => updateForm("vehiclePicture2", e.target.value)} placeholder="https://..." /></FormField>
+                  <FormField label="Vehicle Picture 3"><input className={inputClass} value={formData.vehiclePicture3 || ""} onChange={e => updateForm("vehiclePicture3", e.target.value)} placeholder="https://..." /></FormField>
+                  <FormField label="Vehicle Picture 4"><input className={inputClass} value={formData.vehiclePicture4 || ""} onChange={e => updateForm("vehiclePicture4", e.target.value)} placeholder="https://..." /></FormField>
+                  <FormField label="Dashboard Image"><input className={inputClass} value={formData.dashboardImage || ""} onChange={e => updateForm("dashboardImage", e.target.value)} placeholder="https://..." /></FormField>
+                  <FormField label="Additional Picture"><input className={inputClass} value={formData.additionalPicture || ""} onChange={e => updateForm("additionalPicture", e.target.value)} placeholder="https://..." /></FormField>
+                </div>
+              </div>
             </>)}
 
             {modalType === "rental" && (<>

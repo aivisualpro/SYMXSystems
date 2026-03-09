@@ -315,22 +315,31 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
           </>
         )}
         {isInspectionsPage && (
-          <button
-            onClick={() => setShowStandardOnly(!showStandardOnly)}
-            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm flex-shrink-0 border ${showStandardOnly
-              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
-              : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
-              }`}
-            title={showStandardOnly ? "Show all inspections" : "Show only standard photo inspections"}
-          >
-            <span className="text-sm leading-none">{showStandardOnly ? "★" : "☆"}</span>
-            <span className="hidden sm:inline">Standard Only</span>
-            <div className={`w-6 h-3.5 rounded-full transition-colors relative flex-shrink-0 ${showStandardOnly ? "bg-amber-500" : "bg-muted-foreground/30"
-              }`}>
-              <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white shadow-sm transition-all ${showStandardOnly ? "left-3" : "left-0.5"
-                }`} />
-            </div>
-          </button>
+          <>
+            <button
+              onClick={() => setShowStandardOnly(!showStandardOnly)}
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm flex-shrink-0 border ${showStandardOnly
+                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
+                : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+                }`}
+              title={showStandardOnly ? "Show all inspections" : "Show only standard photo inspections"}
+            >
+              <span className="text-sm leading-none">{showStandardOnly ? "★" : "☆"}</span>
+              <span className="hidden sm:inline">Standard Only</span>
+              <div className={`w-6 h-3.5 rounded-full transition-colors relative flex-shrink-0 ${showStandardOnly ? "bg-amber-500" : "bg-muted-foreground/30"
+                }`}>
+                <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white shadow-sm transition-all ${showStandardOnly ? "left-3" : "left-0.5"
+                  }`} />
+              </div>
+            </button>
+            <button
+              onClick={() => openCreateModal("inspection")}
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shadow-sm flex-shrink-0"
+            >
+              <IconPlus size={14} />
+              <span className="hidden sm:inline">Add Inspection</span>
+            </button>
+          </>
         )}
         {isRentalsPage && (
           <button
