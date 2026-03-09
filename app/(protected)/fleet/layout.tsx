@@ -196,6 +196,8 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const isRepairsPage = pathname === "/fleet/repairs";
   const isInspectionsPage = pathname === "/fleet/inspections";
   const isRentalsPage = pathname === "/fleet/rentals";
+  // Detail pages (e.g. /fleet/inspections/[id]) — 3+ segments after splitting
+  const isDetailPage = pathname.replace("/fleet/", "").split("/").filter(Boolean).length >= 2;
   const vehicleCount = data?.vehicles?.length ?? 0;
   const rentalsCount = rentalsSeed?.length ?? 0;
 
@@ -210,8 +212,11 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
     if (searchInputRef.current) searchInputRef.current.value = "";
   }, [pathname, setSearch]);
 
-  // Inject header content — only re-runs on page/count changes, NOT on every keystroke
+  // Inject header content — only on LIST pages, not detail pages (detail pages set their own header buttons)
   useEffect(() => {
+    // Skip if we're on a detail page — the detail component handles its own header
+    if (isDetailPage) return;
+
     // Left: page title with count
     if (isVehiclesPage) {
       setLeftContent(
@@ -342,7 +347,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       setRightContent(null);
       setLeftContent(null);
     };
-  }, [setRightContent, setLeftContent, isVehiclesPage, isRepairsPage, isInspectionsPage, isRentalsPage, vehicleCount, rentalsCount, openCreateModal, pathname, showReturned, showCompleted, showStandardOnly]);
+  }, [setRightContent, setLeftContent, isVehiclesPage, isRepairsPage, isInspectionsPage, isRentalsPage, isDetailPage, vehicleCount, rentalsCount, openCreateModal, pathname, showReturned, showCompleted, showStandardOnly]);
 
   // Determine active tab from pathname (first segment after /fleet/)
   const activeTab = (() => {
