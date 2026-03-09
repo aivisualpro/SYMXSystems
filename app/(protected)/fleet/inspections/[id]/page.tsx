@@ -579,8 +579,8 @@ export default function InspectionDetailPage() {
                     </div>
                 </div>
 
-                {/* ── Normal Mode ────────────────────────────────────── */}
-                {!compareMode && (
+                {/* ── Content (always visible, photos switch to compare sliders when compareMode is on) ── */}
+                {
                     <>
                         {/* Comments */}
                         {inspection.comments && (
@@ -631,70 +631,128 @@ export default function InspectionDetailPage() {
                             </div>
                         )}
 
-                        {/* Photo gallery — structured layout */}
+                        {/* Photo gallery — normal or compare mode */}
                         {hasPhotos && (
                             <div>
                                 <div className="flex items-center gap-2 mb-3">
                                     <IconCamera size={14} className="text-muted-foreground/60" />
                                     <h2 className="text-sm font-bold text-foreground">Inspection Photos</h2>
                                     <span className="text-[10px] text-muted-foreground/40">({photos.filter(p => p.url).length} of 6)</span>
+                                    {compareMode && compareData && (
+                                        <span className="text-[10px] text-primary font-medium ml-1">— Drag slider to compare</span>
+                                    )}
                                 </div>
+
+                                {/* Compare mode indicator */}
+                                {compareMode && compareData && (
+                                    <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 flex items-center gap-3 text-sm mb-3">
+                                        {compareSource === "master" ? (
+                                            <><span className="text-amber-500 text-base leading-none">★</span> Comparing with <strong>Standard Photo</strong> — {fmtDateShort(compareData.routeDate)}</>
+                                        ) : (
+                                            <><IconArrowsLeftRight size={14} className="text-primary" /> Comparing with <strong>Previous Inspection</strong> — {fmtDateShort(compareData.routeDate)}</>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Row 1: Vehicle Photo 1 + Vehicle Photo 3 — horizontal/landscape */}
                                 <div className="grid grid-cols-2 gap-2 mb-2">
-                                    <PhotoCard url={photos[0]?.url} label={photos[0]?.label || "Vehicle Photo 1"} onClick={photos[0]?.url ? () => setLightbox(photos[0].url!) : undefined} />
-                                    <PhotoCard url={photos[2]?.url} label={photos[2]?.label || "Vehicle Photo 3"} onClick={photos[2]?.url ? () => setLightbox(photos[2].url!) : undefined} />
+                                    {compareMode && compareData ? (
+                                        <>
+                                            <div>
+                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[0]?.label}</p>
+                                                <ImageCompareSlider before={photos[0]?.url} after={prevPhotos[0]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[2]?.label}</p>
+                                                <ImageCompareSlider before={photos[2]?.url} after={prevPhotos[2]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <PhotoCard url={photos[0]?.url} label={photos[0]?.label || "Vehicle Photo 1"} onClick={photos[0]?.url ? () => setLightbox(photos[0].url!) : undefined} />
+                                            <PhotoCard url={photos[2]?.url} label={photos[2]?.label || "Vehicle Photo 3"} onClick={photos[2]?.url ? () => setLightbox(photos[2].url!) : undefined} />
+                                        </>
+                                    )}
                                 </div>
 
                                 {/* Row 2: Vehicle Photo 2 + Vehicle Photo 4 — vertical/portrait */}
                                 <div className="grid grid-cols-2 gap-2 mb-2">
-                                    <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
-                                        {photos[1]?.url ? (
-                                            <button onClick={() => setLightbox(photos[1].url!)} className="w-full h-full group relative focus:outline-none">
-                                                <img src={photos[1].url} alt={photos[1].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
-                                                    <span className="text-[10px] text-white font-medium">{photos[1].label}</span>
-                                                    <IconMaximize size={12} className="text-white/70" />
-                                                </div>
-                                            </button>
-                                        ) : (
-                                            <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
-                                                <IconCamera size={20} />
-                                                <span className="text-[10px]">{photos[1]?.label || "Vehicle Photo 2"}</span>
+                                    {compareMode && compareData ? (
+                                        <>
+                                            <div>
+                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[1]?.label}</p>
+                                                <ImageCompareSlider before={photos[1]?.url} after={prevPhotos[1]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
                                             </div>
-                                        )}
-                                    </div>
-                                    <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
-                                        {photos[3]?.url ? (
-                                            <button onClick={() => setLightbox(photos[3].url!)} className="w-full h-full group relative focus:outline-none">
-                                                <img src={photos[3].url} alt={photos[3].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
-                                                    <span className="text-[10px] text-white font-medium">{photos[3].label}</span>
-                                                    <IconMaximize size={12} className="text-white/70" />
-                                                </div>
-                                            </button>
-                                        ) : (
-                                            <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
-                                                <IconCamera size={20} />
-                                                <span className="text-[10px]">{photos[3]?.label || "Vehicle Photo 4"}</span>
+                                            <div>
+                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[3]?.label}</p>
+                                                <ImageCompareSlider before={photos[3]?.url} after={prevPhotos[3]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
                                             </div>
-                                        )}
-                                    </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
+                                                {photos[1]?.url ? (
+                                                    <button onClick={() => setLightbox(photos[1].url!)} className="w-full h-full group relative focus:outline-none">
+                                                        <img src={photos[1].url} alt={photos[1].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                        <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
+                                                            <span className="text-[10px] text-white font-medium">{photos[1].label}</span>
+                                                            <IconMaximize size={12} className="text-white/70" />
+                                                        </div>
+                                                    </button>
+                                                ) : (
+                                                    <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
+                                                        <IconCamera size={20} />
+                                                        <span className="text-[10px]">{photos[1]?.label || "Vehicle Photo 2"}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
+                                                {photos[3]?.url ? (
+                                                    <button onClick={() => setLightbox(photos[3].url!)} className="w-full h-full group relative focus:outline-none">
+                                                        <img src={photos[3].url} alt={photos[3].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                        <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
+                                                            <span className="text-[10px] text-white font-medium">{photos[3].label}</span>
+                                                            <IconMaximize size={12} className="text-white/70" />
+                                                        </div>
+                                                    </button>
+                                                ) : (
+                                                    <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
+                                                        <IconCamera size={20} />
+                                                        <span className="text-[10px]">{photos[3]?.label || "Vehicle Photo 4"}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 {/* Row 3: Dashboard — full width, horizontal */}
-                                {photos[4]?.url && (
+                                {(photos[4]?.url || (compareMode && prevPhotos[4]?.url)) && (
                                     <div className="mb-2">
-                                        <PhotoCard url={photos[4].url} label={photos[4].label || "Dashboard"} onClick={() => setLightbox(photos[4].url!)} />
+                                        {compareMode && compareData ? (
+                                            <div>
+                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[4]?.label || "Dashboard"}</p>
+                                                <ImageCompareSlider before={photos[4]?.url} after={prevPhotos[4]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                            </div>
+                                        ) : (
+                                            <PhotoCard url={photos[4]?.url} label={photos[4]?.label || "Dashboard"} onClick={() => setLightbox(photos[4].url!)} />
+                                        )}
                                     </div>
                                 )}
 
                                 {/* Additional picture if exists */}
-                                {photos[5]?.url && (
+                                {(photos[5]?.url || (compareMode && prevPhotos[5]?.url)) && (
                                     <div>
-                                        <PhotoCard url={photos[5].url} label={photos[5].label || "Additional"} onClick={() => setLightbox(photos[5].url!)} />
+                                        {compareMode && compareData ? (
+                                            <div>
+                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[5]?.label || "Additional"}</p>
+                                                <ImageCompareSlider before={photos[5]?.url} after={prevPhotos[5]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                            </div>
+                                        ) : (
+                                            <PhotoCard url={photos[5]?.url} label={photos[5]?.label || "Additional"} onClick={() => setLightbox(photos[5].url!)} />
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -710,9 +768,6 @@ export default function InspectionDetailPage() {
                                     <div>
                                         <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-0.5">Inspected By</p>
                                         <p className="text-sm font-semibold text-foreground">{inspectedByDisplay}</p>
-                                        {inspection.inspectedByName && inspection.inspectedBy && (
-                                            <p className="text-[10px] text-muted-foreground/40 mt-0.5">{inspection.inspectedBy}</p>
-                                        )}
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3">
@@ -721,56 +776,13 @@ export default function InspectionDetailPage() {
                                     </div>
                                     <div>
                                         <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-0.5">Timestamp</p>
-                                        <p className="text-sm font-semibold text-foreground">{fmtDate(inspection.timeStamp)}</p>
-                                        <p className="text-xs text-muted-foreground/50">{fmtTime(inspection.timeStamp)}</p>
+                                        <p className="text-sm font-semibold text-foreground">{fmtDate(inspection.timeStamp)} · {fmtTime(inspection.timeStamp)}</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </>
-                )}
-
-                {/* ── Comparison Mode ────────────────────────────────── */}
-                {compareMode && compareData && (
-                    <>
-                        {/* Source indicator */}
-                        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 flex items-center gap-3 text-sm">
-                            {compareSource === "master" ? (
-                                <><span className="text-amber-500 text-base leading-none">★</span> Comparing with <strong>Standard Photo</strong> — {fmtDateShort(compareData.routeDate)}</>
-                            ) : (
-                                <><IconArrowsLeftRight size={14} className="text-primary" /> Comparing with <strong>Previous Inspection</strong> — {fmtDateShort(compareData.routeDate)}</>
-                            )}
-                        </div>
-
-                        {/* Image comparisons */}
-                        <div>
-                            <h2 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
-                                <IconArrowsLeftRight size={14} className="text-primary" />
-                                Photo Comparison
-                                <span className="text-[10px] text-muted-foreground/40 font-normal">Drag the slider to compare</span>
-                            </h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {photos.map((curr, i) => (
-                                    <div key={curr.label}>
-                                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{curr.label}</p>
-                                        {curr.url || prevPhotos[i]?.url ? (
-                                            <ImageCompareSlider
-                                                before={curr.url}
-                                                after={prevPhotos[i]?.url}
-                                                beforeLabel={fmtDateShort(inspection.routeDate)}
-                                                afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)}
-                                            />
-                                        ) : (
-                                            <div className="aspect-video rounded-xl bg-muted/10 border border-border/20 flex items-center justify-center text-muted-foreground/30">
-                                                <IconCamera size={24} />
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </>
-                )}
+                }
             </div>
         </div>
     );
