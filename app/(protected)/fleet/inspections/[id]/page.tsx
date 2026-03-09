@@ -570,7 +570,7 @@ export default function InspectionDetailPage() {
                                     const missingPhotos = photos.filter(p => !p.url);
                                     if (missingPhotos.length === 0) return null;
                                     return (
-                                        <div className="col-span-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
+                                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
                                             <div className="p-2 rounded-lg bg-amber-500/10 mt-0.5">
                                                 <IconCamera size={16} className="text-amber-500" />
                                             </div>
