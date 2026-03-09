@@ -23,8 +23,8 @@ const fmtTime = (d: any) => !d ? "—" : new Date(d).toLocaleTimeString("en-US",
 
 /* ── Image Compare Slider (ref-based, zero re-renders) ───────────── */
 function ImageCompareSlider({
-    before, after, beforeLabel, afterLabel,
-}: { before?: string; after?: string; beforeLabel: string; afterLabel: string }) {
+    before, after, beforeLabel, afterLabel, aspectClass,
+}: { before?: string; after?: string; beforeLabel: string; afterLabel: string; aspectClass?: string }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const clipRef = useRef<HTMLDivElement>(null);
     const handleRef = useRef<HTMLDivElement>(null);
@@ -73,7 +73,7 @@ function ImageCompareSlider({
     return (
         <div
             ref={containerRef}
-            className="relative w-full aspect-video overflow-hidden rounded-xl select-none cursor-col-resize group touch-none"
+            className={`relative w-full ${aspectClass || "aspect-video"} overflow-hidden rounded-xl select-none cursor-col-resize group touch-none`}
             onPointerDown={onDown}
         >
             <div className="absolute inset-0 bg-black/80">
@@ -681,11 +681,11 @@ export default function InspectionDetailPage() {
                                         <>
                                             <div>
                                                 <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[1]?.label}</p>
-                                                <ImageCompareSlider before={photos[1]?.url} after={prevPhotos[1]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                <ImageCompareSlider before={photos[1]?.url} after={prevPhotos[1]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} aspectClass="aspect-[3/4]" />
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[3]?.label}</p>
-                                                <ImageCompareSlider before={photos[3]?.url} after={prevPhotos[3]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                <ImageCompareSlider before={photos[3]?.url} after={prevPhotos[3]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} aspectClass="aspect-[3/4]" />
                                             </div>
                                         </>
                                     ) : (
