@@ -729,7 +729,7 @@ export default function InspectionDetailPage() {
                                 </div>
 
                                 {/* Row 3: Dashboard — full width, horizontal */}
-                                {(photos[4]?.url || (compareMode && prevPhotos[4]?.url)) && (
+                                {photos[4]?.url && (
                                     <div className="mb-2">
                                         {compareMode && compareData ? (
                                             <div>
@@ -743,7 +743,7 @@ export default function InspectionDetailPage() {
                                 )}
 
                                 {/* Additional picture if exists */}
-                                {(photos[5]?.url || (compareMode && prevPhotos[5]?.url)) && (
+                                {photos[5]?.url && (
                                     <div>
                                         {compareMode && compareData ? (
                                             <div>
