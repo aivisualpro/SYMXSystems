@@ -179,7 +179,7 @@ export default function AppUsersPage() {
             return (
               <div
                 key={user._id}
-                className="group relative rounded-xl border border-border/50 bg-card overflow-hidden transition-all duration-200 hover:shadow-md hover:border-border cursor-pointer"
+                className="group relative rounded-xl border border-border bg-card overflow-hidden transition-all duration-200 hover:shadow-md hover:border-foreground/20 cursor-pointer"
                 onClick={() => openUserDetail(user)}
               >
                 {/* Action buttons - top right on hover */}
@@ -202,11 +202,11 @@ export default function AppUsersPage() {
 
                 <div className="p-5 flex flex-col items-center text-center">
                   {/* Avatar */}
-                  <div className="w-16 h-16 rounded-full bg-muted overflow-hidden border-2 border-border/40 mb-3 flex-shrink-0">
+                  <div className="w-16 h-16 rounded-full bg-muted overflow-hidden border-2 border-border mb-3 flex-shrink-0">
                     {user.profilePicture ? (
                       <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-lg font-bold text-muted-foreground/60">
+                      <div className="w-full h-full flex items-center justify-center text-lg font-bold text-muted-foreground">
                         {initials}
                       </div>
                     )}
@@ -218,10 +218,10 @@ export default function AppUsersPage() {
                   </h3>
 
                   {/* Role */}
-                  <p className="text-xs text-muted-foreground mt-0.5">{user.AppRole || "—"}</p>
+                  <p className="text-xs text-foreground/60 mt-0.5">{user.AppRole || "—"}</p>
 
                   {/* Email */}
-                  <p className="text-[11px] text-muted-foreground/70 truncate max-w-full mt-1.5">
+                  <p className="text-[11px] text-foreground/50 truncate max-w-full mt-1.5">
                     {user.email}
                   </p>
 
@@ -231,12 +231,6 @@ export default function AppUsersPage() {
                     <span className={`text-[11px] font-semibold ${user.isActive ? "text-emerald-500" : "text-muted-foreground/50"}`}>
                       {user.isActive ? "Active" : "Inactive"}
                     </span>
-                  </div>
-
-                  {/* Role badge */}
-                  <div className="mt-3 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/60 border border-border/40">
-                    <IconShieldCheck size={11} className="text-muted-foreground/50" />
-                    <span className="text-[10px] text-muted-foreground font-medium">{user.AppRole}</span>
                   </div>
                 </div>
               </div>
