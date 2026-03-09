@@ -1,29 +1,84 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useCallback, useState } from "react";
+import { toast } from "sonner";
 
 export function ServiceWorkerRegistration() {
-  useEffect(() => {
-    // ── Service Worker Registration ───────────────────────────────
-    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      navigator.serviceWorker
-        .register("/sw.js")
-        .then((registration) => {
-          console.log("[PWA] Service Worker registered, scope:", registration.scope);
+  const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
 
-          // Check for updates periodically (every 60 min)
-          setInterval(() => {
-            registration.update();
-          }, 60 * 60 * 1000);
-        })
-        .catch((err) => {
-          console.warn("[PWA] Service Worker registration failed:", err);
-        });
+  const handleUpdate = useCallback(() => {
+    if (waitingWorker) {
+      waitingWorker.postMessage({ type: "SKIP_WAITING" });
+      // Reload once the new SW takes over
+      waitingWorker.addEventListener("statechange", () => {
+        if (waitingWorker.state === "activated") {
+          window.location.reload();
+        }
+      });
     }
+  }, [waitingWorker]);
 
-    // Suppress the browser's native install prompt — no toast shown
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => {
+        console.log("[PWA] Service Worker registered, scope:", registration.scope);
+
+        // Detect updates
+        registration.addEventListener("updatefound", () => {
+          const newWorker = registration.installing;
+          if (!newWorker) return;
+
+          newWorker.addEventListener("statechange", () => {
+            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+              // New SW installed but waiting → show toast
+              setWaitingWorker(newWorker);
+              toast("App update available!", {
+                description: "Tap to refresh and get the latest version.",
+                action: {
+                  label: "Update",
+                  onClick: () => {
+                    newWorker.postMessage({ type: "SKIP_WAITING" });
+                    window.location.reload();
+                  },
+                },
+                duration: 10000,
+              });
+            }
+          });
+        });
+
+        // Check for updates periodically (every 30 min)
+        setInterval(() => {
+          registration.update();
+        }, 30 * 60 * 1000);
+
+        // Also check for updates when the app comes back from background
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") {
+            registration.update();
+          }
+        });
+      })
+      .catch((err) => {
+        console.warn("[PWA] Service Worker registration failed:", err);
+      });
+
+    // Listen for controller change (new SW activated) → reload
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+
+    // Suppress the browser's native install prompt — we can trigger it later
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
+      // Store the event for potential "Install App" button
+      (window as any).__pwaInstallPrompt = e;
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstall);

@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Settings, Shield, Upload } from "lucide-react";
 
@@ -33,15 +34,16 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-border/50 px-1 pb-0">
+      <div data-tab-nav className="flex items-center gap-1 border-b border-border/50 px-1 pb-0 overflow-x-auto">
         {tabs.map((tab) => {
           const isActive = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           return (
-            <button
+            <Link
               key={tab.href}
-              onClick={() => router.push(tab.href)}
+              href={tab.href}
+              prefetch={true}
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-all relative",
+                "flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-t-lg transition-all relative select-none",
                 isActive
                   ? "text-primary bg-primary/5"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -52,7 +54,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
               {isActive && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t-full" />
               )}
-            </button>
+            </Link>
           );
         })}
       </div>

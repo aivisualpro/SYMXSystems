@@ -124,6 +124,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -240,38 +241,162 @@ body {
 
 /* Custom Animations */
 @keyframes pulse-slow {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.05); }
+
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
 }
+
 .animate-pulse-slow {
   animation: pulse-slow 4s ease-in-out infinite;
 }
 
 @keyframes ring-caution {
-  0%, 100% { box-shadow: 0 0 0 2.5px rgba(251, 191, 36, 0.7); }
-  50% { box-shadow: 0 0 0 2.5px rgba(251, 191, 36, 0.25); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 2.5px rgba(251, 191, 36, 0.7);
+  }
+
+  50% {
+    box-shadow: 0 0 0 2.5px rgba(251, 191, 36, 0.25);
+  }
 }
+
 .animate-ring-caution {
   animation: ring-caution 2s ease-in-out infinite;
 }
 
 @keyframes ring-danger {
-  0%, 100% { box-shadow: 0 0 0 2.5px rgba(239, 68, 68, 0.8); }
-  50% { box-shadow: 0 0 0 2.5px rgba(239, 68, 68, 0.25); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 2.5px rgba(239, 68, 68, 0.8);
+  }
+
+  50% {
+    box-shadow: 0 0 0 2.5px rgba(239, 68, 68, 0.25);
+  }
 }
+
 .animate-ring-danger {
   animation: ring-danger 1.2s ease-in-out infinite;
 }
 
 /* Skeleton shimmer */
 @keyframes shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 /* Row highlight blink on back-nav */
 @keyframes highlightBlink {
-  0%, 100% { background-color: transparent; }
-  10%, 30%, 50%, 70%, 90% { background-color: hsl(var(--primary) / 0.12); box-shadow: inset 3px 0 0 hsl(var(--primary)); }
-  20%, 40%, 60%, 80% { background-color: transparent; }
+
+  0%,
+  100% {
+    background-color: transparent;
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    background-color: hsl(var(--primary) / 0.12);
+    box-shadow: inset 3px 0 0 hsl(var(--primary));
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    background-color: transparent;
+  }
+}
+
+/* ─── Mobile / Touch Device Optimizations ───────────────────────────── */
+
+/* Remove tap highlight that causes "stuck" visual on iOS/Android */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent double-tap-to-zoom on all interactive elements — eliminates 300ms delay */
+button,
+a,
+[role="button"],
+[role="tab"],
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
+/* Smooth horizontal scroll for tab bars with momentum scrolling */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+.overflow-x-auto::-webkit-scrollbar {
+  display: none;
+  /* Chrome / Safari */
+}
+
+/* Utility class to hide scrollbars */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* PWA standalone mode — safe area insets for notch / home indicator */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Prevent pull-to-refresh glitch on PWA standalone */
+html,
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* Prevent text selection on tab buttons during swipe scroll */
+[data-tab-nav] button {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Active state feedback for touch - provides instant haptic-like visual */
+@media (hover: none) and (pointer: coarse) {
+
+  button:active,
+  a:active,
+  [role="button"]:active {
+    opacity: 0.7;
+    transition: opacity 0.05s ease;
+  }
 }

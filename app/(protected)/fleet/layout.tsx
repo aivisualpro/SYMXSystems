@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import {
   IconChartDonut, IconCar, IconTool, IconClipboardCheck,
@@ -378,19 +379,20 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       <div className="flex flex-col max-w-[1600px] mx-auto h-[calc(100vh-var(--header-height)-2rem)]">
 
         {/* ── Tab Navigation (sticky) ──────────────────────────── */}
-        <div className="flex-shrink-0 flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
+        <div data-tab-nav className="flex-shrink-0 flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
           {tabs.map((tab) => (
-            <button
+            <Link
               key={tab.id}
-              onClick={() => router.push(tab.href)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 ${activeTab === tab.id
+              href={tab.href}
+              prefetch={true}
+              className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 select-none ${activeTab === tab.id
                 ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
             >
               <tab.icon size={14} />
               {tab.label}
-            </button>
+            </Link>
           ))}
         </div>
 

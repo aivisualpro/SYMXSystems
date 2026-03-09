@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo, createContext, useContext } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
     Users,
@@ -314,16 +315,17 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
             <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-3">
                 {/* ── Tab Bar + Date Tabs (inline) ── */}
                 <div className="shrink-0 overflow-x-auto scrollbar-none">
-                    <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border min-w-max">
+                    <div data-tab-nav className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border min-w-max">
                         {DISPATCHING_TABS.map((tab) => {
                             const Icon = tab.icon;
                             const isActive = pathname.startsWith(tab.href);
                             return (
-                                <button
+                                <Link
                                     key={tab.id}
-                                    onClick={() => router.push(tab.href)}
+                                    href={tab.href}
+                                    prefetch={true}
                                     className={cn(
-                                        "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap",
+                                        "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap select-none",
                                         isActive
                                             ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
                                             : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -331,7 +333,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                 >
                                     <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                     {tab.label}
-                                </button>
+                                </Link>
                             );
                         })}
 
@@ -352,7 +354,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                             key={dateStr}
                                             onClick={() => setSelectedDate(dateStr)}
                                             className={cn(
-                                                "flex flex-col items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap min-w-[44px]",
+                                                "flex flex-col items-center px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap min-w-[48px] select-none",
                                                 isActive
                                                     ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
                                                     : isToday

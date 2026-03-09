@@ -2,6 +2,7 @@
 
 import React, { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { useEffect } from "react";
 import {
@@ -74,20 +75,20 @@ export default function HRLayout({ children }: { children: ReactNode }) {
       {/* ── Tab Navigation ─────────────────────────────────────── */}
       {!isDetailPage && (
         <div className="shrink-0 sticky top-0 z-20 -mx-[16px] px-[16px] pt-0 pb-2 bg-background/80 backdrop-blur-md">
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
+          <div data-tab-nav className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
             {tabs.map((tab) => (
-              <button
+              <Link
                 key={tab.id}
-                onClick={() => router.push(tab.href)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 ${
-                  activeTab === tab.id
+                href={tab.href}
+                prefetch={true}
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 select-none ${activeTab === tab.id
                     ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
+                  }`}
               >
                 <tab.icon size={14} />
                 {tab.label}
-              </button>
+              </Link>
             ))}
           </div>
         </div>
