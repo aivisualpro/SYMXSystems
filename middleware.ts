@@ -1,33 +1,78 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
 
-const protectedRoutes = ["/dashboard", "/admin", "/inventory"];
+const secretKey = process.env.JWT_SECRET || "symx_systems_secret_key";
+const key = new TextEncoder().encode(secretKey);
+
+// Only these paths are publicly accessible (no auth required)
+const publicPaths = [
+  "/login",
+  "/forgot-password",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/forgot-password",
+  "/api/public/",
+  "/api/messaging/webhook",
+];
+
+function isPublicPath(path: string) {
+  return publicPaths.some((p) => path === p || path.startsWith(p));
+}
+
+function isStaticAsset(path: string) {
+  return (
+    path.startsWith("/_next") ||
+    path === "/sw.js" ||
+    path === "/manifest.json" ||
+    path.startsWith("/icons/") ||
+    path === "/favicon.ico" ||
+    path.endsWith(".png") ||
+    path.endsWith(".jpg") ||
+    path.endsWith(".svg") ||
+    path.endsWith(".ico") ||
+    path.endsWith(".webmanifest")
+  );
+}
 
 export default async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
-  
-  // IMMEDIATELY skip everything that isn't a page
-  if (
-    path.startsWith('/api') || 
-    path.startsWith('/_next') || 
-    path === '/sw.js' ||
-    path === '/manifest.json' ||
-    path.startsWith('/icons/') ||
-    path.includes('.') ||
-    path === '/favicon.ico'
-  ) {
+
+  // Skip static assets
+  if (isStaticAsset(path)) {
     return NextResponse.next();
   }
 
-  const isProtectedRoute = protectedRoutes.some(route => path.startsWith(route)) || path === "/";
+  // Allow public paths
+  if (isPublicPath(path)) {
+    return NextResponse.next();
+  }
+
+  // ── Everything else requires authentication ──
   const sessionCookie = req.cookies.get("symx_session")?.value;
 
-  // If trying to access protected route without a cookie
-  if (isProtectedRoute && !sessionCookie && path !== "/login") {
+  // No cookie at all → redirect pages to /login, reject APIs with 401
+  if (!sessionCookie) {
+    if (path.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     return NextResponse.redirect(new URL("/login", req.nextUrl));
   }
 
-  // If has cookie and is on login/home, go to dashboard
-  if (sessionCookie && (path === "/login" || path === "/")) {
+  // Validate the JWT (not just that a cookie exists — verify signature + expiration)
+  try {
+    await jwtVerify(sessionCookie, key, { algorithms: ["HS256"] });
+  } catch {
+    // Invalid or expired token → clear cookie and redirect
+    const response = path.startsWith("/api/")
+      ? NextResponse.json({ error: "Session expired" }, { status: 401 })
+      : NextResponse.redirect(new URL("/login", req.nextUrl));
+
+    response.cookies.set("symx_session", "", { expires: new Date(0), path: "/" });
+    return response;
+  }
+
+  // If authenticated user tries to visit /login, redirect to dashboard
+  if (path === "/login") {
     return NextResponse.redirect(new URL("/dashboard", req.nextUrl));
   }
 
@@ -35,5 +80,5 @@ export default async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|icons\\/.*|.*\\.png$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|icons\\/.*|.*\\.png$).*)"],
 };
