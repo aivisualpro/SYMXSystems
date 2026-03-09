@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useMemo, ReactNode } from "react";
 
 interface HeaderActionsContextType {
   actions: ReactNode | null;
@@ -20,17 +20,17 @@ export function HeaderActionsProvider({ children }: { children: ReactNode }) {
   const [leftContent, setLeftContent] = useState<ReactNode | null>(null);
   const [rightContent, setRightContent] = useState<ReactNode | null>(null);
 
+  const value = useMemo(() => ({
+    actions,
+    setActions,
+    leftContent,
+    setLeftContent,
+    rightContent,
+    setRightContent
+  }), [actions, leftContent, rightContent]);
+
   return (
-    <HeaderActionsContext.Provider
-      value={{
-        actions,
-        setActions,
-        leftContent,
-        setLeftContent,
-        rightContent,
-        setRightContent
-      }}
-    >
+    <HeaderActionsContext.Provider value={value}>
       {children}
     </HeaderActionsContext.Provider>
   );

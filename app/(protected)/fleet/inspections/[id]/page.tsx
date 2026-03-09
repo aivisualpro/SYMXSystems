@@ -7,6 +7,7 @@ import {
     IconCamera, IconTool, IconClock, IconAdjustmentsHorizontal,
     IconChevronLeft, IconChevronRight, IconArrowsLeftRight,
     IconX, IconCheck, IconMinus, IconMaximize, IconEdit, IconArrowLeft,
+    IconMessageCircle, IconId, IconAlertTriangle,
 } from "@tabler/icons-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { useFleet } from "../../layout";
@@ -75,7 +76,7 @@ function ImageCompareSlider({
     return (
         <div
             ref={containerRef}
-            className={`relative w-full ${aspectClass || "aspect-video"} overflow-hidden rounded-xl select-none cursor-col-resize group touch-none`}
+            className={`relative w-full ${aspectClass || "aspect-video"} overflow-hidden rounded-2xl select-none cursor-col-resize group touch-none`}
             onPointerDown={onDown}
         >
             <div className="absolute inset-0 bg-black/80">
@@ -104,42 +105,6 @@ function ImageCompareSlider({
     );
 }
 
-/* ── Photo card ──────────────────────────────────────────────────── */
-function PhotoCard({ url, label, onClick }: { url?: string; label: string; onClick?: () => void }) {
-    if (!url) return (
-        <div className="aspect-video rounded-xl bg-muted/20 border border-border/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
-            <IconCamera size={20} />
-            <span className="text-[10px]">{label}</span>
-        </div>
-    );
-    return (
-        <button onClick={onClick} className="relative aspect-video rounded-xl overflow-hidden group border border-border/30 shadow-sm focus:outline-none w-full">
-            <img src={url} alt={label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
-                <span className="text-[10px] text-white font-medium">{label}</span>
-                <IconMaximize size={12} className="text-white/70" />
-            </div>
-        </button>
-    );
-}
-
-/* ── Diff badge ──────────────────────────────────────────────────── */
-function DiffBadge({ curr, prev }: { curr: any; prev: any }) {
-    if (prev === undefined || prev === null || curr === prev) return <span className="text-muted-foreground/40 text-[10px]">—</span>;
-    const currN = Number(curr), prevN = Number(prev);
-    if (!isNaN(currN) && !isNaN(prevN)) {
-        const diff = currN - prevN;
-        if (diff === 0) return <span className="text-muted-foreground/40 text-[10px]">No change</span>;
-        return (
-            <span className={`text-[10px] font-semibold ${diff > 0 ? "text-emerald-500" : "text-red-500"}`}>
-                {diff > 0 ? "+" : ""}{diff.toLocaleString()}
-            </span>
-        );
-    }
-    return <span className="text-amber-500 text-[10px] font-medium">Changed</span>;
-}
-
 /* ── Lightbox ────────────────────────────────────────────────────── */
 function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
     useEffect(() => {
@@ -149,17 +114,69 @@ function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
     }, [onClose]);
 
     return (
-        <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-            <button className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20" onClick={onClose}>
-                <IconX size={18} />
+        <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 pb-[max(12px,env(safe-area-inset-bottom))]" onClick={onClose}>
+            <button className="absolute top-[max(16px,env(safe-area-inset-top))] right-4 p-2.5 rounded-full bg-white/10 text-white hover:bg-white/20 z-10" onClick={onClose}>
+                <IconX size={20} />
             </button>
-            <img src={url} alt="full" className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
+            <img src={url} alt="full" className="max-w-full max-h-full rounded-xl sm:rounded-2xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
         </div>
     );
 }
 
+/* ── Bento Card wrapper ─────────────────────────────────────────── */
+function BentoCard({
+    children,
+    className = "",
+    gradient,
+    onClick,
+}: {
+    children: React.ReactNode;
+    className?: string;
+    gradient?: string;
+    onClick?: () => void;
+}) {
+    return (
+        <div
+            className={`relative rounded-2xl sm:rounded-[20px] overflow-hidden transition-all duration-300 [@media(hover:hover)]:hover:scale-[1.015] [@media(hover:hover)]:hover:shadow-xl ${className}`}
+            onClick={onClick}
+            style={onClick ? { cursor: "pointer" } : undefined}
+        >
+            {gradient && (
+                <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-[0.06] dark:opacity-[0.12]`} />
+            )}
+            <div className="relative h-full">{children}</div>
+        </div>
+    );
+}
+
+/* ── Photo tile for bento gallery ───────────────────────────────── */
+function BentoPhoto({ url, label, onClick, className = "" }: { url?: string; label: string; onClick?: () => void; className?: string }) {
+    if (!url) return (
+        <div className={`rounded-2xl sm:rounded-[20px] bg-muted/30 dark:bg-white/[0.03] border border-border/30 flex flex-col items-center justify-center gap-1.5 sm:gap-2 text-muted-foreground/25 ${className}`}>
+            <IconCamera size={20} className="sm:w-6 sm:h-6" />
+            <span className="text-[9px] sm:text-[10px] font-medium">{label}</span>
+        </div>
+    );
+    return (
+        <button
+            onClick={onClick}
+            className={`relative rounded-2xl sm:rounded-[20px] overflow-hidden group border border-border/20 focus:outline-none shadow-sm [@media(hover:hover)]:hover:shadow-xl transition-all duration-300 [@media(hover:hover)]:hover:scale-[1.02] active:scale-[0.98] ${className}`}
+        >
+            <img src={url} alt={label} className="w-full h-full object-cover transition-transform duration-500 [@media(hover:hover)]:group-hover:scale-110" />
+            {/* Always-visible label on mobile, hover-reveal on desktop */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 sm:from-black/70 via-black/0 to-transparent sm:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-all duration-300" />
+            <div className="absolute bottom-2 sm:bottom-3 left-2 sm:left-3 right-2 sm:right-3 sm:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-all duration-300 sm:translate-y-2 [@media(hover:hover)]:group-hover:translate-y-0 flex items-center justify-between">
+                <span className="text-[10px] sm:text-xs text-white font-semibold drop-shadow-lg">{label}</span>
+                <div className="p-1 sm:p-1.5 rounded-md sm:rounded-lg bg-white/20 backdrop-blur-sm">
+                    <IconMaximize size={10} className="text-white sm:w-3 sm:h-3" />
+                </div>
+            </div>
+        </button>
+    );
+}
+
 /* ══════════════════════════════════════════════════════════════════
-   Main page
+   Main page — Apple-style Bento Grid
    ══════════════════════════════════════════════════════════════════ */
 export default function InspectionDetailPage() {
     const params = useParams();
@@ -311,7 +328,6 @@ export default function InspectionDetailPage() {
                         <>
                             <div className="fixed inset-0 z-40" onClick={() => setShowCompareMenu(false)} />
                             <div className="absolute right-0 top-full mt-1.5 z-50 w-56 rounded-xl border border-border bg-card shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
-                                {/* Compare with Previous */}
                                 <button
                                     onClick={() => loadCompare("previous")}
                                     className={`w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/60 transition-colors text-left ${compareMode && compareSource === "previous" ? "bg-primary/5 text-primary" : "text-foreground"}`}
@@ -328,7 +344,6 @@ export default function InspectionDetailPage() {
                                     )}
                                 </button>
                                 <div className="h-px bg-border/60" />
-                                {/* Compare with Master */}
                                 <div className="relative group/master">
                                     <button
                                         onClick={() => hasStandardPhoto ? loadCompare("master") : undefined}
@@ -357,7 +372,6 @@ export default function InspectionDetailPage() {
                                         </div>
                                     )}
                                 </div>
-                                {/* Exit Compare — only show when in compare mode */}
                                 {compareMode && (
                                     <>
                                         <div className="h-px bg-border/60" />
@@ -382,7 +396,7 @@ export default function InspectionDetailPage() {
             </div>
         );
         return () => setRightContent(null);
-    }, [setRightContent, compareMode, compareLoading, loadCompare, isStandardPhoto, togglingStandard, toggleStandardPhoto, showCompareMenu, hasStandardPhoto, inspection, openEditModal]);
+    }, [setRightContent, compareMode, compareLoading, loadCompare, isStandardPhoto, togglingStandard, toggleStandardPhoto, showCompareMenu, hasStandardPhoto, inspection, openEditModal, compareSource]);
 
     if (loading) return (
         <div className="flex items-center justify-center h-full">
@@ -404,20 +418,22 @@ export default function InspectionDetailPage() {
     const hasRepair = inspection.anyRepairs && inspection.anyRepairs !== "FALSE" && inspection.anyRepairs !== "false";
 
     const photos = [
-        { url: inspection.vehiclePicture1, label: "Passenger Side Photo" },
-        { url: inspection.vehiclePicture2, label: "Back Photo" },
-        { url: inspection.vehiclePicture3, label: "Driver Side Photo" },
-        { url: inspection.vehiclePicture4, label: "Front Photo" },
+        { url: inspection.vehiclePicture1, label: "Passenger Side" },
+        { url: inspection.vehiclePicture2, label: "Back" },
+        { url: inspection.vehiclePicture3, label: "Driver Side" },
+        { url: inspection.vehiclePicture4, label: "Front" },
         { url: inspection.dashboardImage, label: "Dashboard" },
         { url: inspection.additionalPicture, label: "Additional" },
     ];
     const hasPhotos = photos.some(p => p.url);
+    const missingPhotos = photos.filter(p => !p.url);
+    const availablePhotos = photos.filter(p => p.url);
 
     const prevPhotos = compareData ? [
-        { url: compareData.vehiclePicture1, label: "Passenger Side Photo" },
-        { url: compareData.vehiclePicture2, label: "Back Photo" },
-        { url: compareData.vehiclePicture3, label: "Driver Side Photo" },
-        { url: compareData.vehiclePicture4, label: "Front Photo" },
+        { url: compareData.vehiclePicture1, label: "Passenger Side" },
+        { url: compareData.vehiclePicture2, label: "Back" },
+        { url: compareData.vehiclePicture3, label: "Driver Side" },
+        { url: compareData.vehiclePicture4, label: "Front" },
         { url: compareData.dashboardImage, label: "Dashboard" },
         { url: compareData.additionalPicture, label: "Additional" },
     ] : [];
@@ -427,442 +443,405 @@ export default function InspectionDetailPage() {
             <div className="h-full overflow-auto">
                 {lightbox && <Lightbox url={lightbox} onClose={() => setLightbox(null)} />}
 
-                <div className="space-y-6">
+                <div className="space-y-3 sm:space-y-4 pb-6">
 
                     {compareError && (
-                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-500 flex items-center gap-2">
-                            <IconMinus size={14} /> {compareError}
+                        <div className="rounded-xl sm:rounded-2xl border border-amber-500/20 bg-amber-500/5 px-3 sm:px-5 py-3 sm:py-3.5 text-xs sm:text-sm text-amber-500 flex items-center gap-2">
+                            <IconAlertTriangle size={14} className="flex-shrink-0" /> {compareError}
                         </div>
                     )}
 
-                    {/* ════════════════════════════════════════════════════════
-            TOP SECTION: Date · VIN · Driver Name | Vehicle Image
-           ══════════════════════════════════════════════════════════ */}
-                    <div className="relative rounded-2xl overflow-hidden border border-border/40 shadow-lg bg-card">
-                        <div className="flex flex-row">
-                            {/* Left — info grid */}
-                            <div className="flex-1 px-6 py-6 flex flex-col justify-center gap-4">
-                                {/* Status badges */}
-                                {(hasRepair || inspection.isCompared) && (
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        {hasRepair && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/15 text-red-500 border border-red-500/20">
-                                                <IconTool size={9} /> Repair Logged
-                                            </span>
-                                        )}
-                                        {inspection.isCompared && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
-                                                <IconCheck size={9} /> Compared
-                                            </span>
-                                        )}
-                                    </div>
-                                )}
+                    {/* ═══════════════════════════════════════════════════════════
+                       BENTO GRID — Apple-style data presentation
+                       ═══════════════════════════════════════════════════════════ */}
+                    <div className="grid grid-cols-12 gap-2 sm:gap-3 auto-rows-min">
 
-                                {/* 3×2 grid — icon + value, with compare row when active */}
-                                <div className="grid grid-cols-3 gap-3">
-                                    {/* Date */}
-                                    <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                        <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                            <IconCalendar size={16} className="text-primary" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-bold text-foreground">{fmtDate(inspection.routeDate)}</p>
-                                            {compareMode && compareData && (
-                                                <p className="text-xs text-muted-foreground/60 mt-1">{fmtDate(compareData.routeDate)}</p>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* VIN */}
-                                    <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                        <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                            <IconCamera size={16} className="text-primary" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="font-mono text-xs font-bold text-foreground break-all">
-                                                {inspection.vehicleName ? `${inspection.vehicleName} · ` : ""}{inspection.vin || "—"}
-                                            </p>
-                                            {compareMode && compareData && (
-                                                <div className="flex items-center gap-1.5 mt-1">
-                                                    <p className="font-mono text-[10px] text-muted-foreground/60 break-all">
-                                                        {compareData.vin || "—"}
-                                                    </p>
-                                                    <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Driver */}
-                                    {(() => {
-                                        const prevDriver = compareData ? (compareData.driverName || compareData.driver || "—") : "—";
-                                        const driverChanged = compareMode && compareData && driverDisplay !== prevDriver;
-                                        return (
-                                            <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                                <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                                    <IconUser size={16} className="text-primary" />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-semibold text-foreground">{driverDisplay}</p>
-                                                    {compareMode && compareData && (
-                                                        <div className="flex items-center gap-1.5 mt-1">
-                                                            <p className="text-xs text-muted-foreground/60">{prevDriver}</p>
-                                                            {driverChanged
-                                                                ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
-                                                                : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })()}
-
-                                    {/* Mileage */}
-                                    {(() => {
-                                        const prevMileage = compareData?.mileage || 0;
-                                        const mileageChanged = compareMode && compareData && inspection.mileage !== prevMileage;
-                                        const mileageDiff = inspection.mileage - prevMileage;
-                                        return (
-                                            <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                                <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                                    <IconGauge size={16} className="text-primary" />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-bold text-foreground">
-                                                        {inspection.mileage > 0 ? `${inspection.mileage.toLocaleString()} mi` : "—"}
-                                                    </p>
-                                                    {compareMode && compareData && (
-                                                        <div className="flex items-center gap-1.5 mt-1">
-                                                            <p className="text-xs text-muted-foreground/60">{prevMileage > 0 ? `${prevMileage.toLocaleString()} mi` : "—"}</p>
-                                                            {mileageChanged
-                                                                ? <span className={`text-[10px] font-semibold whitespace-nowrap ${mileageDiff > 0 ? "text-emerald-500" : "text-red-500"}`}>{mileageDiff > 0 ? "+" : ""}{mileageDiff.toLocaleString()}</span>
-                                                                : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })()}
-
-                                    {/* Comments */}
-                                    {(() => {
-                                        const prevComments = compareData?.comments || "—";
-                                        const currComments = inspection.comments || "—";
-                                        const commentsChanged = compareMode && compareData && currComments !== prevComments;
-                                        return (
-                                            <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                                <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                                    <IconClock size={16} className="text-primary" />
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-sm text-foreground truncate">{currComments}</p>
-                                                    {compareMode && compareData && (
-                                                        <div className="flex items-center gap-1.5 mt-1">
-                                                            <p className="text-xs text-muted-foreground/60 truncate flex-1">{prevComments}</p>
-                                                            {commentsChanged
-                                                                ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
-                                                                : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })()}
-
-                                    {/* Any Repairs */}
-                                    {(() => {
-                                        const prevHasRepair = compareData?.anyRepairs && compareData.anyRepairs !== "FALSE" && compareData.anyRepairs !== "false";
-                                        const repairsChanged = compareMode && compareData && hasRepair !== prevHasRepair;
-                                        return (
-                                            <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                                <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                                    <IconTool size={16} className="text-primary" />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className={`text-sm font-semibold ${hasRepair ? "text-red-500" : "text-foreground"}`}>
-                                                        {hasRepair ? "Yes" : "No"}
-                                                    </p>
-                                                    {compareMode && compareData && (
-                                                        <div className="flex items-center gap-1.5 mt-1">
-                                                            <p className={`text-xs ${prevHasRepair ? "text-red-500/60" : "text-muted-foreground/60"}`}>{prevHasRepair ? "Yes" : "No"}</p>
-                                                            {repairsChanged
-                                                                ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
-                                                                : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })()}
-                                    {/* Missing Photos indicator */}
-                                    {(() => {
-                                        const missingPhotos = photos.filter(p => !p.url);
-                                        if (missingPhotos.length === 0) return null;
-                                        return (
-                                            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
-                                                <div className="p-2 rounded-lg bg-amber-500/10 mt-0.5">
-                                                    <IconCamera size={16} className="text-amber-500" />
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80 mb-1">Missing Photos ({missingPhotos.length})</p>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {missingPhotos.map(p => (
-                                                            <span key={p.label} className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15">
-                                                                {p.label}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })()}
-
-                                    {/* Comments — 2-col wide */}
-                                    {inspection.comments && (
-                                        <div className="col-span-2 rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                            <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                                <IconClock size={16} className="text-primary" />
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-1">Comments</p>
-                                                <p className="text-sm text-foreground leading-relaxed">{inspection.comments}</p>
-                                            </div>
-                                        </div>
+                        {/* ── Date Card (span 3) ────────────────────────────────── */}
+                        <BentoCard
+                            className="col-span-6 sm:col-span-6 lg:col-span-3 bg-card border border-border/40 p-3.5 sm:p-5"
+                            gradient="from-blue-500 to-cyan-500"
+                        >
+                            <div className="flex items-start gap-3">
+                                <div className="p-2.5 rounded-2xl bg-blue-500/10 dark:bg-blue-500/20">
+                                    <IconCalendar size={20} className="text-blue-500" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5 sm:mb-1">Date</p>
+                                    <p className="text-xs sm:text-base font-bold text-foreground leading-snug">{fmtDate(inspection.routeDate)}</p>
+                                    {compareMode && compareData && (
+                                        <p className="text-xs text-muted-foreground/50 mt-1.5 flex items-center gap-1">
+                                            vs {fmtDateShort(compareData.routeDate)}
+                                        </p>
                                     )}
                                 </div>
                             </div>
+                        </BentoCard>
 
-                            {/* Right — Vehicle image from vehicles table */}
-                            <div className="w-80 lg:w-96 flex-shrink-0 relative group">
-                                {inspection.vehicleImage ? (
+                        {/* ── VIN Card (span 3) ─────────────────────────────────── */}
+                        <BentoCard
+                            className="col-span-6 sm:col-span-6 lg:col-span-3 bg-card border border-border/40 p-3.5 sm:p-5"
+                            gradient="from-emerald-500 to-teal-500"
+                        >
+                            <div className="flex items-start gap-3">
+                                <div className="p-2.5 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20">
+                                    <IconId size={20} className="text-emerald-500" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5 sm:mb-1">VIN</p>
+                                    <p className="font-mono text-[11px] sm:text-sm font-bold text-foreground break-all leading-snug">
+                                        {inspection.vehicleName ? `${inspection.vehicleName}` : ""}{inspection.vehicleName && inspection.vin ? " · " : ""}{inspection.vin || "—"}
+                                    </p>
+                                </div>
+                            </div>
+                        </BentoCard>
+
+                        {/* ── Driver Card (span 3) ──────────────────────────────── */}
+                        <BentoCard
+                            className="col-span-6 sm:col-span-6 lg:col-span-3 bg-card border border-border/40 p-3.5 sm:p-5"
+                            gradient="from-violet-500 to-purple-500"
+                        >
+                            <div className="flex items-start gap-3">
+                                <div className="p-2.5 rounded-2xl bg-violet-500/10 dark:bg-violet-500/20">
+                                    <IconUser size={20} className="text-violet-500" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5 sm:mb-1">Driver</p>
+                                    <p className="text-xs sm:text-base font-bold text-foreground uppercase leading-snug truncate">{driverDisplay}</p>
+                                </div>
+                            </div>
+                        </BentoCard>
+
+                        {/* ── Vehicle Image Card (span 3, tall) ─────────────────── */}
+                        <BentoCard
+                            className="col-span-12 sm:col-span-6 lg:col-span-3 sm:row-span-2 bg-card border border-border/40 overflow-hidden"
+                            onClick={inspection.vehicleImage ? () => setLightbox(inspection.vehicleImage) : undefined}
+                        >
+                            {inspection.vehicleImage ? (
+                                <div className="relative h-full min-h-[180px] sm:min-h-[200px] group">
                                     <img
                                         src={inspection.vehicleImage}
                                         alt="Vehicle"
-                                        className="w-full h-full min-h-[200px] object-cover"
-                                        onClick={() => setLightbox(inspection.vehicleImage)}
-                                        style={{ cursor: "zoom-in" }}
+                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                     />
-                                ) : (
-                                    <div className="w-full h-full min-h-[200px] bg-muted/20 flex flex-col items-center justify-center gap-2 text-muted-foreground/30">
-                                        <IconCamera size={32} />
-                                        <span className="text-xs">No vehicle image</span>
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                                    <div className="absolute bottom-4 left-4 right-4">
+                                        <p className="text-white/60 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Vehicle</p>
+                                        <p className="text-white text-sm font-bold">{inspection.vehicleName || "VIN Image"}</p>
+                                    </div>
+                                    <div className="absolute top-3 right-3 p-1.5 rounded-xl bg-black/30 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <IconMaximize size={14} className="text-white" />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="h-full min-h-[140px] sm:min-h-[200px] bg-muted/10 flex flex-col items-center justify-center gap-2 sm:gap-3 text-muted-foreground/25 p-4 sm:p-6">
+                                    <IconCamera size={36} />
+                                    <span className="text-xs font-medium">No vehicle image</span>
+                                </div>
+                            )}
+                        </BentoCard>
+
+                        {/* ── Mileage Card (span 3 — big number) ────────────────── */}
+                        <BentoCard
+                            className="col-span-6 sm:col-span-4 lg:col-span-3 bg-card border border-border/40 p-3.5 sm:p-5"
+                            gradient="from-orange-500 to-amber-500"
+                        >
+                            <div className="flex flex-col h-full">
+                                <div className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-orange-500/10 dark:bg-orange-500/20 w-fit mb-2 sm:mb-3">
+                                    <IconGauge size={20} className="text-orange-500" />
+                                </div>
+                                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5 sm:mb-1">Mileage</p>
+                                <p className="text-xl sm:text-3xl font-extrabold text-foreground tracking-tight leading-none">
+                                    {inspection.mileage > 0 ? inspection.mileage.toLocaleString() : "—"}
+                                </p>
+                                <p className="text-xs text-muted-foreground/40 font-medium mt-0.5">miles</p>
+                                {compareMode && compareData && (
+                                    <div className="mt-2 flex items-center gap-1.5">
+                                        {(() => {
+                                            const prev = compareData.mileage || 0;
+                                            const diff = (inspection.mileage || 0) - prev;
+                                            if (diff === 0) return <span className="text-[10px] text-muted-foreground/40">No change</span>;
+                                            return (
+                                                <span className={`text-xs font-bold ${diff > 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                                    {diff > 0 ? "+" : ""}{diff.toLocaleString()} mi
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
                                 )}
-                                {/* Label */}
-                                <div className="absolute bottom-2 left-2 pointer-events-none">
-                                    <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-sm text-[10px] font-semibold text-white border border-white/10">
-                                        VIN Image
+                            </div>
+                        </BentoCard>
+
+                        {/* ── Repairs Status (span 3) ───────────────────────────── */}
+                        <BentoCard
+                            className={`col-span-6 sm:col-span-4 lg:col-span-3 border p-3.5 sm:p-5 ${hasRepair
+                                ? "bg-red-500/[0.03] dark:bg-red-500/[0.06] border-red-500/20"
+                                : "bg-card border-border/40"
+                                }`}
+                            gradient={hasRepair ? "from-red-500 to-rose-500" : "from-emerald-500 to-green-500"}
+                        >
+                            <div className="flex flex-col h-full">
+                                <div className={`p-2 sm:p-2.5 rounded-xl sm:rounded-2xl w-fit mb-2 sm:mb-3 ${hasRepair ? "bg-red-500/10 dark:bg-red-500/20" : "bg-emerald-500/10 dark:bg-emerald-500/20"}`}>
+                                    <IconTool size={20} className={hasRepair ? "text-red-500" : "text-emerald-500"} />
+                                </div>
+                                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5 sm:mb-1">Repairs</p>
+                                <p className={`text-xl sm:text-3xl font-extrabold tracking-tight leading-none ${hasRepair ? "text-red-500" : "text-emerald-500"}`}>
+                                    {hasRepair ? "Yes" : "No"}
+                                </p>
+                                {hasRepair && inspection.repairCurrentStatus && (
+                                    <span className="mt-2 inline-flex self-start px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-red-500 border border-red-500/20">
+                                        {inspection.repairCurrentStatus}
                                     </span>
+                                )}
+                            </div>
+                        </BentoCard>
+
+                        {/* ── Comments Card (span 3) ────────────────────────────── */}
+                        <BentoCard
+                            className="col-span-12 sm:col-span-4 lg:col-span-3 bg-card border border-border/40 p-3.5 sm:p-5"
+                            gradient="from-pink-500 to-rose-500"
+                        >
+                            <div className="flex flex-col h-full">
+                                <div className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-pink-500/10 dark:bg-pink-500/20 w-fit mb-2 sm:mb-3">
+                                    <IconMessageCircle size={20} className="text-pink-500" />
+                                </div>
+                                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5 sm:mb-1">Comments</p>
+                                <p className="text-sm text-foreground leading-relaxed flex-1">
+                                    {inspection.comments || <span className="text-muted-foreground/30 italic">No comments</span>}
+                                </p>
+                            </div>
+                        </BentoCard>
+
+                        {/* ── Missing Photos Warning (span 6, conditional) ──────── */}
+                        {missingPhotos.length > 0 && (
+                            <BentoCard
+                                className="col-span-12 sm:col-span-6 bg-amber-500/[0.03] dark:bg-amber-500/[0.06] border border-amber-500/20 p-3.5 sm:p-5"
+                                gradient="from-amber-500 to-yellow-500"
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className="p-2.5 rounded-2xl bg-amber-500/10 dark:bg-amber-500/20 flex-shrink-0">
+                                        <IconAlertTriangle size={20} className="text-amber-500" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-bold text-amber-600 dark:text-amber-400 mb-2">
+                                            Missing Photos ({missingPhotos.length})
+                                        </p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {missingPhotos.map(p => (
+                                                <span key={p.label} className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15">
+                                                    {p.label}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </BentoCard>
+                        )}
+
+                        {/* ── Inspected By + Timestamp (span 6) ─────────────────── */}
+                        <BentoCard
+                            className={`${missingPhotos.length > 0 ? "col-span-12 sm:col-span-6" : "col-span-12"} bg-card border border-border/40 p-3.5 sm:p-5`}
+                            gradient="from-indigo-500 to-blue-500"
+                        >
+                            <div className={`grid ${missingPhotos.length > 0 ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"} gap-4`}>
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/20 flex-shrink-0">
+                                        <IconUser size={20} className="text-indigo-500" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5">Inspected By</p>
+                                        <p className="text-sm font-bold text-foreground">{inspectedByDisplay}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 rounded-2xl bg-cyan-500/10 dark:bg-cyan-500/20 flex-shrink-0">
+                                        <IconClock size={20} className="text-cyan-500" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5">Timestamp</p>
+                                        <p className="text-sm font-bold text-foreground">{fmtDate(inspection.timeStamp)} · {fmtTime(inspection.timeStamp)}</p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        </BentoCard>
                     </div>
 
-                    {/* ── Content (always visible, photos switch to compare sliders when compareMode is on) ── */}
-                    {
-                        <>
+                    {/* ═══════════════════════════════════════════════════════════
+                       REPAIR SECTION (if applicable)
+                       ═══════════════════════════════════════════════════════════ */}
+                    {hasRepair && (
+                        <BentoCard
+                            className="bg-red-500/[0.02] dark:bg-red-500/[0.04] border border-red-500/20 p-4 sm:p-6"
+                            gradient="from-red-500 to-rose-500"
+                        >
+                            <div className="flex items-center gap-3 mb-5">
+                                <div className="p-2.5 rounded-2xl bg-red-500/10 dark:bg-red-500/15">
+                                    <IconTool size={20} className="text-red-500" />
+                                </div>
+                                <div>
+                                    <h2 className="text-base font-bold text-foreground">Repair Information</h2>
+                                    <p className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">Active repair on this vehicle</p>
+                                </div>
+                                {inspection.repairCurrentStatus && (
+                                    <span className="ml-auto px-3 py-1 rounded-full text-[11px] font-bold bg-red-500/10 text-red-500 border border-red-500/20">
+                                        {inspection.repairCurrentStatus}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {inspection.repairDescription && (
+                                    <div className="rounded-2xl bg-card/50 dark:bg-white/[0.03] border border-border/30 p-4">
+                                        <p className="text-[10px] text-muted-foreground/50 uppercase tracking-wider font-bold mb-1.5">Description</p>
+                                        <p className="text-sm text-foreground leading-relaxed">{inspection.repairDescription}</p>
+                                    </div>
+                                )}
+                                {inspection.repairEstimatedDate && (
+                                    <div className="rounded-2xl bg-card/50 dark:bg-white/[0.03] border border-border/30 p-4">
+                                        <p className="text-[10px] text-muted-foreground/50 uppercase tracking-wider font-bold mb-1.5">Estimated Completion</p>
+                                        <p className="text-sm font-semibold text-foreground">{fmtDate(inspection.repairEstimatedDate)}</p>
+                                    </div>
+                                )}
+                            </div>
+                            {inspection.repairImage && (
+                                <div className="mt-4">
+                                    <p className="text-[10px] text-muted-foreground/50 uppercase tracking-wider font-bold mb-2">Repair Image</p>
+                                    <button
+                                        onClick={() => setLightbox(inspection.repairImage)}
+                                        className="relative rounded-2xl overflow-hidden group border border-border/20 hover:shadow-xl transition-all"
+                                    >
+                                        <img src={inspection.repairImage} alt="repair" className="h-40 object-cover transition-transform duration-300 group-hover:scale-105" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </button>
+                                </div>
+                            )}
+                        </BentoCard>
+                    )}
 
-                            {/* Repair section */}
-                            {hasRepair && (
-                                <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-5 shadow-sm">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <div className="p-1.5 rounded-lg bg-red-500/15">
-                                            <IconTool size={14} className="text-red-500" />
+                    {/* ═══════════════════════════════════════════════════════════
+                       PHOTO GALLERY — Bento Grid or Compare Sliders
+                       ═══════════════════════════════════════════════════════════ */}
+                    {hasPhotos && (
+                        <div>
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 rounded-xl bg-primary/10">
+                                    <IconCamera size={16} className="text-primary" />
+                                </div>
+                                <div>
+                                    <h2 className="text-base font-bold text-foreground">Inspection Photos</h2>
+                                    <p className="text-[10px] text-muted-foreground/50">
+                                        {availablePhotos.length} of 6 photos captured
+                                        {compareMode && compareData && " — Drag slider to compare"}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Compare mode indicator */}
+                            {compareMode && compareData && (
+                                <div className="rounded-xl sm:rounded-2xl border border-primary/20 bg-primary/5 px-3 sm:px-5 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-3 text-xs sm:text-sm mb-3 sm:mb-4">
+                                    {compareSource === "master" ? (
+                                        <><span className="text-amber-500 text-base leading-none">★</span> Comparing with <strong>Standard Photo</strong> — {fmtDateShort(compareData.routeDate)}</>
+                                    ) : (
+                                        <><IconArrowsLeftRight size={14} className="text-primary" /> Comparing with <strong>Previous Inspection</strong> — {fmtDateShort(compareData.routeDate)}</>
+                                    )}
+                                </div>
+                            )}
+
+                            {compareMode && compareData ? (
+                                /* ── Compare Mode: Side-by-side sliders ── */
+                                <div className="space-y-3">
+                                    {/* Row 1: Passenger Side & Driver Side */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[0]?.label}</p>
+                                            <ImageCompareSlider before={photos[0]?.url} after={prevPhotos[0]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
                                         </div>
-                                        <h2 className="text-sm font-bold text-foreground">Repair Information</h2>
-                                        {inspection.repairCurrentStatus && (
-                                            <span className="ml-auto px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-red-500 border border-red-500/20">
-                                                {inspection.repairCurrentStatus}
-                                            </span>
-                                        )}
+                                        <div>
+                                            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[2]?.label}</p>
+                                            <ImageCompareSlider before={photos[2]?.url} after={prevPhotos[2]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                        </div>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {inspection.repairDescription && (
-                                            <div>
-                                                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-1">Description</p>
-                                                <p className="text-sm text-foreground">{inspection.repairDescription}</p>
-                                            </div>
-                                        )}
-                                        {inspection.repairEstimatedDate && (
-                                            <div>
-                                                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-1">Estimated Completion</p>
-                                                <p className="text-sm text-foreground">{fmtDate(inspection.repairEstimatedDate)}</p>
-                                            </div>
-                                        )}
+                                    {/* Row 2: Front & Back */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[3]?.label}</p>
+                                            <ImageCompareSlider before={photos[3]?.url} after={prevPhotos[3]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[1]?.label}</p>
+                                            <ImageCompareSlider before={photos[1]?.url} after={prevPhotos[1]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                        </div>
                                     </div>
-                                    {inspection.repairImage && (
-                                        <div className="mt-4">
-                                            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">Repair Image</p>
-                                            <img
-                                                src={inspection.repairImage} alt="repair"
-                                                onClick={() => setLightbox(inspection.repairImage)}
-                                                className="h-36 rounded-xl object-cover border border-border/30 shadow-sm cursor-zoom-in hover:shadow-md hover:scale-[1.02] transition-all"
+                                    {/* Row 3: Dashboard & Additional */}
+                                    {(photos[4]?.url || photos[5]?.url) && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {photos[4]?.url && (
+                                                <div>
+                                                    <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[4].label}</p>
+                                                    <ImageCompareSlider before={photos[4].url} after={prevPhotos[4]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                </div>
+                                            )}
+                                            {photos[5]?.url && (
+                                                <div>
+                                                    <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[5].label}</p>
+                                                    <ImageCompareSlider before={photos[5].url} after={prevPhotos[5]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                /* ── Normal Mode: 3-Row Photo Grid ── */
+                                <div className="space-y-3">
+                                    {/* Row 1: Passenger Side & Driver Side (horizontal) */}
+                                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                                        <BentoPhoto
+                                            url={photos[0]?.url}
+                                            label={photos[0]?.label || "Passenger Side"}
+                                            onClick={photos[0]?.url ? () => setLightbox(photos[0].url!) : undefined}
+                                            className="aspect-video"
+                                        />
+                                        <BentoPhoto
+                                            url={photos[2]?.url}
+                                            label={photos[2]?.label || "Driver Side"}
+                                            onClick={photos[2]?.url ? () => setLightbox(photos[2].url!) : undefined}
+                                            className="aspect-video"
+                                        />
+                                    </div>
+                                    {/* Row 2: Front & Back */}
+                                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                                        <BentoPhoto
+                                            url={photos[3]?.url}
+                                            label={photos[3]?.label || "Front"}
+                                            onClick={photos[3]?.url ? () => setLightbox(photos[3].url!) : undefined}
+                                            className="aspect-video"
+                                        />
+                                        <BentoPhoto
+                                            url={photos[1]?.url}
+                                            label={photos[1]?.label || "Back"}
+                                            onClick={photos[1]?.url ? () => setLightbox(photos[1].url!) : undefined}
+                                            className="aspect-video"
+                                        />
+                                    </div>
+                                    {/* Row 3: Dashboard & Additional */}
+                                    {(photos[4]?.url || photos[5]?.url) && (
+                                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                                            <BentoPhoto
+                                                url={photos[4]?.url}
+                                                label={photos[4]?.label || "Dashboard"}
+                                                onClick={photos[4]?.url ? () => setLightbox(photos[4].url!) : undefined}
+                                                className="aspect-video"
+                                            />
+                                            <BentoPhoto
+                                                url={photos[5]?.url}
+                                                label={photos[5]?.label || "Additional"}
+                                                onClick={photos[5]?.url ? () => setLightbox(photos[5].url!) : undefined}
+                                                className="aspect-video"
                                             />
                                         </div>
                                     )}
                                 </div>
                             )}
-
-                            {/* Photo gallery — normal or compare mode */}
-                            {hasPhotos && (
-                                <div>
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <IconCamera size={14} className="text-muted-foreground/60" />
-                                        <h2 className="text-sm font-bold text-foreground">Inspection Photos</h2>
-                                        <span className="text-[10px] text-muted-foreground/40">({photos.filter(p => p.url).length} of 6)</span>
-                                        {compareMode && compareData && (
-                                            <span className="text-[10px] text-primary font-medium ml-1">— Drag slider to compare</span>
-                                        )}
-                                    </div>
-
-                                    {/* Compare mode indicator */}
-                                    {compareMode && compareData && (
-                                        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 flex items-center gap-3 text-sm mb-3">
-                                            {compareSource === "master" ? (
-                                                <><span className="text-amber-500 text-base leading-none">★</span> Comparing with <strong>Standard Photo</strong> — {fmtDateShort(compareData.routeDate)}</>
-                                            ) : (
-                                                <><IconArrowsLeftRight size={14} className="text-primary" /> Comparing with <strong>Previous Inspection</strong> — {fmtDateShort(compareData.routeDate)}</>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Row 1: Vehicle Photo 1 + Vehicle Photo 3 — horizontal/landscape */}
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                        {compareMode && compareData ? (
-                                            <>
-                                                <div>
-                                                    <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[0]?.label}</p>
-                                                    <ImageCompareSlider before={photos[0]?.url} after={prevPhotos[0]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[2]?.label}</p>
-                                                    <ImageCompareSlider before={photos[2]?.url} after={prevPhotos[2]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <PhotoCard url={photos[0]?.url} label={photos[0]?.label || "Vehicle Photo 1"} onClick={photos[0]?.url ? () => setLightbox(photos[0].url!) : undefined} />
-                                                <PhotoCard url={photos[2]?.url} label={photos[2]?.label || "Vehicle Photo 3"} onClick={photos[2]?.url ? () => setLightbox(photos[2].url!) : undefined} />
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* Row 2: Vehicle Photo 2 + Vehicle Photo 4 — vertical/portrait */}
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                        {compareMode && compareData ? (
-                                            <>
-                                                <div>
-                                                    <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[1]?.label}</p>
-                                                    <ImageCompareSlider before={photos[1]?.url} after={prevPhotos[1]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} aspectClass="aspect-[3/4]" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[3]?.label}</p>
-                                                    <ImageCompareSlider before={photos[3]?.url} after={prevPhotos[3]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} aspectClass="aspect-[3/4]" />
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
-                                                    {photos[1]?.url ? (
-                                                        <button onClick={() => setLightbox(photos[1].url!)} className="w-full h-full group relative focus:outline-none">
-                                                            <img src={photos[1].url} alt={photos[1].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                            <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
-                                                                <span className="text-[10px] text-white font-medium">{photos[1].label}</span>
-                                                                <IconMaximize size={12} className="text-white/70" />
-                                                            </div>
-                                                        </button>
-                                                    ) : (
-                                                        <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
-                                                            <IconCamera size={20} />
-                                                            <span className="text-[10px]">{photos[1]?.label || "Vehicle Photo 2"}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
-                                                    {photos[3]?.url ? (
-                                                        <button onClick={() => setLightbox(photos[3].url!)} className="w-full h-full group relative focus:outline-none">
-                                                            <img src={photos[3].url} alt={photos[3].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                            <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
-                                                                <span className="text-[10px] text-white font-medium">{photos[3].label}</span>
-                                                                <IconMaximize size={12} className="text-white/70" />
-                                                            </div>
-                                                        </button>
-                                                    ) : (
-                                                        <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
-                                                            <IconCamera size={20} />
-                                                            <span className="text-[10px]">{photos[3]?.label || "Vehicle Photo 4"}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* Row 3: Dashboard + Additional — 2 columns */}
-                                    {(photos[4]?.url || photos[5]?.url) && (
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {/* Dashboard */}
-                                            <div>
-                                                {compareMode && compareData ? (
-                                                    photos[4]?.url ? (
-                                                        <div>
-                                                            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[4].label}</p>
-                                                            <ImageCompareSlider before={photos[4].url} after={prevPhotos[4]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
-                                                        </div>
-                                                    ) : (
-                                                        <PhotoCard url={undefined} label="Dashboard" />
-                                                    )
-                                                ) : (
-                                                    <PhotoCard url={photos[4]?.url} label={photos[4]?.label || "Dashboard"} onClick={photos[4]?.url ? () => setLightbox(photos[4].url!) : undefined} />
-                                                )}
-                                            </div>
-                                            {/* Additional */}
-                                            <div>
-                                                {compareMode && compareData ? (
-                                                    photos[5]?.url ? (
-                                                        <div>
-                                                            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[5].label}</p>
-                                                            <ImageCompareSlider before={photos[5].url} after={prevPhotos[5]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
-                                                        </div>
-                                                    ) : (
-                                                        <PhotoCard url={undefined} label="Additional" />
-                                                    )
-                                                ) : (
-                                                    <PhotoCard url={photos[5]?.url} label={photos[5]?.label || "Additional"} onClick={photos[5]?.url ? () => setLightbox(photos[5].url!) : undefined} />
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* ── Bottom: Inspected By + Timestamp ─────────────── */}
-                            <div className="rounded-xl border border-border/40 bg-card p-5 shadow-sm">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="flex items-start gap-3">
-                                        <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                            <IconUser size={16} className="text-primary" />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-0.5">Inspected By</p>
-                                            <p className="text-sm font-semibold text-foreground">{inspectedByDisplay}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-3">
-                                        <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                            <IconClock size={16} className="text-primary" />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-0.5">Timestamp</p>
-                                            <p className="text-sm font-semibold text-foreground">{fmtDate(inspection.timeStamp)} · {fmtTime(inspection.timeStamp)}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </>
-                    }
+                        </div>
+                    )}
                 </div>
             </div>
             <FleetFormModal />

@@ -152,12 +152,12 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
     setModalOpen(true);
   }, []);
 
-  const openEditModal = (type: string, item: any) => {
+  const openEditModal = useCallback((type: string, item: any) => {
     setModalType(type);
     setFormData({ ...item });
     setEditId(item._id);
     setModalOpen(true);
-  };
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
