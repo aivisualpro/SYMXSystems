@@ -88,6 +88,21 @@ export default function FleetFormModal() {
       })
       .catch(() => { });
 
+    // When editing, fetch the full record to get photo URLs (list view omits them)
+    if (editId) {
+      fetch(`/api/fleet?section=inspection-detail&id=${editId}`)
+        .then(r => r.json())
+        .then(d => {
+          const insp = d.inspection;
+          if (!insp) return;
+          const photoFields = ["vehiclePicture1", "vehiclePicture2", "vehiclePicture3", "vehiclePicture4", "dashboardImage", "additionalPicture"];
+          for (const field of photoFields) {
+            if (insp[field]) updateForm(field, insp[field]);
+          }
+        })
+        .catch(() => { });
+    }
+
     // Get current user session for auto inspectedBy
     fetch("/api/auth/session")
       .then(r => r.json())
