@@ -376,20 +376,20 @@ export default function InspectionDetailPage() {
     const hasRepair = inspection.anyRepairs && inspection.anyRepairs !== "FALSE" && inspection.anyRepairs !== "false";
 
     const photos = [
-        { url: inspection.vehiclePicture1, label: "Vehicle Photo 1" },
-        { url: inspection.vehiclePicture2, label: "Vehicle Photo 2" },
-        { url: inspection.vehiclePicture3, label: "Vehicle Photo 3" },
-        { url: inspection.vehiclePicture4, label: "Vehicle Photo 4" },
+        { url: inspection.vehiclePicture1, label: "Passenger Side Photo" },
+        { url: inspection.vehiclePicture2, label: "Back Photo" },
+        { url: inspection.vehiclePicture3, label: "Driver Side Photo" },
+        { url: inspection.vehiclePicture4, label: "Front Photo" },
         { url: inspection.dashboardImage, label: "Dashboard" },
         { url: inspection.additionalPicture, label: "Additional" },
     ];
     const hasPhotos = photos.some(p => p.url);
 
     const prevPhotos = compareData ? [
-        { url: compareData.vehiclePicture1, label: "Vehicle Photo 1" },
-        { url: compareData.vehiclePicture2, label: "Vehicle Photo 2" },
-        { url: compareData.vehiclePicture3, label: "Vehicle Photo 3" },
-        { url: compareData.vehiclePicture4, label: "Vehicle Photo 4" },
+        { url: compareData.vehiclePicture1, label: "Passenger Side Photo" },
+        { url: compareData.vehiclePicture2, label: "Back Photo" },
+        { url: compareData.vehiclePicture3, label: "Driver Side Photo" },
+        { url: compareData.vehiclePicture4, label: "Front Photo" },
         { url: compareData.dashboardImage, label: "Dashboard" },
         { url: compareData.additionalPicture, label: "Additional" },
     ] : [];
@@ -771,31 +771,39 @@ export default function InspectionDetailPage() {
                                     )}
                                 </div>
 
-                                {/* Row 3: Dashboard — full width, horizontal */}
-                                {photos[4]?.url && (
-                                    <div className="mb-2">
-                                        {compareMode && compareData ? (
-                                            <div>
-                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[4]?.label || "Dashboard"}</p>
-                                                <ImageCompareSlider before={photos[4]?.url} after={prevPhotos[4]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
-                                            </div>
-                                        ) : (
-                                            <PhotoCard url={photos[4]?.url} label={photos[4]?.label || "Dashboard"} onClick={() => setLightbox(photos[4].url!)} />
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Additional picture if exists */}
-                                {photos[5]?.url && (
-                                    <div>
-                                        {compareMode && compareData ? (
-                                            <div>
-                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[5]?.label || "Additional"}</p>
-                                                <ImageCompareSlider before={photos[5]?.url} after={prevPhotos[5]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
-                                            </div>
-                                        ) : (
-                                            <PhotoCard url={photos[5]?.url} label={photos[5]?.label || "Additional"} onClick={() => setLightbox(photos[5].url!)} />
-                                        )}
+                                {/* Row 3: Dashboard + Additional — 2 columns */}
+                                {(photos[4]?.url || photos[5]?.url) && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {/* Dashboard */}
+                                        <div>
+                                            {compareMode && compareData ? (
+                                                photos[4]?.url ? (
+                                                    <div>
+                                                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[4].label}</p>
+                                                        <ImageCompareSlider before={photos[4].url} after={prevPhotos[4]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                    </div>
+                                                ) : (
+                                                    <PhotoCard url={undefined} label="Dashboard" />
+                                                )
+                                            ) : (
+                                                <PhotoCard url={photos[4]?.url} label={photos[4]?.label || "Dashboard"} onClick={photos[4]?.url ? () => setLightbox(photos[4].url!) : undefined} />
+                                            )}
+                                        </div>
+                                        {/* Additional */}
+                                        <div>
+                                            {compareMode && compareData ? (
+                                                photos[5]?.url ? (
+                                                    <div>
+                                                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[5].label}</p>
+                                                        <ImageCompareSlider before={photos[5].url} after={prevPhotos[5]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                    </div>
+                                                ) : (
+                                                    <PhotoCard url={undefined} label="Additional" />
+                                                )
+                                            ) : (
+                                                <PhotoCard url={photos[5]?.url} label={photos[5]?.label || "Additional"} onClick={photos[5]?.url ? () => setLightbox(photos[5].url!) : undefined} />
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
