@@ -165,6 +165,7 @@ export default function FleetFormModal() {
   // Load employees & vehicles for dropdowns
   const [employees, setEmployees] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
+  const [inspectionTypes, setInspectionTypes] = useState<any[]>([]);
   const [sessionEmail, setSessionEmail] = useState<string>("");
 
   useEffect(() => {
@@ -176,6 +177,7 @@ export default function FleetFormModal() {
       .then(d => {
         if (d.employees) setEmployees(d.employees);
         if (d.vehicles) setVehicles(d.vehicles);
+        if (d.inspectionTypes) setInspectionTypes(d.inspectionTypes);
       })
       .catch(() => { });
 
@@ -295,6 +297,14 @@ export default function FleetFormModal() {
                       if (raw?.unitNumber) updateForm("unitNumber", raw.unitNumber);
                     }}
                   />
+                </FormField>
+                <FormField label="Inspection Type">
+                  <select className={inputClass} value={formData.inspectionType || ""} onChange={e => updateForm("inspectionType", e.target.value)}>
+                    <option value="">Select type…</option>
+                    {inspectionTypes.map((t: any) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
                 </FormField>
                 <FormField label="Unit Number"><input className={inputClass} value={formData.unitNumber || ""} onChange={e => updateForm("unitNumber", e.target.value)} /></FormField>
                 <FormField label="Route Date"><input type="date" className={inputClass} value={formData.routeDate ? (typeof formData.routeDate === "string" ? formData.routeDate.split("T")[0] : "") : ""} onChange={e => updateForm("routeDate", e.target.value)} /></FormField>

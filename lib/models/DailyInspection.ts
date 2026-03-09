@@ -25,6 +25,9 @@ export interface IDailyInspection extends Document {
     // Notes
     comments: string;
 
+    // Inspection type
+    inspectionType: string;
+
     // Repair info (embedded on this inspection)
     anyRepairs: string;
     repairDescription: string;
@@ -65,6 +68,9 @@ const DailyInspectionSchema: Schema = new Schema(
 
         // Notes
         comments: { type: String, default: '' },
+
+        // Inspection type
+        inspectionType: { type: String, default: '' },
 
         // Repair
         anyRepairs: { type: String, default: '' },

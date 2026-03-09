@@ -9,6 +9,7 @@ import VehicleActivityLog from "@/lib/models/VehicleActivityLog";
 import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxUser from "@/lib/models/SymxUser";
+import DropdownOption from "@/lib/models/DropdownOption";
 
 // GET: Fleet dashboard summary + all data
 export async function GET(req: NextRequest) {
@@ -391,13 +392,15 @@ export async function GET(req: NextRequest) {
 
     // Dropdowns for inspection form — employees + vehicles
     if (section === "inspection-dropdowns") {
-      const [employees, vehiclesList] = await Promise.all([
+      const [employees, vehiclesList, inspectionTypes] = await Promise.all([
         SymxEmployee.find({}, { transporterId: 1, firstName: 1, lastName: 1 }).sort({ firstName: 1 }).lean(),
         Vehicle.find({ status: { $ne: "Returned" } }, { vin: 1, unitNumber: 1, vehicleName: 1 }).sort({ unitNumber: 1 }).lean(),
+        DropdownOption.find({ type: "inspection", isActive: true }).sort({ sortOrder: 1, description: 1 }).lean(),
       ]);
       return NextResponse.json({
         employees: employees.filter((e: any) => e.transporterId),
         vehicles: vehiclesList.filter((v: any) => v.vin),
+        inspectionTypes: inspectionTypes.map((t: any) => ({ value: t.description, label: t.description })),
       });
     }
 
