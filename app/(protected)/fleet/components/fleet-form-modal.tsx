@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { IconX, IconLoader2, IconUpload, IconPhoto, IconCheck } from "@tabler/icons-react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { IconX, IconLoader2, IconUpload, IconPhoto, IconCheck, IconSearch, IconChevronDown } from "@tabler/icons-react";
 import { useFleet } from "../layout";
 
 const inputClass = "w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors";
@@ -11,6 +11,97 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
     <div>
       <label className="block text-[11px] font-medium text-muted-foreground mb-1">{label}</label>
       {children}
+    </div>
+  );
+}
+
+/* ── Searchable select ───────────────────────────────────────────── */
+function SearchableSelect({
+  value, onChange, options, placeholder = "Search…",
+}: {
+  value: string;
+  onChange: (value: string, option?: any) => void;
+  options: { value: string; label: string; raw?: any }[];
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const filtered = useMemo(() => {
+    if (!query) return options;
+    const q = query.toLowerCase();
+    return options.filter(o => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q));
+  }, [options, query]);
+
+  const selectedLabel = useMemo(() => options.find(o => o.value === value)?.label || "", [options, value]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      {/* Trigger */}
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => { setOpen(true); setQuery(""); setTimeout(() => inputRef.current?.focus(), 50); }}
+          className={`${inputClass} flex items-center justify-between gap-1 text-left cursor-pointer`}
+        >
+          <span className={value ? "text-foreground truncate" : "text-muted-foreground/50 truncate"}>
+            {selectedLabel || placeholder}
+          </span>
+          <IconChevronDown size={14} className="text-muted-foreground/40 flex-shrink-0" />
+        </button>
+      ) : (
+        <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-muted/50 border border-primary/50 ring-1 ring-primary/20">
+          <IconSearch size={13} className="text-muted-foreground/40 flex-shrink-0" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder={placeholder}
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none min-w-0"
+            onKeyDown={e => { if (e.key === "Escape") setOpen(false); }}
+          />
+          {value && (
+            <button type="button" onClick={() => { onChange(""); setQuery(""); }}
+              className="p-0.5 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground transition-colors">
+              <IconX size={12} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute z-50 left-0 right-0 mt-1 rounded-lg border border-border bg-card shadow-xl max-h-[180px] overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-4 text-center text-xs text-muted-foreground/50">No results</div>
+          ) : (
+            filtered.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { onChange(opt.value, opt.raw); setOpen(false); setQuery(""); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-primary/5 ${opt.value === value ? "bg-primary/10 text-primary font-medium" : "text-foreground"
+                  }`}
+              >
+                {opt.value === value && <IconCheck size={12} className="text-primary flex-shrink-0" />}
+                <span className="truncate">{opt.label}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -179,29 +270,31 @@ export default function FleetFormModal() {
               <div className="grid grid-cols-2 gap-3">
                 {/* Driver dropdown */}
                 <FormField label="Driver">
-                  <select className={inputClass} value={formData.driver || ""} onChange={e => updateForm("driver", e.target.value)}>
-                    <option value="">Select driver…</option>
-                    {employees.map((emp: any) => (
-                      <option key={emp.transporterId} value={emp.transporterId}>
-                        {emp.firstName} {emp.lastName}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableSelect
+                    value={formData.driver || ""}
+                    placeholder="Search driver…"
+                    options={employees.map((emp: any) => ({
+                      value: emp.transporterId,
+                      label: `${emp.firstName} ${emp.lastName}`,
+                    }))}
+                    onChange={(val) => updateForm("driver", val)}
+                  />
                 </FormField>
                 {/* VIN dropdown */}
                 <FormField label="VIN">
-                  <select className={inputClass} value={formData.vin || ""} onChange={e => {
-                    const sel = vehicles.find((v: any) => v.vin === e.target.value);
-                    updateForm("vin", e.target.value);
-                    if (sel?.unitNumber) updateForm("unitNumber", sel.unitNumber);
-                  }}>
-                    <option value="">Select VIN…</option>
-                    {vehicles.map((v: any) => (
-                      <option key={v.vin} value={v.vin}>
-                        {v.unitNumber ? `${v.unitNumber} — ` : ""}{v.vin}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableSelect
+                    value={formData.vin || ""}
+                    placeholder="Search VIN or unit…"
+                    options={vehicles.map((v: any) => ({
+                      value: v.vin,
+                      label: `${v.unitNumber ? v.unitNumber + " — " : ""}${v.vin}`,
+                      raw: v,
+                    }))}
+                    onChange={(val, raw) => {
+                      updateForm("vin", val);
+                      if (raw?.unitNumber) updateForm("unitNumber", raw.unitNumber);
+                    }}
+                  />
                 </FormField>
                 <FormField label="Unit Number"><input className={inputClass} value={formData.unitNumber || ""} onChange={e => updateForm("unitNumber", e.target.value)} /></FormField>
                 <FormField label="Route Date"><input type="date" className={inputClass} value={formData.routeDate ? (typeof formData.routeDate === "string" ? formData.routeDate.split("T")[0] : "") : ""} onChange={e => updateForm("routeDate", e.target.value)} /></FormField>
