@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useDispatching } from "../layout";
 
 // ── Column definitions for the spreadsheet ──
 interface ColumnDef {
@@ -73,6 +74,7 @@ interface RoutesInfoPanelProps {
 }
 
 export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanelProps) {
+    const { refreshRoutes } = useDispatching();
     const [rows, setRows] = useState<RowData[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [waveTimeOptions, setWaveTimeOptions] = useState<string[]>([]);
@@ -90,6 +92,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
     // Dropdown state
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [dropdownSearch, setDropdownSearch] = useState("");
+    const [dropdownHighlightedIndex, setDropdownHighlightedIndex] = useState(0);
 
     // Refs
     const gridRef = useRef<HTMLDivElement>(null);
@@ -223,10 +226,11 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ date, rowIndex, field, value }),
             });
+            refreshRoutes();
         } catch {
             // Silent fail for individual cell saves
         }
-    }, [date]);
+    }, [date, refreshRoutes]);
 
     // ── Save all dirty rows ──
     const saveAll = useCallback(async () => {
@@ -246,12 +250,13 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             if (!res.ok) throw new Error(data.error);
             toast.success(`Saved ${data.saved} rows${data.synced > 0 ? `, synced ${data.synced} to Routes` : ""}`);
             setDirtyRows(new Set());
+            refreshRoutes();
         } catch (err: any) {
             toast.error(err.message || "Failed to save");
         } finally {
             setSaving(false);
         }
-    }, [rows, dirtyRows, date]);
+    }, [rows, dirtyRows, date, refreshRoutes]);
 
     // ── Cell update ──
     const updateCell = useCallback((rowIndex: number, field: string, value: string) => {
@@ -277,6 +282,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             setEditingCell({ row, col });
             setDropdownOpen(true);
             setDropdownSearch("");
+            setDropdownHighlightedIndex(0);
             setTimeout(() => dropdownSearchRef.current?.focus(), 50);
             return;
         }
@@ -300,11 +306,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         }
         if (nextRow < TOTAL_ROWS && nextCol < EDITABLE_COLUMNS.length) {
             setActiveCell({ row: nextRow, col: nextCol });
-            // Auto-start editing if the next cell is a dropdown
-            const nextColumn = EDITABLE_COLUMNS[nextCol];
-            if (nextColumn?.type === "dropdown") {
-                setTimeout(() => startEditingRef.current(nextRow, nextCol), 10);
-            }
+            setTimeout(() => startEditingRef.current(nextRow, nextCol), 10);
         }
     }, []);
 
@@ -348,17 +350,55 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         setDropdownSearch("");
     }, []);
 
-    // ── Keyboard navigation ──
-    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (dropdownOpen) {
+    // ── Global keyboard handler for dropdowns ──
+    useEffect(() => {
+        if (!dropdownOpen || !editingCell) return;
+
+        const handleGlobalKeyDown = (e: KeyboardEvent) => {
+            const column = EDITABLE_COLUMNS[editingCell.col];
+            if (!column) return;
+
             if (e.key === "Escape") {
                 cancelEdit();
-                e.preventDefault();
+                e.stopPropagation();
                 return;
             }
-            return;
-        }
 
+            let maxIndex = 0;
+            if (column.dropdownKind === "driver") maxIndex = filteredEmployees.length - 1;
+            else if (column.dropdownKind === "waveTime") maxIndex = filteredWaveOptions.length - 1;
+            else if (column.dropdownKind === "pad") maxIndex = filteredPadOptions.length - 1;
+            else if (column.dropdownKind === "wst") maxIndex = filteredWstOptions.length - 1;
+
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setDropdownHighlightedIndex(prev => Math.min(prev + 1, maxIndex));
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setDropdownHighlightedIndex(prev => Math.max(prev - 1, 0));
+            } else if (e.key === "Enter") {
+                e.preventDefault();
+                if (column.dropdownKind === "driver" && filteredEmployees[dropdownHighlightedIndex]) {
+                    selectDropdownValue(filteredEmployees[dropdownHighlightedIndex].transporterId);
+                } else if (column.dropdownKind === "waveTime" && filteredWaveOptions[dropdownHighlightedIndex]) {
+                    selectDropdownValue(filteredWaveOptions[dropdownHighlightedIndex]);
+                } else if (column.dropdownKind === "pad" && filteredPadOptions[dropdownHighlightedIndex]) {
+                    selectDropdownValue(filteredPadOptions[dropdownHighlightedIndex]);
+                } else if (column.dropdownKind === "wst" && filteredWstOptions[dropdownHighlightedIndex]) {
+                    selectDropdownValue(filteredWstOptions[dropdownHighlightedIndex].wst);
+                }
+            }
+        };
+
+        window.addEventListener("keydown", handleGlobalKeyDown, true);
+        return () => window.removeEventListener("keydown", handleGlobalKeyDown, true);
+    }, [dropdownOpen, editingCell, filteredEmployees, filteredWaveOptions, filteredPadOptions, filteredWstOptions, dropdownHighlightedIndex, cancelEdit, selectDropdownValue]);
+
+
+    // ── Keyboard navigation ──
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        // Dropdown keyboard navigation is handled by a global useEffect
+        // This handler only deals with grid navigation and text editing
         if (editingCell) {
             if (e.key === "Enter" || e.key === "Tab") {
                 e.preventDefault();
@@ -431,7 +471,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                     }
                 }
         }
-    }, [activeCell, editingCell, dropdownOpen, startEditing, commitEdit, cancelEdit, updateCell]);
+    }, [activeCell, editingCell, startEditing, commitEdit, cancelEdit, updateCell]);
 
     // ── Paste support ──
     const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -496,17 +536,6 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         return () => document.removeEventListener("mousedown", handle);
     }, [dropdownOpen, cancelEdit]);
 
-    // Stats
-    const { filledCount, linkedCount } = useMemo(() => {
-        let filled = 0;
-        let linked = 0;
-        rows.forEach(r => {
-            const hasData = r.routeNumber || r.stopCount || r.packageCount || r.transporterId;
-            if (hasData) filled++;
-            if (r.transporterId) linked++;
-        });
-        return { filledCount: filled, linkedCount: linked };
-    }, [rows]);
 
     const formattedDate = useMemo(() => {
         if (!date) return "";
@@ -514,7 +543,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
     }, [date]);
 
-    // ── Render a dropdown popup (shared between driver and waveTime) ──
+    // ── Render a dropdown popup (shared between driver and wave time) ──
     const renderDropdown = useCallback((col: ColumnDef, cellValue: string) => {
         if (!dropdownOpen) return null;
 
@@ -530,12 +559,6 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                 type="text"
                                 value={dropdownSearch}
                                 onChange={e => setDropdownSearch(e.target.value)}
-                                onKeyDown={e => {
-                                    if (e.key === "Escape") {
-                                        cancelEdit();
-                                        e.stopPropagation();
-                                    }
-                                }}
                                 placeholder="Search driver..."
                                 className="w-full h-7 pl-7 pr-2 text-[11px] bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
                             />
@@ -550,19 +573,21 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                         <span>Clear selection</span>
                     </button>
                     {/* Options */}
-                    <div className="overflow-auto flex-1">
-                        {filteredEmployees.map(emp => {
+                    <div className="overflow-auto flex-1 p-1">
+                        {filteredEmployees.map((emp, i) => {
                             const isSelected = cellValue === emp.transporterId;
+                            const isHighlighted = i === dropdownHighlightedIndex;
                             return (
                                 <button
                                     key={emp.transporterId}
                                     className={cn(
-                                        "flex items-center gap-2 w-full px-3 py-1.5 text-left text-[11px] transition-colors",
-                                        isSelected
+                                        "flex items-center gap-2 w-full px-3 py-1.5 text-left text-[11px] transition-colors rounded-sm",
+                                        isSelected || isHighlighted
                                             ? "bg-accent text-primary"
                                             : "text-foreground hover:bg-muted"
                                     )}
                                     onClick={() => selectDropdownValue(emp.transporterId)}
+                                    onMouseEnter={() => setDropdownHighlightedIndex(i)}
                                 >
                                     <div className="flex-1 min-w-0">
                                         <div className="font-medium truncate">{emp.name}</div>
@@ -598,12 +623,9 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                     ref={dropdownSearchRef}
                                     type="text"
                                     value={dropdownSearch}
-                                    onChange={e => setDropdownSearch(e.target.value)}
-                                    onKeyDown={e => {
-                                        if (e.key === "Escape") {
-                                            cancelEdit();
-                                            e.stopPropagation();
-                                        }
+                                    onChange={e => {
+                                        setDropdownSearch(e.target.value);
+                                        setDropdownHighlightedIndex(0);
                                     }}
                                     placeholder={`Search ${label}...`}
                                     className="w-full h-7 pl-7 pr-2 text-[11px] bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
@@ -618,19 +640,21 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                         <X className="h-3 w-3" />
                         <span>Clear</span>
                     </button>
-                    <div className="overflow-auto flex-1">
-                        {options.map(opt => {
+                    <div className="overflow-auto flex-1 p-1">
+                        {options.map((opt, i) => {
                             const isSelected = cellValue === opt;
+                            const isHighlighted = i === dropdownHighlightedIndex;
                             return (
                                 <button
                                     key={opt}
                                     className={cn(
-                                        "flex items-center gap-2 w-full px-3 py-1.5 text-left text-[11px] transition-colors",
-                                        isSelected
+                                        "flex items-center gap-2 w-full px-3 py-1.5 text-left text-[11px] transition-colors rounded-sm",
+                                        isSelected || isHighlighted
                                             ? "bg-accent text-primary"
                                             : "text-foreground hover:bg-muted"
                                     )}
                                     onClick={() => selectDropdownValue(opt)}
+                                    onMouseEnter={() => setDropdownHighlightedIndex(i)}
                                 >
                                     <span className="font-medium">{opt}</span>
                                     {isSelected && <Check className="h-3 w-3 text-primary shrink-0 ml-auto" />}
@@ -658,12 +682,9 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                 ref={dropdownSearchRef}
                                 type="text"
                                 value={dropdownSearch}
-                                onChange={e => setDropdownSearch(e.target.value)}
-                                onKeyDown={e => {
-                                    if (e.key === "Escape") {
-                                        cancelEdit();
-                                        e.stopPropagation();
-                                    }
+                                onChange={e => {
+                                    setDropdownSearch(e.target.value);
+                                    setDropdownHighlightedIndex(0);
                                 }}
                                 placeholder="Search WST..."
                                 className="w-full h-7 pl-7 pr-2 text-[11px] bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
@@ -678,25 +699,24 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                     <X className="h-3 w-3" />
                     <span>Clear</span>
                 </button>
-                <div className="overflow-auto flex-1">
-                    {filteredWstOptions.map(opt => {
+                <div className="overflow-auto flex-1 p-1">
+                    {filteredWstOptions.map((opt, i) => {
                         const isSelected = cellValue === opt.wst;
+                        const isHighlighted = i === dropdownHighlightedIndex;
                         return (
                             <button
                                 key={opt.wst}
                                 className={cn(
-                                    "flex items-center justify-between w-full px-3 py-1.5 text-left text-[11px] transition-colors",
-                                    isSelected
+                                    "flex items-center justify-between w-full px-3 py-1.5 text-left text-[11px] transition-colors rounded-sm",
+                                    isSelected || isHighlighted
                                         ? "bg-accent text-primary"
                                         : "text-foreground hover:bg-muted"
                                 )}
                                 onClick={() => selectDropdownValue(opt.wst)}
+                                onMouseEnter={() => setDropdownHighlightedIndex(i)}
                             >
                                 <span className="font-medium">{opt.wst}</span>
-                                <span className="flex items-center gap-1">
-                                    <span className="text-[9px] text-emerald-400 font-mono">${opt.revenue.toFixed(2)}</span>
-                                    {isSelected && <Check className="h-3 w-3 text-primary shrink-0" />}
-                                </span>
+                                {isSelected && <Check className="h-3 w-3 text-primary shrink-0" />}
                             </button>
                         );
                     })}
@@ -745,13 +765,6 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                         {formattedDate}
                                     </span>
                                 </h2>
-                                <p className="text-[10px] sm:text-[11px] text-muted-foreground flex items-center gap-2">
-                                    <span>{filledCount} filled</span>
-                                    <span className="text-border">·</span>
-                                    <span>{linkedCount} linked to drivers</span>
-                                    <span className="text-border">·</span>
-                                    <span>{dirtyRows.size > 0 ? `${dirtyRows.size} unsaved` : "All saved"}</span>
-                                </p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -770,23 +783,6 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                 <X className="h-4 w-4" />
                             </Button>
                         </div>
-                    </div>
-
-                    {/* Keyboard hints */}
-                    <div className="px-4 sm:px-6 pb-2 flex items-center gap-3 text-[9px] sm:text-[10px] text-muted-foreground flex-wrap">
-                        <span className="hidden sm:inline">
-                            <kbd className="px-1 py-0.5 rounded bg-muted border border-border text-[9px] font-mono">←↑↓→</kbd> Navigate
-                        </span>
-                        <span className="hidden sm:inline">
-                            <kbd className="px-1 py-0.5 rounded bg-muted border border-border text-[9px] font-mono">Enter</kbd> Edit
-                        </span>
-                        <span className="hidden sm:inline">
-                            <kbd className="px-1 py-0.5 rounded bg-muted border border-border text-[9px] font-mono">Tab</kbd> Next Cell
-                        </span>
-                        <span className="hidden sm:inline">
-                            <kbd className="px-1 py-0.5 rounded bg-muted border border-border text-[9px] font-mono">Esc</kbd> Cancel
-                        </span>
-                        <span className="sm:hidden text-[9px]">Tap to edit · Auto-saves on blur</span>
                     </div>
                 </div>
 

@@ -220,7 +220,7 @@ export default function AttendancePage() {
         }
     }, []);
 
-    // ── Quick Mark Present (from Pending Card) ──
+    // ── Quick Mark Present/Absent (from Pending Card) ──
     const handleMarkPresent = async (row: RouteRow) => {
         const timeStr = new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -244,6 +244,33 @@ export default function AttendancePage() {
             toast.success(`Marked ${row.employeeName} present`);
         } catch {
             toast.error(`Failed to mark present`);
+        }
+    };
+
+    const handleMarkAbsent = async (row: RouteRow, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const timeStr = new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit', hour12: false });
+
+        // Optimistic
+        setAllRoutes(prev => prev.map(r =>
+            r._id === row._id
+                ? { ...r, attendance: "Absent", attendanceTime: timeStr }
+                : r
+        ));
+
+        try {
+            const res = await fetch("/api/dispatching/routes", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    routeId: row._id,
+                    updates: { attendance: "Absent", attendanceTime: timeStr },
+                }),
+            });
+            if (!res.ok) throw new Error();
+            toast.success(`Marked ${row.employeeName} absent`);
+        } catch {
+            toast.error(`Failed to mark absent`);
         }
     };
 
@@ -501,9 +528,14 @@ export default function AttendancePage() {
                                         </div>
                                     </div>
 
-                                    {/* Check icon right side */}
-                                    <div className="absolute right-4 w-7 h-7 rounded-full border-2 border-border flex items-center justify-center opacity-0 group-hover:opacity-100 group-hover:bg-primary group-hover:border-primary transition-all translate-x-2 group-hover:translate-x-0">
-                                        <Check className="w-4 h-4 text-primary-foreground" />
+                                    {/* Action Buttons */}
+                                    <div className="flex items-center gap-2 pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            onClick={(e) => handleMarkAbsent(row, e)}
+                                            className="px-2.5 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/30 font-bold text-[10px] uppercase tracking-wider transition-colors z-10"
+                                        >
+                                            Absent
+                                        </button>
                                     </div>
                                 </button>
                             );
