@@ -304,7 +304,7 @@ export default function AppUsersPage() {
 
       {/* ── User Detail Popup ───────────────────────────────────── */}
       <Dialog open={!!viewUser} onOpenChange={(open) => { if (!open) setViewUser(null); }}>
-        <DialogContent className="max-w-2xl p-0 overflow-hidden border-0 rounded-3xl bg-zinc-950 shadow-2xl shadow-black/40 [&>button]:text-white [&>button]:hover:bg-white/10">
+        <DialogContent className="max-w-2xl p-0 overflow-hidden rounded-3xl bg-card shadow-2xl">
           <DialogHeader className="sr-only">
             <DialogTitle>{viewUser?.name || "User Details"}</DialogTitle>
           </DialogHeader>
@@ -314,34 +314,34 @@ export default function AppUsersPage() {
               {/* Hero section */}
               <div className="relative">
                 {/* Gradient backdrop */}
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-blue-500/10" />
-                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-zinc-950 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-blue-500/5" />
+                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-card to-transparent" />
 
                 <div className="relative px-8 pt-8 pb-6 flex items-end gap-5">
                   {/* Large avatar */}
                   <div className="relative flex-shrink-0">
-                    <div className="w-24 h-24 rounded-2xl bg-zinc-800 overflow-hidden border-2 border-white/10 shadow-2xl">
+                    <div className="w-24 h-24 rounded-2xl bg-muted overflow-hidden border-2 border-border shadow-2xl">
                       {viewUser.profilePicture ? (
                         <img src={viewUser.profilePicture} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <IconUser size={36} className="text-zinc-600" />
+                          <IconUser size={36} className="text-muted-foreground/40" />
                         </div>
                       )}
                     </div>
-                    <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-3 border-zinc-950 ${viewUser.isActive ? "bg-emerald-500 shadow-lg shadow-emerald-500/30" : "bg-gray-500"}`} />
+                    <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-3 border-card ${viewUser.isActive ? "bg-emerald-500 shadow-lg shadow-emerald-500/30" : "bg-gray-500"}`} />
                   </div>
 
                   {/* Name + role + edit button */}
                   <div className="flex-1 min-w-0 pb-1">
-                    <h2 className="text-2xl font-extrabold text-white truncate tracking-tight">{viewUser.name}</h2>
+                    <h2 className="text-2xl font-extrabold text-foreground truncate tracking-tight">{viewUser.name}</h2>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${getRoleStyle(viewUser.AppRole).bg}`}>
                         <IconShieldCheck size={10} />
                         {viewUser.AppRole}
                       </span>
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${viewUser.isActive ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : "border-zinc-700 bg-zinc-800 text-zinc-500"}`}>
-                        <div className={`w-1.5 h-1.5 rounded-full ${viewUser.isActive ? "bg-emerald-400 shadow-sm shadow-emerald-400/50" : "bg-zinc-600"}`} />
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${viewUser.isActive ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-500" : "border-border bg-muted text-muted-foreground"}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${viewUser.isActive ? "bg-emerald-500 shadow-sm shadow-emerald-500/50" : "bg-muted-foreground/40"}`} />
                         {viewUser.isActive ? "Active" : "Inactive"}
                       </span>
                     </div>
@@ -350,7 +350,7 @@ export default function AppUsersPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-white/60 hover:text-white hover:bg-white/10 gap-1.5 rounded-xl border border-white/10"
+                    className="text-muted-foreground hover:text-foreground hover:bg-muted gap-1.5 rounded-xl border border-border"
                     onClick={() => openEditSheet(viewUser)}
                   >
                     <IconPencil size={13} /> Edit
@@ -362,68 +362,68 @@ export default function AppUsersPage() {
               <div className="px-8 pb-6 space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   {/* Email */}
-                  <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4 hover:bg-white/[0.05] transition-colors">
-                    <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
+                  <div className="bg-muted/50 rounded-xl border border-border/60 p-4 hover:bg-muted/70 transition-colors">
+                    <p className="text-muted-foreground text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
                       <IconMail size={11} className="text-primary/60" /> Email
                     </p>
-                    <p className="text-zinc-200 text-sm font-medium break-all leading-relaxed">{viewUser.email}</p>
+                    <p className="text-foreground text-sm font-medium break-all leading-relaxed">{viewUser.email}</p>
                   </div>
 
                   {/* Phone */}
-                  <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4 hover:bg-white/[0.05] transition-colors">
-                    <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
+                  <div className="bg-muted/50 rounded-xl border border-border/60 p-4 hover:bg-muted/70 transition-colors">
+                    <p className="text-muted-foreground text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
                       <IconPhone size={11} className="text-primary/60" /> Phone
                     </p>
-                    <p className="text-zinc-200 text-sm font-medium">{viewUser.phone || <span className="text-zinc-600 italic">Not provided</span>}</p>
+                    <p className="text-foreground text-sm font-medium">{viewUser.phone || <span className="text-muted-foreground/50 italic">Not provided</span>}</p>
                   </div>
 
                   {/* Address */}
-                  <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4 hover:bg-white/[0.05] transition-colors">
-                    <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
+                  <div className="bg-muted/50 rounded-xl border border-border/60 p-4 hover:bg-muted/70 transition-colors">
+                    <p className="text-muted-foreground text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
                       <IconMapPin size={11} className="text-primary/60" /> Address
                     </p>
-                    <p className="text-zinc-200 text-sm font-medium">{viewUser.address || <span className="text-zinc-600 italic">Not provided</span>}</p>
+                    <p className="text-foreground text-sm font-medium">{viewUser.address || <span className="text-muted-foreground/50 italic">Not provided</span>}</p>
                   </div>
 
                   {/* Location */}
-                  <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4 hover:bg-white/[0.05] transition-colors">
-                    <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
+                  <div className="bg-muted/50 rounded-xl border border-border/60 p-4 hover:bg-muted/70 transition-colors">
+                    <p className="text-muted-foreground text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
                       <IconMapPin size={11} className="text-primary/60" /> Location
                     </p>
-                    <p className="text-zinc-200 text-sm font-medium">{viewUser.location || <span className="text-zinc-600 italic">Not provided</span>}</p>
+                    <p className="text-foreground text-sm font-medium">{viewUser.location || <span className="text-muted-foreground/50 italic">Not provided</span>}</p>
                   </div>
                 </div>
 
                 {/* Signature */}
-                <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4 hover:bg-white/[0.05] transition-colors">
-                  <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-2">
+                <div className="bg-muted/50 rounded-xl border border-border/60 p-4 hover:bg-muted/70 transition-colors">
+                  <p className="text-muted-foreground text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-2">
                     <IconSignature size={11} className="text-primary/60" /> Signature
                   </p>
                   {viewUser.signature ? (
-                    <div className="bg-white/5 rounded-lg flex items-center justify-center p-3 min-h-[80px] border border-white/5">
-                      <img src={viewUser.signature} alt="Signature" className="h-full w-auto max-h-[70px] object-contain invert brightness-200" />
+                    <div className="bg-muted rounded-lg flex items-center justify-center p-3 min-h-[80px] border border-border/40">
+                      <img src={viewUser.signature} alt="Signature" className="h-full w-auto max-h-[70px] object-contain dark:invert dark:brightness-200" />
                     </div>
                   ) : (
-                    <div className="bg-white/[0.02] rounded-lg flex items-center justify-center p-3 min-h-[60px] border border-dashed border-zinc-800">
-                      <p className="text-zinc-600 text-xs italic">No signature on file</p>
+                    <div className="bg-muted/30 rounded-lg flex items-center justify-center p-3 min-h-[60px] border border-dashed border-border">
+                      <p className="text-muted-foreground/50 text-xs italic">No signature on file</p>
                     </div>
                   )}
                 </div>
 
                 {/* Password change */}
-                <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4">
-                  <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-3">
+                <div className="bg-muted/50 rounded-xl border border-border/60 p-4">
+                  <p className="text-muted-foreground text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-3">
                     <IconLock size={11} className="text-primary/60" /> Account Security
                   </p>
                   <div className="flex gap-3 items-end">
                     <div className="flex-1">
                       <div className="relative">
-                        <IconLock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+                        <IconLock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
                         <input
                           type="text"
                           placeholder="Enter new password"
                           id="detail-password-input"
-                          className="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-zinc-200 outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-zinc-700"
+                          className="w-full bg-background border border-border rounded-xl py-2.5 pl-10 pr-4 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/40"
                         />
                       </div>
                     </div>
