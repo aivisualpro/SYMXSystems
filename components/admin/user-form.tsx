@@ -4,7 +4,7 @@ import { useRef, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+
 import {
   Select,
   SelectContent,
@@ -17,16 +17,14 @@ import {
   Mail,
   Phone,
   MapPin,
-  Briefcase,
   Shield,
   Lock,
   Activity,
-  Hash,
   Eye,
   EyeOff,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
 
 interface User {
   _id?: string;
@@ -62,12 +60,8 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
     password: "",
     isActive: true,
     AppRole: "Manager",
-    serialNo: "",
-    designation: "",
-    bioDescription: "",
     profilePicture: "",
     signature: "",
-    isOnWebsite: false,
     location: "USA",
     ...initialData,
   });
@@ -257,7 +251,7 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
       <div className="grid grid-cols-3 gap-8 py-4">
         {/* Left Column: 2/3 width */}
         <div className="col-span-2 space-y-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="name">Name</Label>
               <div className="relative">
@@ -285,31 +279,6 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
                 />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="designation">Designation</Label>
-              <div className="relative">
-                <Briefcase className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground z-10" />
-                <div className="[&>button]:pl-9">
-                  <Select
-                    value={formData.designation}
-                    onValueChange={(value) => setFormData({ ...formData, designation: value })}
-                  >
-                    <SelectTrigger className="pl-9 w-full">
-                      <SelectValue placeholder="Select Designation" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Owner">Owner</SelectItem>
-                      <SelectItem value="Manager">Manager</SelectItem>
-                      <SelectItem value="Dispatcher">Dispatcher</SelectItem>
-                      <SelectItem value="Accountant">Accountant</SelectItem>
-                      <SelectItem value="Sales">Sales</SelectItem>
-                      <SelectItem value="Driver">Driver</SelectItem>
-                      <SelectItem value="Staff">Staff</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
             </div>
           </div>
@@ -350,36 +319,23 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
                 </Button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="status">Status</Label>
-                <div className="relative">
-                  <Activity className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground z-10" />
-                  <div className="[&>button]:pl-9">
-                    <Select
-                      value={formData.isActive ? "active" : "inactive"}
-                      onValueChange={(value) => setFormData({ ...formData, isActive: value === "active" })}
-                    >
-                      <SelectTrigger className="pl-9 w-full">
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="isOnWebsite">Show on Website</Label>
-                <div className="flex h-10 items-center justify-between rounded-md border border-input bg-transparent px-3 py-2">
-                  <span className="text-sm text-muted-foreground">Visible</span>
-                  <Switch
-                    id="isOnWebsite"
-                    checked={formData.isOnWebsite || false}
-                    onCheckedChange={(checked) => setFormData({ ...formData, isOnWebsite: checked })}
-                  />
+            <div className="grid gap-2">
+              <Label htmlFor="status">Status</Label>
+              <div className="relative">
+                <Activity className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground z-10" />
+                <div className="[&>button]:pl-9">
+                  <Select
+                    value={formData.isActive ? "active" : "inactive"}
+                    onValueChange={(value) => setFormData({ ...formData, isActive: value === "active" })}
+                  >
+                    <SelectTrigger className="pl-9 w-full">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
@@ -432,8 +388,8 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
             </div>
           </div>
 
-          <div className="grid grid-cols-12 gap-4">
-            <div className="col-span-6 grid gap-2">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
               <Label htmlFor="address">Address</Label>
               <div className="relative">
                 <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -446,7 +402,7 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
                 />
               </div>
             </div>
-            <div className="col-span-3 grid gap-2">
+            <div className="grid gap-2">
               <Label htmlFor="location">Location</Label>
               <Select
                 value={formData.location || "USA"}
@@ -462,30 +418,6 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
                 </SelectContent>
               </Select>
             </div>
-            <div className="col-span-3 grid gap-2">
-              <Label htmlFor="serialNo">Serial No</Label>
-              <div className="relative">
-                <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="serialNo"
-                  className="pl-9"
-                  placeholder="001"
-                  value={formData.serialNo || ""}
-                  onChange={(e) => setFormData({ ...formData, serialNo: e.target.value })}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="bioDescription">Bio / Description</Label>
-            <textarea
-              id="bioDescription"
-              className="flex min-h-[220px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="Enter user biography..."
-              value={formData.bioDescription || ""}
-              onChange={(e) => setFormData({ ...formData, bioDescription: e.target.value })}
-            />
           </div>
         </div>
 

@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   IconEdit, IconTrash, IconEye, IconMail, IconPhone,
   IconUser, IconUsers, IconMapPin, IconShieldCheck,
-  IconBriefcase, IconDotsVertical,
+  IconDotsVertical,
 } from "@tabler/icons-react";
 
 /* ── Types ──────────────────────────────────────────────────────── */
@@ -200,17 +200,6 @@ export default function AppUsersPage() {
                       <h3 className="text-sm font-bold text-foreground truncate leading-tight">
                         {user.name || "Unnamed"}
                       </h3>
-                      {user.designation && (
-                        <p className="text-[11px] text-muted-foreground truncate mt-0.5 flex items-center gap-1">
-                          <IconBriefcase size={10} className="flex-shrink-0" />
-                          {user.designation}
-                        </p>
-                      )}
-                      {user.serialNo && (
-                        <p className="text-[10px] text-muted-foreground/50 mt-0.5 font-mono">
-                          #{user.serialNo}
-                        </p>
-                      )}
                     </div>
 
                     {/* Actions menu */}
