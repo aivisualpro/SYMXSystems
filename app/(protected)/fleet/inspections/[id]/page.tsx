@@ -171,6 +171,7 @@ export default function InspectionDetailPage() {
     // Standard Photo
     const [isStandardPhoto, setIsStandardPhoto] = useState(false);
     const [togglingStandard, setTogglingStandard] = useState(false);
+    const [hasStandardPhoto, setHasStandardPhoto] = useState(false);
 
     // Comparison
     const [compareMode, setCompareMode] = useState(false);
@@ -190,6 +191,7 @@ export default function InspectionDetailPage() {
             .then(j => {
                 setInspection(j.inspection);
                 setIsStandardPhoto(j.inspection?.isStandardPhoto || false);
+                setHasStandardPhoto(j.inspection?.hasStandardPhoto || false);
                 setLoading(false);
             })
             .catch(() => setLoading(false));
@@ -299,21 +301,34 @@ export default function InspectionDetailPage() {
                                 </button>
                                 <div className="h-px bg-border/60" />
                                 {/* Compare with Master */}
-                                <button
-                                    onClick={() => loadCompare("master")}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/60 transition-colors text-left ${compareMode && compareSource === "master" ? "bg-primary/5 text-primary" : "text-foreground"}`}
-                                >
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${compareMode && compareSource === "master" ? "bg-primary/15" : "bg-amber-500/10"}`}>
-                                        <span className={`text-base leading-none ${compareMode && compareSource === "master" ? "text-primary" : "text-amber-500"}`}>★</span>
-                                    </div>
-                                    <div>
-                                        <p className="font-medium">Master Photo</p>
-                                        <p className="text-[10px] text-muted-foreground">Compare with standard reference</p>
-                                    </div>
-                                    {compareMode && compareSource === "master" && (
-                                        <span className="ml-auto text-primary text-xs">●</span>
+                                <div className="relative group/master">
+                                    <button
+                                        onClick={() => hasStandardPhoto ? loadCompare("master") : undefined}
+                                        disabled={!hasStandardPhoto}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors text-left ${!hasStandardPhoto
+                                            ? "opacity-40 cursor-not-allowed"
+                                            : compareMode && compareSource === "master" ? "bg-primary/5 text-primary hover:bg-muted/60" : "text-foreground hover:bg-muted/60"
+                                            }`}
+                                    >
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${compareMode && compareSource === "master" ? "bg-primary/15" : "bg-amber-500/10"}`}>
+                                            <span className={`text-base leading-none ${compareMode && compareSource === "master" ? "text-primary" : "text-amber-500"}`}>★</span>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium">Master Photo</p>
+                                            <p className="text-[10px] text-muted-foreground">{hasStandardPhoto ? "Compare with standard reference" : "No standard photo available"}</p>
+                                        </div>
+                                        {compareMode && compareSource === "master" && (
+                                            <span className="ml-auto text-primary text-xs">●</span>
+                                        )}
+                                    </button>
+                                    {!hasStandardPhoto && (
+                                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover/master:block z-50 pointer-events-none">
+                                            <div className="bg-foreground text-background text-[10px] px-2.5 py-1.5 rounded-lg shadow-lg whitespace-nowrap max-w-[220px] text-wrap text-center">
+                                                No standard photo inspection found for this VIN. Mark one as Standard Photo first.
+                                            </div>
+                                        </div>
                                     )}
-                                </button>
+                                </div>
                                 {/* Exit Compare — only show when in compare mode */}
                                 {compareMode && (
                                     <>
@@ -339,7 +354,7 @@ export default function InspectionDetailPage() {
             </div>
         );
         return () => setRightContent(null);
-    }, [setRightContent, compareMode, compareLoading, loadCompare, isStandardPhoto, togglingStandard, toggleStandardPhoto, showCompareMenu]);
+    }, [setRightContent, compareMode, compareLoading, loadCompare, isStandardPhoto, togglingStandard, toggleStandardPhoto, showCompareMenu, hasStandardPhoto]);
 
     if (loading) return (
         <div className="flex items-center justify-center h-full">
@@ -550,6 +565,41 @@ export default function InspectionDetailPage() {
                                         </div>
                                     );
                                 })()}
+                                {/* Missing Photos indicator */}
+                                {(() => {
+                                    const missingPhotos = photos.filter(p => !p.url);
+                                    if (missingPhotos.length === 0) return null;
+                                    return (
+                                        <div className="col-span-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
+                                            <div className="p-2 rounded-lg bg-amber-500/10 mt-0.5">
+                                                <IconCamera size={16} className="text-amber-500" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80 mb-1">Missing Photos ({missingPhotos.length})</p>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {missingPhotos.map(p => (
+                                                        <span key={p.label} className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15">
+                                                            {p.label}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Comments — 2-col wide */}
+                                {inspection.comments && (
+                                    <div className="col-span-2 rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                        <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                            <IconClock size={16} className="text-primary" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-1">Comments</p>
+                                            <p className="text-sm text-foreground leading-relaxed">{inspection.comments}</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -582,13 +632,6 @@ export default function InspectionDetailPage() {
                 {/* ── Content (always visible, photos switch to compare sliders when compareMode is on) ── */}
                 {
                     <>
-                        {/* Comments */}
-                        {inspection.comments && (
-                            <div className="rounded-xl border border-border/40 bg-card p-4 shadow-sm">
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-2">Comments</p>
-                                <p className="text-sm text-foreground leading-relaxed">{inspection.comments}</p>
-                            </div>
-                        )}
 
                         {/* Repair section */}
                         {hasRepair && (

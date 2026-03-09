@@ -271,7 +271,7 @@ export async function GET(req: NextRequest) {
 
       // Enrich with references — ALL IN PARALLEL
       const enriched = { ...inspection } as any;
-      const [emp, user, vehicle] = await Promise.all([
+      const [emp, user, vehicle, standardPhotoCount] = await Promise.all([
         inspection.driver
           ? SymxEmployee.findOne({ transporterId: inspection.driver }, { firstName: 1, lastName: 1 }).lean()
           : null,
@@ -282,6 +282,9 @@ export async function GET(req: NextRequest) {
         inspection.vin
           ? Vehicle.findOne({ vin: inspection.vin }, { image: 1, vehicleName: 1, unitNumber: 1 }).lean()
           : null,
+        inspection.vin
+          ? DailyInspection.countDocuments({ vin: inspection.vin, isStandardPhoto: true, _id: { $ne: inspection._id } })
+          : 0,
       ]);
 
       if (emp) enriched.driverName = `${(emp as any).firstName || ""} ${(emp as any).lastName || ""}`.trim();
@@ -290,6 +293,7 @@ export async function GET(req: NextRequest) {
         enriched.vehicleImage = (vehicle as any).image || "";
         enriched.vehicleName = (vehicle as any).vehicleName || "";
       }
+      enriched.hasStandardPhoto = standardPhotoCount > 0;
 
       return NextResponse.json({ inspection: enriched });
     }
