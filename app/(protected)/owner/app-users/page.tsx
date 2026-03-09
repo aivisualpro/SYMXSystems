@@ -37,13 +37,13 @@ interface User {
 function getRoleStyle(role: string) {
   switch (role) {
     case "Super Admin":
-      return { bg: "bg-gradient-to-r from-red-500/10 to-orange-500/10 text-red-500 border-red-500/20", dot: "bg-red-500" };
+      return { bg: "bg-gradient-to-r from-red-500/20 to-orange-500/20 text-red-600 dark:text-red-400 border-red-500/30", dot: "bg-red-500" };
     case "Admin":
-      return { bg: "bg-gradient-to-r from-amber-500/10 to-yellow-500/10 text-amber-500 border-amber-500/20", dot: "bg-amber-500" };
+      return { bg: "bg-gradient-to-r from-amber-500/20 to-yellow-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30", dot: "bg-amber-500" };
     case "Manager":
-      return { bg: "bg-gradient-to-r from-blue-500/10 to-cyan-500/10 text-blue-500 border-blue-500/20", dot: "bg-blue-500" };
+      return { bg: "bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30", dot: "bg-blue-500" };
     default:
-      return { bg: "bg-gradient-to-r from-slate-500/10 to-gray-500/10 text-slate-500 border-slate-500/20", dot: "bg-slate-500" };
+      return { bg: "bg-gradient-to-r from-slate-500/20 to-gray-500/20 text-slate-600 dark:text-slate-400 border-slate-500/30", dot: "bg-slate-500" };
   }
 }
 
@@ -214,7 +214,6 @@ export default function AppUsersPage() {
                           </div>
                         )}
                       </div>
-                      <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-card ${user.isActive ? "bg-emerald-500" : "bg-gray-400"}`} />
                     </div>
 
                     {/* Name */}
@@ -222,7 +221,7 @@ export default function AppUsersPage() {
                       <h3 className="text-sm font-bold text-foreground truncate leading-tight">
                         {user.name || "Unnamed"}
                       </h3>
-                      <p className="text-[11px] text-muted-foreground/60 truncate mt-0.5">{user.email}</p>
+                      <p className="text-[11px] text-foreground/70 truncate mt-0.5">{user.email}</p>
                     </div>
 
                     {/* Action buttons - always visible */}
@@ -261,7 +260,7 @@ export default function AppUsersPage() {
                       </div>
                     )}
                     {user.location && (
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-2 text-[11px] text-foreground/70">
                         <IconMapPin size={12} className="text-muted-foreground/40 flex-shrink-0" />
                         <span className="truncate">{user.location}</span>
                       </div>
