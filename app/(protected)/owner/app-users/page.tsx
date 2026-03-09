@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { useOwner } from "../layout";
 import { UserForm } from "@/components/admin/user-form";
 import {
@@ -11,11 +10,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
-  IconEdit, IconTrash, IconEye, IconMail, IconPhone,
+  IconEdit, IconTrash, IconMail, IconPhone,
   IconUser, IconUsers, IconMapPin, IconShieldCheck,
-  IconDotsVertical,
+  IconPencil, IconLock, IconSignature,
 } from "@tabler/icons-react";
 
 /* ── Types ──────────────────────────────────────────────────────── */
@@ -28,36 +28,32 @@ interface User {
   AppRole: string;
   password?: string;
   isActive: boolean;
-  serialNo?: string;
-  designation?: string;
-  bioDescription?: string;
   profilePicture?: string;
   signature?: string;
-  isOnWebsite?: boolean;
   location?: string;
 }
 
-/* ── Role color map ─────────────────────────────────────────────── */
+/* ── Role styles ────────────────────────────────────────────────── */
 function getRoleStyle(role: string) {
   switch (role) {
     case "Super Admin":
-      return "bg-gradient-to-r from-red-500/10 to-orange-500/10 text-red-500 border-red-500/20";
+      return { bg: "bg-gradient-to-r from-red-500/10 to-orange-500/10 text-red-500 border-red-500/20", dot: "bg-red-500" };
     case "Admin":
-      return "bg-gradient-to-r from-amber-500/10 to-yellow-500/10 text-amber-500 border-amber-500/20";
+      return { bg: "bg-gradient-to-r from-amber-500/10 to-yellow-500/10 text-amber-500 border-amber-500/20", dot: "bg-amber-500" };
     case "Manager":
-      return "bg-gradient-to-r from-blue-500/10 to-cyan-500/10 text-blue-500 border-blue-500/20";
+      return { bg: "bg-gradient-to-r from-blue-500/10 to-cyan-500/10 text-blue-500 border-blue-500/20", dot: "bg-blue-500" };
     default:
-      return "bg-gradient-to-r from-slate-500/10 to-gray-500/10 text-slate-500 border-slate-500/20";
+      return { bg: "bg-gradient-to-r from-slate-500/10 to-gray-500/10 text-slate-500 border-slate-500/20", dot: "bg-slate-500" };
   }
 }
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function AppUsersPage() {
   const { users, loadingUsers, search, fetchUsers, addUserOpen, setAddUserOpen } = useOwner();
-  const router = useRouter();
 
   const [editingItem, setEditingItem] = useState<User | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [viewUser, setViewUser] = useState<User | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
 
   /* ── CRUD ──────────────────────────────────────────────── */
   const handleSubmit = async (formData: Partial<User>) => {
@@ -74,17 +70,25 @@ export default function AppUsersPage() {
       setAddUserOpen(false);
       setEditingItem(null);
       fetchUsers();
+      // Refresh view popup if open
+      if (viewUser && editingItem && viewUser._id === editingItem._id) {
+        const updated = await res.json().catch(() => null);
+        if (updated) setViewUser(updated);
+        else fetchUserDetail(editingItem._id);
+      }
     } catch {
       toast.error("Failed to save user");
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (!confirm("Are you sure you want to delete this user?")) return;
     try {
       const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed");
       toast.success("User deleted");
+      if (viewUser?._id === id) setViewUser(null);
       fetchUsers();
     } catch {
       toast.error("Failed to delete user");
@@ -101,13 +105,15 @@ export default function AppUsersPage() {
       if (!res.ok) throw new Error("Failed");
       toast.success(`User ${checked ? "activated" : "deactivated"}`);
       fetchUsers();
+      if (viewUser?._id === userId) setViewUser(prev => prev ? { ...prev, isActive: checked } : null);
     } catch {
       toast.error("Failed to update status");
       fetchUsers();
     }
-  }, [fetchUsers]);
+  }, [fetchUsers, viewUser]);
 
-  const openEditSheet = async (item: User) => {
+  const openEditSheet = async (item: User, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setEditingItem(item);
     setAddUserOpen(true);
     try {
@@ -119,6 +125,26 @@ export default function AppUsersPage() {
     } catch { }
   };
 
+  const fetchUserDetail = async (id: string) => {
+    setViewLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setViewUser(data);
+      }
+    } catch {
+      toast.error("Failed to load user details");
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
+  const openUserDetail = (user: User) => {
+    setViewUser(user); // Show immediately with list data
+    fetchUserDetail(user._id); // Then fetch full details
+  };
+
   /* ── Filter ────────────────────────────────────────────── */
   const filteredUsers = useMemo(() => {
     if (!search.trim()) return users;
@@ -127,13 +153,11 @@ export default function AppUsersPage() {
       (u.name || "").toLowerCase().includes(q) ||
       (u.email || "").toLowerCase().includes(q) ||
       (u.phone || "").toLowerCase().includes(q) ||
-      (u.designation || "").toLowerCase().includes(q) ||
-      (u.AppRole || "").toLowerCase().includes(q) ||
-      (u.serialNo || "").toLowerCase().includes(q)
+      (u.AppRole || "").toLowerCase().includes(q)
     );
   }, [users, search]);
 
-  /* ── Loading skeleton ──────────────────────────────────── */
+  /* ── Skeleton loading ──────────────────────────────────── */
   if (loadingUsers) return (
     <div className="p-4 sm:p-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -156,19 +180,19 @@ export default function AppUsersPage() {
     </div>
   );
 
+  const roleStyle = (role: string) => getRoleStyle(role);
+
   return (
     <>
       <div className="h-full overflow-auto p-4 sm:p-6">
-        {/* Cards grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredUsers.map((user: any) => {
-            const isMenuOpen = openMenuId === user._id;
-
+            const rs = roleStyle(user.AppRole);
             return (
               <div
                 key={user._id}
                 className="group relative rounded-2xl border border-border/40 bg-card overflow-hidden transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 cursor-pointer"
-                onClick={() => router.push(`/owner/app-users/${user._id}`)}
+                onClick={() => openUserDetail(user)}
               >
                 {/* Top gradient bar */}
                 <div className={`h-1 w-full ${user.isActive
@@ -176,10 +200,9 @@ export default function AppUsersPage() {
                   : "bg-gradient-to-r from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700"
                   }`} />
 
-                {/* Card content */}
                 <div className="p-4 sm:p-5">
-                  {/* Header: Avatar + Info + Actions */}
-                  <div className="flex items-start gap-3 mb-4">
+                  {/* Header: Avatar + Name + Inline buttons */}
+                  <div className="flex items-start gap-3 mb-3">
                     {/* Avatar */}
                     <div className="relative flex-shrink-0">
                       <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-muted to-muted/60 overflow-hidden border-2 border-border/30 shadow-sm">
@@ -191,57 +214,39 @@ export default function AppUsersPage() {
                           </div>
                         )}
                       </div>
-                      {/* Online indicator */}
                       <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-card ${user.isActive ? "bg-emerald-500" : "bg-gray-400"}`} />
                     </div>
 
-                    {/* Name + Designation */}
-                    <div className="flex-1 min-w-0">
+                    {/* Name */}
+                    <div className="flex-1 min-w-0 pt-1">
                       <h3 className="text-sm font-bold text-foreground truncate leading-tight">
                         {user.name || "Unnamed"}
                       </h3>
+                      <p className="text-[11px] text-muted-foreground/60 truncate mt-0.5">{user.email}</p>
                     </div>
 
-                    {/* Actions menu */}
-                    <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    {/* Action buttons - always visible */}
+                    <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
                       <button
-                        onClick={() => setOpenMenuId(isMenuOpen ? null : user._id)}
-                        className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-foreground hover:bg-muted/60 transition-colors opacity-0 group-hover:opacity-100"
+                        onClick={(e) => openEditSheet(user, e)}
+                        className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-blue-500 hover:bg-blue-500/10 transition-all duration-200 opacity-0 group-hover:opacity-100"
+                        title="Edit"
                       >
-                        <IconDotsVertical size={14} />
+                        <IconEdit size={14} />
                       </button>
-                      {isMenuOpen && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
-                          <div className="absolute right-0 top-8 z-50 w-36 rounded-xl border border-border bg-card shadow-xl py-1 animate-in fade-in slide-in-from-top-1 duration-150">
-                            <button
-                              onClick={() => { setOpenMenuId(null); router.push(`/owner/app-users/${user._id}`); }}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-xs text-foreground hover:bg-muted/60 transition-colors"
-                            >
-                              <IconEye size={13} /> View Profile
-                            </button>
-                            <button
-                              onClick={() => { setOpenMenuId(null); openEditSheet(user); }}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-xs text-foreground hover:bg-muted/60 transition-colors"
-                            >
-                              <IconEdit size={13} /> Edit
-                            </button>
-                            <div className="h-px bg-border/50 my-1" />
-                            <button
-                              onClick={() => { setOpenMenuId(null); handleDelete(user._id); }}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-500 hover:bg-red-500/5 transition-colors"
-                            >
-                              <IconTrash size={13} /> Delete
-                            </button>
-                          </div>
-                        </>
-                      )}
+                      <button
+                        onClick={(e) => handleDelete(user._id, e)}
+                        className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-red-500 hover:bg-red-500/10 transition-all duration-200 opacity-0 group-hover:opacity-100"
+                        title="Delete"
+                      >
+                        <IconTrash size={14} />
+                      </button>
                     </div>
                   </div>
 
                   {/* Role Badge */}
                   <div className="mb-3">
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${getRoleStyle(user.AppRole)}`}>
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${rs.bg}`}>
                       <IconShieldCheck size={11} />
                       {user.AppRole || "No Role"}
                     </span>
@@ -249,13 +254,6 @@ export default function AppUsersPage() {
 
                   {/* Contact details */}
                   <div className="space-y-1.5">
-                    {user.email && (
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground group/link"
-                        onClick={e => { e.stopPropagation(); window.location.href = `mailto:${user.email}`; }}>
-                        <IconMail size={12} className="text-muted-foreground/40 flex-shrink-0" />
-                        <span className="truncate hover:text-primary transition-colors">{user.email}</span>
-                      </div>
-                    )}
                     {user.phone && (
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                         <IconPhone size={12} className="text-muted-foreground/40 flex-shrink-0" />
@@ -304,7 +302,161 @@ export default function AppUsersPage() {
         )}
       </div>
 
-      {/* Add/Edit User Dialog */}
+      {/* ── User Detail Popup ───────────────────────────────────── */}
+      <Dialog open={!!viewUser} onOpenChange={(open) => { if (!open) setViewUser(null); }}>
+        <DialogContent className="max-w-2xl p-0 overflow-hidden border-0 rounded-3xl bg-zinc-950 shadow-2xl shadow-black/40 [&>button]:text-white [&>button]:hover:bg-white/10">
+          <DialogHeader className="sr-only">
+            <DialogTitle>{viewUser?.name || "User Details"}</DialogTitle>
+          </DialogHeader>
+
+          {viewUser && (
+            <div className="animate-in fade-in zoom-in-95 duration-300">
+              {/* Hero section */}
+              <div className="relative">
+                {/* Gradient backdrop */}
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-blue-500/10" />
+                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-zinc-950 to-transparent" />
+
+                <div className="relative px-8 pt-8 pb-6 flex items-end gap-5">
+                  {/* Large avatar */}
+                  <div className="relative flex-shrink-0">
+                    <div className="w-24 h-24 rounded-2xl bg-zinc-800 overflow-hidden border-2 border-white/10 shadow-2xl">
+                      {viewUser.profilePicture ? (
+                        <img src={viewUser.profilePicture} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <IconUser size={36} className="text-zinc-600" />
+                        </div>
+                      )}
+                    </div>
+                    <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-3 border-zinc-950 ${viewUser.isActive ? "bg-emerald-500 shadow-lg shadow-emerald-500/30" : "bg-gray-500"}`} />
+                  </div>
+
+                  {/* Name + role + edit button */}
+                  <div className="flex-1 min-w-0 pb-1">
+                    <h2 className="text-2xl font-extrabold text-white truncate tracking-tight">{viewUser.name}</h2>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${getRoleStyle(viewUser.AppRole).bg}`}>
+                        <IconShieldCheck size={10} />
+                        {viewUser.AppRole}
+                      </span>
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${viewUser.isActive ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : "border-zinc-700 bg-zinc-800 text-zinc-500"}`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${viewUser.isActive ? "bg-emerald-400 shadow-sm shadow-emerald-400/50" : "bg-zinc-600"}`} />
+                        {viewUser.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white/60 hover:text-white hover:bg-white/10 gap-1.5 rounded-xl border border-white/10"
+                    onClick={() => openEditSheet(viewUser)}
+                  >
+                    <IconPencil size={13} /> Edit
+                  </Button>
+                </div>
+              </div>
+
+              {/* Details grid */}
+              <div className="px-8 pb-6 space-y-5">
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Email */}
+                  <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4 hover:bg-white/[0.05] transition-colors">
+                    <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
+                      <IconMail size={11} className="text-primary/60" /> Email
+                    </p>
+                    <p className="text-zinc-200 text-sm font-medium break-all leading-relaxed">{viewUser.email}</p>
+                  </div>
+
+                  {/* Phone */}
+                  <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4 hover:bg-white/[0.05] transition-colors">
+                    <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
+                      <IconPhone size={11} className="text-primary/60" /> Phone
+                    </p>
+                    <p className="text-zinc-200 text-sm font-medium">{viewUser.phone || <span className="text-zinc-600 italic">Not provided</span>}</p>
+                  </div>
+
+                  {/* Address */}
+                  <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4 hover:bg-white/[0.05] transition-colors">
+                    <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
+                      <IconMapPin size={11} className="text-primary/60" /> Address
+                    </p>
+                    <p className="text-zinc-200 text-sm font-medium">{viewUser.address || <span className="text-zinc-600 italic">Not provided</span>}</p>
+                  </div>
+
+                  {/* Location */}
+                  <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4 hover:bg-white/[0.05] transition-colors">
+                    <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-1.5">
+                      <IconMapPin size={11} className="text-primary/60" /> Location
+                    </p>
+                    <p className="text-zinc-200 text-sm font-medium">{viewUser.location || <span className="text-zinc-600 italic">Not provided</span>}</p>
+                  </div>
+                </div>
+
+                {/* Signature */}
+                <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4 hover:bg-white/[0.05] transition-colors">
+                  <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-2">
+                    <IconSignature size={11} className="text-primary/60" /> Signature
+                  </p>
+                  {viewUser.signature ? (
+                    <div className="bg-white/5 rounded-lg flex items-center justify-center p-3 min-h-[80px] border border-white/5">
+                      <img src={viewUser.signature} alt="Signature" className="h-full w-auto max-h-[70px] object-contain invert brightness-200" />
+                    </div>
+                  ) : (
+                    <div className="bg-white/[0.02] rounded-lg flex items-center justify-center p-3 min-h-[60px] border border-dashed border-zinc-800">
+                      <p className="text-zinc-600 text-xs italic">No signature on file</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Password change */}
+                <div className="bg-white/[0.03] backdrop-blur-sm rounded-xl border border-white/[0.06] p-4">
+                  <p className="text-zinc-500 text-[9px] uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 mb-3">
+                    <IconLock size={11} className="text-primary/60" /> Account Security
+                  </p>
+                  <div className="flex gap-3 items-end">
+                    <div className="flex-1">
+                      <div className="relative">
+                        <IconLock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+                        <input
+                          type="text"
+                          placeholder="Enter new password"
+                          id="detail-password-input"
+                          className="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-zinc-200 outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-zinc-700"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="bg-primary hover:bg-primary/90 text-white font-bold text-[11px] uppercase tracking-wider h-10 px-5 rounded-xl transition-all shadow-lg shadow-primary/10 active:scale-95 whitespace-nowrap"
+                      onClick={async () => {
+                        const input = document.getElementById("detail-password-input") as HTMLInputElement;
+                        const newPassword = input.value;
+                        if (!newPassword) { toast.error("Please enter a new password"); return; }
+                        try {
+                          const res = await fetch("/api/auth/change-password", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ userId: viewUser._id, newPassword }),
+                          });
+                          if (!res.ok) throw new Error("Failed");
+                          toast.success("Password updated");
+                          input.value = "";
+                        } catch { toast.error("Failed to update password"); }
+                      }}
+                    >
+                      Update
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add/Edit User Dialog ─────────────────────────────── */}
       <Dialog open={addUserOpen} onOpenChange={(open) => { setAddUserOpen(open); if (!open) setEditingItem(null); }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
