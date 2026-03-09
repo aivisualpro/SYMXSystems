@@ -12,20 +12,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
-  User as UserIcon, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Briefcase, 
-  Shield, 
-  Lock, 
-  Activity, 
-  Hash, 
+import {
+  User as UserIcon,
+  Mail,
+  Phone,
+  MapPin,
+  Briefcase,
+  Shield,
+  Lock,
+  Activity,
+  Hash,
   Eye,
   EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
 interface User {
   _id?: string;
@@ -82,6 +83,8 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
   }, [initialData]);
 
   const [showPassword, setShowPassword] = useState(false);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+  const [uploadingSignature, setUploadingSignature] = useState(false);
 
   const generatePassword = () => {
     const length = 12;
@@ -95,7 +98,7 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
     toast.success("Secure password generated");
   };
 
-  const [availableRoles, setAvailableRoles] = useState<{name: string}[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<{ name: string }[]>([]);
 
   useEffect(() => {
     const fetchRoles = async () => {
@@ -136,18 +139,26 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
     }
   }, [formData.signature]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("File excessively large. Please choose a smaller image.");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, profilePicture: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File excessively large. Please choose a smaller image.");
+      return;
+    }
+    setUploadingPicture(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      setFormData((prev) => ({ ...prev, profilePicture: data.secure_url }));
+      toast.success("Photo uploaded");
+    } catch {
+      toast.error("Failed to upload photo");
+    } finally {
+      setUploadingPicture(false);
     }
   };
 
@@ -156,14 +167,14 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    
+
     ctx.strokeStyle = "#000000";
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
 
     setIsDrawing(true);
     const rect = canvas.getBoundingClientRect();
-    
+
     let clientX, clientY;
     if ('touches' in e) {
       clientX = e.touches[0].clientX;
@@ -186,7 +197,7 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const rect = canvas.getBoundingClientRect();
-    
+
     let clientX, clientY;
     if ('touches' in e) {
       clientX = e.touches[0].clientX;
@@ -202,13 +213,29 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
     ctx.stroke();
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = async () => {
     if (!isDrawing) return;
     setIsDrawing(false);
     const canvas = signatureCanvasRef.current;
-    if (canvas) {
-      setFormData((prev) => ({ ...prev, signature: canvas.toDataURL() }));
-    }
+    if (!canvas) return;
+
+    // Convert canvas to blob and upload to Cloudinary
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      setUploadingSignature(true);
+      try {
+        const fd = new FormData();
+        fd.append("file", blob, "signature.png");
+        const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+        if (!res.ok) throw new Error("Upload failed");
+        const data = await res.json();
+        setFormData((prev) => ({ ...prev, signature: data.secure_url }));
+      } catch {
+        toast.error("Failed to upload signature");
+      } finally {
+        setUploadingSignature(false);
+      }
+    }, "image/png");
   };
 
   const clearSignature = () => {
@@ -291,14 +318,14 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <Button 
-                   type="button" 
-                   variant="ghost" 
-                   size="sm" 
-                   className="h-auto p-0 text-xs text-primary hover:bg-transparent hover:text-primary/80"
-                   onClick={generatePassword}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto p-0 text-xs text-primary hover:bg-transparent hover:text-primary/80"
+                  onClick={generatePassword}
                 >
-                   Suggest Password
+                  Suggest Password
                 </Button>
               </div>
               <div className="relative">
@@ -313,13 +340,13 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
                   required={!initialData?._id}
                 />
                 <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full w-9 px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                    onClick={() => setShowPassword(!showPassword)}
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full w-9 px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                  onClick={() => setShowPassword(!showPassword)}
                 >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
@@ -477,7 +504,11 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
                 accept="image/*"
                 onChange={handleFileChange}
               />
-              {formData.profilePicture ? (
+              {uploadingPicture ? (
+                <div className="w-32 h-32 rounded-full bg-muted flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : formData.profilePicture ? (
                 <div className="relative w-32 h-32 rounded-full overflow-hidden border">
                   <img src={formData.profilePicture} alt="Profile" className="w-full h-full object-cover" />
                 </div>
@@ -486,8 +517,8 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
                   <UserIcon className="h-10 w-10 text-muted-foreground" />
                 </div>
               )}
-              <Button variant="ghost" size="sm" type="button" className="mt-2 text-xs">
-                {formData.profilePicture ? "Change Photo" : "Upload Photo"}
+              <Button variant="ghost" size="sm" type="button" className="mt-2 text-xs" disabled={uploadingPicture}>
+                {uploadingPicture ? "Uploading..." : formData.profilePicture ? "Change Photo" : "Upload Photo"}
               </Button>
             </div>
           </div>
@@ -514,6 +545,11 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
                 onTouchEnd={stopDrawing}
               />
             </div>
+            {uploadingSignature && (
+              <div className="flex items-center gap-1.5 text-[10px] text-primary">
+                <Loader2 className="h-3 w-3 animate-spin" /> Uploading signature...
+              </div>
+            )}
             <p className="text-[10px] text-muted-foreground">Sign in the box above</p>
           </div>
 
