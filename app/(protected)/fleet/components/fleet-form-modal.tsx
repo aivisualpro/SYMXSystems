@@ -269,45 +269,72 @@ export default function FleetFormModal() {
             </>)}
 
             {modalType === "inspection" && (<>
+              {/* ── Inspection Type — FIRST FIELD, full width ── */}
+              <FormField label="Inspection Type">
+                <select className={inputClass} value={formData.type || ""} onChange={e => updateForm("type", e.target.value)}>
+                  <option value="">Select type…</option>
+                  {inspectionTypes.length > 0
+                    ? inspectionTypes.map((t: any) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))
+                    : <>
+                      <option value="Route Inspection">Route Inspection</option>
+                      <option value="Yard Inspection">Yard Inspection</option>
+                      <option value="Pre-Trip Inspection">Pre-Trip Inspection</option>
+                      <option value="Post-Trip Inspection">Post-Trip Inspection</option>
+                    </>
+                  }
+                </select>
+              </FormField>
+
               <div className="grid grid-cols-2 gap-3">
-                {/* Driver dropdown */}
-                <FormField label="Driver">
-                  <SearchableSelect
-                    value={formData.driver || ""}
-                    placeholder="Search driver…"
-                    options={employees.map((emp: any) => ({
-                      value: emp.transporterId,
-                      label: `${emp.firstName} ${emp.lastName}`,
-                    }))}
-                    onChange={(val) => updateForm("driver", val)}
-                  />
-                </FormField>
-                {/* VIN dropdown */}
+                {/* Driver — only for Route Inspection */}
+                {formData.type === "Route Inspection" && (
+                  <FormField label="Driver">
+                    <SearchableSelect
+                      value={formData.driver || ""}
+                      placeholder="Search driver…"
+                      options={employees.map((emp: any) => ({
+                        value: emp.transporterId,
+                        label: `${emp.firstName} ${emp.lastName}`,
+                      }))}
+                      onChange={(val) => updateForm("driver", val)}
+                    />
+                  </FormField>
+                )}
+
+                {/* VIN dropdown — shows vehicleName - vin */}
                 <FormField label="VIN">
                   <SearchableSelect
                     value={formData.vin || ""}
-                    placeholder="Search VIN or unit…"
+                    placeholder="Search VIN…"
                     options={vehicles.map((v: any) => ({
                       value: v.vin,
-                      label: `${v.unitNumber ? v.unitNumber + " — " : ""}${v.vin}`,
+                      label: `${v.vehicleName ? v.vehicleName + " — " : ""}${v.vin}`,
                       raw: v,
                     }))}
                     onChange={(val, raw) => {
                       updateForm("vin", val);
                       if (raw?.unitNumber) updateForm("unitNumber", raw.unitNumber);
+                      if (raw?.vehicleName) updateForm("vehicleName", raw.vehicleName);
                     }}
                   />
                 </FormField>
-                <FormField label="Inspection Type">
-                  <select className={inputClass} value={formData.inspectionType || ""} onChange={e => updateForm("inspectionType", e.target.value)}>
-                    <option value="">Select type…</option>
-                    {inspectionTypes.map((t: any) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </FormField>
-                <FormField label="Unit Number"><input className={inputClass} value={formData.unitNumber || ""} onChange={e => updateForm("unitNumber", e.target.value)} /></FormField>
-                <FormField label="Route Date"><input type="date" className={inputClass} value={formData.routeDate ? (typeof formData.routeDate === "string" ? formData.routeDate.split("T")[0] : "") : ""} onChange={e => updateForm("routeDate", e.target.value)} /></FormField>
+
+                {/* Route Date — only for Route Inspection */}
+                {formData.type === "Route Inspection" && (
+                  <FormField label="Route Date">
+                    <input type="date" className={inputClass} value={formData.routeDate ? (typeof formData.routeDate === "string" ? formData.routeDate.split("T")[0] : "") : ""} onChange={e => updateForm("routeDate", e.target.value)} />
+                  </FormField>
+                )}
+
+                {/* Inspection Date — for all OTHER types (not Route Inspection) */}
+                {formData.type && formData.type !== "Route Inspection" && (
+                  <FormField label="Inspection Date">
+                    <input type="date" className={inputClass} value={formData.routeDate ? (typeof formData.routeDate === "string" ? formData.routeDate.split("T")[0] : "") : ""} onChange={e => updateForm("routeDate", e.target.value)} />
+                  </FormField>
+                )}
+
                 <FormField label="Mileage"><input type="number" className={inputClass} value={formData.mileage || ""} onChange={e => updateForm("mileage", parseInt(e.target.value) || 0)} /></FormField>
                 <FormField label="Any Repairs?"><select className={inputClass} value={formData.anyRepairs || ""} onChange={e => updateForm("anyRepairs", e.target.value)}>
                   <option value="">No</option>

@@ -51,6 +51,14 @@ const columns: Column[] = [
   },
   { key: "vin", label: "VIN", accessor: r => r.vin || "", className: "font-mono text-[11px]" },
   {
+    key: "type", label: "Type", accessor: r => r.type || "",
+    render: r => r.type ? (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-primary/10 text-primary border border-primary/15">
+        {r.type}
+      </span>
+    ) : <span className="text-muted-foreground/30">—</span>,
+  },
+  {
     key: "mileage", label: "Mileage", accessor: r => r.mileage ?? 0,
     render: r => r.mileage ? <>{r.mileage.toLocaleString()}</> : <span className="text-muted-foreground/30">—</span>,
   },
@@ -77,7 +85,7 @@ const DATE_KEYS = new Set(["routeDate"]);
 const PAGE_SIZE = 50;
 
 /* ── Skeleton widths ─────────────────────────────────────────────── */
-const SK_WIDTHS = [15, 55, 75, 72, 35, 85, 65, 25];
+const SK_WIDTHS = [15, 55, 75, 72, 50, 35, 85, 65, 25];
 
 function SkeletonRows({ count = 15 }: { count?: number }) {
   return (
