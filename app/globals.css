@@ -268,3 +268,10 @@ body {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Row highlight blink on back-nav */
+@keyframes highlightBlink {
+  0%, 100% { background-color: transparent; }
+  10%, 30%, 50%, 70%, 90% { background-color: hsl(var(--primary) / 0.12); box-shadow: inset 3px 0 0 hsl(var(--primary)); }
+  20%, 40%, 60%, 80% { background-color: transparent; }
+}

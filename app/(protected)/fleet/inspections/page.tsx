@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   IconEdit, IconTrash, IconArrowUp, IconArrowDown, IconArrowsSort,
   IconClipboardCheck, IconLoader2, IconExternalLink,
@@ -92,6 +92,9 @@ export default function FleetInspectionsPage() {
   const { search, openEditModal, handleDelete, openCreateModal, inspectionsSeed, showStandardOnly } = useFleet();
   const { setLeftContent } = useHeaderActions();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get("highlight");
+  const highlightedRef = useRef(false);
 
   // Start with seed data if already prefetched by the layout — instant first paint
   const [inspections, setInspections] = useState<any[]>(() => inspectionsSeed?.data ?? []);
@@ -256,46 +259,59 @@ export default function FleetInspectionsPage() {
           {/* Body */}
           <tbody className="divide-y divide-border/40">
             {isFetching && <SkeletonRows count={18} />}
-            {!isFetching && sortedInspections.map((r: any, idx: number) => (
-              <tr key={r._id}
-                onClick={() => router.push(`/fleet/inspections/${r._id}`)}
-                className={`relative group cursor-pointer transition-all duration-150
+            {!isFetching && sortedInspections.map((r: any, idx: number) => {
+              const isHighlighted = highlightId === r._id;
+              return (
+                <tr key={r._id}
+                  id={`inspection-${r._id}`}
+                  ref={el => {
+                    if (isHighlighted && el && !highlightedRef.current) {
+                      highlightedRef.current = true;
+                      setTimeout(() => {
+                        el.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }, 100);
+                    }
+                  }}
+                  onClick={() => router.push(`/fleet/inspections/${r._id}`)}
+                  className={`relative group cursor-pointer transition-all duration-150
                   hover:bg-primary/[0.035] hover:shadow-[inset_3px_0_0_hsl(var(--primary))]
-                  ${idx % 2 === 0 ? "bg-transparent" : "bg-muted/[0.015]"}`}
-              >
-                {columns.map(col => {
-                  const val = col.accessor(r);
-                  const display = col.render ? col.render(r) : (val || "—");
-                  const isTruncated = col.key === "comments";
-                  return (
-                    <td key={col.key}
-                      className={`px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap ${col.className || ""}`}
-                      title={isTruncated ? (val || "") : undefined}
-                    >
-                      {display}
-                    </td>
-                  );
-                })}
-                <td className="px-3 py-2.5">
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150 translate-x-1 group-hover:translate-x-0">
-                    <button
-                      onClick={e => { e.stopPropagation(); router.push(`/fleet/inspections/${r._id}`); }}
-                      className="p-1.5 rounded-lg bg-card border border-border/60 hover:border-primary/60 hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all shadow-sm"
-                      title="View detail">
-                      <IconExternalLink size={12} />
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); openEditModal("inspection", r); }}
-                      className="p-1.5 rounded-lg bg-card border border-border/60 hover:border-blue-400/60 hover:bg-blue-50 dark:hover:bg-blue-950/40 text-muted-foreground hover:text-blue-500 transition-all shadow-sm">
-                      <IconEdit size={12} />
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); handleDelete("inspection", r._id); }}
-                      className="p-1.5 rounded-lg bg-card border border-border/60 hover:border-red-400/60 hover:bg-red-50 dark:hover:bg-red-950/40 text-muted-foreground hover:text-red-500 transition-all shadow-sm">
-                      <IconTrash size={12} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  ${idx % 2 === 0 ? "bg-transparent" : "bg-muted/[0.015]"}
+                  ${isHighlighted ? "animate-[highlightBlink_3s_ease-in-out]" : ""}`}
+                >
+                  {columns.map(col => {
+                    const val = col.accessor(r);
+                    const display = col.render ? col.render(r) : (val || "—");
+                    const isTruncated = col.key === "comments";
+                    return (
+                      <td key={col.key}
+                        className={`px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap ${col.className || ""}`}
+                        title={isTruncated ? (val || "") : undefined}
+                      >
+                        {display}
+                      </td>
+                    );
+                  })}
+                  <td className="px-3 py-2.5">
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150 translate-x-1 group-hover:translate-x-0">
+                      <button
+                        onClick={e => { e.stopPropagation(); router.push(`/fleet/inspections/${r._id}`); }}
+                        className="p-1.5 rounded-lg bg-card border border-border/60 hover:border-primary/60 hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all shadow-sm"
+                        title="View detail">
+                        <IconExternalLink size={12} />
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); openEditModal("inspection", r); }}
+                        className="p-1.5 rounded-lg bg-card border border-border/60 hover:border-blue-400/60 hover:bg-blue-50 dark:hover:bg-blue-950/40 text-muted-foreground hover:text-blue-500 transition-all shadow-sm">
+                        <IconEdit size={12} />
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); handleDelete("inspection", r._id); }}
+                        className="p-1.5 rounded-lg bg-card border border-border/60 hover:border-red-400/60 hover:bg-red-50 dark:hover:bg-red-950/40 text-muted-foreground hover:text-red-500 transition-all shadow-sm">
+                        <IconTrash size={12} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
             {isLoadingMore && <SkeletonRows count={8} />}
           </tbody>
         </table>

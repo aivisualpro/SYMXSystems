@@ -6,9 +6,11 @@ import {
     IconCalendar, IconUser, IconGauge,
     IconCamera, IconTool, IconClock, IconAdjustmentsHorizontal,
     IconChevronLeft, IconChevronRight, IconArrowsLeftRight,
-    IconX, IconCheck, IconMinus, IconMaximize,
+    IconX, IconCheck, IconMinus, IconMaximize, IconEdit, IconArrowLeft,
 } from "@tabler/icons-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { useFleet } from "../../layout";
+import FleetFormModal from "../../components/fleet-form-modal";
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 const fmtDate = (d: any) => !d ? "—" : new Date(d).toLocaleDateString("en-US", {
@@ -164,6 +166,8 @@ export default function InspectionDetailPage() {
     const router = useRouter();
     const id = params?.id as string;
 
+    const { openEditModal } = useFleet();
+
     const [inspection, setInspection] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [lightbox, setLightbox] = useState<string | null>(null);
@@ -182,7 +186,21 @@ export default function InspectionDetailPage() {
     const [compareError, setCompareError] = useState<string | null>(null);
     const [showCompareMenu, setShowCompareMenu] = useState(false);
 
-    const { setRightContent } = useHeaderActions();
+    const { setRightContent, setLeftContent } = useHeaderActions();
+
+    // Left header — back button
+    useEffect(() => {
+        setLeftContent(
+            <button
+                onClick={() => router.push(`/fleet/inspections?highlight=${id}`)}
+                className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+                <IconArrowLeft size={16} />
+                <span>Inspections</span>
+            </button>
+        );
+        return () => setLeftContent(null);
+    }, [id, router, setLeftContent]);
 
     useEffect(() => {
         if (!id) return;
@@ -245,6 +263,16 @@ export default function InspectionDetailPage() {
     useEffect(() => {
         setRightContent(
             <div className="flex items-center gap-2 relative">
+                {/* Edit button */}
+                <button
+                    onClick={() => openEditModal("inspection", inspection)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all shadow-sm border bg-card border-border hover:border-blue-400/60 hover:text-blue-500"
+                    title="Edit Inspection"
+                >
+                    <IconEdit size={14} />
+                    <span className="hidden sm:inline">Edit</span>
+                </button>
+
                 {/* Standard Photo toggle */}
                 <button
                     onClick={toggleStandardPhoto}
@@ -354,7 +382,7 @@ export default function InspectionDetailPage() {
             </div>
         );
         return () => setRightContent(null);
-    }, [setRightContent, compareMode, compareLoading, loadCompare, isStandardPhoto, togglingStandard, toggleStandardPhoto, showCompareMenu, hasStandardPhoto]);
+    }, [setRightContent, compareMode, compareLoading, loadCompare, isStandardPhoto, togglingStandard, toggleStandardPhoto, showCompareMenu, hasStandardPhoto, inspection, openEditModal]);
 
     if (loading) return (
         <div className="flex items-center justify-center h-full">
@@ -395,446 +423,449 @@ export default function InspectionDetailPage() {
     ] : [];
 
     return (
-        <div className="h-full overflow-auto">
-            {lightbox && <Lightbox url={lightbox} onClose={() => setLightbox(null)} />}
+        <>
+            <div className="h-full overflow-auto">
+                {lightbox && <Lightbox url={lightbox} onClose={() => setLightbox(null)} />}
 
-            <div className="space-y-6">
+                <div className="space-y-6">
 
-                {compareError && (
-                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-500 flex items-center gap-2">
-                        <IconMinus size={14} /> {compareError}
-                    </div>
-                )}
+                    {compareError && (
+                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-500 flex items-center gap-2">
+                            <IconMinus size={14} /> {compareError}
+                        </div>
+                    )}
 
-                {/* ════════════════════════════════════════════════════════
+                    {/* ════════════════════════════════════════════════════════
             TOP SECTION: Date · VIN · Driver Name | Vehicle Image
            ══════════════════════════════════════════════════════════ */}
-                <div className="relative rounded-2xl overflow-hidden border border-border/40 shadow-lg bg-card">
-                    <div className="flex flex-row">
-                        {/* Left — info grid */}
-                        <div className="flex-1 px-6 py-6 flex flex-col justify-center gap-4">
-                            {/* Status badges */}
-                            {(hasRepair || inspection.isCompared) && (
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    {hasRepair && (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/15 text-red-500 border border-red-500/20">
-                                            <IconTool size={9} /> Repair Logged
-                                        </span>
-                                    )}
-                                    {inspection.isCompared && (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
-                                            <IconCheck size={9} /> Compared
-                                        </span>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* 3×2 grid — icon + value, with compare row when active */}
-                            <div className="grid grid-cols-3 gap-3">
-                                {/* Date */}
-                                <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                    <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                        <IconCalendar size={16} className="text-primary" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-bold text-foreground">{fmtDate(inspection.routeDate)}</p>
-                                        {compareMode && compareData && (
-                                            <p className="text-xs text-muted-foreground/60 mt-1">{fmtDate(compareData.routeDate)}</p>
+                    <div className="relative rounded-2xl overflow-hidden border border-border/40 shadow-lg bg-card">
+                        <div className="flex flex-row">
+                            {/* Left — info grid */}
+                            <div className="flex-1 px-6 py-6 flex flex-col justify-center gap-4">
+                                {/* Status badges */}
+                                {(hasRepair || inspection.isCompared) && (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        {hasRepair && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/15 text-red-500 border border-red-500/20">
+                                                <IconTool size={9} /> Repair Logged
+                                            </span>
+                                        )}
+                                        {inspection.isCompared && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
+                                                <IconCheck size={9} /> Compared
+                                            </span>
                                         )}
                                     </div>
-                                </div>
+                                )}
 
-                                {/* VIN */}
-                                <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                    <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                        <IconCamera size={16} className="text-primary" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="font-mono text-xs font-bold text-foreground break-all">
-                                            {inspection.vehicleName ? `${inspection.vehicleName} · ` : ""}{inspection.vin || "—"}
-                                        </p>
-                                        {compareMode && compareData && (
-                                            <div className="flex items-center gap-1.5 mt-1">
-                                                <p className="font-mono text-[10px] text-muted-foreground/60 break-all">
-                                                    {compareData.vin || "—"}
-                                                </p>
-                                                <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Driver */}
-                                {(() => {
-                                    const prevDriver = compareData ? (compareData.driverName || compareData.driver || "—") : "—";
-                                    const driverChanged = compareMode && compareData && driverDisplay !== prevDriver;
-                                    return (
-                                        <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                            <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                                <IconUser size={16} className="text-primary" />
-                                            </div>
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-semibold text-foreground">{driverDisplay}</p>
-                                                {compareMode && compareData && (
-                                                    <div className="flex items-center gap-1.5 mt-1">
-                                                        <p className="text-xs text-muted-foreground/60">{prevDriver}</p>
-                                                        {driverChanged
-                                                            ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
-                                                            : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
-                                                    </div>
-                                                )}
-                                            </div>
+                                {/* 3×2 grid — icon + value, with compare row when active */}
+                                <div className="grid grid-cols-3 gap-3">
+                                    {/* Date */}
+                                    <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                        <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                            <IconCalendar size={16} className="text-primary" />
                                         </div>
-                                    );
-                                })()}
-
-                                {/* Mileage */}
-                                {(() => {
-                                    const prevMileage = compareData?.mileage || 0;
-                                    const mileageChanged = compareMode && compareData && inspection.mileage !== prevMileage;
-                                    const mileageDiff = inspection.mileage - prevMileage;
-                                    return (
-                                        <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                            <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                                <IconGauge size={16} className="text-primary" />
-                                            </div>
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-bold text-foreground">
-                                                    {inspection.mileage > 0 ? `${inspection.mileage.toLocaleString()} mi` : "—"}
-                                                </p>
-                                                {compareMode && compareData && (
-                                                    <div className="flex items-center gap-1.5 mt-1">
-                                                        <p className="text-xs text-muted-foreground/60">{prevMileage > 0 ? `${prevMileage.toLocaleString()} mi` : "—"}</p>
-                                                        {mileageChanged
-                                                            ? <span className={`text-[10px] font-semibold whitespace-nowrap ${mileageDiff > 0 ? "text-emerald-500" : "text-red-500"}`}>{mileageDiff > 0 ? "+" : ""}{mileageDiff.toLocaleString()}</span>
-                                                            : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
-                                                    </div>
-                                                )}
-                                            </div>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-foreground">{fmtDate(inspection.routeDate)}</p>
+                                            {compareMode && compareData && (
+                                                <p className="text-xs text-muted-foreground/60 mt-1">{fmtDate(compareData.routeDate)}</p>
+                                            )}
                                         </div>
-                                    );
-                                })()}
+                                    </div>
 
-                                {/* Comments */}
-                                {(() => {
-                                    const prevComments = compareData?.comments || "—";
-                                    const currComments = inspection.comments || "—";
-                                    const commentsChanged = compareMode && compareData && currComments !== prevComments;
-                                    return (
-                                        <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                    {/* VIN */}
+                                    <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                        <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                            <IconCamera size={16} className="text-primary" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-mono text-xs font-bold text-foreground break-all">
+                                                {inspection.vehicleName ? `${inspection.vehicleName} · ` : ""}{inspection.vin || "—"}
+                                            </p>
+                                            {compareMode && compareData && (
+                                                <div className="flex items-center gap-1.5 mt-1">
+                                                    <p className="font-mono text-[10px] text-muted-foreground/60 break-all">
+                                                        {compareData.vin || "—"}
+                                                    </p>
+                                                    <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Driver */}
+                                    {(() => {
+                                        const prevDriver = compareData ? (compareData.driverName || compareData.driver || "—") : "—";
+                                        const driverChanged = compareMode && compareData && driverDisplay !== prevDriver;
+                                        return (
+                                            <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                                <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                                    <IconUser size={16} className="text-primary" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-semibold text-foreground">{driverDisplay}</p>
+                                                    {compareMode && compareData && (
+                                                        <div className="flex items-center gap-1.5 mt-1">
+                                                            <p className="text-xs text-muted-foreground/60">{prevDriver}</p>
+                                                            {driverChanged
+                                                                ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
+                                                                : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Mileage */}
+                                    {(() => {
+                                        const prevMileage = compareData?.mileage || 0;
+                                        const mileageChanged = compareMode && compareData && inspection.mileage !== prevMileage;
+                                        const mileageDiff = inspection.mileage - prevMileage;
+                                        return (
+                                            <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                                <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                                    <IconGauge size={16} className="text-primary" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-bold text-foreground">
+                                                        {inspection.mileage > 0 ? `${inspection.mileage.toLocaleString()} mi` : "—"}
+                                                    </p>
+                                                    {compareMode && compareData && (
+                                                        <div className="flex items-center gap-1.5 mt-1">
+                                                            <p className="text-xs text-muted-foreground/60">{prevMileage > 0 ? `${prevMileage.toLocaleString()} mi` : "—"}</p>
+                                                            {mileageChanged
+                                                                ? <span className={`text-[10px] font-semibold whitespace-nowrap ${mileageDiff > 0 ? "text-emerald-500" : "text-red-500"}`}>{mileageDiff > 0 ? "+" : ""}{mileageDiff.toLocaleString()}</span>
+                                                                : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Comments */}
+                                    {(() => {
+                                        const prevComments = compareData?.comments || "—";
+                                        const currComments = inspection.comments || "—";
+                                        const commentsChanged = compareMode && compareData && currComments !== prevComments;
+                                        return (
+                                            <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                                <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                                    <IconClock size={16} className="text-primary" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-sm text-foreground truncate">{currComments}</p>
+                                                    {compareMode && compareData && (
+                                                        <div className="flex items-center gap-1.5 mt-1">
+                                                            <p className="text-xs text-muted-foreground/60 truncate flex-1">{prevComments}</p>
+                                                            {commentsChanged
+                                                                ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
+                                                                : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Any Repairs */}
+                                    {(() => {
+                                        const prevHasRepair = compareData?.anyRepairs && compareData.anyRepairs !== "FALSE" && compareData.anyRepairs !== "false";
+                                        const repairsChanged = compareMode && compareData && hasRepair !== prevHasRepair;
+                                        return (
+                                            <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
+                                                <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                                    <IconTool size={16} className="text-primary" />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className={`text-sm font-semibold ${hasRepair ? "text-red-500" : "text-foreground"}`}>
+                                                        {hasRepair ? "Yes" : "No"}
+                                                    </p>
+                                                    {compareMode && compareData && (
+                                                        <div className="flex items-center gap-1.5 mt-1">
+                                                            <p className={`text-xs ${prevHasRepair ? "text-red-500/60" : "text-muted-foreground/60"}`}>{prevHasRepair ? "Yes" : "No"}</p>
+                                                            {repairsChanged
+                                                                ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
+                                                                : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                    {/* Missing Photos indicator */}
+                                    {(() => {
+                                        const missingPhotos = photos.filter(p => !p.url);
+                                        if (missingPhotos.length === 0) return null;
+                                        return (
+                                            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
+                                                <div className="p-2 rounded-lg bg-amber-500/10 mt-0.5">
+                                                    <IconCamera size={16} className="text-amber-500" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80 mb-1">Missing Photos ({missingPhotos.length})</p>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {missingPhotos.map(p => (
+                                                            <span key={p.label} className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15">
+                                                                {p.label}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Comments — 2-col wide */}
+                                    {inspection.comments && (
+                                        <div className="col-span-2 rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
                                             <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
                                                 <IconClock size={16} className="text-primary" />
                                             </div>
                                             <div className="min-w-0 flex-1">
-                                                <p className="text-sm text-foreground truncate">{currComments}</p>
-                                                {compareMode && compareData && (
-                                                    <div className="flex items-center gap-1.5 mt-1">
-                                                        <p className="text-xs text-muted-foreground/60 truncate flex-1">{prevComments}</p>
-                                                        {commentsChanged
-                                                            ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
-                                                            : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
-                                                    </div>
-                                                )}
+                                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-1">Comments</p>
+                                                <p className="text-sm text-foreground leading-relaxed">{inspection.comments}</p>
                                             </div>
                                         </div>
-                                    );
-                                })()}
+                                    )}
+                                </div>
+                            </div>
 
-                                {/* Any Repairs */}
-                                {(() => {
-                                    const prevHasRepair = compareData?.anyRepairs && compareData.anyRepairs !== "FALSE" && compareData.anyRepairs !== "false";
-                                    const repairsChanged = compareMode && compareData && hasRepair !== prevHasRepair;
-                                    return (
-                                        <div className="rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                            <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                                <IconTool size={16} className="text-primary" />
-                                            </div>
-                                            <div className="min-w-0">
-                                                <p className={`text-sm font-semibold ${hasRepair ? "text-red-500" : "text-foreground"}`}>
-                                                    {hasRepair ? "Yes" : "No"}
-                                                </p>
-                                                {compareMode && compareData && (
-                                                    <div className="flex items-center gap-1.5 mt-1">
-                                                        <p className={`text-xs ${prevHasRepair ? "text-red-500/60" : "text-muted-foreground/60"}`}>{prevHasRepair ? "Yes" : "No"}</p>
-                                                        {repairsChanged
-                                                            ? <span className="text-amber-500 text-[10px] font-medium whitespace-nowrap">Changed</span>
-                                                            : <span className="text-emerald-500/60 text-[10px] flex items-center gap-0.5 whitespace-nowrap"><IconCheck size={9} />Same</span>}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-                                {/* Missing Photos indicator */}
-                                {(() => {
-                                    const missingPhotos = photos.filter(p => !p.url);
-                                    if (missingPhotos.length === 0) return null;
-                                    return (
-                                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
-                                            <div className="p-2 rounded-lg bg-amber-500/10 mt-0.5">
-                                                <IconCamera size={16} className="text-amber-500" />
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500/80 mb-1">Missing Photos ({missingPhotos.length})</p>
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {missingPhotos.map(p => (
-                                                        <span key={p.label} className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15">
-                                                            {p.label}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-
-                                {/* Comments — 2-col wide */}
-                                {inspection.comments && (
-                                    <div className="col-span-2 rounded-xl border border-border/40 bg-muted/20 p-4 flex items-start gap-3">
-                                        <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                            <IconClock size={16} className="text-primary" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-1">Comments</p>
-                                            <p className="text-sm text-foreground leading-relaxed">{inspection.comments}</p>
-                                        </div>
+                            {/* Right — Vehicle image from vehicles table */}
+                            <div className="w-80 lg:w-96 flex-shrink-0 relative group">
+                                {inspection.vehicleImage ? (
+                                    <img
+                                        src={inspection.vehicleImage}
+                                        alt="Vehicle"
+                                        className="w-full h-full min-h-[200px] object-cover"
+                                        onClick={() => setLightbox(inspection.vehicleImage)}
+                                        style={{ cursor: "zoom-in" }}
+                                    />
+                                ) : (
+                                    <div className="w-full h-full min-h-[200px] bg-muted/20 flex flex-col items-center justify-center gap-2 text-muted-foreground/30">
+                                        <IconCamera size={32} />
+                                        <span className="text-xs">No vehicle image</span>
                                     </div>
                                 )}
-                            </div>
-                        </div>
-
-                        {/* Right — Vehicle image from vehicles table */}
-                        <div className="w-80 lg:w-96 flex-shrink-0 relative group">
-                            {inspection.vehicleImage ? (
-                                <img
-                                    src={inspection.vehicleImage}
-                                    alt="Vehicle"
-                                    className="w-full h-full min-h-[200px] object-cover"
-                                    onClick={() => setLightbox(inspection.vehicleImage)}
-                                    style={{ cursor: "zoom-in" }}
-                                />
-                            ) : (
-                                <div className="w-full h-full min-h-[200px] bg-muted/20 flex flex-col items-center justify-center gap-2 text-muted-foreground/30">
-                                    <IconCamera size={32} />
-                                    <span className="text-xs">No vehicle image</span>
+                                {/* Label */}
+                                <div className="absolute bottom-2 left-2 pointer-events-none">
+                                    <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-sm text-[10px] font-semibold text-white border border-white/10">
+                                        VIN Image
+                                    </span>
                                 </div>
-                            )}
-                            {/* Label */}
-                            <div className="absolute bottom-2 left-2 pointer-events-none">
-                                <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-sm text-[10px] font-semibold text-white border border-white/10">
-                                    VIN Image
-                                </span>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                {/* ── Content (always visible, photos switch to compare sliders when compareMode is on) ── */}
-                {
-                    <>
+                    {/* ── Content (always visible, photos switch to compare sliders when compareMode is on) ── */}
+                    {
+                        <>
 
-                        {/* Repair section */}
-                        {hasRepair && (
-                            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-5 shadow-sm">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <div className="p-1.5 rounded-lg bg-red-500/15">
-                                        <IconTool size={14} className="text-red-500" />
-                                    </div>
-                                    <h2 className="text-sm font-bold text-foreground">Repair Information</h2>
-                                    {inspection.repairCurrentStatus && (
-                                        <span className="ml-auto px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-red-500 border border-red-500/20">
-                                            {inspection.repairCurrentStatus}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {inspection.repairDescription && (
-                                        <div>
-                                            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-1">Description</p>
-                                            <p className="text-sm text-foreground">{inspection.repairDescription}</p>
+                            {/* Repair section */}
+                            {hasRepair && (
+                                <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-5 shadow-sm">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="p-1.5 rounded-lg bg-red-500/15">
+                                            <IconTool size={14} className="text-red-500" />
                                         </div>
-                                    )}
-                                    {inspection.repairEstimatedDate && (
-                                        <div>
-                                            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-1">Estimated Completion</p>
-                                            <p className="text-sm text-foreground">{fmtDate(inspection.repairEstimatedDate)}</p>
-                                        </div>
-                                    )}
-                                </div>
-                                {inspection.repairImage && (
-                                    <div className="mt-4">
-                                        <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">Repair Image</p>
-                                        <img
-                                            src={inspection.repairImage} alt="repair"
-                                            onClick={() => setLightbox(inspection.repairImage)}
-                                            className="h-36 rounded-xl object-cover border border-border/30 shadow-sm cursor-zoom-in hover:shadow-md hover:scale-[1.02] transition-all"
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Photo gallery — normal or compare mode */}
-                        {hasPhotos && (
-                            <div>
-                                <div className="flex items-center gap-2 mb-3">
-                                    <IconCamera size={14} className="text-muted-foreground/60" />
-                                    <h2 className="text-sm font-bold text-foreground">Inspection Photos</h2>
-                                    <span className="text-[10px] text-muted-foreground/40">({photos.filter(p => p.url).length} of 6)</span>
-                                    {compareMode && compareData && (
-                                        <span className="text-[10px] text-primary font-medium ml-1">— Drag slider to compare</span>
-                                    )}
-                                </div>
-
-                                {/* Compare mode indicator */}
-                                {compareMode && compareData && (
-                                    <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 flex items-center gap-3 text-sm mb-3">
-                                        {compareSource === "master" ? (
-                                            <><span className="text-amber-500 text-base leading-none">★</span> Comparing with <strong>Standard Photo</strong> — {fmtDateShort(compareData.routeDate)}</>
-                                        ) : (
-                                            <><IconArrowsLeftRight size={14} className="text-primary" /> Comparing with <strong>Previous Inspection</strong> — {fmtDateShort(compareData.routeDate)}</>
+                                        <h2 className="text-sm font-bold text-foreground">Repair Information</h2>
+                                        {inspection.repairCurrentStatus && (
+                                            <span className="ml-auto px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-red-500 border border-red-500/20">
+                                                {inspection.repairCurrentStatus}
+                                            </span>
                                         )}
                                     </div>
-                                )}
-
-                                {/* Row 1: Vehicle Photo 1 + Vehicle Photo 3 — horizontal/landscape */}
-                                <div className="grid grid-cols-2 gap-2 mb-2">
-                                    {compareMode && compareData ? (
-                                        <>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {inspection.repairDescription && (
                                             <div>
-                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[0]?.label}</p>
-                                                <ImageCompareSlider before={photos[0]?.url} after={prevPhotos[0]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-1">Description</p>
+                                                <p className="text-sm text-foreground">{inspection.repairDescription}</p>
                                             </div>
+                                        )}
+                                        {inspection.repairEstimatedDate && (
                                             <div>
-                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[2]?.label}</p>
-                                                <ImageCompareSlider before={photos[2]?.url} after={prevPhotos[2]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-1">Estimated Completion</p>
+                                                <p className="text-sm text-foreground">{fmtDate(inspection.repairEstimatedDate)}</p>
                                             </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <PhotoCard url={photos[0]?.url} label={photos[0]?.label || "Vehicle Photo 1"} onClick={photos[0]?.url ? () => setLightbox(photos[0].url!) : undefined} />
-                                            <PhotoCard url={photos[2]?.url} label={photos[2]?.label || "Vehicle Photo 3"} onClick={photos[2]?.url ? () => setLightbox(photos[2].url!) : undefined} />
-                                        </>
+                                        )}
+                                    </div>
+                                    {inspection.repairImage && (
+                                        <div className="mt-4">
+                                            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-2">Repair Image</p>
+                                            <img
+                                                src={inspection.repairImage} alt="repair"
+                                                onClick={() => setLightbox(inspection.repairImage)}
+                                                className="h-36 rounded-xl object-cover border border-border/30 shadow-sm cursor-zoom-in hover:shadow-md hover:scale-[1.02] transition-all"
+                                            />
+                                        </div>
                                     )}
                                 </div>
+                            )}
 
-                                {/* Row 2: Vehicle Photo 2 + Vehicle Photo 4 — vertical/portrait */}
-                                <div className="grid grid-cols-2 gap-2 mb-2">
-                                    {compareMode && compareData ? (
-                                        <>
-                                            <div>
-                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[1]?.label}</p>
-                                                <ImageCompareSlider before={photos[1]?.url} after={prevPhotos[1]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} aspectClass="aspect-[3/4]" />
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[3]?.label}</p>
-                                                <ImageCompareSlider before={photos[3]?.url} after={prevPhotos[3]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} aspectClass="aspect-[3/4]" />
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
-                                                {photos[1]?.url ? (
-                                                    <button onClick={() => setLightbox(photos[1].url!)} className="w-full h-full group relative focus:outline-none">
-                                                        <img src={photos[1].url} alt={photos[1].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                        <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
-                                                            <span className="text-[10px] text-white font-medium">{photos[1].label}</span>
-                                                            <IconMaximize size={12} className="text-white/70" />
+                            {/* Photo gallery — normal or compare mode */}
+                            {hasPhotos && (
+                                <div>
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <IconCamera size={14} className="text-muted-foreground/60" />
+                                        <h2 className="text-sm font-bold text-foreground">Inspection Photos</h2>
+                                        <span className="text-[10px] text-muted-foreground/40">({photos.filter(p => p.url).length} of 6)</span>
+                                        {compareMode && compareData && (
+                                            <span className="text-[10px] text-primary font-medium ml-1">— Drag slider to compare</span>
+                                        )}
+                                    </div>
+
+                                    {/* Compare mode indicator */}
+                                    {compareMode && compareData && (
+                                        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 flex items-center gap-3 text-sm mb-3">
+                                            {compareSource === "master" ? (
+                                                <><span className="text-amber-500 text-base leading-none">★</span> Comparing with <strong>Standard Photo</strong> — {fmtDateShort(compareData.routeDate)}</>
+                                            ) : (
+                                                <><IconArrowsLeftRight size={14} className="text-primary" /> Comparing with <strong>Previous Inspection</strong> — {fmtDateShort(compareData.routeDate)}</>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Row 1: Vehicle Photo 1 + Vehicle Photo 3 — horizontal/landscape */}
+                                    <div className="grid grid-cols-2 gap-2 mb-2">
+                                        {compareMode && compareData ? (
+                                            <>
+                                                <div>
+                                                    <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[0]?.label}</p>
+                                                    <ImageCompareSlider before={photos[0]?.url} after={prevPhotos[0]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[2]?.label}</p>
+                                                    <ImageCompareSlider before={photos[2]?.url} after={prevPhotos[2]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <PhotoCard url={photos[0]?.url} label={photos[0]?.label || "Vehicle Photo 1"} onClick={photos[0]?.url ? () => setLightbox(photos[0].url!) : undefined} />
+                                                <PhotoCard url={photos[2]?.url} label={photos[2]?.label || "Vehicle Photo 3"} onClick={photos[2]?.url ? () => setLightbox(photos[2].url!) : undefined} />
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Row 2: Vehicle Photo 2 + Vehicle Photo 4 — vertical/portrait */}
+                                    <div className="grid grid-cols-2 gap-2 mb-2">
+                                        {compareMode && compareData ? (
+                                            <>
+                                                <div>
+                                                    <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[1]?.label}</p>
+                                                    <ImageCompareSlider before={photos[1]?.url} after={prevPhotos[1]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} aspectClass="aspect-[3/4]" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[3]?.label}</p>
+                                                    <ImageCompareSlider before={photos[3]?.url} after={prevPhotos[3]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} aspectClass="aspect-[3/4]" />
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
+                                                    {photos[1]?.url ? (
+                                                        <button onClick={() => setLightbox(photos[1].url!)} className="w-full h-full group relative focus:outline-none">
+                                                            <img src={photos[1].url} alt={photos[1].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                            <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
+                                                                <span className="text-[10px] text-white font-medium">{photos[1].label}</span>
+                                                                <IconMaximize size={12} className="text-white/70" />
+                                                            </div>
+                                                        </button>
+                                                    ) : (
+                                                        <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
+                                                            <IconCamera size={20} />
+                                                            <span className="text-[10px]">{photos[1]?.label || "Vehicle Photo 2"}</span>
                                                         </div>
-                                                    </button>
+                                                    )}
+                                                </div>
+                                                <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
+                                                    {photos[3]?.url ? (
+                                                        <button onClick={() => setLightbox(photos[3].url!)} className="w-full h-full group relative focus:outline-none">
+                                                            <img src={photos[3].url} alt={photos[3].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                            <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
+                                                                <span className="text-[10px] text-white font-medium">{photos[3].label}</span>
+                                                                <IconMaximize size={12} className="text-white/70" />
+                                                            </div>
+                                                        </button>
+                                                    ) : (
+                                                        <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
+                                                            <IconCamera size={20} />
+                                                            <span className="text-[10px]">{photos[3]?.label || "Vehicle Photo 4"}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Row 3: Dashboard + Additional — 2 columns */}
+                                    {(photos[4]?.url || photos[5]?.url) && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {/* Dashboard */}
+                                            <div>
+                                                {compareMode && compareData ? (
+                                                    photos[4]?.url ? (
+                                                        <div>
+                                                            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[4].label}</p>
+                                                            <ImageCompareSlider before={photos[4].url} after={prevPhotos[4]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                        </div>
+                                                    ) : (
+                                                        <PhotoCard url={undefined} label="Dashboard" />
+                                                    )
                                                 ) : (
-                                                    <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
-                                                        <IconCamera size={20} />
-                                                        <span className="text-[10px]">{photos[1]?.label || "Vehicle Photo 2"}</span>
-                                                    </div>
+                                                    <PhotoCard url={photos[4]?.url} label={photos[4]?.label || "Dashboard"} onClick={photos[4]?.url ? () => setLightbox(photos[4].url!) : undefined} />
                                                 )}
                                             </div>
-                                            <div className="aspect-[3/4] rounded-xl overflow-hidden border border-border/30 shadow-sm">
-                                                {photos[3]?.url ? (
-                                                    <button onClick={() => setLightbox(photos[3].url!)} className="w-full h-full group relative focus:outline-none">
-                                                        <img src={photos[3].url} alt={photos[3].label} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                        <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
-                                                            <span className="text-[10px] text-white font-medium">{photos[3].label}</span>
-                                                            <IconMaximize size={12} className="text-white/70" />
+                                            {/* Additional */}
+                                            <div>
+                                                {compareMode && compareData ? (
+                                                    photos[5]?.url ? (
+                                                        <div>
+                                                            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[5].label}</p>
+                                                            <ImageCompareSlider before={photos[5].url} after={prevPhotos[5]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
                                                         </div>
-                                                    </button>
+                                                    ) : (
+                                                        <PhotoCard url={undefined} label="Additional" />
+                                                    )
                                                 ) : (
-                                                    <div className="w-full h-full bg-muted/20 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/30">
-                                                        <IconCamera size={20} />
-                                                        <span className="text-[10px]">{photos[3]?.label || "Vehicle Photo 4"}</span>
-                                                    </div>
+                                                    <PhotoCard url={photos[5]?.url} label={photos[5]?.label || "Additional"} onClick={photos[5]?.url ? () => setLightbox(photos[5].url!) : undefined} />
                                                 )}
                                             </div>
-                                        </>
+                                        </div>
                                     )}
                                 </div>
+                            )}
 
-                                {/* Row 3: Dashboard + Additional — 2 columns */}
-                                {(photos[4]?.url || photos[5]?.url) && (
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {/* Dashboard */}
-                                        <div>
-                                            {compareMode && compareData ? (
-                                                photos[4]?.url ? (
-                                                    <div>
-                                                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[4].label}</p>
-                                                        <ImageCompareSlider before={photos[4].url} after={prevPhotos[4]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
-                                                    </div>
-                                                ) : (
-                                                    <PhotoCard url={undefined} label="Dashboard" />
-                                                )
-                                            ) : (
-                                                <PhotoCard url={photos[4]?.url} label={photos[4]?.label || "Dashboard"} onClick={photos[4]?.url ? () => setLightbox(photos[4].url!) : undefined} />
-                                            )}
+                            {/* ── Bottom: Inspected By + Timestamp ─────────────── */}
+                            <div className="rounded-xl border border-border/40 bg-card p-5 shadow-sm">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="flex items-start gap-3">
+                                        <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                            <IconUser size={16} className="text-primary" />
                                         </div>
-                                        {/* Additional */}
                                         <div>
-                                            {compareMode && compareData ? (
-                                                photos[5]?.url ? (
-                                                    <div>
-                                                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">{photos[5].label}</p>
-                                                        <ImageCompareSlider before={photos[5].url} after={prevPhotos[5]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
-                                                    </div>
-                                                ) : (
-                                                    <PhotoCard url={undefined} label="Additional" />
-                                                )
-                                            ) : (
-                                                <PhotoCard url={photos[5]?.url} label={photos[5]?.label || "Additional"} onClick={photos[5]?.url ? () => setLightbox(photos[5].url!) : undefined} />
-                                            )}
+                                            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-0.5">Inspected By</p>
+                                            <p className="text-sm font-semibold text-foreground">{inspectedByDisplay}</p>
                                         </div>
                                     </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* ── Bottom: Inspected By + Timestamp ─────────────── */}
-                        <div className="rounded-xl border border-border/40 bg-card p-5 shadow-sm">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="flex items-start gap-3">
-                                    <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                        <IconUser size={16} className="text-primary" />
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-0.5">Inspected By</p>
-                                        <p className="text-sm font-semibold text-foreground">{inspectedByDisplay}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3">
-                                    <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
-                                        <IconClock size={16} className="text-primary" />
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-0.5">Timestamp</p>
-                                        <p className="text-sm font-semibold text-foreground">{fmtDate(inspection.timeStamp)} · {fmtTime(inspection.timeStamp)}</p>
+                                    <div className="flex items-start gap-3">
+                                        <div className="p-2 rounded-lg bg-primary/10 mt-0.5">
+                                            <IconClock size={16} className="text-primary" />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider mb-0.5">Timestamp</p>
+                                            <p className="text-sm font-semibold text-foreground">{fmtDate(inspection.timeStamp)} · {fmtTime(inspection.timeStamp)}</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </>
-                }
+                        </>
+                    }
+                </div>
             </div>
-        </div>
+            <FleetFormModal />
+        </>
     );
 }

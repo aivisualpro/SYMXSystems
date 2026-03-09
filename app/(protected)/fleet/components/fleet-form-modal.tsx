@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { IconX, IconLoader2 } from "@tabler/icons-react";
+import React, { useState, useEffect, useRef } from "react";
+import { IconX, IconLoader2, IconUpload, IconPhoto, IconCheck } from "@tabler/icons-react";
 import { useFleet } from "../layout";
 
 const inputClass = "w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors";
@@ -15,8 +15,92 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
+/* ── Photo upload field ──────────────────────────────────────────── */
+function PhotoUploadField({
+  label, value, onChange,
+}: { label: string; value?: string; onChange: (url: string) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (data.secure_url) onChange(data.secure_url);
+    } catch (err) { console.error("Upload failed:", err); }
+    finally { setUploading(false); }
+  };
+
+  return (
+    <div>
+      <label className="block text-[11px] font-medium text-muted-foreground mb-1">{label}</label>
+      <input ref={fileRef} type="file" accept="image/*" className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
+      <div className="flex items-center gap-2">
+        {value ? (
+          <div className="relative w-full h-20 rounded-lg overflow-hidden border border-border/50 group">
+            <img src={value} alt={label} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <button type="button" onClick={() => fileRef.current?.click()} className="px-2 py-1 rounded bg-white/20 text-white text-[10px] font-medium hover:bg-white/30 transition-colors">
+                Replace
+              </button>
+              <button type="button" onClick={() => onChange("")} className="px-2 py-1 rounded bg-red-500/30 text-white text-[10px] font-medium hover:bg-red-500/50 transition-colors">
+                Remove
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="w-full h-20 rounded-lg border-2 border-dashed border-border/60 hover:border-primary/40 flex flex-col items-center justify-center gap-1 text-muted-foreground/50 hover:text-primary/60 transition-colors disabled:opacity-50">
+            {uploading ? (
+              <><IconLoader2 size={16} className="animate-spin" /><span className="text-[10px]">Uploading…</span></>
+            ) : (
+              <><IconUpload size={16} /><span className="text-[10px]">Upload</span></>
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function FleetFormModal() {
-  const { modalOpen, setModalOpen, modalType, formData, updateForm, handleSave, saving, editId } = useFleet();
+  const { modalOpen, setModalOpen, modalType, formData, updateForm, handleSave, saving, editId, data } = useFleet();
+
+  // Load employees & vehicles for dropdowns
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [sessionEmail, setSessionEmail] = useState<string>("");
+
+  useEffect(() => {
+    if (!modalOpen || modalType !== "inspection") return;
+
+    // Fetch employees for driver dropdown
+    fetch("/api/fleet?section=inspection-dropdowns")
+      .then(r => r.json())
+      .then(d => {
+        if (d.employees) setEmployees(d.employees);
+        if (d.vehicles) setVehicles(d.vehicles);
+      })
+      .catch(() => { });
+
+    // Get current user session for auto inspectedBy
+    fetch("/api/auth/session")
+      .then(r => r.json())
+      .then(d => {
+        if (d?.user?.email) {
+          setSessionEmail(d.user.email);
+          if (!editId && !formData.inspectedBy) {
+            updateForm("inspectedBy", d.user.email);
+          }
+        }
+      })
+      .catch(() => { });
+  }, [modalOpen, modalType]);
 
   if (!modalOpen) return null;
 
@@ -78,13 +162,35 @@ export default function FleetFormModal() {
 
             {modalType === "inspection" && (<>
               <div className="grid grid-cols-2 gap-3">
-                <FormField label="Driver (Transporter ID)"><input className={inputClass} value={formData.driver || ""} onChange={e => updateForm("driver", e.target.value)} placeholder="e.g. DA123" /></FormField>
-                <FormField label="VIN"><input className={inputClass} value={formData.vin || ""} onChange={e => updateForm("vin", e.target.value)} placeholder="Vehicle VIN" /></FormField>
+                {/* Driver dropdown */}
+                <FormField label="Driver">
+                  <select className={inputClass} value={formData.driver || ""} onChange={e => updateForm("driver", e.target.value)}>
+                    <option value="">Select driver…</option>
+                    {employees.map((emp: any) => (
+                      <option key={emp.transporterId} value={emp.transporterId}>
+                        {emp.firstName} {emp.lastName}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+                {/* VIN dropdown */}
+                <FormField label="VIN">
+                  <select className={inputClass} value={formData.vin || ""} onChange={e => {
+                    const sel = vehicles.find((v: any) => v.vin === e.target.value);
+                    updateForm("vin", e.target.value);
+                    if (sel?.unitNumber) updateForm("unitNumber", sel.unitNumber);
+                  }}>
+                    <option value="">Select VIN…</option>
+                    {vehicles.map((v: any) => (
+                      <option key={v.vin} value={v.vin}>
+                        {v.unitNumber ? `${v.unitNumber} — ` : ""}{v.vin}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
                 <FormField label="Unit Number"><input className={inputClass} value={formData.unitNumber || ""} onChange={e => updateForm("unitNumber", e.target.value)} /></FormField>
-                <FormField label="Route ID"><input className={inputClass} value={formData.routeId || ""} onChange={e => updateForm("routeId", e.target.value)} /></FormField>
                 <FormField label="Route Date"><input type="date" className={inputClass} value={formData.routeDate ? (typeof formData.routeDate === "string" ? formData.routeDate.split("T")[0] : "") : ""} onChange={e => updateForm("routeDate", e.target.value)} /></FormField>
                 <FormField label="Mileage"><input type="number" className={inputClass} value={formData.mileage || ""} onChange={e => updateForm("mileage", parseInt(e.target.value) || 0)} /></FormField>
-                <FormField label="Inspected By (Email)"><input className={inputClass} value={formData.inspectedBy || ""} onChange={e => updateForm("inspectedBy", e.target.value)} placeholder="email@domain.com" /></FormField>
                 <FormField label="Any Repairs?"><select className={inputClass} value={formData.anyRepairs || ""} onChange={e => updateForm("anyRepairs", e.target.value)}>
                   <option value="">No</option>
                   <option value="TRUE">Yes</option>
@@ -103,14 +209,16 @@ export default function FleetFormModal() {
                 </div>
               )}
               <div className="space-y-3 rounded-lg border border-border/50 bg-muted/20 p-3">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Photos</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <IconPhoto size={12} /> Photos
+                </p>
                 <div className="grid grid-cols-2 gap-3">
-                  <FormField label="Vehicle Picture 1"><input className={inputClass} value={formData.vehiclePicture1 || ""} onChange={e => updateForm("vehiclePicture1", e.target.value)} placeholder="https://..." /></FormField>
-                  <FormField label="Vehicle Picture 2"><input className={inputClass} value={formData.vehiclePicture2 || ""} onChange={e => updateForm("vehiclePicture2", e.target.value)} placeholder="https://..." /></FormField>
-                  <FormField label="Vehicle Picture 3"><input className={inputClass} value={formData.vehiclePicture3 || ""} onChange={e => updateForm("vehiclePicture3", e.target.value)} placeholder="https://..." /></FormField>
-                  <FormField label="Vehicle Picture 4"><input className={inputClass} value={formData.vehiclePicture4 || ""} onChange={e => updateForm("vehiclePicture4", e.target.value)} placeholder="https://..." /></FormField>
-                  <FormField label="Dashboard Image"><input className={inputClass} value={formData.dashboardImage || ""} onChange={e => updateForm("dashboardImage", e.target.value)} placeholder="https://..." /></FormField>
-                  <FormField label="Additional Picture"><input className={inputClass} value={formData.additionalPicture || ""} onChange={e => updateForm("additionalPicture", e.target.value)} placeholder="https://..." /></FormField>
+                  <PhotoUploadField label="Passenger Side" value={formData.vehiclePicture1} onChange={v => updateForm("vehiclePicture1", v)} />
+                  <PhotoUploadField label="Back Photo" value={formData.vehiclePicture2} onChange={v => updateForm("vehiclePicture2", v)} />
+                  <PhotoUploadField label="Driver Side" value={formData.vehiclePicture3} onChange={v => updateForm("vehiclePicture3", v)} />
+                  <PhotoUploadField label="Front Photo" value={formData.vehiclePicture4} onChange={v => updateForm("vehiclePicture4", v)} />
+                  <PhotoUploadField label="Dashboard" value={formData.dashboardImage} onChange={v => updateForm("dashboardImage", v)} />
+                  <PhotoUploadField label="Additional" value={formData.additionalPicture} onChange={v => updateForm("additionalPicture", v)} />
                 </div>
               </div>
             </>)}

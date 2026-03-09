@@ -380,6 +380,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ rentals });
     }
 
+    // Dropdowns for inspection form — employees + vehicles
+    if (section === "inspection-dropdowns") {
+      const [employees, vehiclesList] = await Promise.all([
+        SymxEmployee.find({}, { transporterId: 1, firstName: 1, lastName: 1 }).sort({ firstName: 1 }).lean(),
+        Vehicle.find({ status: { $ne: "Returned" } }, { vin: 1, unitNumber: 1, vehicleName: 1 }).sort({ unitNumber: 1 }).lean(),
+      ]);
+      return NextResponse.json({
+        employees: employees.filter((e: any) => e.transporterId),
+        vehicles: vehiclesList.filter((v: any) => v.vin),
+      });
+    }
+
     return NextResponse.json({ error: "Invalid section" }, { status: 400 });
   } catch (error) {
     console.error("Fleet API Error:", error);
