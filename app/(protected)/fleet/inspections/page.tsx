@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   IconEdit, IconTrash, IconArrowUp, IconArrowDown, IconArrowsSort,
-  IconClipboardCheck, IconLoader2, IconExternalLink,
+  IconClipboardCheck, IconLoader2, IconCamera,
 } from "@tabler/icons-react";
 import { useFleet } from "../layout";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
@@ -59,13 +59,25 @@ const columns: Column[] = [
     className: "max-w-[260px] truncate",
   },
   { key: "inspectedByName", label: "Inspected By", accessor: r => r.inspectedByName || r.inspectedBy || "" },
+  {
+    key: "photoCount", label: "Photos", accessor: r => r.photoCount ?? 0,
+    render: r => {
+      const count = r.photoCount ?? 0;
+      return (
+        <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${count === 6 ? "text-emerald-500" : count > 0 ? "text-foreground" : "text-muted-foreground/30"}`}>
+          <IconCamera size={11} />{count}/6
+        </span>
+      );
+    },
+    className: "w-16 text-center",
+  },
 ];
 
 const DATE_KEYS = new Set(["routeDate"]);
 const PAGE_SIZE = 50;
 
 /* ── Skeleton widths ─────────────────────────────────────────────── */
-const SK_WIDTHS = [15, 55, 75, 72, 35, 85, 65];
+const SK_WIDTHS = [15, 55, 75, 72, 35, 85, 65, 25];
 
 function SkeletonRows({ count = 15 }: { count?: number }) {
   return (
@@ -293,12 +305,6 @@ export default function FleetInspectionsPage() {
                   })}
                   <td className="px-3 py-2.5">
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150 translate-x-1 group-hover:translate-x-0">
-                      <button
-                        onClick={e => { e.stopPropagation(); router.push(`/fleet/inspections/${r._id}`); }}
-                        className="p-1.5 rounded-lg bg-card border border-border/60 hover:border-primary/60 hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all shadow-sm"
-                        title="View detail">
-                        <IconExternalLink size={12} />
-                      </button>
                       <button onClick={e => { e.stopPropagation(); openEditModal("inspection", r); }}
                         className="p-1.5 rounded-lg bg-card border border-border/60 hover:border-blue-400/60 hover:bg-blue-50 dark:hover:bg-blue-950/40 text-muted-foreground hover:text-blue-500 transition-all shadow-sm">
                         <IconEdit size={12} />

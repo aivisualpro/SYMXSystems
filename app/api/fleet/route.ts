@@ -215,8 +215,8 @@ export async function GET(req: NextRequest) {
         filter = { ...filter, isStandardPhoto: true };
       }
 
-      // Only select fields needed for the list view — skip heavy image URLs
-      const listFields = "routeId driver routeDate vin unitNumber mileage comments inspectedBy timeStamp anyRepairs repairCurrentStatus isCompared isStandardPhoto";
+      // Only select fields needed for the list view — skip heavy image URLs but include photo fields for count
+      const listFields = "routeId driver routeDate vin unitNumber mileage comments inspectedBy timeStamp anyRepairs repairCurrentStatus isCompared isStandardPhoto vehiclePicture1 vehiclePicture2 vehiclePicture3 vehiclePicture4 dashboardImage additionalPicture";
 
       const [inspections, total] = await Promise.all([
         DailyInspection.find(filter).select(listFields).sort({ routeDate: -1 }).skip(skip).limit(limit).lean(),
@@ -250,11 +250,20 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const enrichedInspections = inspections.map((insp: any) => ({
-        ...insp,
-        driverName: insp.driver ? (driverMap[insp.driver] || insp.driver) : "",
-        inspectedByName: insp.inspectedBy ? (inspectorMap[insp.inspectedBy.toLowerCase()] || insp.inspectedBy) : "",
-      }));
+      const photoFields = ["vehiclePicture1", "vehiclePicture2", "vehiclePicture3", "vehiclePicture4", "dashboardImage", "additionalPicture"];
+
+      const enrichedInspections = inspections.map((insp: any) => {
+        const photoCount = photoFields.filter(f => !!insp[f]).length;
+        const result: any = {
+          ...insp,
+          driverName: insp.driver ? (driverMap[insp.driver] || insp.driver) : "",
+          inspectedByName: insp.inspectedBy ? (inspectorMap[insp.inspectedBy.toLowerCase()] || insp.inspectedBy) : "",
+          photoCount,
+        };
+        // Remove the actual URLs from the response to keep it lightweight
+        for (const f of photoFields) delete result[f];
+        return result;
+      });
 
       return NextResponse.json({
         inspections: enrichedInspections,
