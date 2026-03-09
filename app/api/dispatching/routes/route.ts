@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SYMXRoute from "@/lib/models/SYMXRoute";
+import SYMXRoutesInfo from "@/lib/models/SYMXRoutesInfo";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
         const [employees, routeCounts, auditCountsRaw] = await Promise.all([
             SymxEmployee.find(
                 { transporterId: { $in: transporterIds } },
-                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1 }
+                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, profileImage: 1 }
             ).lean(),
             // Count total routes per transporter (across all weeks) for "routesCompleted" virtual column
             SYMXRoute.aggregate([
@@ -86,6 +87,7 @@ export async function GET(req: NextRequest) {
                 lastName: emp.lastName,
                 phoneNumber: emp.phoneNumber || "",
                 type: emp.type || "",
+                profileImage: emp.profileImage || "",
             };
         });
 
@@ -197,15 +199,25 @@ export async function POST(req: NextRequest) {
         console.log(`[Generate Routes] bulkWrite result: upserted=${result.upsertedCount}, matched=${result.matchedCount}, modified=${result.modifiedCount}, total=${createdCount}`);
 
         // ══════════════════════════════════════════════════════════
+        // ── RE-APPLY ROUTES INFO DATA ──
+        // After generating/regenerating routes, re-apply any existing
+        // RoutesInfo data (routeNumber, stops, packages, etc.) that was
+        // previously entered via the Routes Info panel.
+        // ══════════════════════════════════════════════════════════
+        try {
+            await reApplyRoutesInfo(yearWeek, workingSchedules);
+        } catch (err: any) {
+            console.error("[Re-Apply RoutesInfo] Error:", err.message);
+        }
+
+        // ══════════════════════════════════════════════════════════
         // ── AUTO VAN ASSIGNMENT ──
-        // Mirrors the AppSheet logic: assign vans per size category,
-        // untrained (new) employees first, then trained (experienced).
+        // Only for routes still without a van after RoutesInfo re-apply.
         // ══════════════════════════════════════════════════════════
         try {
             await autoAssignVans(yearWeek);
         } catch (err: any) {
             console.error("[Auto Van Assignment] Error:", err.message);
-            // Don't fail the route generation if van assignment fails
         }
 
         return NextResponse.json({
@@ -217,6 +229,64 @@ export async function POST(req: NextRequest) {
         console.error("Error generating routes:", error);
         return NextResponse.json({ error: error.message || "Failed to generate routes" }, { status: 500 });
     }
+}
+
+// ══════════════════════════════════════════════════════════
+// RE-APPLY ROUTES INFO DATA
+// ══════════════════════════════════════════════════════════
+// After routes are generated/regenerated, fetch any existing
+// SYMXRoutesInfo rows (from the Routes Info panel) that have
+// a linked transporterId and re-apply their fields to the
+// corresponding SYMXRoute records.
+// ══════════════════════════════════════════════════════════
+async function reApplyRoutesInfo(yearWeek: string, schedules: any[]) {
+    // Collect unique dates from the schedules
+    const dateSet = new Set<string>();
+    for (const s of schedules) {
+        if (s.date) {
+            const d = new Date(s.date);
+            dateSet.add(d.toISOString().split("T")[0]);
+        }
+    }
+
+    if (dateSet.size === 0) return;
+
+    // Query all RoutesInfo rows for these dates that have a transporterId
+    const dateObjects = [...dateSet].map(d => new Date(d));
+    const routesInfoRows = await SYMXRoutesInfo.find({
+        date: { $in: dateObjects },
+        transporterId: { $nin: ["", null] },
+    }).lean() as any[];
+
+    if (routesInfoRows.length === 0) {
+        console.log("[Re-Apply RoutesInfo] No linked RoutesInfo rows to re-apply");
+        return;
+    }
+
+    // Build bulk update ops for SYMXRoute
+    const updateOps = routesInfoRows.map((row: any) => ({
+        updateOne: {
+            filter: { transporterId: row.transporterId, date: row.date },
+            update: {
+                $set: {
+                    routeNumber: row.routeNumber || "",
+                    stopCount: row.stopCount ? parseInt(row.stopCount) || 0 : 0,
+                    packageCount: row.packageCount ? parseInt(row.packageCount) || 0 : 0,
+                    routeDuration: row.routeDuration || "",
+                    waveTime: row.waveTime || "",
+                    pad: row.pad || "",
+                    wst: row.wst || "",
+                    wstDuration: row.wstDuration ? parseInt(row.wstDuration) || 0 : 0,
+                    bags: row.bags || "",
+                    ov: row.ov || "",
+                    stagingLocation: row.stagingLocation || "",
+                },
+            },
+        },
+    }));
+
+    const result = await SYMXRoute.bulkWrite(updateOps, { ordered: false });
+    console.log(`[Re-Apply RoutesInfo] Re-applied ${result.modifiedCount} route(s) from ${routesInfoRows.length} RoutesInfo rows`);
 }
 
 // ══════════════════════════════════════════════════════════

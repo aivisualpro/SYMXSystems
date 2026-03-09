@@ -37,6 +37,7 @@ import {
     MapPin,
     CircleDashed,
     XCircle,
+    Video,
     type LucideIcon,
 } from "lucide-react";
 import {
@@ -56,6 +57,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import RouteDetailModal from "../_components/RouteDetailModal";
 
 // ── Type Options with Icons & Colors ──
 interface TypeOption {
@@ -157,6 +159,7 @@ interface RouteRow {
     ov: string;
     stagingLocation: string;
     attendance: string;
+    profileImage: string;
 }
 
 type SortKey = typeof COLUMNS[number]["key"];
@@ -183,6 +186,11 @@ export default function RoutesPage() {
     const [auditEmployee, setAuditEmployee] = useState<{ transporterId: string; name: string } | null>(null);
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
     const [auditLoading, setAuditLoading] = useState(false);
+
+    // Route detail modal state
+    const [detailModal, setDetailModal] = useState<{ open: boolean; routeId: string; employeeName: string; profileImage: string }>(
+        { open: false, routeId: "", employeeName: "", profileImage: "" }
+    );
 
     // ── Fetch ALL routes for the week ──
     useEffect(() => {
@@ -231,6 +239,7 @@ export default function RoutesPage() {
                         ov: rec.ov || "",
                         stagingLocation: rec.stagingLocation || "",
                         attendance: rec.attendance || "",
+                        profileImage: emp?.profileImage || "",
                     };
                 });
 
@@ -376,8 +385,8 @@ export default function RoutesPage() {
         const displayVal = value === 0 || value === "" ? "—" : String(value);
         return (
             <span className={cn(
-                "text-[11px] whitespace-nowrap",
-                displayVal === "—" ? "text-muted-foreground/40" : "text-foreground"
+                "text-[11px] whitespace-nowrap font-semibold",
+                displayVal === "—" ? "text-muted-foreground/30" : "text-foreground"
             )}>
                 {displayVal}
             </span>
@@ -500,22 +509,44 @@ export default function RoutesPage() {
                                                 return (
                                                     <tr
                                                         key={row._id}
-                                                        className="border-b border-border/20 hover:bg-muted/20 transition-colors"
+                                                        className="border-b border-border/20 hover:bg-muted/30 transition-colors cursor-pointer"
+                                                        onClick={() => setDetailModal({
+                                                            open: true,
+                                                            routeId: row._id,
+                                                            employeeName: row.employeeName,
+                                                            profileImage: row.profileImage,
+                                                        })}
                                                     >
                                                         {/* 1. Employee */}
                                                         <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card")}>
-                                                            <span className="text-[11px] font-semibold whitespace-nowrap">
-                                                                {row.employeeName}
-                                                            </span>
+                                                            <div className="flex items-center gap-2">
+                                                                {/* Avatar */}
+                                                                {row.profileImage ? (
+                                                                    <img
+                                                                        src={row.profileImage}
+                                                                        alt={row.employeeName}
+                                                                        className="w-6 h-6 rounded-full object-cover ring-1 ring-border shrink-0"
+                                                                    />
+                                                                ) : (
+                                                                    <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center ring-1 ring-primary/20 shrink-0">
+                                                                        <span className="text-[8px] font-bold text-primary">
+                                                                            {row.employeeName.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                <span className="text-[11px] font-bold text-foreground whitespace-nowrap">
+                                                                    {row.employeeName}
+                                                                </span>
+                                                            </div>
                                                         </td>
 
                                                         {/* 2. Efficiency */}
                                                         <td className="px-2 py-1.5">
                                                             {row.driverEfficiency > 0 ? (
                                                                 <span className={cn(
-                                                                    "text-[11px] font-semibold",
-                                                                    row.driverEfficiency >= 90 ? "text-emerald-500" :
-                                                                        row.driverEfficiency >= 70 ? "text-amber-500" : "text-red-500"
+                                                                    "text-[11px] font-bold",
+                                                                    row.driverEfficiency >= 90 ? "text-emerald-400" :
+                                                                        row.driverEfficiency >= 70 ? "text-amber-400" : "text-red-400"
                                                                 )}>
                                                                     {row.driverEfficiency}%
                                                                 </span>
@@ -525,7 +556,22 @@ export default function RoutesPage() {
                                                         </td>
 
                                                         {/* 3. WST */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "wst", row.wst)}</td>
+                                                        <td className="px-2 py-1.5">
+                                                            {row.wst ? (
+                                                                <span className={cn(
+                                                                    "text-[11px] font-semibold whitespace-nowrap",
+                                                                    row.serviceType
+                                                                        ? row.wst.toLowerCase() === row.serviceType.toLowerCase()
+                                                                            ? "text-emerald-500"
+                                                                            : "text-red-500"
+                                                                        : "text-foreground"
+                                                                )}>
+                                                                    {row.wst}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>
+                                                            )}
+                                                        </td>
 
                                                         {/* 4. Route # */}
                                                         <td className="px-2 py-1.5">{renderCell(row, "routeNumber", row.routeNumber)}</td>
@@ -541,16 +587,33 @@ export default function RoutesPage() {
 
                                                         {/* 8. Service Type (auto from Van) */}
                                                         <td className="px-2 py-1.5">
-                                                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                                                                {row.serviceType || "—"}
+                                                            <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">
+                                                                {row.serviceType || <span className="text-muted-foreground/30 font-semibold">&mdash;</span>}
                                                             </span>
                                                         </td>
 
                                                         {/* 9. Dashcam (auto from Van) */}
                                                         <td className="px-2 py-1.5">
-                                                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                                                                {row.dashcam || "—"}
-                                                            </span>
+                                                            {row.dashcam ? (
+                                                                <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                                    <Video className={cn(
+                                                                        "h-3.5 w-3.5 shrink-0",
+                                                                        row.dashcam.toLowerCase() === "verizon" ? "text-red-500" :
+                                                                            row.dashcam.toLowerCase() === "netradyne" ? "text-blue-500" :
+                                                                                "text-muted-foreground"
+                                                                    )} />
+                                                                    <span className={cn(
+                                                                        "text-[11px] font-semibold",
+                                                                        row.dashcam.toLowerCase() === "verizon" ? "text-red-500" :
+                                                                            row.dashcam.toLowerCase() === "netradyne" ? "text-blue-500" :
+                                                                                "text-foreground"
+                                                                    )}>
+                                                                        {row.dashcam}
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-muted-foreground/30 text-[11px] font-semibold">&mdash;</span>
+                                                            )}
                                                         </td>
 
                                                         {/* 10. Routes Completed */}
@@ -724,6 +787,15 @@ export default function RoutesPage() {
                     </div>
                 </div>
             )}
+
+            {/* ── Route Detail Modal ── */}
+            <RouteDetailModal
+                open={detailModal.open}
+                onClose={() => setDetailModal({ open: false, routeId: "", employeeName: "", profileImage: "" })}
+                routeId={detailModal.routeId}
+                employeeName={detailModal.employeeName}
+                profileImage={detailModal.profileImage}
+            />
         </TooltipProvider>
     );
 }

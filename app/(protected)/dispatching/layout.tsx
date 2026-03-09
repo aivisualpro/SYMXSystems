@@ -37,7 +37,6 @@ import RoutesInfoPanel from "./_components/RoutesInfoPanel";
 export const DISPATCHING_TABS = [
     { id: "routes", label: "Routes", href: "/dispatching/routes", icon: MapPin, gradient: "from-orange-500 to-red-500", description: "Route details, roster, and delivery tracking" },
     { id: "attendance", label: "Attendance", href: "/dispatching/attendance", icon: UserCheck, gradient: "from-violet-500 to-purple-500", description: "Driver attendance tracking and check-ins" },
-    { id: "repairs", label: "Repairs", href: "/dispatching/repairs", icon: Wrench, gradient: "from-amber-500 to-orange-500", description: "Vehicle repair status and tracking" },
     { id: "time", label: "Time", href: "/dispatching/time", icon: Clock, gradient: "from-rose-500 to-pink-500", description: "Time tracking and shift management" },
     { id: "closing", label: "Closing", href: "/dispatching/closing", icon: DoorClosed, gradient: "from-indigo-500 to-blue-500", description: "End-of-day dispatch closing procedures" },
     { id: "efficiency", label: "Efficiency", href: "/dispatching/efficiency", icon: TrendingUp, gradient: "from-teal-500 to-emerald-500", description: "Route efficiency and performance metrics" },
@@ -220,14 +219,23 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     }, []);
 
     // ── Push title into global header ──
+    const pageTitle = useMemo(() => {
+        if (pathname.includes("/dispatching/routes")) return "Routes";
+        if (pathname.includes("/dispatching/attendance")) return "Attendance";
+        if (pathname.includes("/dispatching/time")) return "Time";
+        if (pathname.includes("/dispatching/closing")) return "Closing";
+        if (pathname.includes("/dispatching/efficiency")) return "Efficiency";
+        return "Dispatching";
+    }, [pathname]);
+
     useEffect(() => {
         setLeftContent(
             <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Dispatching
+                {pageTitle}
             </h1>
         );
         return () => setLeftContent(null);
-    }, [setLeftContent]);
+    }, [setLeftContent, pageTitle]);
 
     // ── Push search + week selector + generate button into right side of header ──
     useEffect(() => {
@@ -377,18 +385,22 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                             </>
                         )}
 
-                        {/* Routes Info button */}
-                        <div className="w-px h-6 bg-border/60 mx-1" />
-                        <button
-                            onClick={() => setShowRoutesInfo(true)}
-                            className={cn(
-                                "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap select-none",
-                                "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:brightness-110 hover:shadow-xl hover:shadow-primary/30"
-                            )}
-                        >
-                            <TableProperties className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                            Routes Info
-                        </button>
+                        {/* Routes Info button — only on /dispatching/routes */}
+                        {pathname.includes("/dispatching/routes") && (
+                            <>
+                                <div className="w-px h-6 bg-border/60 mx-1" />
+                                <button
+                                    onClick={() => setShowRoutesInfo(true)}
+                                    className={cn(
+                                        "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap select-none",
+                                        "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:brightness-110 hover:shadow-xl hover:shadow-primary/30"
+                                    )}
+                                >
+                                    <TableProperties className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                    Routes Info
+                                </button>
+                            </>
+                        )}
 
                         {/* Spacer + Stats badges on right */}
                         {(stats.employeeCount !== undefined || stats.groupCount !== undefined) && (

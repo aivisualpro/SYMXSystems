@@ -265,18 +265,8 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         saveCell(rowIndex, field, value);
     }, [saveCell]);
 
-    // ── Select a dropdown value (generic for both driver and wave time) ──
-    const selectDropdownValue = useCallback((value: string) => {
-        if (editingCell) {
-            const column = EDITABLE_COLUMNS[editingCell.col];
-            if (column) {
-                updateCell(editingCell.row, column.key, value);
-            }
-        }
-        setDropdownOpen(false);
-        setDropdownSearch("");
-        setEditingCell(null);
-    }, [editingCell, updateCell]);
+    // Ref to break circular dep between moveForward <-> startEditing
+    const startEditingRef = useRef<(row: number, col: number) => void>(() => { });
 
     // ── Start editing a cell ──
     const startEditing = useCallback((row: number, col: number) => {
@@ -296,6 +286,48 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         setEditValue(currentValue);
         setTimeout(() => inputRef.current?.focus(), 0);
     }, [rows]);
+
+    // Keep the ref in sync
+    startEditingRef.current = startEditing;
+
+    // ── Move to next cell (forward) ──
+    const moveForward = useCallback((fromRow: number, fromCol: number) => {
+        let nextCol = fromCol + 1;
+        let nextRow = fromRow;
+        if (nextCol >= EDITABLE_COLUMNS.length) {
+            nextCol = 0;
+            nextRow = fromRow + 1;
+        }
+        if (nextRow < TOTAL_ROWS && nextCol < EDITABLE_COLUMNS.length) {
+            setActiveCell({ row: nextRow, col: nextCol });
+            // Auto-start editing if the next cell is a dropdown
+            const nextColumn = EDITABLE_COLUMNS[nextCol];
+            if (nextColumn?.type === "dropdown") {
+                setTimeout(() => startEditingRef.current(nextRow, nextCol), 10);
+            }
+        }
+    }, []);
+
+    // ── Select a dropdown value (generic for both driver and wave time) ──
+    const selectDropdownValue = useCallback((value: string) => {
+        if (editingCell) {
+            const column = EDITABLE_COLUMNS[editingCell.col];
+            if (column) {
+                updateCell(editingCell.row, column.key, value);
+            }
+            // Auto-advance to next cell after selection
+            const fromRow = editingCell.row;
+            const fromCol = editingCell.col;
+            setDropdownOpen(false);
+            setDropdownSearch("");
+            setEditingCell(null);
+            setTimeout(() => moveForward(fromRow, fromCol), 20);
+        } else {
+            setDropdownOpen(false);
+            setDropdownSearch("");
+            setEditingCell(null);
+        }
+    }, [editingCell, updateCell, moveForward]);
 
     // ── Commit editing ──
     const commitEdit = useCallback(() => {
@@ -331,21 +363,8 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             if (e.key === "Enter" || e.key === "Tab") {
                 e.preventDefault();
                 commitEdit();
-                // Move to next cell
-                const nextCol = e.key === "Tab"
-                    ? (e.shiftKey ? editingCell.col - 1 : editingCell.col + 1)
-                    : editingCell.col;
-                const nextRow = e.key === "Enter"
-                    ? (e.shiftKey ? editingCell.row - 1 : editingCell.row + 1)
-                    : editingCell.row;
-
-                if (nextRow >= 0 && nextRow < TOTAL_ROWS && nextCol >= 0 && nextCol < EDITABLE_COLUMNS.length) {
-                    setActiveCell({ row: nextRow, col: nextCol });
-                    // Auto-start editing on tab
-                    if (e.key === "Tab") {
-                        setTimeout(() => startEditing(nextRow, nextCol), 10);
-                    }
-                }
+                // Both Enter and Tab move forward
+                moveForward(editingCell.row, editingCell.col);
             } else if (e.key === "Escape") {
                 cancelEdit();
                 e.preventDefault();
@@ -711,7 +730,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             />
 
             {/* Panel */}
-            <div className="relative w-full max-w-[100vw] lg:max-w-[85vw] xl:max-w-[75vw] bg-background border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right-full duration-300">
+            <div className="relative w-full max-w-[100vw] lg:max-w-[92vw] xl:max-w-[88vw] bg-background border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right-full duration-300">
                 {/* ── Header ── */}
                 <div className="shrink-0 border-b border-border bg-secondary">
                     <div className="flex items-center justify-between px-4 sm:px-6 py-3">
