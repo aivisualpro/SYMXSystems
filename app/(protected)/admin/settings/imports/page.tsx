@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   FileText,
   Users,
+  ListFilter,
 } from "lucide-react";
 import { toast } from "sonner";
 import Papa from "papaparse";
@@ -138,6 +139,17 @@ const importTypes = [
       "R. Start Date", "R. End Date", "Due Date",
       "Amount", "File", "Image",
     ],
+  },
+  {
+    id: "dropdowns",
+    name: "Dropdowns",
+    description: "Import dropdown options from CSV. Upserts on Description + Type. Fields: description, type.",
+    icon: ListFilter,
+    color: "from-sky-500 to-blue-500",
+    bgColor: "bg-sky-500/10",
+    borderColor: "border-sky-500/20",
+    iconColor: "text-sky-500",
+    fields: ["description", "type"],
   },
 ];
 

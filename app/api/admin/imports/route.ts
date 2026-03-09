@@ -18,6 +18,7 @@ import Vehicle from "@/lib/models/Vehicle";
 import VehicleRepair from "@/lib/models/VehicleRepair";
 import DailyInspection from "@/lib/models/DailyInspection";
 import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
+import DropdownOption from "@/lib/models/DropdownOption";
 import { getISOWeek, getISOWeekYear, parseISO } from "date-fns";
 
 const reimbursementHeaderMap: Record<string, string> = {
@@ -1564,6 +1565,35 @@ export async function POST(req: NextRequest) {
                     count: result.length,
                     inserted: result.length,
                     updated: 0,
+                });
+            }
+
+            return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+        }
+
+        // ── Dropdowns Import ──
+        else if (type === "dropdowns") {
+            const operations = data.map((row: any) => {
+                const description = (row.description || "").toString().trim();
+                const rowType = (row.type || "").toString().trim().toLowerCase();
+                if (!description || !rowType) return null;
+
+                return {
+                    updateOne: {
+                        filter: { description, type: rowType },
+                        update: { $set: { description, type: rowType, isActive: true } },
+                        upsert: true,
+                    },
+                };
+            }).filter((op: any): op is NonNullable<typeof op> => op !== null);
+
+            if (operations.length > 0) {
+                const result = await DropdownOption.bulkWrite(operations, { ordered: false });
+                return NextResponse.json({
+                    success: true,
+                    count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
+                    inserted: result.upsertedCount || 0,
+                    updated: result.modifiedCount || 0,
                 });
             }
 
