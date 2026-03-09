@@ -1,20 +1,27 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../layout";
 import { cn } from "@/lib/utils";
 import {
     Users,
+    Phone,
     Loader2,
     ChevronUp,
     ChevronDown,
-    Pencil,
-    Check,
-    X,
+    ChevronRight,
     Minus,
+    Plus,
+    History,
+    FileText,
     CheckCircle2,
-    XCircle,
-    CircleDashed,
+    Pencil,
+    RefreshCw,
+    Clock,
+    X,
+    Check,
+    ArrowRight,
+    TrendingUp,
     Navigation,
     DoorOpen,
     DoorClosed,
@@ -27,12 +34,16 @@ import {
     BookOpen,
     Ban,
     ShieldAlert,
-    Clock,
     MapPin,
+    CircleDashed,
+    XCircle,
     type LucideIcon,
 } from "lucide-react";
 import {
+    Tooltip,
+    TooltipContent,
     TooltipProvider,
+    TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
     DropdownMenu,
@@ -43,31 +54,44 @@ import {
     DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-// ── Type Options (colored pills) ──
-const TYPE_OPTIONS = [
-    { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700" },
-    { label: "Open", icon: DoorOpen, bg: "bg-amber-400/80", text: "text-white", border: "border-amber-500/60" },
-    { label: "Close", icon: DoorClosed, bg: "bg-rose-400/80", text: "text-white", border: "border-rose-500/60" },
-    { label: "Off", icon: Coffee, bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" },
-    { label: "Call Out", icon: PhoneOff, bg: "bg-yellow-500", text: "text-white", border: "border-yellow-600" },
-    { label: "AMZ Training", icon: GraduationCap, bg: "bg-indigo-600", text: "text-white", border: "border-indigo-700" },
-    { label: "Fleet", icon: TruckIcon, bg: "bg-blue-600", text: "text-white", border: "border-blue-700" },
-    { label: "Request Off", icon: CalendarOff, bg: "bg-purple-600", text: "text-white", border: "border-purple-700" },
-    { label: "Trainer", icon: UserCheck, bg: "bg-teal-600", text: "text-white", border: "border-teal-700" },
-    { label: "Training OTR", icon: BookOpen, bg: "bg-violet-600", text: "text-white", border: "border-violet-700" },
-    { label: "Suspension", icon: Ban, bg: "bg-rose-700", text: "text-white", border: "border-rose-800" },
-    { label: "Modified Duty", icon: ShieldAlert, bg: "bg-amber-600", text: "text-white", border: "border-amber-700" },
-    { label: "Stand by", icon: Clock, bg: "bg-cyan-600", text: "text-white", border: "border-cyan-700" },
+// ── Type Options with Icons & Colors ──
+interface TypeOption {
+    label: string;
+    icon: LucideIcon;
+    bg: string;
+    text: string;
+    border: string;
+    dotColor: string;
+}
+
+const TYPE_OPTIONS: TypeOption[] = [
+    { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700", dotColor: "bg-emerald-500" },
+    { label: "Open", icon: DoorOpen, bg: "bg-amber-400/80", text: "text-white", border: "border-amber-500/60", dotColor: "bg-amber-400" },
+    { label: "Close", icon: DoorClosed, bg: "bg-rose-400/80", text: "text-white", border: "border-rose-500/60", dotColor: "bg-rose-400" },
+    { label: "Off", icon: Coffee, bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600", dotColor: "bg-zinc-400" },
+    { label: "Call Out", icon: PhoneOff, bg: "bg-yellow-500", text: "text-white", border: "border-yellow-600", dotColor: "bg-yellow-500" },
+    { label: "AMZ Training", icon: GraduationCap, bg: "bg-indigo-600", text: "text-white", border: "border-indigo-700", dotColor: "bg-indigo-500" },
+    { label: "Fleet", icon: TruckIcon, bg: "bg-blue-600", text: "text-white", border: "border-blue-700", dotColor: "bg-blue-500" },
+    { label: "Request Off", icon: CalendarOff, bg: "bg-purple-600", text: "text-white", border: "border-purple-700", dotColor: "bg-purple-500" },
+    { label: "Trainer", icon: UserCheck, bg: "bg-teal-600", text: "text-white", border: "border-teal-700", dotColor: "bg-teal-500" },
+    { label: "Training OTR", icon: BookOpen, bg: "bg-violet-600", text: "text-white", border: "border-violet-700", dotColor: "bg-violet-500" },
+    { label: "Suspension", icon: Ban, bg: "bg-rose-700", text: "text-white", border: "border-rose-800", dotColor: "bg-rose-600" },
+    { label: "Modified Duty", icon: ShieldAlert, bg: "bg-amber-600", text: "text-white", border: "border-amber-700", dotColor: "bg-amber-500" },
+    { label: "Stand by", icon: Clock, bg: "bg-cyan-600", text: "text-white", border: "border-cyan-700", dotColor: "bg-cyan-500" },
 ];
+
 const TYPE_MAP = new Map(TYPE_OPTIONS.map(opt => [opt.label.toLowerCase(), opt]));
-const getTypeStyle = (value: string) => {
-    if (!value || value.trim() === "") return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" };
+
+function getTypeStyle(value: string): { bg: string; text: string; border: string } {
+    if (!value || value.trim() === "")
+        return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" };
     const opt = TYPE_MAP.get(value.trim().toLowerCase());
     if (opt) return { bg: opt.bg, text: opt.text, border: opt.border };
     return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
-};
+}
 
 // ── Attendance Options ──
 const ATTENDANCE_OPTIONS = [
@@ -76,74 +100,107 @@ const ATTENDANCE_OPTIONS = [
     { label: "", icon: CircleDashed, bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600", iconColor: "text-zinc-400", displayLabel: "Clear" },
 ];
 const getAttendanceStyle = (value: string) => {
-    const v = value.trim().toLowerCase();
+    const v = (value || "").trim().toLowerCase();
     if (v === "present") return ATTENDANCE_OPTIONS[0];
     if (v === "absent") return ATTENDANCE_OPTIONS[1];
     return ATTENDANCE_OPTIONS[2];
 };
 
-// ── Column Definitions ──
+// ── Column Definitions (merged from Roster + Opening + old Routes) ──
 const COLUMNS = [
-    { key: "employee", label: "Employee", width: "flex-1 min-w-[160px]" },
-    { key: "type", label: "Type", width: "w-[120px]" },
-    { key: "routeNumber", label: "Route #", width: "w-[90px]" },
-    { key: "van", label: "Van", width: "w-[80px]" },
-    { key: "routeDuration", label: "Duration", width: "w-[90px]" },
-    { key: "stopCount", label: "Stops", width: "w-[70px]" },
-    { key: "packageCount", label: "Packages", width: "w-[80px]" },
-    { key: "attendance", label: "Attendance", width: "w-[110px]" },
+    { key: "employee", label: "Employee", minW: 140, sticky: true },
+    { key: "driverEfficiency", label: "Eff", minW: 44, sticky: false },
+    { key: "wst", label: "WST", minW: 50, sticky: false },
+    { key: "routeNumber", label: "Route #", minW: 60, sticky: false },
+    { key: "van", label: "Van", minW: 58, sticky: false },
+    { key: "bags", label: "Bags", minW: 40, sticky: false },
+    { key: "ov", label: "OV", minW: 36, sticky: false },
+    { key: "serviceType", label: "Service", minW: 64, sticky: false },
+    { key: "dashcam", label: "Dashcam", minW: 64, sticky: false },
+    { key: "routesCompleted", label: "Routes", minW: 50, sticky: false },
+    { key: "routeSize", label: "Rt Size", minW: 56, sticky: false },
+    { key: "stopCount", label: "Stops", minW: 46, sticky: false },
+    { key: "packageCount", label: "Pkgs", minW: 44, sticky: false },
+    { key: "routeDuration", label: "Dur", minW: 48, sticky: false },
+    { key: "waveTime", label: "Wave", minW: 56, sticky: false },
+    { key: "pad", label: "PAD", minW: 42, sticky: false },
+    { key: "wstDuration", label: "WST Dur", minW: 52, sticky: false },
+    { key: "stagingLocation", label: "Staging", minW: 60, sticky: false },
 ] as const;
 
-const GRID_TEMPLATE = "1fr 120px 90px 80px 90px 70px 80px 110px";
 
-// ── Editable fields ──
-const EDITABLE_FIELDS = new Set([
-    "routeNumber", "van", "routeDuration", "stopCount", "packageCount",
-]);
-
-const SHORT_DAYS: Record<string, string> = {
-    Sunday: "Sun", Monday: "Mon", Tuesday: "Tue", Wednesday: "Wed",
-    Thursday: "Thu", Friday: "Fri", Saturday: "Sat",
-};
 
 interface RouteRow {
     _id: string;
     transporterId: string;
     date: string;
     weekDay: string;
-    employeeName: string;
     type: string;
-    routeNumber: string;
+    subType: string;
     van: string;
-    routeDuration: string;
+    serviceType: string;
+    dashcam: string;
+    routeSize: string;
+    driverEfficiency: number;
+    employeeName: string;
+    phone: string;
+    routesCompleted: number;
+    routeNumber: string;
     stopCount: number;
     packageCount: number;
+    routeDuration: string;
+    waveTime: string;
+    pad: string;
+    wst: string;
+    wstDuration: number;
+    bags: string;
+    ov: string;
+    stagingLocation: string;
     attendance: string;
 }
 
 type SortKey = typeof COLUMNS[number]["key"];
 
+// ── Short day label ──
+const SHORT_DAYS: Record<string, string> = {
+    Sunday: "Sun", Monday: "Mon", Tuesday: "Tue", Wednesday: "Wed",
+    Thursday: "Thu", Friday: "Fri", Saturday: "Sat",
+};
+
 export default function RoutesPage() {
-    const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats } = useDispatching();
+    const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, refreshRoutes, refreshKey, setStats } = useDispatching();
 
     const [allRoutes, setAllRoutes] = useState<RouteRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [sortKey, setSortKey] = useState<SortKey>("employee");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-    const [editingCell, setEditingCell] = useState<{ rowId: string; field: string } | null>(null);
-    const [editValue, setEditValue] = useState("");
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+    const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
 
-    // ── Fetch routes ──
+
+    // Audit panel state
+    const [showAuditPanel, setShowAuditPanel] = useState(false);
+    const [auditEmployee, setAuditEmployee] = useState<{ transporterId: string; name: string } | null>(null);
+    const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    const [auditLoading, setAuditLoading] = useState(false);
+
+    // ── Fetch ALL routes for the week ──
     useEffect(() => {
         if (!selectedWeek) return;
         let cancelled = false;
         setLoading(true);
 
         fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
-            .then(r => r.json())
-            .then(data => {
+            .then((r) => r.json())
+            .then((data) => {
                 if (cancelled) return;
-                if (!data.routes || data.routes.length === 0) { setAllRoutes([]); return; }
+                if (!data.routes || data.routes.length === 0) {
+                    setAllRoutes([]);
+                    setAuditCounts({});
+                    return;
+                }
+
+                setAuditCounts(data.auditCounts || {});
 
                 const rows: RouteRow[] = data.routes.map((rec: any) => {
                     const emp = data.employees?.[rec.transporterId];
@@ -152,74 +209,114 @@ export default function RoutesPage() {
                         transporterId: rec.transporterId,
                         date: rec.date,
                         weekDay: rec.weekDay || "",
-                        employeeName: emp?.name || rec.transporterId,
                         type: rec.type || "",
-                        routeNumber: rec.routeNumber || "",
+                        subType: rec.subType || "",
                         van: rec.van || "",
-                        routeDuration: rec.routeDuration || "",
+                        serviceType: rec.serviceType || "",
+                        dashcam: rec.dashcam || "",
+                        routeSize: rec.routeSize || "",
+                        driverEfficiency: rec.driverEfficiency || 0,
+                        employeeName: emp?.name || rec.transporterId,
+                        phone: emp?.phoneNumber || "",
+                        routesCompleted: data.routeCounts?.[rec.transporterId] || 0,
+                        routeNumber: rec.routeNumber || "",
                         stopCount: rec.stopCount || 0,
                         packageCount: rec.packageCount || 0,
+                        routeDuration: rec.routeDuration || "",
+                        waveTime: rec.waveTime || "",
+                        pad: rec.pad || "",
+                        wst: rec.wst || "",
+                        wstDuration: rec.wstDuration || 0,
+                        bags: rec.bags || "",
+                        ov: rec.ov || "",
+                        stagingLocation: rec.stagingLocation || "",
                         attendance: rec.attendance || "",
                     };
                 });
+
                 setAllRoutes(rows);
             })
-            .catch(() => setAllRoutes([]))
-            .finally(() => { if (!cancelled) setLoading(false); });
+            .catch(() => {
+                setAllRoutes([]);
+                setAuditCounts({});
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
 
         return () => { cancelled = true; };
-    }, [selectedWeek, routesGenerated]);
+    }, [selectedWeek, refreshKey]);
 
-    // ── Save ──
-    const handleSave = useCallback(async (routeId: string, field: string, value: string) => {
-        const numericFields = new Set(["stopCount", "packageCount"]);
-        const parsedValue = numericFields.has(field) ? (parseInt(value) || 0) : value;
-
-        setAllRoutes(prev => prev.map(r => r._id === routeId ? { ...r, [field]: parsedValue } : r));
-        setEditingCell(null);
+    // ── Handle type change ──
+    const handleTypeChange = useCallback(async (routeId: string, newType: string, transporterId: string) => {
+        setAllRoutes(prev => prev.map(r =>
+            r._id === routeId ? { ...r, type: newType } : r
+        ));
         try {
             const res = await fetch("/api/dispatching/routes", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ routeId, updates: { [field]: parsedValue } }),
+                body: JSON.stringify({ routeId, updates: { type: newType } }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update");
-            toast.success(`Updated ${field}`);
+            toast.success(`Type updated to ${newType}`);
+            setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
         } catch (err: any) {
-            toast.error(err.message || "Failed to update");
+            toast.error(err.message || "Failed to update type");
+            refreshRoutes();
         }
-    }, []);
+    }, [refreshRoutes]);
 
+
+    // ── Open audit panel ──
+    const openAuditPanel = useCallback(async (transporterId: string, employeeName: string) => {
+        setAuditEmployee({ transporterId, name: employeeName });
+        setShowAuditPanel(true);
+        setAuditLoading(true);
+        try {
+            const res = await fetch(`/api/schedules/audit?yearWeek=${encodeURIComponent(selectedWeek)}&transporterId=${encodeURIComponent(transporterId)}&limit=50`);
+            const data = await res.json();
+            setAuditLogs(data.logs || []);
+        } catch { }
+        setAuditLoading(false);
+    }, [selectedWeek]);
+
+    // ── Sort handler ──
     const handleSort = (key: SortKey) => {
-        if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-        else { setSortKey(key); setSortDir("asc"); }
+        if (sortKey === key) {
+            setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        } else {
+            setSortKey(key);
+            setSortDir("asc");
+        }
     };
 
-    const formatDateColumn = (dateStr: string, weekDay: string) => {
-        if (!dateStr) return "—";
-        const d = new Date(dateStr);
-        const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-        const dd = String(d.getUTCDate()).padStart(2, "0");
-        const yy = String(d.getUTCFullYear()).slice(-2);
-        const day = weekDay ? (SHORT_DAYS[weekDay] || weekDay.slice(0, 3)) : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getUTCDay()];
-        return `${mm}/${dd}/${yy} ${day}`;
+    // ── Toggle group ──
+    const toggleGroup = (group: string) => {
+        setCollapsedGroups(prev => ({ ...prev, [group]: !prev[group] }));
     };
 
-    // ── Filter + sort ──
-    const { rows: displayRows, totalFiltered, totalForDate } = useMemo(() => {
+    // ── Filter by date, search, sort, and group ──
+    const { groups, totalFiltered, totalForDate } = useMemo(() => {
         let dateFiltered = allRoutes;
-        if (selectedDate) dateFiltered = allRoutes.filter(r => r.date?.split("T")[0] === selectedDate);
+        if (selectedDate) {
+            dateFiltered = allRoutes.filter(r => r.date?.split("T")[0] === selectedDate);
+        }
         const totalForDate = dateFiltered.length;
 
         let filtered = dateFiltered;
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
-            filtered = dateFiltered.filter(r =>
-                r.employeeName.toLowerCase().includes(q) ||
-                r.transporterId.toLowerCase().includes(q) ||
-                r.routeNumber.toLowerCase().includes(q) ||
-                r.van.toLowerCase().includes(q)
+            filtered = dateFiltered.filter(
+                (r) =>
+                    r.employeeName.toLowerCase().includes(q) ||
+                    r.transporterId.toLowerCase().includes(q) ||
+                    r.phone.includes(q) ||
+                    r.type.toLowerCase().includes(q) ||
+                    r.van.toLowerCase().includes(q) ||
+                    r.routeNumber.toLowerCase().includes(q) ||
+                    r.stagingLocation.toLowerCase().includes(q)
             );
         }
 
@@ -227,24 +324,75 @@ export default function RoutesPage() {
             let aVal: any, bVal: any;
             switch (sortKey) {
                 case "employee": aVal = a.employeeName; bVal = b.employeeName; break;
+                case "driverEfficiency": aVal = a.driverEfficiency; bVal = b.driverEfficiency; break;
+                case "routesCompleted": aVal = a.routesCompleted; bVal = b.routesCompleted; break;
                 case "stopCount": aVal = a.stopCount; bVal = b.stopCount; break;
                 case "packageCount": aVal = a.packageCount; bVal = b.packageCount; break;
+                case "wstDuration": aVal = a.wstDuration; bVal = b.wstDuration; break;
                 default: aVal = (a as any)[sortKey] || ""; bVal = (b as any)[sortKey] || ""; break;
             }
-            if (typeof aVal === "number" && typeof bVal === "number") return sortDir === "asc" ? aVal - bVal : bVal - aVal;
-            return sortDir === "asc" ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
+            if (typeof aVal === "number" && typeof bVal === "number") {
+                return sortDir === "asc" ? aVal - bVal : bVal - aVal;
+            }
+            return sortDir === "asc"
+                ? String(aVal).localeCompare(String(bVal))
+                : String(bVal).localeCompare(String(aVal));
         });
 
-        return { rows: sorted, totalFiltered: sorted.length, totalForDate };
+        const typeGroups: Record<string, RouteRow[]> = {};
+        sorted.forEach(r => {
+            const typeKey = r.type || "Unassigned";
+            if (!typeGroups[typeKey]) typeGroups[typeKey] = [];
+            typeGroups[typeKey].push(r);
+        });
+
+        const groupKeys = Object.keys(typeGroups).sort((a, b) => {
+            const aLower = a.toLowerCase();
+            const bLower = b.toLowerCase();
+            if (aLower === "route") return -1;
+            if (bLower === "route") return 1;
+            if (aLower === "off" || aLower === "unassigned" || aLower === "") return 1;
+            if (bLower === "off" || bLower === "unassigned" || bLower === "") return -1;
+            return a.localeCompare(b);
+        });
+
+        const groups = groupKeys.map(key => ({
+            type: key,
+            rows: typeGroups[key],
+            count: typeGroups[key].length,
+        }));
+
+        return { groups, totalFiltered: sorted.length, totalForDate };
     }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir]);
 
-    // ── Stats ──
-    useEffect(() => { setStats({ employeeCount: totalFiltered }); }, [totalFiltered, setStats]);
+    // ── Push stats to layout ──
+    useEffect(() => {
+        setStats({ employeeCount: totalFiltered, groupCount: groups.length });
+    }, [totalFiltered, groups.length, setStats]);
     useEffect(() => { return () => setStats({}); }, [setStats]);
 
-    // ── Loading / Empty ──
+    // ── Render read-only cell ──
+    const renderCell = (_row: RouteRow, _field: string, value: any) => {
+        const displayVal = value === 0 || value === "" ? "—" : String(value);
+        return (
+            <span className={cn(
+                "text-[11px] whitespace-nowrap",
+                displayVal === "—" ? "text-muted-foreground/40" : "text-foreground"
+            )}>
+                {displayVal}
+            </span>
+        );
+    };
+
+
+
+    // ── Empty / Loading States ──
     if (routesLoading || loading) {
-        return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+        return (
+            <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
     }
 
     if (!routesGenerated || allRoutes.length === 0) {
@@ -262,7 +410,10 @@ export default function RoutesPage() {
                         ? "No routes generated for this week yet. Click \"Generate Routes\" in the header to create route records from the schedule."
                         : "No route data available for this week."}
                 </p>
-                <div className={cn("inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold", "bg-muted/50 border border-border text-muted-foreground")}>
+                <div className={cn(
+                    "inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold",
+                    "bg-muted/50 border border-border text-muted-foreground"
+                )}>
                     <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
@@ -273,135 +424,306 @@ export default function RoutesPage() {
         );
     }
 
-    // ── Cell renderer ──
-    const renderCell = (row: RouteRow, field: string, value: any) => {
-        const isEditing = editingCell?.rowId === row._id && editingCell?.field === field;
-        const isEditable = EDITABLE_FIELDS.has(field);
-        const displayVal = value === 0 || value === "" ? "—" : String(value);
-
-        if (isEditing) {
-            return (
-                <div className="flex items-center gap-1">
-                    <Input autoFocus value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") handleSave(row._id, field, editValue); if (e.key === "Escape") setEditingCell(null); }}
-                        className="h-6 text-xs px-1.5 w-full" />
-                    <button onClick={() => handleSave(row._id, field, editValue)} className="text-emerald-500 hover:text-emerald-400 shrink-0"><Check className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setEditingCell(null)} className="text-muted-foreground hover:text-foreground shrink-0"><X className="h-3.5 w-3.5" /></button>
-                </div>
-            );
-        }
-
-        if (isEditable) {
-            return (
-                <button onClick={() => { setEditingCell({ rowId: row._id, field }); setEditValue(value === 0 ? "" : String(value)); }}
-                    className="group/cell flex items-center gap-1 text-left w-full">
-                    <span className={cn("text-[11px] truncate", displayVal === "—" ? "text-muted-foreground/40" : "text-foreground")}>{displayVal}</span>
-                    <Pencil className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/60 transition-opacity shrink-0" />
-                </button>
-            );
-        }
-
-        return <span className={cn("text-[11px] truncate", displayVal === "—" ? "text-muted-foreground/40" : "text-foreground")}>{displayVal}</span>;
-    };
-
-    // ── Type pill (read-only) ──
-    const renderType = (row: RouteRow) => {
-        const typeStyle = getTypeStyle(row.type);
-        const matched = TYPE_MAP.get((row.type || "").trim().toLowerCase());
-        const CellIcon = matched?.icon;
-        return (
-            <div className={cn("relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold border select-none px-1.5", typeStyle.bg, typeStyle.text, typeStyle.border)}>
-                {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
-                <span className="truncate">{row.type || <Minus className="h-3 w-3 opacity-40" />}</span>
-            </div>
-        );
-    };
-
-    // ── Attendance dropdown ──
-    const renderAttendance = (row: RouteRow) => {
-        const style = getAttendanceStyle(row.attendance);
-        const Icon = style.icon;
-        return (
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <div className={cn("relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold transition-all border cursor-pointer select-none px-1.5", style.bg, style.text, style.border, "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]")}>
-                        <Icon className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{row.attendance || "—"}</span>
-                    </div>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="bottom" className="w-44">
-                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">Set Attendance</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {ATTENDANCE_OPTIONS.map(opt => {
-                        const OptIcon = opt.icon;
-                        const isActive = row.attendance.toLowerCase() === opt.label.toLowerCase();
-                        return (
-                            <DropdownMenuItem key={opt.label || "clear"} className={cn("flex items-center gap-2 cursor-pointer text-xs", isActive && "bg-accent")} onClick={() => handleSave(row._id, "attendance", opt.label)}>
-                                <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", opt.bg)}><OptIcon className={cn("h-3 w-3", opt.iconColor)} /></div>
-                                <span className="font-medium">{opt.displayLabel || opt.label}</span>
-                                {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
-                            </DropdownMenuItem>
-                        );
-                    })}
-                </DropdownMenuContent>
-            </DropdownMenu>
-        );
-    };
-
-    // ── Table ──
+    // ── Routes Table ──
     return (
         <TooltipProvider delayDuration={200}>
             <div className="flex flex-col h-full">
                 <div className="flex-1 min-h-0 rounded-xl border border-border/50 bg-card overflow-hidden flex flex-col">
-                    {/* Header */}
-                    <div className="grid items-center gap-2 px-3 py-2.5 border-b border-border/50 bg-muted/30"
-                        style={{ gridTemplateColumns: GRID_TEMPLATE }}>
-                        {COLUMNS.map((col) => (
-                            <button key={col.key} onClick={() => handleSort(col.key)}
-                                className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold hover:text-foreground transition-colors text-left">
-                                {col.label}
-                                {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Rows */}
+                    {/* Scrollable table container */}
                     <div className="flex-1 overflow-auto">
-                        {displayRows.map((row) => (
-                            <div key={row._id} className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors"
-                                style={{ gridTemplateColumns: GRID_TEMPLATE }}>
-                                {/* Employee */}
-                                <div className="flex items-center gap-2 min-w-0"><span className="text-xs font-semibold truncate">{row.employeeName}</span></div>
-                                {/* Type */}
-                                {renderType(row)}
-                                {/* Route # */}
-                                {renderCell(row, "routeNumber", row.routeNumber)}
-                                {/* Van */}
-                                {renderCell(row, "van", row.van)}
-                                {/* Duration */}
-                                {renderCell(row, "routeDuration", row.routeDuration)}
-                                {/* Stops */}
-                                {renderCell(row, "stopCount", row.stopCount)}
-                                {/* Packages */}
-                                {renderCell(row, "packageCount", row.packageCount)}
-                                {/* Attendance */}
-                                {renderAttendance(row)}
-                            </div>
-                        ))}
+                        <table className="w-full border-collapse" style={{ minWidth: 1200 }}>
+                            {/* Header */}
+                            <thead className="sticky top-0 z-10">
+                                <tr className="bg-muted/50 border-b border-border/50">
+                                    {COLUMNS.map((col) => (
+                                        <th
+                                            key={col.key}
+                                            onClick={() => handleSort(col.key)}
+                                            className={cn(
+                                                "text-left px-2 py-2 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap",
+                                                col.sticky && "sticky left-0 z-20 bg-muted/50"
+                                            )}
+                                            style={{ minWidth: col.minW }}
+                                        >
+                                            <span className="inline-flex items-center gap-0.5">
+                                                {col.label}
+                                                {sortKey === col.key && (
+                                                    sortDir === "asc"
+                                                        ? <ChevronUp className="h-2.5 w-2.5" />
+                                                        : <ChevronDown className="h-2.5 w-2.5" />
+                                                )}
+                                            </span>
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
 
-                        {displayRows.length === 0 && (
-                            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-                                No employees found for this date
-                            </div>
-                        )}
+                            {/* Body with groups */}
+                            <tbody>
+                                {groups.map((group) => {
+                                    const isCollapsed = collapsedGroups[group.type] ?? false;
+                                    const typeOpt = TYPE_MAP.get(group.type.toLowerCase());
+                                    const GroupIcon = typeOpt?.icon;
+                                    const groupStyle = getTypeStyle(group.type);
+
+                                    return (
+                                        <React.Fragment key={group.type}>
+                                            {/* Group Header Row */}
+                                            <tr
+                                                onClick={() => toggleGroup(group.type)}
+                                                className="cursor-pointer hover:bg-muted/60 transition-colors bg-muted/30 border-b border-border/30"
+                                            >
+                                                <td colSpan={COLUMNS.length} className="px-2 py-1.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <ChevronRight className={cn(
+                                                            "h-3 w-3 text-muted-foreground transition-transform",
+                                                            !isCollapsed && "rotate-90"
+                                                        )} />
+                                                        <div className={cn(
+                                                            "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border",
+                                                            groupStyle.bg, groupStyle.text, groupStyle.border
+                                                        )}>
+                                                            {GroupIcon && <GroupIcon className="h-3 w-3" />}
+                                                            {group.type || "Unassigned"}
+                                                        </div>
+                                                        <span className="text-[10px] font-semibold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-full">
+                                                            {group.count}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+
+                                            {/* Group Data Rows */}
+                                            {!isCollapsed && group.rows.map((row) => {
+                                                const auditCount = auditCounts[row.transporterId] || 0;
+
+                                                return (
+                                                    <tr
+                                                        key={row._id}
+                                                        className="border-b border-border/20 hover:bg-muted/20 transition-colors"
+                                                    >
+                                                        {/* 1. Employee */}
+                                                        <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card")}>
+                                                            <span className="text-[11px] font-semibold whitespace-nowrap">
+                                                                {row.employeeName}
+                                                            </span>
+                                                        </td>
+
+                                                        {/* 2. Efficiency */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.driverEfficiency > 0 ? (
+                                                                <span className={cn(
+                                                                    "text-[11px] font-semibold",
+                                                                    row.driverEfficiency >= 90 ? "text-emerald-500" :
+                                                                        row.driverEfficiency >= 70 ? "text-amber-500" : "text-red-500"
+                                                                )}>
+                                                                    {row.driverEfficiency}%
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[11px] text-muted-foreground/40">—</span>
+                                                            )}
+                                                        </td>
+
+                                                        {/* 3. WST */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "wst", row.wst)}</td>
+
+                                                        {/* 4. Route # */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "routeNumber", row.routeNumber)}</td>
+
+                                                        {/* 5. Van */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "van", row.van)}</td>
+
+                                                        {/* 6. Bags */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "bags", row.bags)}</td>
+
+                                                        {/* 7. OV */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "ov", row.ov)}</td>
+
+                                                        {/* 8. Service Type (auto from Van) */}
+                                                        <td className="px-2 py-1.5">
+                                                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                                                {row.serviceType || "—"}
+                                                            </span>
+                                                        </td>
+
+                                                        {/* 9. Dashcam (auto from Van) */}
+                                                        <td className="px-2 py-1.5">
+                                                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                                                {row.dashcam || "—"}
+                                                            </span>
+                                                        </td>
+
+                                                        {/* 10. Routes Completed */}
+                                                        <td className="px-2 py-1.5">
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <div className="flex items-center gap-0.5 whitespace-nowrap">
+                                                                        <TrendingUp className="h-2.5 w-2.5 text-primary/50" />
+                                                                        <span className="text-[11px] font-medium">{row.routesCompleted}</span>
+                                                                    </div>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>Total routes completed</TooltipContent>
+                                                            </Tooltip>
+                                                        </td>
+
+                                                        {/* 11. Rt Size */}
+                                                        <td className="px-2 py-1.5">
+                                                            <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
+                                                                {row.routeSize || "—"}
+                                                            </span>
+                                                        </td>
+
+                                                        {/* 12. Stops */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "stopCount", row.stopCount)}</td>
+
+                                                        {/* 13. Packages */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "packageCount", row.packageCount)}</td>
+
+                                                        {/* 14. Duration */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "routeDuration", row.routeDuration)}</td>
+
+                                                        {/* 15. Wave Time */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "waveTime", row.waveTime)}</td>
+
+                                                        {/* 16. PAD */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "pad", row.pad)}</td>
+
+                                                        {/* 17. WST Duration */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "wstDuration", row.wstDuration)}</td>
+
+                                                        {/* 18. Staging */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "stagingLocation", row.stagingLocation)}</td>
+
+                                                    </tr>
+                                                );
+                                            })}
+                                        </React.Fragment>
+                                    );
+                                })}
+
+                                {groups.length === 0 && (
+                                    <tr>
+                                        <td colSpan={COLUMNS.length} className="text-center py-12 text-sm text-muted-foreground">
+                                            No employees found for this date
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between p-2.5 border-t border-border/50 bg-muted/20">
-                        <span className="text-[11px] text-muted-foreground">{totalFiltered} of {totalForDate} employees</span>
+                    <div className="shrink-0 flex items-center justify-between p-2 border-t border-border/50 bg-muted/20">
+                        <span className="text-[10px] text-muted-foreground">
+                            {totalFiltered} of {totalForDate} employees
+                        </span>
                     </div>
                 </div>
             </div>
+
+            {/* ── Audit Panel (slide-out) ── */}
+            {showAuditPanel && (
+                <div className="fixed inset-0 z-50 flex justify-end">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={() => setShowAuditPanel(false)} />
+                    <div className="relative w-full max-w-[100vw] sm:max-w-md bg-card border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right-full duration-300">
+                        <div className="shrink-0 px-5 py-4 border-b border-border bg-gradient-to-r from-violet-500/10 to-purple-500/5">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-xl bg-violet-500/20 flex items-center justify-center ring-1 ring-violet-500/30">
+                                        <History className="h-4.5 w-4.5 text-violet-400" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-sm font-bold">Audit Log</h2>
+                                        <p className="text-[10px] text-muted-foreground">
+                                            {auditEmployee?.name || ""} · {selectedWeek} · {auditLogs.length} change{auditLogs.length !== 1 ? "s" : ""}
+                                        </p>
+                                    </div>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowAuditPanel(false)}>
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto px-5 py-4">
+                            {auditLoading ? (
+                                <div className="flex items-center justify-center py-20">
+                                    <Loader2 className="h-6 w-6 animate-spin text-violet-400" />
+                                </div>
+                            ) : auditLogs.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-20 text-center">
+                                    <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center mb-3">
+                                        <FileText className="h-7 w-7 text-muted-foreground/50" />
+                                    </div>
+                                    <p className="text-sm font-medium text-muted-foreground">No changes recorded</p>
+                                    <p className="text-xs text-muted-foreground/60 mt-1">Changes will appear here when modifications are made.</p>
+                                </div>
+                            ) : (
+                                <div className="relative">
+                                    <div className="absolute left-4 top-2 bottom-2 w-px bg-border" />
+                                    <div className="space-y-1">
+                                        {auditLogs.map((log: any, i: number) => {
+                                            const actionConfig: Record<string, { icon: LucideIcon; color: string; bg: string; label: string }> = {
+                                                type_changed: { icon: RefreshCw, color: "text-blue-400", bg: "bg-blue-500/15 ring-blue-500/30", label: "Type Changed" },
+                                                note_updated: { icon: Pencil, color: "text-amber-400", bg: "bg-amber-500/15 ring-amber-500/30", label: "Note Updated" },
+                                                start_time_changed: { icon: Clock, color: "text-emerald-400", bg: "bg-emerald-500/15 ring-emerald-500/30", label: "Start Time Changed" },
+                                                schedule_created: { icon: Plus, color: "text-violet-400", bg: "bg-violet-500/15 ring-violet-500/30", label: "Schedule Created" },
+                                            };
+                                            const config = actionConfig[log.action] || actionConfig.type_changed;
+                                            const ActionIcon = config.icon;
+                                            const timeAgo = (() => {
+                                                const diff = Date.now() - new Date(log.createdAt).getTime();
+                                                const mins = Math.floor(diff / 60000);
+                                                if (mins < 1) return "just now";
+                                                if (mins < 60) return `${mins}m ago`;
+                                                const hrs = Math.floor(mins / 60);
+                                                if (hrs < 24) return `${hrs}h ago`;
+                                                const days = Math.floor(hrs / 24);
+                                                return `${days}d ago`;
+                                            })();
+                                            return (
+                                                <div key={log._id || i} className="relative pl-10 py-2 group">
+                                                    <div className={`absolute left-1.5 top-3.5 w-5 h-5 rounded-full ring-1 flex items-center justify-center ${config.bg}`}>
+                                                        <ActionIcon className={`h-2.5 w-2.5 ${config.color}`} />
+                                                    </div>
+                                                    <div className="bg-muted/30 hover:bg-muted/50 rounded-xl px-3.5 py-2.5 transition-all border border-transparent hover:border-border/50">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <span className={`text-[10px] font-bold uppercase tracking-wider ${config.color}`}>{config.label}</span>
+                                                            <span className="text-[10px] text-muted-foreground shrink-0">{timeAgo}</span>
+                                                        </div>
+                                                        <p className="text-xs font-semibold mt-1">{log.employeeName || log.transporterId}</p>
+                                                        {log.dayOfWeek && (
+                                                            <p className="text-[11px] text-muted-foreground">
+                                                                {log.dayOfWeek}
+                                                                {log.date && ` · ${new Date(log.date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`}
+                                                            </p>
+                                                        )}
+                                                        {(log.oldValue || log.newValue) && (
+                                                            <div className="flex items-center gap-1.5 mt-1.5">
+                                                                {log.oldValue && (
+                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-red-500/10 text-red-400 ring-1 ring-red-500/20 line-through">
+                                                                        {log.oldValue || "(empty)"}
+                                                                    </span>
+                                                                )}
+                                                                {log.oldValue && log.newValue && <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                                                                {log.newValue && (
+                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
+                                                                        {log.newValue || "(empty)"}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        <p className="text-[10px] text-muted-foreground/50 mt-1.5">by {log.performedByName || log.performedBy}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </TooltipProvider>
     );
 }

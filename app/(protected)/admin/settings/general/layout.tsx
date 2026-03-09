@@ -65,6 +65,12 @@ export default function GeneralSettingsLayout({ children }: { children: React.Re
                             Add Option
                         </Button>
                     )}
+                    {activeTab === "wst" && (
+                        <Button size="sm" onClick={() => addRef.current?.()} className="gap-1.5 mb-1">
+                            <Plus className="h-3.5 w-3.5" />
+                            Add WST
+                        </Button>
+                    )}
                 </div>
 
                 {/* Tab Content */}

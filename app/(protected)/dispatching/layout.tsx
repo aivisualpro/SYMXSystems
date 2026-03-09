@@ -5,8 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
-    Users,
-    DoorOpen,
     UserCheck,
     Wrench,
     Clock,
@@ -19,6 +17,8 @@ import {
     Loader2,
     CalendarDays,
     MapPin,
+    Users,
+    TableProperties,
 } from "lucide-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { Input } from "@/components/ui/input";
@@ -31,15 +31,14 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import RoutesInfoPanel from "./_components/RoutesInfoPanel";
 
 // ── Shared Tab Definitions ──
 export const DISPATCHING_TABS = [
-    { id: "roster", label: "Roster", href: "/dispatching/roster", icon: Users, gradient: "from-blue-500 to-cyan-500", description: "Driver roster and assignments for the day" },
-    { id: "opening", label: "Opening", href: "/dispatching/opening", icon: DoorOpen, gradient: "from-emerald-500 to-teal-500", description: "Morning dispatch opening procedures" },
+    { id: "routes", label: "Routes", href: "/dispatching/routes", icon: MapPin, gradient: "from-orange-500 to-red-500", description: "Route details, roster, and delivery tracking" },
     { id: "attendance", label: "Attendance", href: "/dispatching/attendance", icon: UserCheck, gradient: "from-violet-500 to-purple-500", description: "Driver attendance tracking and check-ins" },
     { id: "repairs", label: "Repairs", href: "/dispatching/repairs", icon: Wrench, gradient: "from-amber-500 to-orange-500", description: "Vehicle repair status and tracking" },
     { id: "time", label: "Time", href: "/dispatching/time", icon: Clock, gradient: "from-rose-500 to-pink-500", description: "Time tracking and shift management" },
-    { id: "routes", label: "Routes", href: "/dispatching/routes", icon: MapPin, gradient: "from-orange-500 to-red-500", description: "Route details and delivery tracking" },
     { id: "closing", label: "Closing", href: "/dispatching/closing", icon: DoorClosed, gradient: "from-indigo-500 to-blue-500", description: "End-of-day dispatch closing procedures" },
     { id: "efficiency", label: "Efficiency", href: "/dispatching/efficiency", icon: TrendingUp, gradient: "from-teal-500 to-emerald-500", description: "Route efficiency and performance metrics" },
 ] as const;
@@ -64,7 +63,10 @@ interface DispatchingContextType {
     routesGenerated: boolean;
     routesLoading: boolean;
     refreshRoutes: () => void;
+    refreshKey: number;
     setStats: (stats: DispatchingStats) => void;
+    showRoutesInfo: boolean;
+    setShowRoutesInfo: (show: boolean) => void;
 }
 
 const DispatchingContext = createContext<DispatchingContextType>({
@@ -76,7 +78,10 @@ const DispatchingContext = createContext<DispatchingContextType>({
     routesGenerated: false,
     routesLoading: false,
     refreshRoutes: () => { },
+    refreshKey: 0,
     setStats: () => { },
+    showRoutesInfo: false,
+    setShowRoutesInfo: () => { },
 });
 
 export function useDispatching() {
@@ -126,6 +131,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [routesLoading, setRoutesLoading] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
     const [stats, setStats] = useState<DispatchingStats>({});
+    const [showRoutesInfo, setShowRoutesInfo] = useState(false);
 
     // ── Compute week dates ──
     const weekDates = useMemo(() => {
@@ -190,13 +196,13 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
             const res = await fetch("/api/dispatching/routes", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ yearWeek: selectedWeek }),
+                body: JSON.stringify({ yearWeek: selectedWeek, regenerate: routesGenerated }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to generate routes");
 
             if (data.created > 0) {
-                toast.success(`Generated ${data.created} route records for ${formatWeekLabel(selectedWeek)}`);
+                toast.success(`${routesGenerated ? "Regenerated" : "Generated"} ${data.created} route records for ${formatWeekLabel(selectedWeek)}`);
             } else {
                 toast.info(data.message || "Routes already exist for this week");
             }
@@ -207,7 +213,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         } finally {
             setGeneratingRoutes(false);
         }
-    }, [selectedWeek]);
+    }, [selectedWeek, routesGenerated]);
 
     const refreshRoutes = useCallback(() => {
         setRefreshKey((k) => k + 1);
@@ -310,7 +316,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
 
     return (
         <DispatchingContext.Provider
-            value={{ selectedWeek, selectedDate, setSelectedDate, weekDates, searchQuery, routesGenerated, routesLoading, refreshRoutes, setStats }}
+            value={{ selectedWeek, selectedDate, setSelectedDate, weekDates, searchQuery, routesGenerated, routesLoading, refreshRoutes, refreshKey, setStats, showRoutesInfo, setShowRoutesInfo }}
         >
             <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-3">
                 {/* ── Tab Bar + Date Tabs (inline) ── */}
@@ -371,6 +377,19 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                             </>
                         )}
 
+                        {/* Routes Info button */}
+                        <div className="w-px h-6 bg-border/60 mx-1" />
+                        <button
+                            onClick={() => setShowRoutesInfo(true)}
+                            className={cn(
+                                "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap select-none",
+                                "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:brightness-110 hover:shadow-xl hover:shadow-primary/30"
+                            )}
+                        >
+                            <TableProperties className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                            Routes Info
+                        </button>
+
                         {/* Spacer + Stats badges on right */}
                         {(stats.employeeCount !== undefined || stats.groupCount !== undefined) && (
                             <>
@@ -397,6 +416,13 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                     {children}
                 </div>
             </div>
+
+            {/* ── Routes Info Panel ── */}
+            <RoutesInfoPanel
+                open={showRoutesInfo}
+                onClose={() => setShowRoutesInfo(false)}
+                date={selectedDate}
+            />
         </DispatchingContext.Provider>
     );
 }

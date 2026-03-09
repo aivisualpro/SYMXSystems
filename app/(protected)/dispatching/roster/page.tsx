@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../layout";
+import RoutesInfoPanel from "../_components/RoutesInfoPanel";
 import { cn } from "@/lib/utils";
 import {
     Users,
@@ -34,6 +35,7 @@ import {
     ArrowRight,
     X,
     type LucideIcon,
+    TableProperties,
 } from "lucide-react";
 import {
     Tooltip,
@@ -133,7 +135,7 @@ const SHORT_DAYS: Record<string, string> = {
 };
 
 export default function RosterPage() {
-    const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, refreshRoutes, setStats } = useDispatching();
+    const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, refreshRoutes, refreshKey, setStats } = useDispatching();
 
     const [allRoutes, setAllRoutes] = useState<RouteRow[]>([]);
     const [loading, setLoading] = useState(false);
@@ -147,6 +149,9 @@ export default function RosterPage() {
     const [auditEmployee, setAuditEmployee] = useState<{ transporterId: string; name: string } | null>(null);
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
     const [auditLoading, setAuditLoading] = useState(false);
+
+    // Routes Info panel state
+    const [showRoutesInfo, setShowRoutesInfo] = useState(false);
 
     // ── Fetch ALL routes for the week ──
     useEffect(() => {
@@ -198,7 +203,7 @@ export default function RosterPage() {
             });
 
         return () => { cancelled = true; };
-    }, [selectedWeek, routesGenerated]);
+    }, [selectedWeek, refreshKey]);
 
     // ── Handle type change ──
     const handleTypeChange = useCallback(async (routeId: string, newType: string, transporterId: string) => {
@@ -631,6 +636,14 @@ export default function RosterPage() {
                         <span className="text-[11px] text-muted-foreground">
                             {totalFiltered} of {totalForDate} employees
                         </span>
+                        <Button
+                            size="sm"
+                            className="h-7 gap-1.5 text-[10px] font-semibold bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-lg shadow-orange-500/20 transition-all hover:shadow-orange-500/30 hover:scale-[1.02] active:scale-[0.98]"
+                            onClick={() => setShowRoutesInfo(true)}
+                        >
+                            <TableProperties className="h-3 w-3" />
+                            Routes Info
+                        </Button>
                     </div>
                 </div>
             </div>
@@ -765,6 +778,12 @@ export default function RosterPage() {
                     </div>
                 </div>
             )}
+            {/* ── Routes Info Panel ── */}
+            <RoutesInfoPanel
+                open={showRoutesInfo}
+                onClose={() => setShowRoutesInfo(false)}
+                date={selectedDate}
+            />
         </TooltipProvider>
     );
 }

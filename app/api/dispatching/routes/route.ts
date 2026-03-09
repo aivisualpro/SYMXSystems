@@ -6,6 +6,7 @@ import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
 import SymxUser from "@/lib/models/SymxUser";
+import Vehicle from "@/lib/models/Vehicle";
 
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { yearWeek } = body;
+        const { yearWeek, regenerate } = body;
 
         if (!yearWeek) {
             return NextResponse.json({ error: "yearWeek is required" }, { status: 400 });
@@ -128,12 +129,18 @@ export async function POST(req: NextRequest) {
 
         // Check if routes already exist for this week
         const existingCount = await SYMXRoute.countDocuments({ yearWeek });
-        if (existingCount > 0) {
+        if (existingCount > 0 && !regenerate) {
             return NextResponse.json({
                 message: "Routes already generated for this week",
                 count: existingCount,
                 created: 0,
             });
+        }
+
+        // If regenerating, delete existing routes first so they are re-created from fresh schedule data
+        if (existingCount > 0 && regenerate) {
+            console.log(`[Generate Routes] Regenerating: deleting ${existingCount} existing routes for ${yearWeek}`);
+            await SYMXRoute.deleteMany({ yearWeek });
         }
 
         // Fetch all schedules for this week
@@ -189,6 +196,18 @@ export async function POST(req: NextRequest) {
 
         console.log(`[Generate Routes] bulkWrite result: upserted=${result.upsertedCount}, matched=${result.matchedCount}, modified=${result.modifiedCount}, total=${createdCount}`);
 
+        // ══════════════════════════════════════════════════════════
+        // ── AUTO VAN ASSIGNMENT ──
+        // Mirrors the AppSheet logic: assign vans per size category,
+        // untrained (new) employees first, then trained (experienced).
+        // ══════════════════════════════════════════════════════════
+        try {
+            await autoAssignVans(yearWeek);
+        } catch (err: any) {
+            console.error("[Auto Van Assignment] Error:", err.message);
+            // Don't fail the route generation if van assignment fails
+        }
+
         return NextResponse.json({
             message: `Generated ${createdCount} route records for ${yearWeek}`,
             count: createdCount,
@@ -198,6 +217,193 @@ export async function POST(req: NextRequest) {
         console.error("Error generating routes:", error);
         return NextResponse.json({ error: error.message || "Failed to generate routes" }, { status: 500 });
     }
+}
+
+// ══════════════════════════════════════════════════════════
+// AUTO VAN ASSIGNMENT ALGORITHM
+// ══════════════════════════════════════════════════════════
+// For each size category (SP XL, SP L):
+//   1. Find routes: type in ["Route","Training OTR"], van is empty
+//   2. Split by employee experience: untrained (<90 days) vs trained
+//   3. Get available vans: Active vehicles with matching serviceType,
+//      not already assigned to any route in this week
+//   4. Assign: untrained first, then trained
+//   5. Auto-populate: serviceType + dashcam from vehicle
+// ══════════════════════════════════════════════════════════
+async function autoAssignVans(yearWeek: string) {
+    const SIZE_CATEGORIES = ["SP XL", "SP L"];
+    const ELIGIBLE_TYPES = ["route", "training otr"];
+    const NINETY_DAYS_AGO = new Date();
+    NINETY_DAYS_AGO.setDate(NINETY_DAYS_AGO.getDate() - 90);
+
+    // 1. Fetch all routes for the week that need vans
+    const allRoutes = await SYMXRoute.find(
+        {
+            yearWeek,
+            van: { $in: ["", null] },
+            type: { $regex: new RegExp(`^(${ELIGIBLE_TYPES.join("|")})$`, "i") },
+        },
+        { _id: 1, transporterId: 1, date: 1, routeSize: 1, type: 1, van: 1 }
+    ).lean() as any[];
+
+    if (allRoutes.length === 0) {
+        console.log("[Auto Van Assignment] No routes need van assignment");
+        return;
+    }
+
+    // 2. Get unique transporter IDs and fetch employee data
+    const transporterIds = [...new Set(allRoutes.map(r => r.transporterId))];
+    const employees = await SymxEmployee.find(
+        { transporterId: { $in: transporterIds } },
+        { transporterId: 1, hiredDate: 1 }
+    ).lean() as any[];
+
+    const empMap = new Map<string, { hiredDate: Date | null }>();
+    for (const emp of employees) {
+        empMap.set(emp.transporterId, { hiredDate: emp.hiredDate || null });
+    }
+
+    // 3. Get all vans already assigned this week (to exclude them)
+    const assignedVans = await SYMXRoute.distinct("van", {
+        yearWeek,
+        van: { $nin: ["", null] },
+    }) as string[];
+    const assignedVanSet = new Set(assignedVans);
+
+    // 4. Fetch all Active vehicles
+    const activeVehicles = await Vehicle.find(
+        { status: "Active", serviceType: { $in: SIZE_CATEGORIES } },
+        { vehicleName: 1, serviceType: 1, dashcam: 1 }
+    ).sort({ vehicleName: -1 }).lean() as any[];
+
+    let totalAssigned = 0;
+
+    for (const sizeCategory of SIZE_CATEGORIES) {
+        // ── Routes for this size category ──
+        const sizeRoutes = allRoutes.filter(
+            r => (r.routeSize || "").toLowerCase() === sizeCategory.toLowerCase()
+        );
+
+        if (sizeRoutes.length === 0) continue;
+
+        // ── Split into untrained (new) vs trained (experienced) ──
+        const untrained: any[] = [];
+        const trained: any[] = [];
+
+        for (const route of sizeRoutes) {
+            const emp = empMap.get(route.transporterId);
+            const hiredDate = emp?.hiredDate ? new Date(emp.hiredDate) : null;
+
+            if (hiredDate && hiredDate > NINETY_DAYS_AGO) {
+                untrained.push({ ...route, hiredDate });
+            } else {
+                trained.push({ ...route, hiredDate: hiredDate || new Date(0) });
+            }
+        }
+
+        // Sort both by hiredDate ascending (most senior first)
+        untrained.sort((a, b) => a.hiredDate.getTime() - b.hiredDate.getTime());
+        trained.sort((a, b) => a.hiredDate.getTime() - b.hiredDate.getTime());
+
+        // ── Available vans for this size (not already assigned in this week) ──
+        const availableVans = activeVehicles
+            .filter(v =>
+                (v.serviceType || "").toLowerCase() === sizeCategory.toLowerCase() &&
+                !assignedVanSet.has(v.vehicleName)
+            );
+
+        if (availableVans.length === 0) {
+            console.log(`[Auto Van Assignment] No available ${sizeCategory} vans`);
+            continue;
+        }
+
+        // ── Assign: untrained first, then trained ──
+        const orderedRoutes = [...untrained, ...trained];
+        const vanQueue = [...availableVans]; // work with a copy
+
+        const vanUpdates: { routeId: string; vehicleName: string; serviceType: string; dashcam: string }[] = [];
+
+        for (const route of orderedRoutes) {
+            if (vanQueue.length === 0) break;
+
+            const van = vanQueue.shift()!;
+            vanUpdates.push({
+                routeId: route._id.toString(),
+                vehicleName: van.vehicleName,
+                serviceType: van.serviceType || "",
+                dashcam: van.dashcam || "",
+            });
+
+            // Mark this van as assigned so it's not used again for other days
+            assignedVanSet.add(van.vehicleName);
+        }
+
+        // ── Bulk update routes with assigned vans ──
+        if (vanUpdates.length > 0) {
+            const updateOps = vanUpdates.map(u => ({
+                updateOne: {
+                    filter: { _id: u.routeId },
+                    update: {
+                        $set: {
+                            van: u.vehicleName,
+                            serviceType: u.serviceType,
+                            dashcam: u.dashcam,
+                        },
+                    },
+                },
+            }));
+
+            await SYMXRoute.bulkWrite(updateOps, { ordered: false });
+            totalAssigned += vanUpdates.length;
+
+            console.log(`[Auto Van Assignment] Assigned ${vanUpdates.length} ${sizeCategory} vans`);
+        }
+    }
+
+    // ── Also try to assign vans to routes with NO routeSize (fallback) ──
+    // Routes where routeSize is empty — try to match by any remaining available van
+    const noSizeRoutes = allRoutes.filter(r => !r.routeSize || r.routeSize.trim() === "");
+    if (noSizeRoutes.length > 0) {
+        // Get remaining unassigned vehicles
+        const remainingVans = activeVehicles.filter(v => !assignedVanSet.has(v.vehicleName));
+
+        if (remainingVans.length > 0) {
+            // Sort by hiredDate
+            const sortedRoutes = noSizeRoutes.map(r => {
+                const emp = empMap.get(r.transporterId);
+                return { ...r, hiredDate: emp?.hiredDate ? new Date(emp.hiredDate) : new Date(0) };
+            }).sort((a, b) => a.hiredDate.getTime() - b.hiredDate.getTime());
+
+            const vanQueue = [...remainingVans];
+            const updateOps: any[] = [];
+
+            for (const route of sortedRoutes) {
+                if (vanQueue.length === 0) break;
+                const van = vanQueue.shift()!;
+                updateOps.push({
+                    updateOne: {
+                        filter: { _id: route._id },
+                        update: {
+                            $set: {
+                                van: van.vehicleName,
+                                serviceType: van.serviceType || "",
+                                dashcam: van.dashcam || "",
+                            },
+                        },
+                    },
+                });
+                assignedVanSet.add(van.vehicleName);
+            }
+
+            if (updateOps.length > 0) {
+                await SYMXRoute.bulkWrite(updateOps, { ordered: false });
+                totalAssigned += updateOps.length;
+                console.log(`[Auto Van Assignment] Assigned ${updateOps.length} vans to routes with no size category`);
+            }
+        }
+    }
+
+    console.log(`[Auto Van Assignment] Total assigned: ${totalAssigned} vans across ${SIZE_CATEGORIES.join(", ")}`);
 }
 
 // PUT: Update a single route record (+ sync type back to schedule + audit log)
@@ -221,6 +427,24 @@ export async function PUT(req: NextRequest) {
         const existing = await SYMXRoute.findById(routeId).lean() as any;
         if (!existing) {
             return NextResponse.json({ error: "Route not found" }, { status: 404 });
+        }
+
+        // If van is being updated, auto-resolve serviceType + dashcam from Vehicle
+        if (updates.van !== undefined && updates.van.trim() !== "") {
+            try {
+                const vehicle = await Vehicle.findOne(
+                    { vehicleName: updates.van.trim() },
+                    { serviceType: 1, dashcam: 1 }
+                ).lean() as any;
+                if (vehicle) {
+                    updates.serviceType = vehicle.serviceType || "";
+                    updates.dashcam = vehicle.dashcam || "";
+                }
+            } catch { }
+        } else if (updates.van !== undefined && updates.van.trim() === "") {
+            // Clearing van also clears serviceType + dashcam
+            updates.serviceType = "";
+            updates.dashcam = "";
         }
 
         const updated = await SYMXRoute.findByIdAndUpdate(

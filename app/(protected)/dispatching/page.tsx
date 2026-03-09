@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function DispatchingIndex() {
-    redirect("/dispatching/roster");
+    redirect("/dispatching/routes");
 }
