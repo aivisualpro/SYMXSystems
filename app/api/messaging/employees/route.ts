@@ -214,6 +214,15 @@ export async function GET(req: NextRequest) {
 
         return isOffToday && isWorkingTomorrow;
       });
+    } else if (filter === "week-schedule") {
+      // Only employees with at least one working day this week
+      filtered = enrichedEmployees.filter((emp: any) =>
+        emp.schedules.some(
+          (s: any) =>
+            s.type &&
+            !["off", "close", "request off", ""].includes(s.type.toLowerCase().trim())
+        )
+      );
     } else if (filter === "route-itinerary") {
       // Employees with route type schedules
       filtered = enrichedEmployees.filter((emp: any) =>

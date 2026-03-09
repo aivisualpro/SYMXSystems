@@ -77,7 +77,6 @@ const getTypeStyle = (value: string) => {
 
 // ── Column Definitions ──
 const COLUMNS = [
-    { key: "weekDay", label: "Date", width: "w-[100px]" },
     { key: "employee", label: "Employee", width: "flex-1 min-w-[150px]" },
     { key: "attendance", label: "Attendance", width: "w-[100px]" },
     { key: "type", label: "Type", width: "w-[110px]" },
@@ -91,7 +90,7 @@ const COLUMNS = [
     { key: "dashcam", label: "Dashcam", width: "w-[75px]" },
 ] as const;
 
-const GRID_TEMPLATE = "100px 1fr 100px 110px 80px 70px 80px 85px 60px 85px 85px 75px";
+const GRID_TEMPLATE = "1fr 100px 110px 80px 70px 80px 85px 60px 85px 85px 75px";
 
 // ── Editable fields ──
 const EDITABLE_FIELDS = new Set([
@@ -501,11 +500,6 @@ export default function AttendancePage() {
                                 className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors"
                                 style={{ gridTemplateColumns: GRID_TEMPLATE }}
                             >
-                                {/* Date */}
-                                <span className="text-[11px] font-medium text-foreground">
-                                    {formatDateColumn(row.date, row.weekDay)}
-                                </span>
-
                                 {/* Employee */}
                                 <div className="flex items-center gap-2 min-w-0">
                                     <span className="text-xs font-semibold truncate">

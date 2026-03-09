@@ -38,6 +38,13 @@ function formatDate(d: string) {
     } catch { return d; }
 }
 
+function formatDateOnly(d: string) {
+    try {
+        const date = new Date(d);
+        return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+    } catch { return d; }
+}
+
 function formatShortDate(d: string) {
     try {
         const date = new Date(d);
@@ -73,6 +80,17 @@ function getShiftConfig(type: string) {
     if (t.includes("suspend")) return { label: "Suspension", color: "text-red-400", bg: "bg-red-500/10 ring-red-500/20", isOff: true };
     if (t.includes("pending")) return { label: type, color: "text-amber-400", bg: "bg-amber-500/10 ring-amber-500/20", isOff: false };
     return { label: type, color: "text-zinc-300", bg: "bg-zinc-500/10 ring-zinc-500/20", isOff: false };
+}
+
+function getMessageTitle(messageType: string) {
+    const MAP: Record<string, string> = {
+        "future-shift": "Future Shift Notification",
+        "shift": "Shift Notification",
+        "off-tomorrow": "Off Today / Schedule Tomorrow",
+        "week-schedule": "Week Schedule",
+        "route-itinerary": "Route Itinerary",
+    };
+    return MAP[messageType] || "Schedule Notification";
 }
 
 function WeeklyScheduleCard({ weekSchedules, yearWeek }: { weekSchedules: ConfirmData["weekSchedules"]; yearWeek: string }) {
@@ -238,32 +256,29 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
             return <WeeklyScheduleCard weekSchedules={data.weekSchedules} yearWeek={data.yearWeek} />;
         }
         if (data?.schedule) {
+            const config = getShiftConfig(data.schedule.type);
             return (
                 <div className="bg-zinc-800/60 rounded-2xl p-5 border border-zinc-700/50 mb-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                        </div>
-                        <span className="text-zinc-200 text-sm font-semibold">Schedule Details</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-xs">
-                        <div>
-                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Day</span>
-                            <p className="text-zinc-200 font-medium mt-1">{data.schedule.weekDay || "—"}</p>
-                        </div>
-                        <div>
+                    <div className="grid grid-cols-2 gap-5 text-sm">
+                        <div className="text-center">
                             <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Date</span>
-                            <p className="text-zinc-200 font-medium mt-1">{data.scheduleDate ? formatDate(data.scheduleDate) : "—"}</p>
+                            <p className="text-zinc-100 font-semibold mt-1.5 text-base">{data.scheduleDate ? formatDateOnly(data.scheduleDate) : "—"}</p>
                         </div>
-                        <div>
+                        <div className="text-center">
+                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Day</span>
+                            <p className="text-zinc-100 font-semibold mt-1.5 text-base">{data.schedule.weekDay || "—"}</p>
+                        </div>
+                        <div className="text-center">
                             <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Shift Type</span>
-                            <p className="text-zinc-200 font-medium mt-1">{data.schedule.type || "—"}</p>
+                            <div className="mt-1.5 flex justify-center">
+                                <span className={`inline-flex items-center px-3 py-1 rounded-md ring-1 text-[11px] font-bold uppercase tracking-wider ${config.bg} ${config.color}`}>
+                                    {config.label}
+                                </span>
+                            </div>
                         </div>
-                        <div>
+                        <div className="text-center">
                             <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Start Time</span>
-                            <p className="text-zinc-200 font-medium mt-1">{formatTime(data.schedule.startTime) || "—"}</p>
+                            <p className="text-zinc-100 font-semibold mt-1.5 text-base">{formatTime(data.schedule.startTime) || "—"}</p>
                         </div>
                     </div>
                 </div>
@@ -288,13 +303,10 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                     <div className="relative px-6 pt-8 pb-6 text-center">
                         <div className="absolute inset-0 bg-gradient-to-b from-blue-500/10 to-transparent" />
                         <div className="relative">
-                            {/* Logo */}
-                            <div className="flex items-center justify-center mb-4">
-                                <div className="bg-white rounded-2xl px-5 py-2.5 shadow-lg shadow-blue-500/10">
-                                    <img src="/symx-logo.png" alt="SYMX Logistics" className="h-8 object-contain" />
-                                </div>
-                            </div>
-                            <h1 className="text-xl font-bold text-white tracking-tight">Schedule Confirmation</h1>
+                            <h1 className="text-xl font-bold text-white tracking-tight">{getMessageTitle(data?.messageType || "")}</h1>
+                            {data?.employeeName && (
+                                <p className="text-lg font-bold text-zinc-200 mt-2">{data.employeeName}</p>
+                            )}
                         </div>
                     </div>
 
@@ -348,17 +360,7 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                                     {successAction === "confirmed" ? ", your schedule has been confirmed. Thank you!" : ", this schedule was already confirmed."}
                                 </p>
                                 {renderScheduleCard()}
-                                {data?.messageContent && (
-                                    <div className="bg-zinc-800/60 rounded-2xl p-4 border border-zinc-700/50 text-left mt-4">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                                            </svg>
-                                            <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider">Original Message</span>
-                                        </div>
-                                        <pre className="text-zinc-400 text-[11px] whitespace-pre-wrap font-sans leading-relaxed">{data.messageContent}</pre>
-                                    </div>
-                                )}
+
                             </div>
                         </div>
                     )}
@@ -385,17 +387,7 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                                     </div>
                                 )}
                                 {renderScheduleCard()}
-                                {data?.messageContent && (
-                                    <div className="bg-zinc-800/60 rounded-2xl p-4 border border-zinc-700/50 text-left mt-4">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                                            </svg>
-                                            <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider">Original Message</span>
-                                        </div>
-                                        <pre className="text-zinc-400 text-[11px] whitespace-pre-wrap font-sans leading-relaxed">{data.messageContent}</pre>
-                                    </div>
-                                )}
+
                             </div>
                         </div>
                     )}
@@ -413,26 +405,10 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                         <div className="px-6 pb-8">
                             {/* Greeting */}
                             <div className="text-center mb-5">
-                                <p className="text-zinc-300 text-sm">
-                                    Hi <span className="text-white font-semibold">{data.employeeName}</span>,
-                                </p>
-                                <p className="text-zinc-400 text-sm mt-1">Please confirm or request a change for your upcoming schedule.</p>
+                                <p className="text-zinc-400 text-sm">Please confirm or request a change for your upcoming schedule.</p>
                             </div>
 
-                            {/* Original Message */}
-                            {data.messageContent && (
-                                <div className="bg-zinc-800/60 rounded-2xl p-4 border border-zinc-700/50 mb-5">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <div className="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center">
-                                            <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                                            </svg>
-                                        </div>
-                                        <span className="text-zinc-400 text-xs font-semibold">Message</span>
-                                    </div>
-                                    <pre className="text-zinc-300 text-xs whitespace-pre-wrap font-sans leading-relaxed">{data.messageContent}</pre>
-                                </div>
-                            )}
+
 
                             {/* Schedule Card — Weekly or Single Day */}
                             {renderScheduleCard()}
@@ -497,9 +473,11 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                         </div>
                     )}
 
-                    {/* Footer */}
-                    <div className="px-6 py-3 border-t border-zinc-800/80 text-center">
-                        <p className="text-zinc-600 text-[10px]">Powered by SYMX Systems</p>
+                    {/* Footer with Logo */}
+                    <div className="px-6 py-4 border-t border-zinc-800/80 flex items-center justify-center">
+                        <div className="bg-white rounded-xl px-4 py-2 shadow-lg shadow-blue-500/10">
+                            <img src="/symx-logo.png" alt="SYMX Logistics" className="h-6 object-contain" />
+                        </div>
                     </div>
                 </div>
             </div>

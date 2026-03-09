@@ -86,7 +86,6 @@ const getAttendanceStyle = (value: string) => {
 
 // ── Column Definitions ──
 const COLUMNS = [
-    { key: "weekDay", label: "Date", width: "w-[95px]" },
     { key: "employee", label: "Employee", width: "flex-1 min-w-[140px]" },
     { key: "attendance", label: "Attendance", width: "w-[95px]" },
     { key: "type", label: "Type", width: "w-[100px]" },
@@ -104,7 +103,7 @@ const COLUMNS = [
     { key: "totalHours", label: "Total Hrs", width: "w-[70px]" },
 ] as const;
 
-const GRID_TEMPLATE = "95px 1fr 95px 100px 75px 70px 75px 70px 70px 70px 75px 70px 65px 80px 80px 70px";
+const GRID_TEMPLATE = "1fr 95px 100px 75px 70px 75px 70px 70px 70px 75px 70px 65px 80px 80px 70px";
 
 // ── Editable fields ──
 const EDITABLE_FIELDS = new Set([
@@ -395,8 +394,6 @@ export default function TimePage() {
                         {displayRows.map((row) => (
                             <div key={row._id} className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors"
                                 style={{ gridTemplateColumns: GRID_TEMPLATE }}>
-                                {/* Date */}
-                                <span className="text-[11px] font-medium text-foreground">{formatDateColumn(row.date, row.weekDay)}</span>
                                 {/* Employee */}
                                 <div className="flex items-center gap-2 min-w-0"><span className="text-xs font-semibold truncate">{row.employeeName}</span></div>
                                 {/* Attendance */}

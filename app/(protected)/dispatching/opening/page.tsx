@@ -25,7 +25,6 @@ import { toast } from "sonner";
 
 // ── Column Definitions ──
 const COLUMNS = [
-    { key: "weekDay", label: "Date", width: "w-[100px]" },
     { key: "employee", label: "Employee", width: "flex-1 min-w-[160px]" },
     { key: "routeNumber", label: "Route #", width: "w-[90px]" },
     { key: "stopCount", label: "Stops", width: "w-[70px]" },
@@ -40,7 +39,7 @@ const COLUMNS = [
     { key: "stagingLocation", label: "Staging", width: "w-[90px]" },
 ] as const;
 
-const GRID_TEMPLATE = "100px 1fr 90px 70px 80px 80px 90px 70px 70px 70px 60px 60px 90px";
+const GRID_TEMPLATE = "1fr 90px 70px 80px 80px 90px 70px 70px 70px 60px 60px 90px";
 
 // ── Editable fields list ──
 const EDITABLE_FIELDS = new Set([
@@ -380,11 +379,6 @@ export default function OpeningPage() {
                                 className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors"
                                 style={{ gridTemplateColumns: GRID_TEMPLATE }}
                             >
-                                {/* Date */}
-                                <span className="text-[11px] font-medium text-foreground">
-                                    {formatDateColumn(row.date, row.weekDay)}
-                                </span>
-
                                 {/* Employee */}
                                 <div className="flex items-center gap-2 min-w-0">
                                     <span className="text-xs font-semibold truncate">

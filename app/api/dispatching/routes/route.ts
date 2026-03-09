@@ -43,9 +43,10 @@ export async function GET(req: NextRequest) {
 
         await connectToDatabase();
 
-        // Build query
+        // Build query — exclude "Off" type records from all dispatching views
         const query: any = { yearWeek };
         if (date) query.date = new Date(date);
+        query.type = { $not: { $regex: /^off$/i } };
 
         const routes = await SYMXRoute.find(query)
             .sort({ date: 1, transporterId: 1 })
@@ -147,9 +148,25 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "No schedules found for this week" }, { status: 404 });
         }
 
-        // Create route records — one per schedule entry (7 days × N employees)
+        // Filter out "Off" and empty-type schedules — don't create route records for days off
+        const workingSchedules = schedules.filter((s: any) => {
+            const t = (s.type || "").trim().toLowerCase();
+            return t !== "" && t !== "off";
+        });
+
+        console.log(`[Generate Routes] ${schedules.length} total schedules, ${workingSchedules.length} working (excluded Off/empty)`);
+
+        if (workingSchedules.length === 0) {
+            return NextResponse.json({
+                message: "No working schedules found for this week (all entries are Off or empty)",
+                count: 0,
+                created: 0,
+            });
+        }
+
+        // Create route records — one per working schedule entry
         // Use bulkWrite with upserts to handle the unique {transporterId, date} index gracefully
-        const bulkOps = schedules.map((s: any) => ({
+        const bulkOps = workingSchedules.map((s: any) => ({
             updateOne: {
                 filter: { transporterId: s.transporterId, date: s.date },
                 update: {

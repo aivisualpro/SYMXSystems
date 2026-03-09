@@ -308,7 +308,20 @@ function MessageStatusBadge({
 }
 
 // ── Sub Tab Config ──
-const SUB_TABS = [
+interface SubTab {
+  id: string;
+  label: string;
+  icon: typeof Bell;
+  description: string;
+  gradient: string;
+  iconColor: string;
+  borderColor: string;
+  defaultMessage: string;
+  variables: string[];
+  hidden?: boolean;
+}
+
+const SUB_TABS: SubTab[] = [
   {
     id: "future-shift",
     label: "Future Shift Notification",
@@ -344,6 +357,7 @@ const SUB_TABS = [
     defaultMessage:
       "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are off today. Reminder: you are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease reply Y to confirm your route. See you tomorrow!",
     variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
+    hidden: true,
   },
   {
     id: "week-schedule",
@@ -625,7 +639,7 @@ function MessagingSubTab({
   templatesLoaded,
   onSelectionReport,
 }: {
-  tab: (typeof SUB_TABS)[0];
+  tab: SubTab;
   weeks: string[];
   selectedWeek: string;
   setSelectedWeek: (w: string) => void;
@@ -647,6 +661,28 @@ function MessagingSubTab({
   const EMPTY: EmployeeRecipient[] = useMemo(() => [], []);
   const employees = prefetchedEmployees ?? EMPTY;
   const loading = employeesLoading;
+
+  // ── "Off Today" toggle for the future-shift tab ──
+  const [showOffToday, setShowOffToday] = useState(false);
+  const [offTodayEmployees, setOffTodayEmployees] = useState<EmployeeRecipient[]>([]);
+  const [offTodayLoading, setOffTodayLoading] = useState(false);
+
+  // Fetch "off-tomorrow" filter employees when toggle is ON
+  useEffect(() => {
+    if (tab.id !== "future-shift" || !showOffToday) return;
+    setOffTodayLoading(true);
+    const params = new URLSearchParams({ filter: "off-tomorrow" });
+    if (selectedWeek) params.append("yearWeek", selectedWeek);
+    fetch(`/api/messaging/employees?${params.toString()}`)
+      .then(res => res.json())
+      .then(data => setOffTodayEmployees(data.employees || []))
+      .catch(() => setOffTodayEmployees([]))
+      .finally(() => setOffTodayLoading(false));
+  }, [tab.id, showOffToday, selectedWeek]);
+
+  // Pick which employee list to show based on toggle
+  const activeEmployees = (tab.id === "future-shift" && showOffToday) ? offTodayEmployees : employees;
+  const activeLoading = (tab.id === "future-shift" && showOffToday) ? offTodayLoading : loading;
 
   const [sending, setSending] = useState(false);
   const [selectedAll, setSelectedAll] = useState(false);
@@ -713,15 +749,15 @@ function MessagingSubTab({
 
   // Filter by search
   const filteredEmployees = useMemo(() => {
-    if (!searchQuery) return employees;
+    if (!searchQuery) return activeEmployees;
     const q = searchQuery.toLowerCase();
-    return employees.filter(
+    return activeEmployees.filter(
       (emp) =>
         emp.name.toLowerCase().includes(q) ||
         emp.phoneNumber.includes(q) ||
         emp.transporterId?.toLowerCase().includes(q)
     );
-  }, [employees, searchQuery]);
+  }, [activeEmployees, searchQuery]);
 
   // Report selection count to parent when it changes (deferred to avoid setState-during-render)
   useEffect(() => {
@@ -854,29 +890,59 @@ function MessagingSubTab({
         {/* ── Left: Employee List ── */}
         <div className="rounded-xl border border-border/50 bg-card flex flex-col overflow-hidden">
           {/* Table Header */}
-          <div className="grid grid-cols-[40px_1fr_100px_120px_120px] items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold sticky top-0 z-10">
-            <div className="flex items-center justify-center">
-              <Checkbox
-                checked={
-                  filteredEmployees.length > 0 && selectedIds.size === filteredEmployees.length
-                    ? true
-                    : selectedIds.size > 0
-                      ? "indeterminate"
-                      : false
-                }
-                onCheckedChange={toggleSelectAll}
-                className="h-3.5 w-3.5"
-              />
+          <div className="border-b border-border/50 bg-muted/30 sticky top-0 z-10">
+            {/* Off-Today Toggle — only for future-shift tab */}
+            {tab.id === "future-shift" && (
+              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/30">
+                <button
+                  onClick={() => setShowOffToday(!showOffToday)}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+                    showOffToday ? "bg-amber-500" : "bg-zinc-600"
+                  )}
+                >
+                  <span className={cn(
+                    "pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform",
+                    showOffToday ? "translate-x-4" : "translate-x-0"
+                  )} />
+                </button>
+                <span className={cn(
+                  "text-[11px] font-medium",
+                  showOffToday ? "text-amber-500" : "text-muted-foreground"
+                )}>
+                  Off Today
+                </span>
+                {showOffToday && (
+                  <span className="text-[10px] text-muted-foreground">
+                    — showing employees off today but working tomorrow
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-[40px_1fr_100px_120px_120px] items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              <div className="flex items-center justify-center">
+                <Checkbox
+                  checked={
+                    filteredEmployees.length > 0 && selectedIds.size === filteredEmployees.length
+                      ? true
+                      : selectedIds.size > 0
+                        ? "indeterminate"
+                        : false
+                  }
+                  onCheckedChange={toggleSelectAll}
+                  className="h-3.5 w-3.5"
+                />
+              </div>
+              <span>Name</span>
+              <span>Client Type</span>
+              <span>Phone</span>
+              <span>Schedule Type</span>
             </div>
-            <span>Name</span>
-            <span>Client Type</span>
-            <span>Phone</span>
-            <span>Schedule Type</span>
           </div>
 
           {/* Employee Rows */}
           <div className="flex-1 overflow-auto">
-            {loading ? (
+            {activeLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
@@ -1446,7 +1512,7 @@ export default function MessagingPanel({
       <div className="flex flex-col h-full gap-3">
         {/* ── Sub-Tab Navigation ── */}
         <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-          {SUB_TABS.map((tab) => {
+          {SUB_TABS.filter(tab => !tab.hidden).map((tab) => {
             const isActive = resolvedTab === tab.id;
             return (
               <button

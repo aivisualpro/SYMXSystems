@@ -91,7 +91,6 @@ const getTypeStyle = (value: string): { bg: string; text: string; border: string
 
 // ── Column Definitions ──
 const COLUMNS = [
-    { key: "weekDay", label: "Date", width: "w-[100px]" },
     { key: "routeSize", label: "Route Size", width: "w-[90px]" },
     { key: "employee", label: "Employee", width: "flex-1 min-w-[160px]" },
     { key: "driverEfficiency", label: "Efficiency", width: "w-[90px]" },
@@ -105,7 +104,7 @@ const COLUMNS = [
     { key: "audit", label: "Audit", width: "w-[50px]" },
 ] as const;
 
-const GRID_TEMPLATE = "100px 90px 1fr 90px 120px 100px 80px 90px 80px 90px 110px 50px";
+const GRID_TEMPLATE = "90px 1fr 90px 120px 100px 80px 90px 80px 90px 110px 50px";
 
 interface RouteRow {
     _id: string;
@@ -466,11 +465,6 @@ export default function RosterPage() {
                                                 className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors"
                                                 style={{ gridTemplateColumns: GRID_TEMPLATE }}
                                             >
-                                                {/* Date */}
-                                                <span className="text-[11px] font-medium text-foreground">
-                                                    {formatDateColumn(row.date, row.weekDay)}
-                                                </span>
-
                                                 {/* Route Size */}
                                                 <span className="text-xs font-medium text-foreground truncate">
                                                     {row.routeSize || "—"}

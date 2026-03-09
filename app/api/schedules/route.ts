@@ -324,12 +324,33 @@ export async function PATCH(req: NextRequest) {
         });
       }
 
-      // Sync type back to the SYMXRoute record (dispatching)
+      // Sync type to SYMXRoute (dispatching)
       if (typeChanged) {
-        await SYMXRoute.updateOne(
-          { scheduleId: scheduleId },
-          { $set: { type: type || "", subType: updated.subType || "" } }
-        ).catch(() => { }); // silent — route may not exist yet
+        const newTypeNorm = (type || "").trim().toLowerCase();
+        const isNowWorking = !["off", ""].includes(newTypeNorm);
+
+        if (isNowWorking) {
+          // Working type → upsert a route record (create if it doesn't exist)
+          await SYMXRoute.updateOne(
+            { transporterId: updated.transporterId, date: updated.date },
+            {
+              $set: {
+                scheduleId: scheduleId,
+                type: type || "",
+                subType: updated.subType || "",
+                weekDay: updated.weekDay || "",
+                yearWeek: updated.yearWeek || "",
+                van: updated.van || "",
+              },
+            },
+            { upsert: true }
+          ).catch(() => { }); // silent
+        } else {
+          // Off/empty type → remove route record so it disappears from dispatching
+          await SYMXRoute.deleteOne(
+            { transporterId: updated.transporterId, date: updated.date }
+          ).catch(() => { }); // silent
+        }
       }
 
       return NextResponse.json({ success: true, schedule: updated });
@@ -373,12 +394,29 @@ export async function PATCH(req: NextRequest) {
         performedByName: performer.name,
       });
 
-      // Sync to SYMXRoute if it exists
+      // Sync to SYMXRoute — only create for working types
       if (created && (created as any)._id) {
-        await SYMXRoute.updateOne(
-          { transporterId, date: new Date(date) },
-          { $set: { type: type || "", scheduleId: (created as any)._id } }
-        ).catch(() => { }); // silent
+        const newTypeNorm = (type || "").trim().toLowerCase();
+        const isWorking = !["off", ""].includes(newTypeNorm);
+
+        if (isWorking) {
+          await SYMXRoute.updateOne(
+            { transporterId, date: new Date(date) },
+            {
+              $set: {
+                scheduleId: (created as any)._id,
+                type: type || "",
+                weekDay: weekDay || "",
+                yearWeek,
+              },
+            },
+            { upsert: true }
+          ).catch(() => { }); // silent
+        } else {
+          await SYMXRoute.deleteOne(
+            { transporterId, date: new Date(date) }
+          ).catch(() => { }); // silent
+        }
       }
 
       return NextResponse.json({ success: true, schedule: created });

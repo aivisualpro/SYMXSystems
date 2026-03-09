@@ -60,7 +60,6 @@ const getTypeStyle = (value: string) => {
 
 // ── Column Definitions ──
 const COLUMNS = [
-    { key: "weekDay", label: "Date", width: "w-[90px]" },
     { key: "employee", label: "Employee", width: "flex-1 min-w-[130px]" },
     { key: "type", label: "Type", width: "w-[95px]" },
     { key: "routeNumber", label: "Route #", width: "w-[70px]" },
@@ -88,7 +87,7 @@ const COLUMNS = [
     { key: "driverEfficiency", label: "Eff %", width: "w-[55px]" },
 ] as const;
 
-const GRID_TEMPLATE = "90px 1fr 95px 70px 55px 65px 60px 60px 65px 55px 55px 60px 55px 55px 60px 60px 60px 65px 60px 60px 55px 55px 55px 50px 60px 55px";
+const GRID_TEMPLATE = "1fr 95px 70px 55px 65px 60px 60px 65px 55px 55px 60px 55px 55px 60px 60px 60px 65px 60px 60px 55px 55px 55px 50px 60px 55px";
 
 // ── Editable fields ──
 const EDITABLE_FIELDS = new Set([
@@ -416,7 +415,6 @@ export default function EfficiencyPage() {
                         {displayRows.map((row) => (
                             <div key={row._id} className="grid items-center gap-1 px-3 py-1.5 border-b border-border/20 hover:bg-muted/20 transition-colors"
                                 style={{ gridTemplateColumns: GRID_TEMPLATE }}>
-                                <span className="text-[10px] font-medium text-foreground">{formatDateColumn(row.date, row.weekDay)}</span>
                                 <div className="flex items-center min-w-0"><span className="text-[11px] font-semibold truncate">{row.employeeName}</span></div>
                                 {renderType(row)}
                                 {renderCell(row, "routeNumber", row.routeNumber)}

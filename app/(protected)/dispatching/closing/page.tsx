@@ -29,13 +29,12 @@ import { toast } from "sonner";
 
 // ── Column Definitions ──
 const COLUMNS = [
-    { key: "weekDay", label: "Date", width: "w-[110px]" },
     { key: "employee", label: "Employee", width: "flex-1 min-w-[180px]" },
     { key: "van", label: "Van", width: "w-[100px]" },
     { key: "inspection", label: "Inspection", width: "w-[140px]" },
 ] as const;
 
-const GRID_TEMPLATE = "110px 1fr 100px 140px";
+const GRID_TEMPLATE = "1fr 100px 140px";
 
 const EDITABLE_FIELDS = new Set(["van"]);
 
@@ -56,7 +55,7 @@ interface RouteRow {
     van: string;
 }
 
-type SortKey = "weekDay" | "employee" | "van" | "inspection";
+type SortKey = "employee" | "van" | "inspection";
 
 // ── Inspection Form Modal ──
 function InspectionFormModal({
@@ -451,7 +450,6 @@ export default function ClosingPage() {
                         {displayRows.map((row) => (
                             <div key={row._id} className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors"
                                 style={{ gridTemplateColumns: GRID_TEMPLATE }}>
-                                <span className="text-[11px] font-medium text-foreground">{formatDateColumn(row.date, row.weekDay)}</span>
                                 <div className="flex items-center gap-2 min-w-0"><span className="text-xs font-semibold truncate">{row.employeeName}</span></div>
                                 {renderCell(row, "van", row.van)}
                                 {renderInspectionButton(row)}
