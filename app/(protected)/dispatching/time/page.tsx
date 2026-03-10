@@ -32,6 +32,7 @@ import {
     Flag,
     type LucideIcon,
 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import {
     Tooltip,
     TooltipContent,
@@ -96,7 +97,7 @@ const getAttendanceStyle = (value: string) => {
 
 // ── Column Definitions ──
 const COLUMNS = [
-    { key: "employee", label: "Employee", width: "flex-1 min-w-[140px]" },
+    { key: "employee", label: "Employee", width: "flex-1 min-w-[100px] max-w-[150px]" },
     { key: "attendance", label: "Attendance", width: "w-[95px]" },
     { key: "type", label: "Type", width: "w-[100px]" },
     { key: "routeNumber", label: "Route #", width: "w-[75px]" },
@@ -104,7 +105,7 @@ const COLUMNS = [
     { key: "paycomOutLunch", label: "Out Lunch", width: "w-[75px]" },
     { key: "paycomInLunch", label: "In Lunch", width: "w-[70px]" },
     { key: "paycomOutDay", label: "Out Day", width: "w-[70px]" },
-    { key: "punchStatus", label: "Punch", width: "w-[70px]" },
+    { key: "punchStatus", label: "Punch", width: "w-[110px]" },
     { key: "attendanceTime", label: "Att. Time", width: "w-[75px]" },
     { key: "amazonOutLunch", label: "AMZ Out", width: "w-[70px]" },
     { key: "amazonInLunch", label: "AMZ In", width: "w-[65px]" },
@@ -114,7 +115,7 @@ const COLUMNS = [
     { key: "actions", label: "", width: "w-[40px]" },
 ] as const;
 
-const GRID_TEMPLATE = "minmax(160px, 1fr) 95px 100px 75px 70px 75px 70px 70px 70px 75px 70px 65px 80px 80px 70px 40px";
+const GRID_TEMPLATE = "minmax(100px, 150px) 95px 100px 75px 70px 75px 70px 70px 110px 75px 70px 65px 80px 80px 70px 40px";
 
 // ── Editable fields ──
 const EDITABLE_FIELDS = new Set([
@@ -281,6 +282,60 @@ const getCellFormat = (row: RouteRow, field: string) => {
         }
     }
 
+    if (field === "paycomOutDay") {
+        const outDayValid = !!row.paycomOutDay;
+        const outDayMins = timeToMins(row.paycomOutDay);
+        const appLogoutValid = !!row.amazonAppLogout;
+        const appLogoutMins = timeToMins(row.amazonAppLogout);
+
+        const inLunchValid = !!row.paycomInLunch;
+        const inLunchMins = timeToMins(row.paycomInLunch);
+        const outLunchValid = !!row.paycomOutLunch;
+        const outLunchMins = timeToMins(row.paycomOutLunch);
+
+        const type = row.type?.trim().toLowerCase() || "";
+        const isTypeRoute = type === "route";
+
+        if (outDayValid && outDayMins > 0) {
+            if (isTypeRoute) {
+                if (appLogoutValid) {
+                    if (outDayMins < appLogoutMins || outDayMins >= appLogoutMins + 15) {
+                        return { bg: "bg-red-600", text: "text-white font-bold", inputBg: "bg-red-600 text-white focus:bg-red-500 focus:text-white" };
+                    }
+                    if (outDayMins >= appLogoutMins && outDayMins < appLogoutMins + 15) {
+                        return { bg: "bg-emerald-600", text: "text-white font-bold", inputBg: "bg-emerald-600 text-white focus:bg-emerald-500 focus:text-white" };
+                    }
+                }
+            } else {
+                if (inLunchValid && outLunchValid) {
+                    const diff = inLunchMins - outLunchMins;
+                    if (diff < 30) {
+                        return { bg: "bg-red-600", text: "text-white font-bold", inputBg: "bg-red-600 text-white focus:bg-red-500 focus:text-white" };
+                    }
+                    if (diff >= 30) {
+                        return { bg: "bg-emerald-600", text: "text-white font-bold", inputBg: "bg-emerald-600 text-white focus:bg-emerald-500 focus:text-white" };
+                    }
+                }
+            }
+        }
+    }
+
+    if (field === "amazonInLunch") {
+        const outLunchValid = !!row.amazonOutLunch;
+        const outLunchMins = timeToMins(row.amazonOutLunch);
+        const inLunchValid = !!row.amazonInLunch;
+        const inLunchMins = timeToMins(row.amazonInLunch);
+
+        if (outLunchValid && inLunchValid) {
+            const diff = inLunchMins - outLunchMins;
+            if (diff < 30) {
+                return { bg: "bg-red-600", text: "text-white font-bold", inputBg: "bg-red-600 text-white focus:bg-red-500 focus:text-white" };
+            } else {
+                return { bg: "bg-emerald-600", text: "text-white font-bold", inputBg: "bg-emerald-600 text-white focus:bg-emerald-500 focus:text-white" };
+            }
+        }
+    }
+
     return null;
 };
 
@@ -294,14 +349,10 @@ export default function TimePage() {
     const [sortKey, setSortKey] = useState<SortKey>("employee");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-    // ── Inline editing state ──
-    const [editingCell, setEditingCell] = useState<{ rowId: string; field: string } | null>(null);
-    const [editValue, setEditValue] = useState("");
-
     // ── Quick Edit Modal State ──
     const [quickEditRow, setQuickEditRow] = useState<RouteRow | null>(null);
     const [quickEditForm, setQuickEditForm] = useState<Partial<RouteRow>>({});
-    const [punchStatusOptions, setPunchStatusOptions] = useState<string[]>([]);
+    const [punchStatusOptions, setPunchStatusOptions] = useState<any[]>([]);
 
     // ── Fetch Punch Status Options ──
     useEffect(() => {
@@ -309,7 +360,7 @@ export default function TimePage() {
         fetch("/api/admin/settings/dropdowns?type=punch%20status")
             .then(res => res.ok ? res.json() : [])
             .then(data => {
-                if (mounted && Array.isArray(data)) setPunchStatusOptions(data.map(d => d.description));
+                if (mounted && Array.isArray(data)) setPunchStatusOptions(data);
             })
             .catch(() => { });
         return () => { mounted = false; };
@@ -363,7 +414,6 @@ export default function TimePage() {
     // ── Save handler ──
     const handleSave = useCallback(async (routeId: string, field: string, value: string) => {
         setAllRoutes(prev => prev.map(r => r._id === routeId ? { ...r, [field]: value } : r));
-        setEditingCell(null);
         try {
             const res = await fetch("/api/dispatching/routes", {
                 method: "PUT",
@@ -484,7 +534,6 @@ export default function TimePage() {
 
     // ── Editable cell renderer ──
     const renderCell = (row: RouteRow, field: string, value: any) => {
-        const isEditing = editingCell?.rowId === row._id && editingCell?.field === field;
         const isEditable = EDITABLE_FIELDS.has(field);
         const displayVal = value === 0 || value === "" ? "—" : String(value);
 
@@ -497,45 +546,35 @@ export default function TimePage() {
             return isTimeField ? parseSmartTime(val) : val;
         };
 
-        if (isEditing) {
-            return (
-                <div className="flex items-center gap-1">
-                    <Input autoFocus value={editValue}
-                        onChange={(e) => {
-                            if (isTimeField) {
-                                setEditValue(e.target.value.replace(/[^\d:]/g, ""));
-                            } else {
-                                setEditValue(e.target.value);
-                            }
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                                const finalVal = handleTimeInputKeyDown(editValue);
-                                handleSave(row._id, field, finalVal);
-                            }
-                            if (e.key === "Escape") setEditingCell(null);
-                        }}
-                        onBlur={() => {
-                            if (isTimeField) setEditValue(handleTimeInputKeyDown(editValue));
-                        }}
-                        className="h-6 text-xs px-1.5 w-full" />
-                    <button onClick={() => handleSave(row._id, field, handleTimeInputKeyDown(editValue))} className="text-emerald-500 hover:text-emerald-400 shrink-0"><Check className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setEditingCell(null)} className="text-muted-foreground hover:text-foreground shrink-0"><X className="h-3.5 w-3.5" /></button>
-                </div>
-            );
-        }
-
         if (globalEditMode && isEditable) {
             if (field === "punchStatus") {
+                const opt = punchStatusOptions.find(o => o.description === value);
+                const badgeColor = opt?.color || "bg-muted text-muted-foreground";
+                const textColor = badgeColor.startsWith("bg-") && badgeColor !== "bg-muted" ? "text-white" : "";
+                const IconComponent = opt?.icon ? (LucideIcons as any)[opt.icon] : null;
+
                 return (
-                    <select
-                        value={value || ""}
-                        onChange={(e) => handleSave(row._id, field, e.target.value)}
-                        className="w-full h-7 bg-foreground/5 relative z-10 text-[11px] px-1 rounded border border-border/40 focus:border-primary focus:bg-background focus:outline-none transition-all appearance-none shadow-inner"
-                    >
-                        <option value=""></option>
-                        {punchStatusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
+                    <div className="relative w-full h-7 mt-[-2px]">
+                        <select
+                            value={value || ""}
+                            onChange={(e) => handleSave(row._id, field, e.target.value)}
+                            className={cn(
+                                "w-full h-full relative z-10 text-[11px] px-1 rounded border border-border/40 focus:border-primary focus:outline-none transition-all appearance-none shadow-sm cursor-pointer",
+                                value && opt ? `${badgeColor} ${textColor} pl-6 font-semibold` : "bg-foreground/5"
+                            )}
+                            style={{ backgroundImage: 'none' }}
+                        >
+                            <option value=""></option>
+                            {punchStatusOptions.map(o => <option key={o._id} value={o.description} className="bg-background text-foreground">{o.description}</option>)}
+                        </select>
+                        <div className="absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none z-20">
+                            {opt?.image ? (
+                                <img src={opt.image} alt="" className="h-3.5 w-3.5 rounded-full object-cover shrink-0 ring-1 ring-white/20" />
+                            ) : IconComponent ? (
+                                <IconComponent className={cn("h-3.5 w-3.5", textColor)} />
+                            ) : null}
+                        </div>
+                    </div>
                 );
             }
             return (
@@ -573,15 +612,23 @@ export default function TimePage() {
             );
         }
 
-        if (isEditable) {
-            return (
-                <button onClick={() => { setEditingCell({ rowId: row._id, field }); setEditValue(value === 0 ? "" : String(value)); }}
-                    className={cn("group/cell flex items-center gap-1 text-left w-full h-full min-h-[28px] rounded px-1 transition-colors border border-transparent", style && `${style.bg} ${style.text}`)}>
-                    {Icon && <Icon className={cn("h-3.5 w-3.5 shrink-0", (style as any).iconColor || style.text || "opacity-80")} />}
-                    <span className={cn("text-[11px] truncate w-full", !style && (displayVal === "—" ? "text-muted-foreground/40" : "text-foreground"))}>{displayVal}</span>
-                    <Pencil className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/60 transition-opacity shrink-0 hidden sm:block ml-auto" />
-                </button>
-            );
+        if (field === "punchStatus") {
+            const opt = punchStatusOptions.find(o => o.description === displayVal);
+            if (opt && displayVal !== "—") {
+                const badgeColor = opt.color || "bg-muted";
+                const textColor = badgeColor.startsWith("bg-") ? "text-white" : "text-foreground";
+                const IconComponent = opt.icon ? (LucideIcons as any)[opt.icon] : null;
+                return (
+                    <div className={cn("inline-flex items-center gap-1.5 px-2 min-h-[22px] rounded text-[11px] font-semibold w-max", badgeColor, textColor)}>
+                        {opt.image ? (
+                            <img src={opt.image} alt={opt.description} className="h-4 w-4 rounded-full object-cover shrink-0 ring-1 ring-border/20" />
+                        ) : IconComponent ? (
+                            <IconComponent className="h-3.5 w-3.5 shrink-0" />
+                        ) : null}
+                        <span className="truncate leading-none">{opt.description}</span>
+                    </div>
+                );
+            }
         }
 
         return (
@@ -592,34 +639,15 @@ export default function TimePage() {
         );
     };
 
-    // ── Attendance dropdown ──
+    // ── Attendance dropdown (Read-Only) ──
     const renderAttendance = (row: RouteRow) => {
         const style = getAttendanceStyle(row.attendance);
         const Icon = style.icon;
         return (
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <div className={cn("relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold transition-all border cursor-pointer select-none px-1.5", style.bg, style.text, style.border, "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]")}>
-                        <Icon className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{row.attendance || "—"}</span>
-                    </div>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="bottom" className="w-44">
-                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">Set Attendance</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {ATTENDANCE_OPTIONS.map(opt => {
-                        const OptIcon = opt.icon;
-                        const isActive = row.attendance.toLowerCase() === opt.label.toLowerCase();
-                        return (
-                            <DropdownMenuItem key={opt.label || "clear"} className={cn("flex items-center gap-2 cursor-pointer text-xs", isActive && "bg-accent")} onClick={() => handleSave(row._id, "attendance", opt.label)}>
-                                <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", opt.bg)}><OptIcon className={cn("h-3 w-3", opt.iconColor)} /></div>
-                                <span className="font-medium">{opt.displayLabel || opt.label}</span>
-                                {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
-                            </DropdownMenuItem>
-                        );
-                    })}
-                </DropdownMenuContent>
-            </DropdownMenu>
+            <div className={cn("relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold border select-none px-1.5", style.bg, style.text, style.border)}>
+                <Icon className="h-3 w-3 shrink-0" />
+                <span className="truncate">{row.attendance || "—"}</span>
+            </div>
         );
     };
 
@@ -758,7 +786,7 @@ export default function TimePage() {
                                     >
                                         <option value="">Select Status...</option>
                                         {punchStatusOptions.map(opt => (
-                                            <option key={opt} value={opt}>{opt}</option>
+                                            <option key={opt._id} value={opt.description}>{opt.description}</option>
                                         ))}
                                     </select>
                                 </div>

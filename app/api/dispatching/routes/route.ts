@@ -479,12 +479,14 @@ async function autoAssignVans(yearWeek: string) {
 // PUT: Update a single route record (+ sync type back to schedule + audit log)
 export async function PUT(req: NextRequest) {
     try {
+        const body = await req.json();
+        console.log(`[PUT /api/dispatching/routes] Received PUT request`, body);
+
         const session = await getSession();
         if (!session) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const body = await req.json();
         const { routeId, updates } = body;
 
         if (!routeId || !updates) {
@@ -496,6 +498,7 @@ export async function PUT(req: NextRequest) {
         // Fetch existing route BEFORE updating (for audit old values)
         const existing = await SYMXRoute.findById(routeId).lean() as any;
         if (!existing) {
+            console.error(`[PUT /api/dispatching/routes] Route not found for ID: ${routeId}`);
             return NextResponse.json({ error: "Route not found" }, { status: 404 });
         }
 

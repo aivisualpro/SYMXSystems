@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import {
     IconCalendar, IconUser, IconGauge,
     IconCamera, IconTool, IconClock, IconAdjustmentsHorizontal,
@@ -181,7 +181,9 @@ function BentoPhoto({ url, label, onClick, className = "" }: { url?: string; lab
 export default function InspectionDetailPage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const id = params?.id as string;
+    const returnTo = searchParams?.get("returnTo");
 
     const { openEditModal } = useFleet();
 
@@ -205,19 +207,24 @@ export default function InspectionDetailPage() {
 
     const { setRightContent, setLeftContent } = useHeaderActions();
 
-    // Left header — back button
     useEffect(() => {
         setLeftContent(
             <button
-                onClick={() => router.push(`/fleet/inspections?highlight=${id}`)}
+                onClick={() => {
+                    if (returnTo) {
+                        router.push(returnTo);
+                    } else {
+                        router.push(`/fleet/inspections?highlight=${id}`);
+                    }
+                }}
                 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
                 <IconArrowLeft size={16} />
-                <span>Inspections</span>
+                <span>{returnTo && returnTo.includes("/dispatching") ? "Back" : "Inspections"}</span>
             </button>
         );
         return () => setLeftContent(null);
-    }, [id, router, setLeftContent]);
+    }, [id, router, returnTo, setLeftContent]);
 
     useEffect(() => {
         if (!id) return;

@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
         const body = await req.json();
-        const { _id, description, type, isActive, sortOrder } = body;
+        const { _id, description, type, isActive, sortOrder, image, color, icon } = body;
 
         if (!description?.trim()) {
             return NextResponse.json({ error: "Description is required" }, { status: 400 });
@@ -43,7 +43,15 @@ export async function POST(req: NextRequest) {
         if (_id) {
             const updated = await DropdownOption.findByIdAndUpdate(
                 _id,
-                { description: description.trim(), type: type.trim().toLowerCase(), isActive: isActive ?? true, sortOrder: sortOrder ?? 0 },
+                {
+                    description: description.trim(),
+                    type: type.trim().toLowerCase(),
+                    isActive: isActive ?? true,
+                    sortOrder: sortOrder ?? 0,
+                    image: image ?? '',
+                    color: color ?? '',
+                    icon: icon ?? ''
+                },
                 { new: true }
             ).lean();
             if (!updated) return NextResponse.json({ error: "Option not found" }, { status: 404 });
@@ -54,6 +62,9 @@ export async function POST(req: NextRequest) {
                 type: type.trim().toLowerCase(),
                 isActive: isActive ?? true,
                 sortOrder: sortOrder ?? 0,
+                image: image ?? '',
+                color: color ?? '',
+                icon: icon ?? ''
             });
             return NextResponse.json(option.toJSON());
         }

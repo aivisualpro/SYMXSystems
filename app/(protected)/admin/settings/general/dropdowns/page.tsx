@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader2, Save, Pencil, X, Trash2, ListFilter, Tag } from "lucide-react";
+import { Loader2, Save, Pencil, X, Trash2, ListFilter, Tag, Search, ChevronDown } from "lucide-react";
+import * as LucideIcons from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -14,8 +16,168 @@ interface DropdownRow {
     type: string;
     isActive: boolean;
     sortOrder: number;
+    image?: string;
+    color?: string;
+    icon?: string;
     isNew?: boolean;
     isEditing?: boolean;
+}
+
+const TAILWIND_COLORS = [
+    "bg-red-600", "bg-emerald-600", "bg-blue-600", "bg-amber-600", "bg-zinc-600",
+    "bg-rose-600", "bg-pink-600", "bg-purple-600", "bg-indigo-600", "bg-cyan-600",
+    "bg-teal-600", "bg-lime-600", "bg-orange-600", "bg-sky-600", "bg-slate-600"
+];
+
+const LUCIDE_ICONS = [
+    "Activity", "AlertCircle", "AlertTriangle", "ArrowDown", "ArrowRight", "ArrowUp", "Award", "Ban",
+    "Bell", "Box", "Briefcase", "Calendar", "Camera", "Check", "CheckCircle", "CheckCircle2", "CheckSquare",
+    "ChevronDown", "ChevronRight", "ChevronUp", "Circle", "Clipboard", "ClipboardList", "Clock", "Cloud",
+    "Compass", "Copy", "CreditCard", "Database", "Download", "Edit", "Edit2", "Edit3", "Eye", "EyeOff",
+    "File", "FileText", "Flag", "Folder", "Globe", "Heart", "Home", "Image", "Info", "Key", "Layers",
+    "Layout", "Link", "List", "Lock", "LogOut", "Mail", "Map", "MapPin", "MessageCircle", "MessageSquare",
+    "Mic", "Minus", "MoreHorizontal", "MoreVertical", "Package", "Paperclip", "Pause", "Phone", "Play",
+    "Plus", "PlusCircle", "Power", "Printer", "RefreshCcw", "RefreshCw", "Repeat", "Save", "Search",
+    "Send", "Settings", "Share", "Share2", "Shield", "ShieldAlert", "ShieldCheck", "ShoppingCart", "Slash",
+    "Sliders", "Smartphone", "Smile", "Star", "Sun", "Tag", "Terminal", "Thermostat", "ThumbsDown",
+    "ThumbsUp", "Timer", "Tool", "Trash", "Trash2", "TrendingDown", "TrendingUp", "Truck", "Umbrella",
+    "Unlock", "Upload", "User", "UserCheck", "UserMinus", "UserPlus", "Users", "Video", "VideoOff",
+    "Volume", "Volume2", "VolumeX", "Wifi", "WifiOff", "X", "XCircle", "XSquare", "Zap"
+];
+
+function ColorPicker({ value, onChange, disabled }: { value: string, onChange: (v: string) => void, disabled: boolean }) {
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <button
+                    disabled={disabled}
+                    className={cn(
+                        "h-8 w-full border border-input rounded flex items-center justify-between px-3 text-[11px] shadow-sm transition-colors",
+                        disabled ? "cursor-not-allowed opacity-50 bg-muted/50" : "bg-background hover:bg-muted/30"
+                    )}
+                >
+                    {value ? (
+                        <div className="flex items-center gap-2 overflow-hidden">
+                            <div className={cn("w-3.5 h-3.5 rounded-full shrink-0 shadow-sm", value)} />
+                            <span className="truncate">{value}</span>
+                        </div>
+                    ) : (
+                        <span className="text-muted-foreground">None</span>
+                    )}
+                    <ChevronDown className="h-3 w-3 shrink-0 opacity-50 ml-2" />
+                </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[180px] p-2" align="start">
+                <div className="grid grid-cols-5 gap-1.5">
+                    <button
+                        onClick={() => onChange("")}
+                        className={cn(
+                            "w-7 h-7 rounded-full border border-dashed flex items-center justify-center transition-transform hover:scale-110",
+                            !value && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                        )}
+                        title="None"
+                    >
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                    {TAILWIND_COLORS.map(c => (
+                        <button
+                            key={c}
+                            onClick={() => onChange(c)}
+                            className={cn(
+                                "w-7 h-7 rounded-full shadow-sm transition-transform hover:scale-110",
+                                c,
+                                value === c && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                            )}
+                            title={c}
+                        />
+                    ))}
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+}
+
+function IconPicker({ value, onChange, disabled }: { value: string, onChange: (v: string) => void, disabled: boolean }) {
+    const [search, setSearch] = useState("");
+    const filtered = useMemo(() => {
+        if (!search) return LUCIDE_ICONS;
+        return LUCIDE_ICONS.filter(i => i.toLowerCase().includes(search.toLowerCase()));
+    }, [search]);
+
+    const ValueIcon = value ? (LucideIcons as any)[value] : null;
+
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <button
+                    disabled={disabled}
+                    className={cn(
+                        "h-8 w-full border border-input rounded flex items-center justify-between px-3 text-[11px] shadow-sm transition-colors",
+                        disabled ? "cursor-not-allowed opacity-50 bg-muted/50" : "bg-background hover:bg-muted/30"
+                    )}
+                >
+                    {value ? (
+                        <div className="flex items-center gap-2 overflow-hidden">
+                            {ValueIcon && <ValueIcon className="h-3.5 w-3.5 shrink-0" />}
+                            <span className="truncate">{value}</span>
+                        </div>
+                    ) : (
+                        <span className="text-muted-foreground">None</span>
+                    )}
+                    <ChevronDown className="h-3 w-3 shrink-0 opacity-50 ml-2" />
+                </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[260px] p-0" align="start" onOpenAutoFocus={e => e.preventDefault()}>
+                <div className="p-2 border-b border-border/50">
+                    <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                            placeholder="Search icons..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="h-8 pl-8 text-[11px] bg-muted/30 border-muted-foreground/20 focus-visible:ring-1"
+                        />
+                    </div>
+                </div>
+                <div className="p-2 max-h-[220px] overflow-y-auto">
+                    <div className="grid grid-cols-6 gap-1">
+                        <button
+                            onClick={() => onChange("")}
+                            className={cn(
+                                "w-8 h-8 rounded flex items-center justify-center hover:bg-muted/50 transition-colors",
+                                !value && "bg-primary/10 text-primary font-medium"
+                            )}
+                            title="None"
+                        >
+                            <span className="text-[9px]">None</span>
+                        </button>
+                        {filtered.map(name => {
+                            const IconComponent = (LucideIcons as any)[name];
+                            if (!IconComponent) return null;
+                            return (
+                                <button
+                                    key={name}
+                                    onClick={() => onChange(name)}
+                                    className={cn(
+                                        "w-8 h-8 rounded shrink-0 flex items-center justify-center hover:bg-muted/50 transition-colors",
+                                        value === name ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground"
+                                    )}
+                                    title={name}
+                                >
+                                    <IconComponent className="h-4 w-4" />
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {filtered.length === 0 && (
+                        <div className="py-4 text-center text-xs text-muted-foreground">
+                            No icons found
+                        </div>
+                    )}
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
 }
 
 export default function DropdownsPage() {
@@ -24,6 +186,7 @@ export default function DropdownsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState<string | null>(null);
     const [selectedType, setSelectedType] = useState<string>("all");
+    const [searchQuery, setSearchQuery] = useState("");
 
     const fetchRows = useCallback(async () => {
         try {
@@ -45,6 +208,9 @@ export default function DropdownsPage() {
             type: selectedType !== "all" ? selectedType : "",
             isActive: true,
             sortOrder: prev.length,
+            image: "",
+            color: "",
+            icon: "",
             isNew: true,
             isEditing: true,
         }]);
@@ -66,7 +232,16 @@ export default function DropdownsPage() {
             const res = await fetch("/api/admin/settings/dropdowns", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ _id: row._id, description: row.description, type: row.type, isActive: row.isActive, sortOrder: row.sortOrder }),
+                body: JSON.stringify({
+                    _id: row._id,
+                    description: row.description,
+                    type: row.type,
+                    isActive: row.isActive,
+                    sortOrder: row.sortOrder,
+                    image: row.image,
+                    color: row.color,
+                    icon: row.icon
+                }),
             });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
             const saved = await res.json();
@@ -102,11 +277,21 @@ export default function DropdownsPage() {
         return [...typeSet].sort();
     }, [rows]);
 
-    // Filtered rows based on selected type
+    // Filtered rows based on selected type and search query
     const filteredRows = useMemo(() => {
-        if (selectedType === "all") return rows;
-        return rows.filter(r => r.type === selectedType);
-    }, [rows, selectedType]);
+        let result = rows;
+        if (selectedType !== "all") {
+            result = result.filter(r => r.type === selectedType);
+        }
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            result = result.filter(r =>
+                r.description.toLowerCase().includes(q) ||
+                r.type.toLowerCase().includes(q)
+            );
+        }
+        return result;
+    }, [rows, selectedType, searchQuery]);
 
     // Global row index lookup (for save/delete which use original array index)
     const getGlobalIndex = (filteredIdx: number) => {
@@ -191,35 +376,51 @@ export default function DropdownsPage() {
 
             {/* ── Table ── */}
             <div className="flex-1 min-w-0">
-                {/* Active filter badge */}
-                {selectedType !== "all" && (
-                    <div className="mb-3 flex items-center gap-2">
-                        <span className="text-[10px] text-muted-foreground">Showing:</span>
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
-                            <Tag className="h-3 w-3" />
-                            {selectedType}
-                            <button
-                                onClick={() => setSelectedType("all")}
-                                className="ml-1 hover:text-primary/70 transition-colors"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                            {filteredRows.length} record{filteredRows.length !== 1 ? "s" : ""}
-                        </span>
+                {/* Active filter badge & Search */}
+                <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="relative w-full max-w-sm">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            type="search"
+                            placeholder="Search description or type..."
+                            className="pl-9 h-9 w-full rounded-md border-input bg-background/50 text-sm focus-visible:ring-1 focus-visible:ring-primary shadow-sm"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
                     </div>
-                )}
+
+                    {selectedType !== "all" && (
+                        <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[10px] text-muted-foreground hidden sm:block">Showing:</span>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                                <Tag className="h-3 w-3" />
+                                {selectedType}
+                                <button
+                                    onClick={() => setSelectedType("all")}
+                                    className="ml-1 hover:text-primary/70 transition-colors"
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </span>
+                            <span className="text-[10px] text-muted-foreground hidden sm:block">
+                                {filteredRows.length} record{filteredRows.length !== 1 ? "s" : ""}
+                            </span>
+                        </div>
+                    )}
+                </div>
 
                 <div className="rounded-lg border border-border overflow-hidden">
                     <table className="w-full">
                         <thead>
                             <tr className="bg-muted/50 border-b border-border">
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[50px]">#</th>
-                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">Description</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[250px]">Description</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[180px]">Type</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Image</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Color</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Icon</th>
                                 <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[80px]">Active</th>
-                                <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Actions</th>
+                                <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[100px]">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -252,6 +453,29 @@ export default function DropdownsPage() {
                                                 onChange={(e) => updateField(globalIdx, "type", e.target.value)}
                                                 placeholder="e.g. inspection"
                                                 className="h-8 text-sm font-mono"
+                                                disabled={!row.isEditing && !row.isNew}
+                                            />
+                                        </td>
+                                        <td className="px-4 py-2">
+                                            <Input
+                                                value={row.image || ""}
+                                                onChange={(e) => updateField(globalIdx, "image", e.target.value)}
+                                                placeholder="URL"
+                                                className="h-8 text-[11px]"
+                                                disabled={!row.isEditing && !row.isNew}
+                                            />
+                                        </td>
+                                        <td className="px-4 py-2">
+                                            <ColorPicker
+                                                value={row.color || ""}
+                                                onChange={(val) => updateField(globalIdx, "color", val)}
+                                                disabled={!row.isEditing && !row.isNew}
+                                            />
+                                        </td>
+                                        <td className="px-4 py-2">
+                                            <IconPicker
+                                                value={row.icon || ""}
+                                                onChange={(val) => updateField(globalIdx, "icon", val)}
                                                 disabled={!row.isEditing && !row.isNew}
                                             />
                                         </td>

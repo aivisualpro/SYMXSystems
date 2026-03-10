@@ -69,6 +69,7 @@ export interface ISYMXRoute extends Document {
     amazonInLunch: string;
     amazonAppLogout: string;
     inspectionTime: string;
+    inspectionId: string;
     paycomInDay: string;
     paycomOutLunch: string;
     paycomInLunch: string;
@@ -160,6 +161,7 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
         amazonInLunch: { type: String, default: "" },
         amazonAppLogout: { type: String, default: "" },
         inspectionTime: { type: String, default: "" },
+        inspectionId: { type: String, default: "" },
         paycomInDay: { type: String, default: "" },
         paycomOutLunch: { type: String, default: "" },
         paycomInLunch: { type: String, default: "" },

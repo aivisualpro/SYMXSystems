@@ -26,6 +26,7 @@ import {
     ShieldAlert,
     Clock,
     TrendingUp,
+    AlertCircle,
     type LucideIcon,
 } from "lucide-react";
 import {
@@ -83,11 +84,13 @@ const COLUMNS = [
     { key: "plannedDuration1stToLast", label: "Pln 1-L", width: "w-[55px]" },
     { key: "actualDuration1stToLast", label: "Act 1-L", width: "w-[55px]" },
     { key: "stopsPerHour", label: "Stp/Hr", width: "w-[50px]" },
+    { key: "deliveryCompletionTime", label: "DCT", width: "w-[60px]" },
+    { key: "dctDelay", label: "DCT Delay", width: "w-[65px]" },
     { key: "stopsRescued", label: "Rescued", width: "w-[60px]" },
     { key: "driverEfficiency", label: "Eff %", width: "w-[55px]" },
 ] as const;
 
-const GRID_TEMPLATE = "1fr 95px 70px 55px 65px 60px 60px 65px 55px 55px 60px 55px 55px 60px 60px 60px 65px 60px 60px 55px 55px 55px 50px 60px 55px";
+const GRID_TEMPLATE = "1fr 95px 70px 55px 65px 60px 60px 65px 55px 55px 60px 55px 55px 60px 60px 60px 65px 60px 60px 55px 55px 55px 50px 60px 65px 60px 55px";
 
 // ── Editable fields ──
 const EDITABLE_FIELDS = new Set([
@@ -98,7 +101,7 @@ const EDITABLE_FIELDS = new Set([
     "plannedLastStop", "actualLastStop", "lastStopDelay",
     "plannedRTSTime", "estimatedRTSTime", "plannedInboundStem",
     "plannedDuration1stToLast", "actualDuration1stToLast",
-    "stopsPerHour", "stopsRescued", "driverEfficiency",
+    "stopsPerHour", "deliveryCompletionTime", "dctDelay", "stopsRescued", "driverEfficiency",
 ]);
 
 const SHORT_DAYS: Record<string, string> = {
@@ -134,6 +137,8 @@ interface RouteRow {
     plannedDuration1stToLast: string;
     actualDuration1stToLast: string;
     stopsPerHour: number;
+    deliveryCompletionTime: string;
+    dctDelay: string;
     stopsRescued: number;
     driverEfficiency: number;
 }
@@ -192,6 +197,8 @@ export default function EfficiencyPage() {
                         plannedDuration1stToLast: rec.plannedDuration1stToLast || "",
                         actualDuration1stToLast: rec.actualDuration1stToLast || "",
                         stopsPerHour: rec.stopsPerHour || 0,
+                        deliveryCompletionTime: rec.deliveryCompletionTime || "",
+                        dctDelay: rec.dctDelay || "",
                         stopsRescued: rec.stopsRescued || 0,
                         driverEfficiency: rec.driverEfficiency || 0,
                     };
@@ -314,6 +321,43 @@ export default function EfficiencyPage() {
         const isEditable = EDITABLE_FIELDS.has(field);
         const displayVal = value === 0 || value === "" ? "—" : String(value);
 
+        let customBg = "text-foreground";
+        let Icon = null;
+        if (displayVal === "—") {
+            customBg = "text-muted-foreground/40";
+        } else {
+            if (field === "lastStopDelay") {
+                const parts = String(value).split(":");
+                if (parts.length >= 2) {
+                    const mins = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+                    if (mins >= 105) { // 105 mins = "001:45"
+                        customBg = "bg-red-600 text-white font-bold px-1.5 py-0.5 rounded shadow-sm";
+                        Icon = AlertCircle;
+                    }
+                }
+            } else if (field === "actualDepartureTime") {
+                const actDepParts = String(value).split(":");
+                const waveParts = String(row.waveTime || "").split(":");
+                if (actDepParts.length >= 2 && waveParts.length >= 2) {
+                    const actMins = parseInt(actDepParts[0], 10) * 60 + parseInt(actDepParts[1], 10);
+                    const waveMins = parseInt(waveParts[0], 10) * 60 + parseInt(waveParts[1], 10);
+                    if (actMins >= waveMins + 80) { // 80 mins = "001:20"
+                        customBg = "bg-red-600 text-white font-bold px-1.5 py-0.5 rounded shadow-sm";
+                        Icon = AlertCircle;
+                    }
+                }
+            } else if (field === "dctDelay") {
+                const parts = String(value).split(":");
+                if (parts.length >= 2) {
+                    const mins = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+                    if (mins >= 5) { // 5 mins = "000:05"
+                        customBg = "bg-red-600 text-white font-bold px-1.5 py-0.5 rounded shadow-sm";
+                        Icon = AlertCircle;
+                    }
+                }
+            }
+        }
+
         if (isEditing) {
             return (
                 <div className="flex items-center gap-1">
@@ -326,17 +370,26 @@ export default function EfficiencyPage() {
             );
         }
 
+        const CellContent = Icon ? (
+            <div className={cn("flex items-center gap-1 w-max", customBg)}>
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="text-[11px] truncate">{displayVal}</span>
+            </div>
+        ) : (
+            <span className={cn("text-[11px] truncate", customBg)}>{displayVal}</span>
+        );
+
         if (isEditable) {
             return (
                 <button onClick={() => { setEditingCell({ rowId: row._id, field }); setEditValue(value === 0 ? "" : String(value)); }}
                     className="group/cell flex items-center gap-1 text-left w-full">
-                    <span className={cn("text-[11px] truncate", displayVal === "—" ? "text-muted-foreground/40" : "text-foreground")}>{displayVal}</span>
+                    {CellContent}
                     <Pencil className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/60 transition-opacity shrink-0" />
                 </button>
             );
         }
 
-        return <span className={cn("text-[11px] truncate", displayVal === "—" ? "text-muted-foreground/40" : "text-foreground")}>{displayVal}</span>;
+        return CellContent;
     };
 
     // ── Type pill ──
@@ -438,6 +491,8 @@ export default function EfficiencyPage() {
                                 {renderCell(row, "plannedDuration1stToLast", row.plannedDuration1stToLast)}
                                 {renderCell(row, "actualDuration1stToLast", row.actualDuration1stToLast)}
                                 {renderCell(row, "stopsPerHour", row.stopsPerHour)}
+                                {renderCell(row, "deliveryCompletionTime", row.deliveryCompletionTime)}
+                                {renderCell(row, "dctDelay", row.dctDelay)}
                                 {renderCell(row, "stopsRescued", row.stopsRescued)}
                                 {renderEfficiency(row)}
                             </div>
