@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   Users,
@@ -21,14 +22,20 @@ import { ISymxEmployee } from "@/lib/models/SymxEmployee";
 
 // ── KPI Card ──
 function KPICard({
-  label, value, subtitle, icon: Icon, trend, trendLabel, accentFrom, accentTo,
+  label, value, subtitle, icon: Icon, trend, trendLabel, accentFrom, accentTo, onClick,
 }: {
   label: string; value: string | number; subtitle?: string;
   icon: any; trend?: "up" | "down" | "neutral"; trendLabel?: string;
-  accentFrom: string; accentTo: string;
+  accentFrom: string; accentTo: string; onClick?: () => void;
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-5 transition-all hover:shadow-lg hover:border-border">
+    <div
+      onClick={onClick}
+      className={cn(
+        "group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-5 transition-all hover:shadow-lg hover:border-border",
+        onClick && "cursor-pointer hover:border-primary/30 hover:shadow-primary/5 active:scale-[0.98]"
+      )}
+    >
       <div className={cn("absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b", accentFrom, accentTo)} />
       <div className="flex items-start justify-between">
         <div className="space-y-1">
@@ -47,7 +54,7 @@ function KPICard({
           ) : trend === "down" ? (
             <TrendingDown className="h-3 w-3 text-red-500" />
           ) : null}
-          <span className={cn("text-[10px] font-bold", 
+          <span className={cn("text-[10px] font-bold",
             trend === "up" ? "text-emerald-500" : trend === "down" ? "text-red-500" : "text-muted-foreground"
           )}>
             {trendLabel}
@@ -59,10 +66,13 @@ function KPICard({
 }
 
 // ── Status Breakdown Row ──
-function StatusRow({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
+function StatusRow({ label, count, total, color, onClick }: { label: string; count: number; total: number; color: string; onClick?: () => void }) {
   const pct = total > 0 ? (count / total) * 100 : 0;
   return (
-    <div className="space-y-1.5">
+    <div
+      className={cn("space-y-1.5 p-2 -mx-2 rounded-lg transition-colors", onClick && "cursor-pointer hover:bg-muted/50 active:scale-[0.99]")}
+      onClick={onClick}
+    >
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-foreground">{label}</span>
         <span className="text-xs font-bold text-muted-foreground">{count} <span className="text-[10px] font-normal">({pct.toFixed(0)}%)</span></span>
@@ -75,9 +85,12 @@ function StatusRow({ label, count, total, color }: { label: string; count: numbe
 }
 
 // ── Type Breakdown Chip ──
-function TypeChip({ label, count, color }: { label: string; count: number; color: string }) {
+function TypeChip({ label, count, color, onClick }: { label: string; count: number; color: string; onClick?: () => void }) {
   return (
-    <div className={cn("flex items-center gap-2 px-3 py-2 rounded-xl border bg-card")}>
+    <div
+      className={cn("flex items-center gap-2 px-3 py-2 rounded-xl border bg-card transition-colors", onClick && "cursor-pointer hover:bg-muted/50 hover:border-primary/30 active:scale-[0.98]")}
+      onClick={onClick}
+    >
       <div className={cn("h-2.5 w-2.5 rounded-full", color)} />
       <span className="text-xs font-semibold text-foreground">{label}</span>
       <span className="text-xs font-black text-muted-foreground ml-auto">{count}</span>
@@ -88,6 +101,7 @@ function TypeChip({ label, count, color }: { label: string; count: number; color
 export default function EmployeesDashboardPage() {
   const [employees, setEmployees] = useState<ISymxEmployee[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -185,6 +199,7 @@ export default function EmployeesDashboardPage() {
           icon={Users}
           accentFrom="from-blue-400"
           accentTo="to-blue-600"
+          onClick={() => router.push("/hr/employees")}
         />
         <KPICard
           label="Active"
@@ -195,6 +210,7 @@ export default function EmployeesDashboardPage() {
           trendLabel="Headcount"
           accentFrom="from-emerald-400"
           accentTo="to-emerald-600"
+          onClick={() => router.push("/hr/employees?status=Active")}
         />
         <KPICard
           label="Recent Hires"
@@ -205,6 +221,7 @@ export default function EmployeesDashboardPage() {
           trendLabel={stats.recentHires > 0 ? "New additions" : "No new hires"}
           accentFrom="from-purple-400"
           accentTo="to-purple-600"
+          onClick={() => router.push("/hr/hired")}
         />
         <KPICard
           label="Terminated"
@@ -215,6 +232,7 @@ export default function EmployeesDashboardPage() {
           trendLabel={stats.terminated > 0 ? `${stats.terminated} total` : "None"}
           accentFrom="from-red-400"
           accentTo="to-red-600"
+          onClick={() => router.push("/hr/terminations")}
         />
       </div>
 
@@ -227,10 +245,10 @@ export default function EmployeesDashboardPage() {
             <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Status Breakdown</h3>
           </div>
           <div className="space-y-3">
-            <StatusRow label="Active" count={stats.active} total={stats.total} color="bg-emerald-500" />
-            <StatusRow label="Terminated" count={stats.terminated} total={stats.total} color="bg-red-500" />
-            <StatusRow label="Resigned" count={stats.resigned} total={stats.total} color="bg-amber-500" />
-            <StatusRow label="Inactive" count={stats.inactive} total={stats.total} color="bg-zinc-400" />
+            <StatusRow label="Active" count={stats.active} total={stats.total} color="bg-emerald-500" onClick={() => router.push("/hr/employees?status=Active")} />
+            <StatusRow label="Terminated" count={stats.terminated} total={stats.total} color="bg-red-500" onClick={() => router.push("/hr/terminations")} />
+            <StatusRow label="Resigned" count={stats.resigned} total={stats.total} color="bg-amber-500" onClick={() => router.push("/hr/employees?status=Resigned")} />
+            <StatusRow label="Inactive" count={stats.inactive} total={stats.total} color="bg-zinc-400" onClick={() => router.push("/hr/employees?status=Inactive")} />
           </div>
         </div>
 
@@ -244,7 +262,7 @@ export default function EmployeesDashboardPage() {
             {Object.entries(stats.typeMap)
               .sort((a, b) => b[1] - a[1])
               .map(([type, count], idx) => (
-                <TypeChip key={type} label={type} count={count} color={typeColors[idx % typeColors.length]} />
+                <TypeChip key={type} label={type} count={count} color={typeColors[idx % typeColors.length]} onClick={() => router.push(`/hr/employees?type=${encodeURIComponent(type)}`)} />
               ))}
           </div>
         </div>
@@ -257,12 +275,15 @@ export default function EmployeesDashboardPage() {
           </div>
           <div className="space-y-3">
             {/* DL Expiring Soon */}
-            <div className={cn(
-              "flex items-center gap-3 p-3 rounded-xl border",
-              stats.expiringDL > 0
-                ? "bg-amber-500/5 border-amber-500/20"
-                : "bg-emerald-500/5 border-emerald-500/20"
-            )}>
+            <div
+              onClick={() => router.push("/hr/employees?filter=dlExpiring")}
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all hover:shadow-sm active:scale-[0.99]",
+                stats.expiringDL > 0
+                  ? "bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10"
+                  : "bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10"
+              )}
+            >
               <div className={cn("p-2 rounded-lg", stats.expiringDL > 0 ? "bg-amber-500/10" : "bg-emerald-500/10")}>
                 <AlertTriangle className={cn("h-4 w-4", stats.expiringDL > 0 ? "text-amber-500" : "text-emerald-500")} />
               </div>
@@ -273,12 +294,15 @@ export default function EmployeesDashboardPage() {
             </div>
 
             {/* Missing Documents */}
-            <div className={cn(
-              "flex items-center gap-3 p-3 rounded-xl border",
-              stats.missingDocs > 0
-                ? "bg-red-500/5 border-red-500/20"
-                : "bg-emerald-500/5 border-emerald-500/20"
-            )}>
+            <div
+              onClick={() => router.push("/hr/employees?filter=missingDocs")}
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all hover:shadow-sm active:scale-[0.99]",
+                stats.missingDocs > 0
+                  ? "bg-red-500/5 border-red-500/20 hover:bg-red-500/10"
+                  : "bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10"
+              )}
+            >
               <div className={cn("p-2 rounded-lg", stats.missingDocs > 0 ? "bg-red-500/10" : "bg-emerald-500/10")}>
                 <AlertTriangle className={cn("h-4 w-4", stats.missingDocs > 0 ? "text-red-500" : "text-emerald-500")} />
               </div>
@@ -289,7 +313,10 @@ export default function EmployeesDashboardPage() {
             </div>
 
             {/* Active Headcount */}
-            <div className="flex items-center gap-3 p-3 rounded-xl border bg-blue-500/5 border-blue-500/20">
+            <div
+              onClick={() => router.push("/hr/employees?status=Active")}
+              className="flex items-center gap-3 p-3 rounded-xl border bg-blue-500/5 border-blue-500/20 cursor-pointer transition-all hover:shadow-sm hover:bg-blue-500/10 active:scale-[0.99]"
+            >
               <div className="p-2 rounded-lg bg-blue-500/10">
                 <Clock className="h-4 w-4 text-blue-500" />
               </div>
@@ -313,7 +340,11 @@ export default function EmployeesDashboardPage() {
             {Object.entries(stats.hourlyMap)
               .sort((a, b) => b[1] - a[1])
               .map(([status, count]) => (
-                <div key={status} className="flex items-center justify-between px-4 py-3 rounded-xl bg-muted/30 border border-border/50">
+                <div
+                  key={status}
+                  onClick={() => router.push(`/hr/employees?hourlyStatus=${encodeURIComponent(status)}`)}
+                  className="flex items-center justify-between px-4 py-3 rounded-xl bg-muted/30 border border-border/50 cursor-pointer transition-all hover:bg-muted/60 hover:border-primary/30 hover:shadow-sm active:scale-[0.98]"
+                >
                   <span className="text-xs font-semibold text-foreground truncate">{status}</span>
                   <span className="text-sm font-black text-foreground ml-2">{count}</span>
                 </div>

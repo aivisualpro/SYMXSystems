@@ -56,9 +56,12 @@ export function SectionHeader({ title, icon: Icon, count, onAdd }: { title: stri
   );
 }
 
-export function KPICard({ icon: Icon, label, value, sub, color }: { icon: any; label: string; value: any; sub?: string; color: string }) {
+export function KPICard({ icon: Icon, label, value, sub, color, onClick }: { icon: any; label: string; value: any; sub?: string; color: string; onClick?: () => void }) {
   return (
-    <div className="relative group overflow-hidden rounded-xl border border-border bg-card p-4 transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
+    <div
+      onClick={onClick}
+      className={`relative group overflow-hidden rounded-xl border border-border bg-card p-4 transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 ${onClick ? "cursor-pointer" : ""}`}
+    >
       <div className="absolute inset-0 bg-gradient-to-br from-transparent to-transparent group-hover:from-primary/[0.03] group-hover:to-transparent transition-all duration-500" />
       <div className="relative flex items-start justify-between">
         <div>

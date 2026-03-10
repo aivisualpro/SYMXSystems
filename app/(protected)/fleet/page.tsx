@@ -46,11 +46,11 @@ export default function FleetOverviewPage() {
       <div className="space-y-5">
         {/* KPI Cards — 5 across */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <KPICard icon={IconCar} label="Total Fleet" value={kpis.totalVehicles} sub="All vehicles" color="bg-blue-500/15 text-blue-600 dark:text-blue-400" />
-          <KPICard icon={IconCheck} label="Active" value={kpis.activeVehicles} sub="Operational" color="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" />
-          <KPICard icon={IconTool} label="Open Repairs" value={totalOpenRepairs} sub="Needs attention" color="bg-amber-500/15 text-amber-600 dark:text-amber-400" />
-          <KPICard icon={IconClipboardCheck} label="Inspections" value={recentInspections.length} sub="Recent" color="bg-violet-500/15 text-violet-600 dark:text-violet-400" />
-          <KPICard icon={IconFileInvoice} label="Rental Agreements" value={rs.total} sub={`$${rs.totalAmount.toLocaleString()} total`} color="bg-teal-500/15 text-teal-600 dark:text-teal-400" />
+          <KPICard icon={IconCar} label="Total Fleet" value={kpis.totalVehicles} sub="All vehicles" color="bg-blue-500/15 text-blue-600 dark:text-blue-400" onClick={() => router.push("/fleet/vehicles")} />
+          <KPICard icon={IconCheck} label="Active" value={kpis.activeVehicles} sub="Operational" color="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" onClick={() => router.push("/fleet/vehicles?status=Active")} />
+          <KPICard icon={IconTool} label="Open Repairs" value={totalOpenRepairs} sub="Needs attention" color="bg-amber-500/15 text-amber-600 dark:text-amber-400" onClick={() => router.push("/fleet/repairs")} />
+          <KPICard icon={IconClipboardCheck} label="Inspections" value={recentInspections.length} sub="Recent" color="bg-violet-500/15 text-violet-600 dark:text-violet-400" onClick={() => router.push("/fleet/inspections")} />
+          <KPICard icon={IconFileInvoice} label="Rental Agreements" value={rs.total} sub={`$${rs.totalAmount.toLocaleString()} total`} color="bg-teal-500/15 text-teal-600 dark:text-teal-400" onClick={() => router.push("/fleet/rentals")} />
         </div>
 
         {/* Row 2 — 3 columns: Status Donut, Ownership Donut, Rental Stats */}
@@ -165,7 +165,7 @@ export default function FleetOverviewPage() {
             ) : (
               <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
                 {openRepairs.map((r: any, i: number) => (
-                  <div key={r._id || i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors group cursor-pointer">
+                  <div key={r._id || i} onClick={() => router.push(`/fleet/repairs?highlight=${r._id}`)} className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors group cursor-pointer">
                     <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
                       <IconTool size={14} className="text-amber-500" />
                     </div>

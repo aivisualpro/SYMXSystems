@@ -413,7 +413,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                             </>
                         )}
 
-                        {pathname.includes("/dispatching/time") && (
+                        {(pathname.includes("/dispatching/time") || pathname.includes("/dispatching/efficiency")) && (
                             <>
                                 <div className="w-px h-6 bg-border/60 mx-1" />
                                 <button
