@@ -11,6 +11,7 @@ import {
     DoorClosed,
     TrendingUp,
     Search,
+    Pencil,
     ChevronLeft,
     ChevronRight,
     Plus,
@@ -66,6 +67,8 @@ interface DispatchingContextType {
     setStats: (stats: DispatchingStats) => void;
     showRoutesInfo: boolean;
     setShowRoutesInfo: (show: boolean) => void;
+    globalEditMode: boolean;
+    setGlobalEditMode: (mode: boolean) => void;
 }
 
 const DispatchingContext = createContext<DispatchingContextType>({
@@ -81,6 +84,8 @@ const DispatchingContext = createContext<DispatchingContextType>({
     setStats: () => { },
     showRoutesInfo: false,
     setShowRoutesInfo: () => { },
+    globalEditMode: false,
+    setGlobalEditMode: () => { },
 });
 
 export function useDispatching() {
@@ -131,6 +136,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [refreshKey, setRefreshKey] = useState(0);
     const [stats, setStats] = useState<DispatchingStats>({});
     const [showRoutesInfo, setShowRoutesInfo] = useState(false);
+    const [globalEditMode, setGlobalEditMode] = useState(false);
 
     // ── Compute week dates ──
     const weekDates = useMemo(() => {
@@ -324,7 +330,12 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
 
     return (
         <DispatchingContext.Provider
-            value={{ selectedWeek, selectedDate, setSelectedDate, weekDates, searchQuery, routesGenerated, routesLoading, refreshRoutes, refreshKey, setStats, showRoutesInfo, setShowRoutesInfo }}
+            value={{
+                selectedWeek, selectedDate, setSelectedDate, weekDates, searchQuery,
+                routesGenerated, routesLoading, refreshRoutes, refreshKey, setStats,
+                showRoutesInfo, setShowRoutesInfo,
+                globalEditMode, setGlobalEditMode,
+            }}
         >
             <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-3">
                 {/* ── Tab Bar + Date Tabs (inline) ── */}
@@ -398,6 +409,24 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                 >
                                     <TableProperties className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                     Routes Info
+                                </button>
+                            </>
+                        )}
+
+                        {pathname.includes("/dispatching/time") && (
+                            <>
+                                <div className="w-px h-6 bg-border/60 mx-1" />
+                                <button
+                                    onClick={() => setGlobalEditMode(!globalEditMode)}
+                                    className={cn(
+                                        "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap select-none",
+                                        globalEditMode
+                                            ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                                            : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                                    )}
+                                >
+                                    <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                    {globalEditMode ? "Finish Editing" : "Quick Edit Table"}
                                 </button>
                             </>
                         )}

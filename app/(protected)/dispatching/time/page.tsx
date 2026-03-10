@@ -28,6 +28,8 @@ import {
     Ban,
     ShieldAlert,
     Clock,
+    AlertCircle,
+    Flag,
     type LucideIcon,
 } from "lucide-react";
 import {
@@ -44,7 +46,15 @@ import {
     DropdownMenuSeparator,
     DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import {
+    Sheet,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+    SheetDescription,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 // ── Type Options (colored pills) ──
@@ -73,8 +83,8 @@ const getTypeStyle = (value: string) => {
 
 // ── Attendance Options ──
 const ATTENDANCE_OPTIONS = [
-    { label: "Present", icon: CheckCircle2, bg: "bg-emerald-500/15", text: "text-emerald-500", border: "border-emerald-500/30", iconColor: "text-emerald-500" },
-    { label: "Absent", icon: XCircle, bg: "bg-red-500/15", text: "text-red-400", border: "border-red-500/30", iconColor: "text-red-400" },
+    { label: "Present", icon: CheckCircle2, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700", iconColor: "text-white" },
+    { label: "Absent", icon: XCircle, bg: "bg-red-600", text: "text-white", border: "border-red-700", iconColor: "text-white" },
     { label: "", icon: CircleDashed, bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600", iconColor: "text-zinc-400", displayLabel: "Clear" },
 ];
 const getAttendanceStyle = (value: string) => {
@@ -101,9 +111,10 @@ const COLUMNS = [
     { key: "amazonAppLogout", label: "AMZ Logout", width: "w-[80px]" },
     { key: "inspectionTime", label: "Inspection", width: "w-[80px]" },
     { key: "totalHours", label: "Total Hrs", width: "w-[70px]" },
+    { key: "actions", label: "", width: "w-[40px]" },
 ] as const;
 
-const GRID_TEMPLATE = "1fr 95px 100px 75px 70px 75px 70px 70px 70px 75px 70px 65px 80px 80px 70px";
+const GRID_TEMPLATE = "minmax(160px, 1fr) 95px 100px 75px 70px 75px 70px 70px 70px 75px 70px 65px 80px 80px 70px 40px";
 
 // ── Editable fields ──
 const EDITABLE_FIELDS = new Set([
@@ -138,12 +149,145 @@ interface RouteRow {
     amazonAppLogout: string;
     inspectionTime: string;
     totalHours: string;
+    profileImage?: string;
 }
+
+// ── Formatting Rules Helpers ──
+const parseSmartTime = (val: string): string => {
+    if (!val) return "";
+    const d = val.replace(/\D/g, "");
+    if (!d) return "";
+
+    let hours = 0;
+    let mins = 0;
+
+    if (d.length <= 2) {
+        hours = parseInt(d, 10);
+    } else if (d.length === 3) {
+        hours = parseInt(d.substring(0, 1), 10);
+        mins = parseInt(d.substring(1, 3), 10);
+    } else {
+        hours = parseInt(d.substring(0, 2), 10);
+        mins = parseInt(d.substring(2, 4), 10);
+    }
+
+    if (hours > 23) hours = 23;
+    if (mins > 59) mins = 59;
+
+    return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+};
+
+const timeToMins = (t: string | undefined | null) => {
+    if (!t) return 0;
+    const parts = t.split(":");
+    if (parts.length < 2) return 0;
+    return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+};
+
+const getElapsedMins = (inDayStr: string, dateStr: string) => {
+    if (!inDayStr) return 0;
+    const inMins = timeToMins(inDayStr);
+    const today = new Date();
+    // Use local time for comparison since time strings are local
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const rowDate = dateStr?.split("T")[0];
+
+    if (rowDate === todayStr) {
+        return (today.getHours() * 60 + today.getMinutes()) - inMins;
+    } else if (rowDate && rowDate < todayStr) {
+        return 9999;
+    } else {
+        return -9999;
+    }
+};
+
+const getCellFormat = (row: RouteRow, field: string) => {
+    if (field === "paycomInDay") {
+        const inMins = timeToMins(row.paycomInDay);
+        const attMins = timeToMins(row.attendanceTime);
+        if (row.paycomInDay && row.attendanceTime) {
+            if (inMins - attMins > 10 || attMins - inMins > 5) {
+                return { bg: "bg-red-600", text: "text-white font-bold", inputBg: "bg-red-600 text-white focus:bg-red-500 focus:text-white" };
+            } else if (attMins - inMins <= 5 && inMins - attMins <= 10) {
+                return { bg: "bg-emerald-600", text: "text-white font-bold", inputBg: "bg-emerald-600 text-white focus:bg-emerald-500 focus:text-white" };
+            }
+        }
+    }
+
+    if (field === "paycomOutLunch") {
+        const outLunchValid = !!row.paycomOutLunch;
+        const outLunchMins = timeToMins(row.paycomOutLunch);
+        const inDayValid = !!row.paycomInDay;
+        const inDayMins = timeToMins(row.paycomInDay);
+        const amzOutValid = !!row.amazonOutLunch;
+        const type = row.type?.trim().toLowerCase() || "";
+
+        const isTypeCR = ["route", "crash"].includes(type);
+        const isTypeOCR = ["open", "close", "rescue"].includes(type);
+        const isTypeOCRC = ["open", "close", "rescue", "crash"].includes(type);
+        const isTypeCRC0 = ["route", "crash", "c0"].includes(type);
+
+        const elapsed = getElapsedMins(row.paycomInDay, row.date);
+        const duration = outLunchValid && inDayValid ? (outLunchMins - inDayMins) : 0;
+
+        // D: Red with alarm icon
+        const condD_noPunch = !outLunchValid && inDayValid && elapsed >= 295;
+        const condD_punchLate = outLunchValid && inDayValid && duration >= 295;
+        const condD = condD_noPunch || condD_punchLate;
+
+        // C: Red
+        const condC = outLunchValid && isTypeOCRC && duration > 330;
+
+        // E: Red with different icon
+        const condE = outLunchValid && isTypeCR && (!amzOutValid || row.paycomOutLunch !== row.amazonOutLunch);
+
+        // F: Green with icon
+        const condF = outLunchValid && isTypeOCR && duration <= 330;
+
+        // G: Green with different icon
+        const condG = isTypeCRC0 && outLunchValid && amzOutValid && (row.paycomOutLunch === row.amazonOutLunch);
+
+        if (condD) return { bg: "bg-red-600", text: "text-white font-bold", inputBg: "bg-red-600 text-white focus:bg-red-500 focus:text-white", icon: Flag, iconColor: "text-white fill-white" };
+        if (condC) return { bg: "bg-red-600", text: "text-white font-bold", inputBg: "bg-red-600 text-white focus:bg-red-500 focus:text-white", icon: Flag, iconColor: "text-white fill-white" };
+        if (condE) return { bg: "bg-red-600", text: "text-white font-bold", inputBg: "bg-red-600 text-white focus:bg-red-500 focus:text-white", icon: Flag, iconColor: "text-white fill-white" };
+        if (condG) return { bg: "bg-emerald-600", text: "text-white font-bold", inputBg: "bg-emerald-600 text-white focus:bg-emerald-500 focus:text-white", icon: CheckCircle2, iconColor: "text-white" };
+        if (condF) return { bg: "bg-emerald-600", text: "text-white font-bold", inputBg: "bg-emerald-600 text-white focus:bg-emerald-500 focus:text-white", icon: CheckCircle2, iconColor: "text-white" };
+    }
+
+    if (field === "paycomInLunch") {
+        const inLunchValid = !!row.paycomInLunch;
+        const inLunchMins = timeToMins(row.paycomInLunch);
+        const outLunchValid = !!row.paycomOutLunch;
+        const outLunchMins = timeToMins(row.paycomOutLunch);
+        const amzInValid = !!row.amazonInLunch;
+
+        const type = row.type?.trim().toLowerCase() || "";
+        const isTypeCR = ["route", "crash"].includes(type);
+        const isTypeOCR = ["open", "close", "rescue"].includes(type);
+        const isTypeCRC0 = ["route", "crash", "c0"].includes(type);
+
+        const condA1 = inLunchValid && inLunchMins > 0 && isTypeCR && (!amzInValid || row.paycomInLunch !== row.amazonInLunch);
+        const condA2 = inLunchValid && inLunchMins > 0 && outLunchValid && (inLunchMins - outLunchMins < 30);
+
+        if (condA1 || condA2) {
+            return { bg: "bg-red-600", text: "text-white font-bold", inputBg: "bg-red-600 text-white focus:bg-red-500 focus:text-white" };
+        }
+
+        const condB1 = isTypeOCR && outLunchValid && inLunchValid && (inLunchMins - outLunchMins >= 30) && inLunchMins > 0;
+        const condB2 = isTypeCRC0 && inLunchValid && inLunchMins > 0 && amzInValid && (row.paycomInLunch === row.amazonInLunch);
+
+        if (condB1 || condB2) {
+            return { bg: "bg-emerald-600", text: "text-white font-bold", inputBg: "bg-emerald-600 text-white focus:bg-emerald-500 focus:text-white" };
+        }
+    }
+
+    return null;
+};
 
 type SortKey = typeof COLUMNS[number]["key"];
 
 export default function TimePage() {
-    const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats } = useDispatching();
+    const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats, globalEditMode } = useDispatching();
 
     const [allRoutes, setAllRoutes] = useState<RouteRow[]>([]);
     const [loading, setLoading] = useState(false);
@@ -153,6 +297,23 @@ export default function TimePage() {
     // ── Inline editing state ──
     const [editingCell, setEditingCell] = useState<{ rowId: string; field: string } | null>(null);
     const [editValue, setEditValue] = useState("");
+
+    // ── Quick Edit Modal State ──
+    const [quickEditRow, setQuickEditRow] = useState<RouteRow | null>(null);
+    const [quickEditForm, setQuickEditForm] = useState<Partial<RouteRow>>({});
+    const [punchStatusOptions, setPunchStatusOptions] = useState<string[]>([]);
+
+    // ── Fetch Punch Status Options ──
+    useEffect(() => {
+        let mounted = true;
+        fetch("/api/admin/settings/dropdowns?type=punch%20status")
+            .then(res => res.ok ? res.json() : [])
+            .then(data => {
+                if (mounted && Array.isArray(data)) setPunchStatusOptions(data.map(d => d.description));
+            })
+            .catch(() => { });
+        return () => { mounted = false; };
+    }, []);
 
     // ── Fetch routes ──
     useEffect(() => {
@@ -188,6 +349,7 @@ export default function TimePage() {
                         amazonAppLogout: rec.amazonAppLogout || "",
                         inspectionTime: rec.inspectionTime || "",
                         totalHours: rec.totalHours || "",
+                        profileImage: emp?.profileImage || "",
                     };
                 });
                 setAllRoutes(rows);
@@ -215,6 +377,29 @@ export default function TimePage() {
             toast.error(err.message || "Failed to update");
         }
     }, []);
+
+    // ── Quick Edit Save Handler ──
+    const handleQuickEditSave = async () => {
+        if (!quickEditRow) return;
+        const updates = { ...quickEditForm };
+        const routeId = quickEditRow._id;
+
+        // Optimistic update
+        setAllRoutes(prev => prev.map(r => r._id === routeId ? { ...r, ...updates } : r));
+        setQuickEditRow(null);
+
+        try {
+            const res = await fetch("/api/dispatching/routes", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ routeId, updates }),
+            });
+            if (!res.ok) throw new Error();
+            toast.success(`Updated time entry for ${quickEditRow.employeeName}`);
+        } catch {
+            toast.error("Failed to update time entry");
+        }
+    };
 
     // ── Sort ──
     const handleSort = (key: SortKey) => {
@@ -303,14 +488,87 @@ export default function TimePage() {
         const isEditable = EDITABLE_FIELDS.has(field);
         const displayVal = value === 0 || value === "" ? "—" : String(value);
 
+        const style = getCellFormat(row, field);
+        const Icon = style?.icon;
+
+        const isTimeField = field !== "routeNumber" && field !== "punchStatus";
+
+        const handleTimeInputKeyDown = (val: string) => {
+            return isTimeField ? parseSmartTime(val) : val;
+        };
+
         if (isEditing) {
             return (
                 <div className="flex items-center gap-1">
-                    <Input autoFocus value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") handleSave(row._id, field, editValue); if (e.key === "Escape") setEditingCell(null); }}
+                    <Input autoFocus value={editValue}
+                        onChange={(e) => {
+                            if (isTimeField) {
+                                setEditValue(e.target.value.replace(/[^\d:]/g, ""));
+                            } else {
+                                setEditValue(e.target.value);
+                            }
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                const finalVal = handleTimeInputKeyDown(editValue);
+                                handleSave(row._id, field, finalVal);
+                            }
+                            if (e.key === "Escape") setEditingCell(null);
+                        }}
+                        onBlur={() => {
+                            if (isTimeField) setEditValue(handleTimeInputKeyDown(editValue));
+                        }}
                         className="h-6 text-xs px-1.5 w-full" />
-                    <button onClick={() => handleSave(row._id, field, editValue)} className="text-emerald-500 hover:text-emerald-400 shrink-0"><Check className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => handleSave(row._id, field, handleTimeInputKeyDown(editValue))} className="text-emerald-500 hover:text-emerald-400 shrink-0"><Check className="h-3.5 w-3.5" /></button>
                     <button onClick={() => setEditingCell(null)} className="text-muted-foreground hover:text-foreground shrink-0"><X className="h-3.5 w-3.5" /></button>
+                </div>
+            );
+        }
+
+        if (globalEditMode && isEditable) {
+            if (field === "punchStatus") {
+                return (
+                    <select
+                        value={value || ""}
+                        onChange={(e) => handleSave(row._id, field, e.target.value)}
+                        className="w-full h-7 bg-foreground/5 relative z-10 text-[11px] px-1 rounded border border-border/40 focus:border-primary focus:bg-background focus:outline-none transition-all appearance-none shadow-inner"
+                    >
+                        <option value=""></option>
+                        {punchStatusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                );
+            }
+            return (
+                <div className="relative w-full h-7">
+                    <input
+                        defaultValue={value === 0 ? "" : String(value)}
+                        onChange={(e) => {
+                            if (isTimeField) {
+                                e.target.value = e.target.value.replace(/[^\d:]/g, "");
+                            }
+                        }}
+                        onBlur={(e) => {
+                            let updatedVal = e.target.value;
+                            if (isTimeField) updatedVal = handleTimeInputKeyDown(updatedVal);
+                            e.target.value = updatedVal;
+
+                            if (updatedVal !== String(value)) {
+                                handleSave(row._id, field, updatedVal);
+                            }
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                e.currentTarget.blur();
+                            }
+                        }}
+                        className={cn(
+                            "w-full h-full text-xs px-1.5 rounded border border-border/40 focus:border-primary focus:outline-none transition-all placeholder:text-muted-foreground/30 shadow-inner",
+                            style ? `${style.inputBg} ${style.text}` : "bg-foreground/5 focus:bg-background relative z-10",
+                            Icon ? "pr-6" : ""
+                        )}
+                        placeholder="—"
+                    />
+                    {Icon && <Icon className={cn("absolute right-1.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none", (style as any)?.iconColor || style?.text || "opacity-80")} />}
                 </div>
             );
         }
@@ -318,14 +576,20 @@ export default function TimePage() {
         if (isEditable) {
             return (
                 <button onClick={() => { setEditingCell({ rowId: row._id, field }); setEditValue(value === 0 ? "" : String(value)); }}
-                    className="group/cell flex items-center gap-1 text-left w-full">
-                    <span className={cn("text-[11px] truncate", displayVal === "—" ? "text-muted-foreground/40" : "text-foreground")}>{displayVal}</span>
-                    <Pencil className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/60 transition-opacity shrink-0" />
+                    className={cn("group/cell flex items-center gap-1 text-left w-full h-full min-h-[28px] rounded px-1 transition-colors border border-transparent", style && `${style.bg} ${style.text}`)}>
+                    {Icon && <Icon className={cn("h-3.5 w-3.5 shrink-0", (style as any).iconColor || style.text || "opacity-80")} />}
+                    <span className={cn("text-[11px] truncate w-full", !style && (displayVal === "—" ? "text-muted-foreground/40" : "text-foreground"))}>{displayVal}</span>
+                    <Pencil className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/60 transition-opacity shrink-0 hidden sm:block ml-auto" />
                 </button>
             );
         }
 
-        return <span className={cn("text-[11px] truncate", displayVal === "—" ? "text-muted-foreground/40" : "text-foreground")}>{displayVal}</span>;
+        return (
+            <div className={cn("flex items-center gap-1 w-full rounded px-1 min-h-[28px]", style && `${style.bg} ${style.text}`)}>
+                {Icon && <Icon className={cn("h-3.5 w-3.5 shrink-0", (style as any).iconColor || style.text || "opacity-80")} />}
+                <span className={cn("text-[11px] truncate block w-full", !style && (displayVal === "—" ? "text-muted-foreground/40" : "text-foreground"))}>{displayVal}</span>
+            </div>
+        );
     };
 
     // ── Attendance dropdown ──
@@ -395,7 +659,19 @@ export default function TimePage() {
                             <div key={row._id} className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors"
                                 style={{ gridTemplateColumns: GRID_TEMPLATE }}>
                                 {/* Employee */}
-                                <div className="flex items-center gap-2 min-w-0"><span className="text-xs font-semibold truncate">{row.employeeName}</span></div>
+                                <div className="flex items-center gap-2 min-w-0 pr-2">
+                                    {row.profileImage ? (
+                                        <img src={row.profileImage} alt={row.employeeName} className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-border" />
+                                    ) : (
+                                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 ring-1 ring-primary/20">
+                                            <span className="text-[9px] font-bold text-primary">{row.employeeName.split(" ").map(n => n[0]).join("").slice(0, 2)}</span>
+                                        </div>
+                                    )}
+                                    <span className="text-xs font-semibold truncate hover:text-primary transition-colors cursor-pointer" onClick={() => {
+                                        setQuickEditRow(row);
+                                        setQuickEditForm({ ...row });
+                                    }}>{row.employeeName}</span>
+                                </div>
                                 {/* Attendance */}
                                 {renderAttendance(row)}
                                 {/* Type */}
@@ -424,6 +700,18 @@ export default function TimePage() {
                                 {renderCell(row, "inspectionTime", row.inspectionTime)}
                                 {/* Total Hours */}
                                 {renderCell(row, "totalHours", row.totalHours)}
+                                {/* Actions */}
+                                <div className="flex justify-end pr-1">
+                                    <button
+                                        onClick={() => {
+                                            setQuickEditRow(row);
+                                            setQuickEditForm({ ...row });
+                                        }}
+                                        className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground hover:bg-primary/15 hover:text-primary transition-colors"
+                                    >
+                                        <Pencil className="h-3 w-3" />
+                                    </button>
+                                </div>
                             </div>
                         ))}
 
@@ -439,6 +727,147 @@ export default function TimePage() {
                         <span className="text-[11px] text-muted-foreground">{totalFiltered} of {totalForDate} employees</span>
                     </div>
                 </div>
+
+                {/* ── Quick Edit Sheet ── */}
+                <Sheet open={!!quickEditRow} onOpenChange={(open) => !open && setQuickEditRow(null)}>
+                    <SheetContent side="right" className="w-full sm:w-[450px] border-l border-border bg-background p-0 flex flex-col shadow-2xl">
+                        <SheetHeader className="px-6 py-5 border-b border-border bg-muted/20">
+                            <SheetTitle className="text-lg font-bold flex items-center gap-3">
+                                {quickEditRow?.profileImage ? (
+                                    <img src={quickEditRow.profileImage} alt="" className="w-10 h-10 rounded-full object-cover ring-2 ring-primary/20" />
+                                ) : (
+                                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center ring-2 ring-primary/20">
+                                        <span className="text-sm font-bold text-primary">{quickEditRow?.employeeName?.split(" ").map(n => n[0]).join("").slice(0, 2)}</span>
+                                    </div>
+                                )}
+                                <div>
+                                    <div className="text-foreground">{quickEditRow?.employeeName}</div>
+                                    <div className="text-xs text-muted-foreground font-medium mt-0.5">Quick Edit Time Entries</div>
+                                </div>
+                            </SheetTitle>
+                        </SheetHeader>
+
+                        <div className="flex-1 overflow-y-auto p-6">
+                            <div className="grid grid-cols-2 gap-x-5 gap-y-6">
+                                <div className="col-span-2 space-y-1.5 border-b border-border/50 pb-5">
+                                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Punch Status</label>
+                                    <select
+                                        className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                        value={quickEditForm.punchStatus || ""}
+                                        onChange={e => setQuickEditForm(prev => ({ ...prev, punchStatus: e.target.value }))}
+                                    >
+                                        <option value="">Select Status...</option>
+                                        {punchStatusOptions.map(opt => (
+                                            <option key={opt} value={opt}>{opt}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] font-bold text-muted-foreground">Attendance Time</label>
+                                    <Input
+                                        value={quickEditForm.attendanceTime || ""}
+                                        onChange={e => setQuickEditForm(prev => ({ ...prev, attendanceTime: e.target.value.replace(/[^\d:]/g, "") }))}
+                                        onBlur={() => setQuickEditForm(prev => ({ ...prev, attendanceTime: parseSmartTime(prev.attendanceTime || "") }))}
+                                        className="h-9 shadow-sm" placeholder="—"
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] font-bold text-muted-foreground">Inspection Time</label>
+                                    <Input
+                                        value={quickEditForm.inspectionTime || ""}
+                                        onChange={e => setQuickEditForm(prev => ({ ...prev, inspectionTime: e.target.value.replace(/[^\d:]/g, "") }))}
+                                        onBlur={() => setQuickEditForm(prev => ({ ...prev, inspectionTime: parseSmartTime(prev.inspectionTime || "") }))}
+                                        className="h-9 shadow-sm" placeholder="—"
+                                    />
+                                </div>
+
+                                <div className="col-span-2 mt-2">
+                                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-primary mb-3">Paycom Data</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[11px] font-semibold text-muted-foreground">In Day</label>
+                                            <Input
+                                                value={quickEditForm.paycomInDay || ""}
+                                                onChange={e => setQuickEditForm(prev => ({ ...prev, paycomInDay: e.target.value.replace(/[^\d:]/g, "") }))}
+                                                onBlur={() => setQuickEditForm(prev => ({ ...prev, paycomInDay: parseSmartTime(prev.paycomInDay || "") }))}
+                                                className="h-9 shadow-sm" placeholder="—"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[11px] font-semibold text-muted-foreground">Out Lunch</label>
+                                            <Input
+                                                value={quickEditForm.paycomOutLunch || ""}
+                                                onChange={e => setQuickEditForm(prev => ({ ...prev, paycomOutLunch: e.target.value.replace(/[^\d:]/g, "") }))}
+                                                onBlur={() => setQuickEditForm(prev => ({ ...prev, paycomOutLunch: parseSmartTime(prev.paycomOutLunch || "") }))}
+                                                className="h-9 shadow-sm" placeholder="—"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[11px] font-semibold text-muted-foreground">In Lunch</label>
+                                            <Input
+                                                value={quickEditForm.paycomInLunch || ""}
+                                                onChange={e => setQuickEditForm(prev => ({ ...prev, paycomInLunch: e.target.value.replace(/[^\d:]/g, "") }))}
+                                                onBlur={() => setQuickEditForm(prev => ({ ...prev, paycomInLunch: parseSmartTime(prev.paycomInLunch || "") }))}
+                                                className="h-9 shadow-sm" placeholder="—"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[11px] font-semibold text-muted-foreground">Out Day</label>
+                                            <Input
+                                                value={quickEditForm.paycomOutDay || ""}
+                                                onChange={e => setQuickEditForm(prev => ({ ...prev, paycomOutDay: e.target.value.replace(/[^\d:]/g, "") }))}
+                                                onBlur={() => setQuickEditForm(prev => ({ ...prev, paycomOutDay: parseSmartTime(prev.paycomOutDay || "") }))}
+                                                className="h-9 shadow-sm" placeholder="—"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="col-span-2 mt-2">
+                                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-orange-500 mb-3">Amazon Data</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[11px] font-semibold text-muted-foreground">In Lunch</label>
+                                            <Input
+                                                value={quickEditForm.amazonInLunch || ""}
+                                                onChange={e => setQuickEditForm(prev => ({ ...prev, amazonInLunch: e.target.value.replace(/[^\d:]/g, "") }))}
+                                                onBlur={() => setQuickEditForm(prev => ({ ...prev, amazonInLunch: parseSmartTime(prev.amazonInLunch || "") }))}
+                                                className="h-9 shadow-sm" placeholder="—"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[11px] font-semibold text-muted-foreground">Out Lunch</label>
+                                            <Input
+                                                value={quickEditForm.amazonOutLunch || ""}
+                                                onChange={e => setQuickEditForm(prev => ({ ...prev, amazonOutLunch: e.target.value.replace(/[^\d:]/g, "") }))}
+                                                onBlur={() => setQuickEditForm(prev => ({ ...prev, amazonOutLunch: parseSmartTime(prev.amazonOutLunch || "") }))}
+                                                className="h-9 shadow-sm" placeholder="—"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[11px] font-semibold text-muted-foreground">App Logout</label>
+                                            <Input
+                                                value={quickEditForm.amazonAppLogout || ""}
+                                                onChange={e => setQuickEditForm(prev => ({ ...prev, amazonAppLogout: e.target.value.replace(/[^\d:]/g, "") }))}
+                                                onBlur={() => setQuickEditForm(prev => ({ ...prev, amazonAppLogout: parseSmartTime(prev.amazonAppLogout || "") }))}
+                                                className="h-9 shadow-sm" placeholder="—"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 border-t border-border bg-muted/20 flex justify-end gap-3 shrink-0">
+                            <Button variant="outline" size="sm" onClick={() => setQuickEditRow(null)}>Cancel</Button>
+                            <Button size="sm" onClick={handleQuickEditSave} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25">
+                                Save Changes
+                            </Button>
+                        </div>
+                    </SheetContent>
+                </Sheet>
             </div>
         </TooltipProvider>
     );
