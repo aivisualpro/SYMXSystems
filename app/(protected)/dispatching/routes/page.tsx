@@ -510,6 +510,8 @@ export default function RoutesPage() {
         setCollapsedGroups(prev => ({ ...prev, [group]: !prev[group] }));
     };
 
+    const { confirmationFilter } = useDispatching();
+
     // ── Filter by date, search, sort, and group ──
     const { groups, totalFiltered, totalForDate } = useMemo(() => {
         // STEP 1: Enrich ALL routes with computed fields (before date filter for 7d hrs)
@@ -669,9 +671,19 @@ export default function RoutesPage() {
         }
 
         let filtered = dateFiltered;
+        if (confirmationFilter !== "all") {
+            filtered = filtered.filter(r => {
+                const status = r.confirmationStatus?.status;
+                if (confirmationFilter === "none") {
+                    return !status;
+                }
+                return status === confirmationFilter;
+            });
+        }
+
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
-            filtered = dateFiltered.filter(
+            filtered = filtered.filter(
                 (r) =>
                     r.employeeName.toLowerCase().includes(q) ||
                     r.transporterId.toLowerCase().includes(q) ||
@@ -729,7 +741,7 @@ export default function RoutesPage() {
         }));
 
         return { groups, totalFiltered: sorted.length, totalForDate };
-    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir, wstRevenueMap, routeCountsByDate, initialRoutesComp]);
+    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir, wstRevenueMap, routeCountsByDate, initialRoutesComp, confirmationFilter]);
 
     // ── Push stats to layout ──
     useEffect(() => {
