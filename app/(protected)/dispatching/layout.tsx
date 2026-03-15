@@ -72,6 +72,8 @@ interface DispatchingContextType {
     setShowRoutesInfo: (show: boolean) => void;
     globalEditMode: boolean;
     setGlobalEditMode: (mode: boolean) => void;
+    confirmationFilter: string;
+    setConfirmationFilter: (filter: string) => void;
 }
 
 const DispatchingContext = createContext<DispatchingContextType>({
@@ -89,6 +91,8 @@ const DispatchingContext = createContext<DispatchingContextType>({
     setShowRoutesInfo: () => { },
     globalEditMode: false,
     setGlobalEditMode: () => { },
+    confirmationFilter: "all",
+    setConfirmationFilter: () => { },
 });
 
 export function useDispatching() {
@@ -173,6 +177,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [showRoutesInfo, setShowRoutesInfo] = useState(false);
     const [globalEditMode, setGlobalEditMode] = useState(false);
     const [pdfLoading, setPdfLoading] = useState(false);
+    const [confirmationFilter, setConfirmationFilter] = useState("all");
 
     // ── Sync state changes to URL ──
     const updateURL = useCallback((week: string, date: string) => {
@@ -429,6 +434,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                 routesGenerated, routesLoading, refreshRoutes, refreshKey, setStats,
                 showRoutesInfo, setShowRoutesInfo,
                 globalEditMode, setGlobalEditMode,
+                confirmationFilter, setConfirmationFilter,
             }}
         >
             <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-3">
@@ -498,6 +504,20 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                         {pathname.includes("/dispatching/routes") && (
                             <>
                                 <div className="w-px h-6 bg-border/60 mx-1" />
+                                <Select value={confirmationFilter} onValueChange={setConfirmationFilter}>
+                                    <SelectTrigger className="h-8 sm:h-9 min-w-[130px] sm:min-w-[150px] bg-card text-[11px] sm:text-xs">
+                                        <SelectValue placeholder="All Status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Conf Status</SelectItem>
+                                        <SelectItem value="confirmed">Confirmed</SelectItem>
+                                        <SelectItem value="change_requested">Change Requested</SelectItem>
+                                        <SelectItem value="sent">Sent</SelectItem>
+                                        <SelectItem value="pending">Pending</SelectItem>
+                                        <SelectItem value="none">None (—)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+
                                 <button
                                     onClick={() => setShowRoutesInfo(true)}
                                     className={cn(
