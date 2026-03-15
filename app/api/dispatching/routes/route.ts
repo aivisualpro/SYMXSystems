@@ -9,6 +9,7 @@ import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
 import SYMXSetting from "@/lib/models/SYMXSetting";
 import SymxUser from "@/lib/models/SymxUser";
 import Vehicle from "@/lib/models/Vehicle";
+import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest) {
         }
 
         // ── PHASE 2: ALL enrichment queries in parallel ──
-        const [employees, routeCountsByDate, auditCountsRaw, vehicleDocs] = await Promise.all([
+        const [employees, routeCountsByDate, auditCountsRaw, vehicleDocs, confirmationDocs] = await Promise.all([
             SymxEmployee.find(
                 { transporterId: { $in: transporterIds } },
                 { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, profileImage: 1, routesComp: 1, rate: 1 }
@@ -103,6 +104,13 @@ export async function GET(req: NextRequest) {
             allVins.length > 0
                 ? Vehicle.find({ vin: { $in: allVins } }, { vin: 1, vehicleName: 1 }).lean()
                 : [],
+            ScheduleConfirmation.find(
+                {
+                    transporterId: { $in: transporterIds },
+                    createdAt: { $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) } // Last 2 weeks
+                },
+                { transporterId: 1, scheduleDate: 1, status: 1, changeRemarks: 1, updatedAt: 1 }
+            ).lean()
         ]);
 
         // ── Build maps (all O(n), very fast) ──
@@ -147,6 +155,21 @@ export async function GET(req: NextRequest) {
             if (v.vin && v.vehicleName) vehicleNames[v.vin] = v.vehicleName;
         });
 
+        // Build Confirmation Status Map
+        const confirmationMap: Record<string, any> = {};
+        confirmationDocs.forEach((c: any) => {
+            const dateStr = c.scheduleDate && typeof c.scheduleDate === 'string' ? c.scheduleDate.split('T')[0] : "";
+            const key = `${c.transporterId}_${dateStr}`;
+            // If multiple records for same day, prioritize "confirmed" or "change_requested" over "pending"
+            if (!confirmationMap[key] || c.status === "confirmed" || c.status === "change_requested") {
+                confirmationMap[key] = {
+                    status: c.status,
+                    changeRemarks: c.changeRemarks || "",
+                    updatedAt: c.updatedAt
+                };
+            }
+        });
+
         return NextResponse.json({
             routes,
             employees: employeeMap,
@@ -155,6 +178,7 @@ export async function GET(req: NextRequest) {
             initialRoutesComp: initialCompMap,
             auditCounts,
             vehicleNames,
+            confirmations: confirmationMap,
             routesGenerated: true,
         });
     } catch (error: any) {

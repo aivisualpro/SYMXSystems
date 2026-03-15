@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useDispatching } from "../layout";
 import { useDataStore } from "@/hooks/use-data-store";
 import { cn } from "@/lib/utils";
+import { MessageStatusBadge } from "@/components/ui-elements/message-status-badge";
 import {
     Users,
     Phone,
@@ -175,7 +176,7 @@ function toPacificDate(d: string | Date): string {
 // ── Column Definitions ──
 const COLUMNS = [
     { key: "employee", label: "Employee", minW: 140, sticky: true },
-
+    { key: "confirmationStatus", label: "Conf Status", minW: 100, sticky: false },
     { key: "wst", label: "WST", minW: 50, sticky: false },
     { key: "wstRevenue", label: "WST Rev", minW: 62, sticky: false },
     { key: "routeNumber", label: "Route #", minW: 60, sticky: false },
@@ -237,6 +238,7 @@ interface RouteRow {
     routeSize: string;
     driverEfficiency: number;
     employeeName: string;
+    confirmationStatus?: { status: string; changeRemarks?: string; updatedAt?: string } | null;
     phone: string;
     rate: number;
     routesCompleted: number;
@@ -369,6 +371,7 @@ export default function RoutesPage() {
                     routeSize: rec.routeSize || "",
                     driverEfficiency: rec.driverEfficiency || 0,
                     employeeName: emp?.name || rec.transporterId,
+                    confirmationStatus: null, // populated below
                     phone: emp?.phoneNumber || "",
                     rate: emp?.rate || 0,
                     routesCompleted: data.routeCounts?.[rec.transporterId] || 0,
@@ -407,6 +410,21 @@ export default function RoutesPage() {
                     routesCompletedPrev: 0,
                 };
             });
+
+            // Populate confirmation status map (handling the complex date part)
+            if (data.confirmations) {
+                rows.forEach(r => {
+                    const dateStr = r.date && typeof r.date === 'string' ? r.date.split('T')[0] : "";
+                    const key = `${r.transporterId}_${dateStr}`;
+                    const weeklyKey = `${r.transporterId}_`; // Fallback if confirmation is weekly (no specific date)
+                    
+                    if (data.confirmations[key]) {
+                        r.confirmationStatus = data.confirmations[key];
+                    } else if (data.confirmations[weeklyKey]) {
+                        r.confirmationStatus = data.confirmations[weeklyKey];
+                    }
+                });
+            }
 
             setAllRoutes(rows);
         };
@@ -675,6 +693,7 @@ export default function RoutesPage() {
             let aVal: any, bVal: any;
             const key = sortKey;
             if (key === "employee") { aVal = a.employeeName; bVal = b.employeeName; }
+            else if (key === "confirmationStatus") { aVal = a.confirmationStatus?.status || ""; bVal = b.confirmationStatus?.status || ""; }
             else if (numericKeys.has(key)) { aVal = (a as any)[key] || 0; bVal = (b as any)[key] || 0; }
             else { aVal = (a as any)[key] || ""; bVal = (b as any)[key] || ""; }
 
@@ -882,6 +901,19 @@ export default function RoutesPage() {
                                                                     {row.employeeName}
                                                                 </span>
                                                             </div>
+                                                        </td>
+
+                                                        {/* Confirmation Status */}
+                                                        <td className="px-2 py-1.5 align-middle">
+                                                            {row.confirmationStatus ? (
+                                                                <MessageStatusBadge
+                                                                    status={row.confirmationStatus.status}
+                                                                    createdAt={row.confirmationStatus.updatedAt}
+                                                                    changeRemarks={row.confirmationStatus.changeRemarks}
+                                                                />
+                                                            ) : (
+                                                                <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>
+                                                            )}
                                                         </td>
 
                                                         {/* 3. WST */}
