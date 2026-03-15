@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
+import { useDataStore } from "@/hooks/use-data-store";
 import { cn } from "@/lib/utils";
 import {
     Loader2,
@@ -182,7 +183,55 @@ export default function ClosingPage() {
             .catch(() => { });
     }, [selectedWeek]);
 
+    const store = useDataStore();
+    const hydratedRoutesRef = useRef(false);
+
     useEffect(() => {
+        // Try hydrating from global store for the first/default week
+        if (
+            !hydratedRoutesRef.current &&
+            store.initialized &&
+            store.dispatchingRoutes &&
+            store.dispatchingWeeks?.[0] === selectedWeek &&
+            selectedWeek
+        ) {
+            hydratedRoutesRef.current = true;
+            const data = store.dispatchingRoutes;
+            if (data.routes && data.routes.length > 0) {
+                const rows: RouteRow[] = data.routes.map((rec: any) => {
+                    const emp = data.employees?.[rec.transporterId];
+                    return {
+                        _id: rec._id,
+                        transporterId: rec.transporterId,
+                        date: rec.date,
+                        weekDay: rec.weekDay || "",
+                        employeeName: emp?.name || rec.transporterId,
+                        type: rec.type || "",
+                        routeNumber: rec.routeNumber || "",
+                        van: rec.van || "",
+                        routeDuration: rec.routeDuration || "",
+                        waveTime: rec.waveTime || "",
+                        inspectionTime: rec.inspectionTime || "",
+                        inspectionId: rec.inspectionId || "",
+                        actualDepartureTime: rec.actualDepartureTime || "",
+                        deliveryCompletionTime: rec.deliveryCompletionTime || "",
+                        profileImage: emp?.profileImage || "",
+                    };
+                });
+                setAllRoutes(rows);
+            }
+            // Also hydrate vehicles from store
+            if (store.fleet.vehicles && Array.isArray(store.fleet.vehicles)) {
+                const dict: Record<string, string> = {};
+                store.fleet.vehicles.forEach((v: any) => {
+                    if (v.unitNumber) dict[v.unitNumber] = v.vin;
+                    if (v.vehicleName) dict[v.vehicleName] = v.vin;
+                });
+                setVehiclesMap(dict);
+            }
+            setLoading(false);
+            return;
+        }
         fetchRoutes();
     }, [fetchRoutes, routesGenerated]);
 

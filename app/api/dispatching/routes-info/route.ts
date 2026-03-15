@@ -157,9 +157,21 @@ export async function POST(req: NextRequest) {
 
         const dateObj = new Date(date);
 
-        // Filter rows that have at least one non-empty field (don't save completely empty rows)
-        const dataFields = ["routeNumber", "stopCount", "packageCount", "routeDuration", "waveTime", "pad", "wst", "wstDuration", "bags", "ov", "stagingLocation", "transporterId"];
+        // ── Fetch existing RoutesInfo rows BEFORE saving, to detect driver replacements ──
+        const changedRowIndices = rows.map((r: any) => r.rowIndex);
+        const existingRows = await SYMXRoutesInfo.find(
+            { date: dateObj, rowIndex: { $in: changedRowIndices } },
+            { rowIndex: 1, transporterId: 1 }
+        ).lean() as any[];
 
+        const oldTransporterMap = new Map<number, string>();
+        existingRows.forEach((r: any) => {
+            if (r.transporterId && r.transporterId.trim() !== "") {
+                oldTransporterMap.set(r.rowIndex, r.transporterId);
+            }
+        });
+
+        // ── Upsert rows ──
         const ops = rows.map((row: any) => ({
             updateOne: {
                 filter: { date: dateObj, rowIndex: row.rowIndex },
@@ -189,7 +201,45 @@ export async function POST(req: NextRequest) {
             await SYMXRoutesInfo.bulkWrite(ops, { ordered: false });
         }
 
-        // For rows that have a transporterId, apply their info to SYMXRoutes
+        // ── Detect replaced drivers and clear their route info ──
+        // Build a set of new transporterIds from all rows for this date
+        // (will be used to check if old driver is still referenced by another row)
+        const newTransporterIdsByRow = new Map<number, string>();
+        rows.forEach((r: any) => {
+            newTransporterIdsByRow.set(r.rowIndex, (r.transporterId || "").trim());
+        });
+
+        const driversToClean = new Set<string>();
+        for (const [rowIndex, oldTid] of oldTransporterMap) {
+            const newTid = newTransporterIdsByRow.get(rowIndex) || "";
+            if (oldTid !== newTid) {
+                driversToClean.add(oldTid);
+            }
+        }
+
+        // Clear route info from replaced drivers (only if no other RoutesInfo row still points to them)
+        if (driversToClean.size > 0) {
+            try {
+                for (const oldTid of driversToClean) {
+                    const otherRow = await SYMXRoutesInfo.findOne({
+                        date: dateObj,
+                        transporterId: oldTid,
+                    }).lean();
+
+                    if (!otherRow) {
+                        await SYMXRoute.updateOne(
+                            { transporterId: oldTid, date: dateObj },
+                            { $set: blankRouteInfoForRoute() }
+                        );
+                        console.log(`[RoutesInfo POST] Cleared route info from replaced driver ${oldTid}`);
+                    }
+                }
+            } catch (e) {
+                console.error("Error clearing replaced drivers' route info:", e);
+            }
+        }
+
+        // ── Sync route info to current drivers ──
         const rowsWithTransporter = rows.filter((r: any) => r.transporterId && r.transporterId.trim() !== "");
         if (rowsWithTransporter.length > 0) {
             const routeOps = rowsWithTransporter.map((row: any) => ({
@@ -215,16 +265,47 @@ export async function POST(req: NextRequest) {
             try {
                 await SYMXRoute.bulkWrite(routeOps, { ordered: false });
             } catch (e) {
-                // Don't fail the whole request if SYMXRoute sync fails
                 console.error("Error syncing to SYMXRoutes:", e);
             }
         }
 
-        return NextResponse.json({ ok: true, saved: ops.length, synced: rowsWithTransporter.length });
+        return NextResponse.json({ ok: true, saved: ops.length, synced: rowsWithTransporter.length, cleared: driversToClean.size });
     } catch (error: any) {
         console.error("Error saving routes info:", error);
         return NextResponse.json({ error: error.message || "Failed to save" }, { status: 500 });
     }
+}
+
+// The route info fields that sync from RoutesInfo → SYMXRoute
+const ROUTE_INFO_FIELDS = ["routeNumber", "stopCount", "packageCount", "routeDuration", "waveTime", "pad", "wst", "wstDuration", "bags", "ov", "stagingLocation"];
+
+// Build a blank set of route info fields (to clear from old driver)
+function blankRouteInfoForRoute(): Record<string, any> {
+    return {
+        routeNumber: "",
+        stopCount: 0,
+        packageCount: 0,
+        routeDuration: "",
+        waveTime: "",
+        pad: "",
+        wst: "",
+        wstDuration: 0,
+        bags: "",
+        ov: "",
+        stagingLocation: "",
+    };
+}
+
+// Build a sync payload from a RoutesInfo row → SYMXRoute format
+function buildRouteSyncFields(row: any): Record<string, any> {
+    const fields: Record<string, any> = {};
+    ROUTE_INFO_FIELDS.forEach(f => {
+        const val = row[f] || "";
+        fields[f] = (f === "stopCount" || f === "packageCount" || f === "wstDuration")
+            ? parseInt(val) || 0
+            : val;
+    });
+    return fields;
 }
 
 // PUT: Update a single cell/row instantly (for real-time cell editing)
@@ -244,6 +325,16 @@ export async function PUT(req: NextRequest) {
 
         const dateObj = new Date(date);
 
+        // ── If the driver is being changed, capture the OLD transporterId first ──
+        let oldTransporterId: string | null = null;
+        if (field === "transporterId") {
+            const existingRow = await SYMXRoutesInfo.findOne(
+                { date: dateObj, rowIndex },
+                { transporterId: 1 }
+            ).lean() as any;
+            oldTransporterId = existingRow?.transporterId || null;
+        }
+
         // Upsert the specific field
         const result = await SYMXRoutesInfo.findOneAndUpdate(
             { date: dateObj, rowIndex },
@@ -251,34 +342,68 @@ export async function PUT(req: NextRequest) {
             { upsert: true, new: true, lean: true }
         );
 
-        // If transporterId is set on this row, sync to SYMXRoute
         const row = result as any;
-        if (row?.transporterId && row.transporterId.trim() !== "") {
-            const syncFields: Record<string, any> = {};
-            const fieldsToSync = ["routeNumber", "stopCount", "packageCount", "routeDuration", "waveTime", "pad", "wst", "wstDuration", "bags", "ov", "stagingLocation"];
 
-            // If the changed field is one that should sync
-            if (fieldsToSync.includes(field)) {
-                syncFields[field] = field === "stopCount" || field === "packageCount" || field === "wstDuration"
+        // ══════════════════════════════════════════════════════════════════
+        // ── DRIVER REPLACEMENT LOGIC ──
+        // When the transporterId changes on a RoutesInfo row:
+        //   1. CLEAR route info fields from the OLD driver's SYMXRoute
+        //   2. APPLY route info fields to the NEW driver's SYMXRoute
+        // This ensures the route data follows the driver assignment.
+        // ══════════════════════════════════════════════════════════════════
+        if (field === "transporterId") {
+            const newTransporterId = (value || "").trim();
+
+            // 1. Clear route info from OLD driver's SYMXRoute
+            if (oldTransporterId && oldTransporterId.trim() !== "" && oldTransporterId !== newTransporterId) {
+                try {
+                    // Check if any OTHER RoutesInfo row still points to this old driver on the same date.
+                    // If so, don't clear — another row still owns those fields.
+                    const otherRowWithOldDriver = await SYMXRoutesInfo.findOne({
+                        date: dateObj,
+                        transporterId: oldTransporterId,
+                        rowIndex: { $ne: rowIndex },
+                    }).lean();
+
+                    if (!otherRowWithOldDriver) {
+                        await SYMXRoute.updateOne(
+                            { transporterId: oldTransporterId, date: dateObj },
+                            { $set: blankRouteInfoForRoute() }
+                        );
+                        console.log(`[RoutesInfo PUT] Cleared route info from old driver ${oldTransporterId}`);
+                    }
+                } catch (e) {
+                    console.error("Error clearing old driver's route info:", e);
+                }
+            }
+
+            // 2. Apply all route info fields to NEW driver's SYMXRoute
+            if (newTransporterId) {
+                try {
+                    const syncFields = buildRouteSyncFields(row);
+                    await SYMXRoute.updateOne(
+                        { transporterId: newTransporterId, date: dateObj },
+                        { $set: syncFields }
+                    );
+                    console.log(`[RoutesInfo PUT] Applied route info to new driver ${newTransporterId}`);
+                } catch (e) {
+                    console.error("Error syncing route info to new driver:", e);
+                }
+            }
+
+            return NextResponse.json({ ok: true });
+        }
+
+        // ── NON-DRIVER FIELD — sync to SYMXRoute if a driver is linked ──
+        if (row?.transporterId && row.transporterId.trim() !== "") {
+            if (ROUTE_INFO_FIELDS.includes(field)) {
+                const syncValue = (field === "stopCount" || field === "packageCount" || field === "wstDuration")
                     ? parseInt(value) || 0
                     : value || "";
-            }
-
-            // Also sync if transporterId was just set — push all fields
-            if (field === "transporterId") {
-                fieldsToSync.forEach(f => {
-                    const val = row[f] || "";
-                    syncFields[f] = (f === "stopCount" || f === "packageCount" || f === "wstDuration")
-                        ? parseInt(val) || 0
-                        : val;
-                });
-            }
-
-            if (Object.keys(syncFields).length > 0) {
                 try {
                     await SYMXRoute.updateOne(
                         { transporterId: row.transporterId, date: dateObj },
-                        { $set: syncFields }
+                        { $set: { [field]: syncValue } }
                     );
                 } catch (e) {
                     console.error("Error syncing cell to SYMXRoute:", e);

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { useDataStore } from "@/hooks/use-data-store";
 import {
   Loader2,
   Send,
@@ -76,7 +77,28 @@ interface QuoPhoneNumber {
 }
 
 // ── Helpers ──
+const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function getWeekDates(yearWeek: string): string[] {
+  const match = yearWeek.match(/(\d{4})-W(\d{2})/);
+  if (!match) return [];
+  const year = parseInt(match[1]);
+  const week = parseInt(match[2]);
+  const jan1 = new Date(Date.UTC(year, 0, 1));
+  const jan1Day = jan1.getUTCDay();
+  const firstSunday = new Date(jan1);
+  firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
+  const weekSunday = new Date(firstSunday);
+  weekSunday.setUTCDate(firstSunday.getUTCDate() + (week - 1) * 7);
+  const dates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekSunday);
+    d.setUTCDate(weekSunday.getUTCDate() + i);
+    dates.push(d.toISOString().split("T")[0]);
+  }
+  return dates;
+}
 
 function addMinutesToTime(time: string, minutes: number): string {
   if (!time) return "";
@@ -1384,6 +1406,27 @@ export default function MessagingPanel({
     fetchPhoneNumbers();
   }, []);
 
+  const store = useDataStore();
+
+  // ── Compute week dates for date pills ──
+  const weekDates = useMemo(() => {
+    if (!selectedWeek) return [];
+    return getWeekDates(selectedWeek);
+  }, [selectedWeek]);
+
+  const [selectedDate, setSelectedDate] = useState("");
+
+  // Auto-select today when week changes
+  useEffect(() => {
+    if (weekDates.length === 0) return;
+    const today = new Date().toISOString().split("T")[0];
+    if (weekDates.includes(today)) {
+      setSelectedDate(today);
+    } else {
+      setSelectedDate("");
+    }
+  }, [weekDates]);
+
   // ── Prefetch employees for ALL tabs in parallel ───────────────────────────
   const [employeesByTab, setEmployeesByTab] = useState<Record<string, EmployeeRecipient[]>>({});
   const [loadingTabs, setLoadingTabs] = useState<Set<string>>(new Set(SUB_TABS.map(t => t.id)));
@@ -1400,11 +1443,54 @@ export default function MessagingPanel({
     }
   }, []);
 
+  // Hydrate from global store for the first week
+  const hydratedMessagingRef = useRef(false);
+
   useEffect(() => {
     if (!selectedWeek) return;
     let cancelled = false;
 
-    // Fetch active tab first for fastest UX
+    // Try hydrating from global store for the first/default week
+    if (
+      !hydratedMessagingRef.current &&
+      store.initialized &&
+      weeks?.[0] === selectedWeek
+    ) {
+      const storeEmployees = store.messagingEmployees;
+      const hydrated: Record<string, EmployeeRecipient[]> = {};
+      const stillLoading = new Set<string>();
+
+      for (const tab of SUB_TABS) {
+        const data = storeEmployees[tab.id as keyof typeof storeEmployees];
+        if (data && Array.isArray(data)) {
+          hydrated[tab.id] = data;
+        } else {
+          stillLoading.add(tab.id);
+        }
+      }
+
+      if (Object.keys(hydrated).length > 0) {
+        hydratedMessagingRef.current = true;
+        setEmployeesByTab(hydrated);
+        setLoadingTabs(stillLoading);
+
+        // Fetch any tabs not covered by global store
+        for (const tabId of stillLoading) {
+          fetchTabEmployees(tabId, selectedWeek).then((emps) => {
+            if (cancelled) return;
+            setEmployeesByTab(prev => ({ ...prev, [tabId]: emps }));
+            setLoadingTabs(prev => {
+              const next = new Set(prev);
+              next.delete(tabId);
+              return next;
+            });
+          });
+        }
+        return () => { cancelled = true; };
+      }
+    }
+
+    // Fallback: Fetch active tab first for fastest UX
     setLoadingTabs(new Set(SUB_TABS.map(t => t.id)));
 
     fetchTabEmployees(resolvedTab, selectedWeek).then((emps) => {
@@ -1530,6 +1616,40 @@ export default function MessagingPanel({
               </button>
             );
           })}
+
+          {/* Divider + Date Tabs */}
+          {weekDates.length > 0 && (
+            <>
+              <div className="w-px h-6 bg-border/60 mx-1 shrink-0" />
+              {weekDates.map((dateStr: string, idx: number) => {
+                const isActive = selectedDate === dateStr;
+                const d = new Date(dateStr + "T00:00:00Z");
+                const dayNum = d.getUTCDate();
+                const monthShort = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+                const today = new Date().toISOString().split("T")[0];
+                const isToday = dateStr === today;
+
+                return (
+                  <button
+                    key={dateStr}
+                    onClick={() => setSelectedDate(isActive ? "" : dateStr)}
+                    className={cn(
+                      "flex flex-col items-center px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap min-w-[48px] select-none shrink-0",
+                      isActive
+                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                        : isToday
+                          ? "bg-primary/10 text-primary hover:bg-primary/20"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    )}
+                  >
+                    <span className="text-[9px] uppercase tracking-wider leading-tight opacity-80">{SHORT_DAYS[idx]}</span>
+                    <span className="text-xs font-bold leading-tight">{dayNum}</span>
+                    <span className="text-[8px] uppercase leading-tight opacity-60">{monthShort}</span>
+                  </button>
+                );
+              })}
+            </>
+          )}
         </div>
 
         {/* ── Sub-tab panels — all mounted, data pre-loaded ── */}

@@ -8,7 +8,7 @@ import { SimpleDataTable } from "@/components/admin/simple-data-table";
 import { formatPhoneNumber } from "@/lib/utils";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
 import { Search, User } from "lucide-react";
@@ -105,13 +105,16 @@ export default function EmployeesPage() {
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) throw new Error("Failed to save employee");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to save employee");
+      }
 
       toast.success(editingItem?._id ? "Employee updated successfully" : "Employee created successfully");
       setIsDialogOpen(false);
       fetchEmployees();
-    } catch (error) {
-      toast.error("Failed to save employee");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to save employee");
     } finally {
       setIsSubmitting(false);
     }
@@ -156,12 +159,16 @@ export default function EmployeesPage() {
     {
       id: "profileImage",
       header: "Image",
-      cell: ({ row }) => (
+      cell: ({ row }) => {
+        const img = row.original.profileImage;
+        // Skip broken AppSheet URLs that always 404
+        const hasValidImage = img && !img.includes("appsheet.com") && !img.includes("gettablefileurl");
+        return (
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted overflow-hidden">
-          {row.original.profileImage ? (
+          {hasValidImage ? (
             <>
               <img
-                src={row.original.profileImage}
+                src={img}
                 alt="User"
                 className="h-full w-full object-cover"
                 onError={(e) => {
@@ -179,7 +186,8 @@ export default function EmployeesPage() {
             <User className="h-5 w-5 text-muted-foreground" />
           )}
         </div>
-      ),
+        );
+      },
     },
     { accessorKey: "firstName", header: "First Name" },
     { accessorKey: "lastName", header: "Last Name" },
@@ -321,7 +329,7 @@ export default function EmployeesPage() {
         title="Employees"
         onAdd={openAddDialog}
         loading={loading}
-        showColumnToggle={true}
+        showColumnToggle={false}
         initialColumnVisibility={initialVisibility}
         enableGlobalFilter={false}
         onRowClick={(employee) => router.push(`/hr/${employee._id}`)}
@@ -358,16 +366,21 @@ export default function EmployeesPage() {
       />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Employee" : "Add Employee"}</DialogTitle>
+        <DialogContent className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogHeader className="shrink-0 px-6 pt-5 pb-4 border-b border-border">
+            <DialogTitle className="text-lg font-bold">{editingItem ? "Edit Employee" : "Add Employee"}</DialogTitle>
+            <DialogDescription className="sr-only">
+              {editingItem ? "Edit employee details" : "Create a new employee record"}
+            </DialogDescription>
           </DialogHeader>
-          <EmployeeForm
-            initialData={editingItem ? { ...editingItem, _id: String(editingItem._id) } : {}}
-            onSubmit={handleSubmit}
-            isLoading={isSubmitting}
-            onCancel={() => setIsDialogOpen(false)}
-          />
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+            <EmployeeForm
+              initialData={editingItem ? { ...editingItem, _id: String(editingItem._id) } : {}}
+              onSubmit={handleSubmit}
+              isLoading={isSubmitting}
+              onCancel={() => setIsDialogOpen(false)}
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
+import { useDataStore } from "@/hooks/use-data-store";
 import { cn } from "@/lib/utils";
 import {
     Users,
@@ -150,44 +151,62 @@ export default function AttendancePage() {
     const [editingCell, setEditingCell] = useState<{ rowId: string; field: string } | null>(null);
     const [editValue, setEditValue] = useState("");
 
+    const store = useDataStore();
+    const hydratedRoutesRef = useRef(false);
+
     // ── Fetch routes for the week ──
     useEffect(() => {
         if (!selectedWeek) return;
         let cancelled = false;
-        setLoading(true);
 
+        const transformRoutes = (data: any) => {
+            if (!data.routes || data.routes.length === 0) {
+                setAllRoutes([]);
+                return;
+            }
+            const rows: RouteRow[] = data.routes.map((rec: any) => {
+                const emp = data.employees?.[rec.transporterId];
+                return {
+                    _id: rec._id,
+                    transporterId: rec.transporterId,
+                    date: rec.date,
+                    weekDay: rec.weekDay || "",
+                    employeeName: emp?.name || rec.transporterId,
+                    attendance: rec.attendance || "",
+                    type: rec.type || "",
+                    routeNumber: rec.routeNumber || "",
+                    van: rec.van || "",
+                    routeDuration: rec.routeDuration || "",
+                    waveTime: rec.waveTime || "",
+                    pad: rec.pad || "",
+                    stagingLocation: rec.stagingLocation || "",
+                    attendanceTime: rec.attendanceTime || "",
+                    dashcam: rec.dashcam || "",
+                    profileImage: emp?.profileImage || "",
+                };
+            });
+            setAllRoutes(rows);
+        };
+
+        // Try hydrating from global store for the first/default week
+        if (
+            !hydratedRoutesRef.current &&
+            store.initialized &&
+            store.dispatchingRoutes &&
+            store.dispatchingWeeks?.[0] === selectedWeek
+        ) {
+            hydratedRoutesRef.current = true;
+            transformRoutes(store.dispatchingRoutes);
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
         fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
             .then((r) => r.json())
             .then((data) => {
                 if (cancelled) return;
-                if (!data.routes || data.routes.length === 0) {
-                    setAllRoutes([]);
-                    return;
-                }
-
-                const rows: RouteRow[] = data.routes.map((rec: any) => {
-                    const emp = data.employees?.[rec.transporterId];
-                    return {
-                        _id: rec._id,
-                        transporterId: rec.transporterId,
-                        date: rec.date,
-                        weekDay: rec.weekDay || "",
-                        employeeName: emp?.name || rec.transporterId,
-                        attendance: rec.attendance || "",
-                        type: rec.type || "",
-                        routeNumber: rec.routeNumber || "",
-                        van: rec.van || "",
-                        routeDuration: rec.routeDuration || "",
-                        waveTime: rec.waveTime || "",
-                        pad: rec.pad || "",
-                        stagingLocation: rec.stagingLocation || "",
-                        attendanceTime: rec.attendanceTime || "",
-                        dashcam: rec.dashcam || "",
-                        profileImage: emp?.profileImage || "",
-                    };
-                });
-
-                setAllRoutes(rows);
+                transformRoutes(data);
             })
             .catch(() => setAllRoutes([]))
             .finally(() => {
@@ -485,10 +504,13 @@ export default function AttendancePage() {
                         {pendingRows.map(row => {
                             const initials = row.employeeName.split(" ").map(n => n[0]).join("").slice(0, 2);
                             return (
-                                <button
+                                <div
                                     key={row._id}
                                     onClick={() => handleMarkPresent(row)}
-                                    className="w-full text-left p-3 rounded-xl border border-border/40 bg-zinc-500/5 hover:bg-zinc-500/10 hover:border-primary/40 transition-all flex items-center gap-3 group relative overflow-hidden"
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleMarkPresent(row); }}
+                                    className="w-full text-left p-3 rounded-xl border border-border/40 bg-zinc-500/5 hover:bg-zinc-500/10 hover:border-primary/40 transition-all flex items-center gap-3 group relative overflow-hidden cursor-pointer"
                                 >
                                     {/* Hover sweep effect */}
                                     <div className="absolute inset-x-0 bottom-0 h-0.5 bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
@@ -537,7 +559,7 @@ export default function AttendancePage() {
                                             Absent
                                         </button>
                                     </div>
-                                </button>
+                                </div>
                             );
                         })}
                         {pendingRows.length === 0 && (

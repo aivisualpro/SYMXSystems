@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
+import { useDataStore } from "@/hooks/use-data-store";
 import { cn } from "@/lib/utils";
 import {
     Users,
@@ -119,10 +120,42 @@ const GRID_TEMPLATE = "minmax(100px, 150px) 95px 100px 75px 70px 75px 70px 70px 
 
 // ── Editable fields ──
 const EDITABLE_FIELDS = new Set([
-    "routeNumber", "paycomInDay", "paycomOutLunch", "paycomInLunch", "paycomOutDay",
+    "paycomInDay", "paycomOutLunch", "paycomInLunch", "paycomOutDay",
     "punchStatus", "attendanceTime", "amazonOutLunch", "amazonInLunch",
-    "amazonAppLogout", "inspectionTime", "totalHours",
+    "amazonAppLogout", "inspectionTime",
 ]);
+
+// ── Compute Total Hours ──
+const computeTotalHours = (row: RouteRow): string => {
+    const inDay = row.paycomInDay;
+    const outLunch = row.paycomOutLunch;
+    const inLunch = row.paycomInLunch;
+    const outDay = row.paycomOutDay;
+
+    const inDayMins = timeToMins(inDay);
+    const outLunchMins = timeToMins(outLunch);
+    const inLunchMins = timeToMins(inLunch);
+    const outDayMins = timeToMins(outDay);
+
+    let totalMins = 0;
+
+    if (inDay && outLunch && inLunch && outDay) {
+        // Case 1: All 4 fields filled → subtract lunch break
+        // (outDay - inLunch) + (outLunch - inDay)
+        totalMins = (outDayMins - inLunchMins) + (outLunchMins - inDayMins);
+    } else if (inDay && outDay && !outLunch && !inLunch) {
+        // Case 2: Only in/out day filled → straight duration
+        totalMins = outDayMins - inDayMins;
+    } else {
+        return "";
+    }
+
+    if (totalMins <= 0) return "";
+
+    const hours = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    return `${hours}.${String(mins).padStart(2, "0")}`;
+};
 
 // ── Short day labels ──
 const SHORT_DAYS: Record<string, string> = {
@@ -203,7 +236,20 @@ const getElapsedMins = (inDayStr: string, dateStr: string) => {
 };
 
 const getCellFormat = (row: RouteRow, field: string) => {
+    // Formatting rules only apply when ALL required time fields are filled
+    const allFieldsFilled = !!(
+        row.paycomInDay &&
+        row.paycomOutLunch &&
+        row.paycomInLunch &&
+        row.paycomOutDay &&
+        row.amazonOutLunch &&
+        row.amazonInLunch &&
+        row.amazonAppLogout
+    );
+    if (!allFieldsFilled) return null;
+
     if (field === "paycomInDay") {
+        if (!row.paycomInDay) return null;
         const inMins = timeToMins(row.paycomInDay);
         const attMins = timeToMins(row.attendanceTime);
         if (row.paycomInDay && row.attendanceTime) {
@@ -216,6 +262,7 @@ const getCellFormat = (row: RouteRow, field: string) => {
     }
 
     if (field === "paycomOutLunch") {
+        if (!row.paycomOutLunch) return null;
         const outLunchValid = !!row.paycomOutLunch;
         const outLunchMins = timeToMins(row.paycomOutLunch);
         const inDayValid = !!row.paycomInDay;
@@ -228,13 +275,11 @@ const getCellFormat = (row: RouteRow, field: string) => {
         const isTypeOCRC = ["open", "close", "rescue", "crash"].includes(type);
         const isTypeCRC0 = ["route", "crash", "c0"].includes(type);
 
-        const elapsed = getElapsedMins(row.paycomInDay, row.date);
         const duration = outLunchValid && inDayValid ? (outLunchMins - inDayMins) : 0;
 
-        // D: Red with alarm icon
-        const condD_noPunch = !outLunchValid && inDayValid && elapsed >= 295;
+        // D: Red — punch too late
         const condD_punchLate = outLunchValid && inDayValid && duration >= 295;
-        const condD = condD_noPunch || condD_punchLate;
+        const condD = condD_punchLate;
 
         // C: Red
         const condC = outLunchValid && isTypeOCRC && duration > 330;
@@ -256,6 +301,7 @@ const getCellFormat = (row: RouteRow, field: string) => {
     }
 
     if (field === "paycomInLunch") {
+        if (!row.paycomInLunch) return null;
         const inLunchValid = !!row.paycomInLunch;
         const inLunchMins = timeToMins(row.paycomInLunch);
         const outLunchValid = !!row.paycomOutLunch;
@@ -283,6 +329,7 @@ const getCellFormat = (row: RouteRow, field: string) => {
     }
 
     if (field === "paycomOutDay") {
+        if (!row.paycomOutDay) return null;
         const outDayValid = !!row.paycomOutDay;
         const outDayMins = timeToMins(row.paycomOutDay);
         const appLogoutValid = !!row.amazonAppLogout;
@@ -320,7 +367,12 @@ const getCellFormat = (row: RouteRow, field: string) => {
         }
     }
 
+    if (field === "amazonOutLunch") {
+        if (!row.amazonOutLunch) return null;
+    }
+
     if (field === "amazonInLunch") {
+        if (!row.amazonInLunch) return null;
         const outLunchValid = !!row.amazonOutLunch;
         const outLunchMins = timeToMins(row.amazonOutLunch);
         const inLunchValid = !!row.amazonInLunch;
@@ -334,6 +386,10 @@ const getCellFormat = (row: RouteRow, field: string) => {
                 return { bg: "bg-emerald-600", text: "text-white font-bold", inputBg: "bg-emerald-600 text-white focus:bg-emerald-500 focus:text-white" };
             }
         }
+    }
+
+    if (field === "amazonAppLogout") {
+        if (!row.amazonAppLogout) return null;
     }
 
     return null;
@@ -366,44 +422,63 @@ export default function TimePage() {
         return () => { mounted = false; };
     }, []);
 
+    const store = useDataStore();
+    const hydratedRoutesRef = useRef(false);
+
     // ── Fetch routes ──
     useEffect(() => {
         if (!selectedWeek) return;
         let cancelled = false;
-        setLoading(true);
 
+        const transformRoutes = (data: any) => {
+            if (!data.routes || data.routes.length === 0) { setAllRoutes([]); return; }
+            const rows: RouteRow[] = data.routes.map((rec: any) => {
+                const emp = data.employees?.[rec.transporterId];
+                return {
+                    _id: rec._id,
+                    transporterId: rec.transporterId,
+                    date: rec.date,
+                    weekDay: rec.weekDay || "",
+                    employeeName: emp?.name || rec.transporterId,
+                    attendance: rec.attendance || "",
+                    type: rec.type || "",
+                    routeNumber: rec.routeNumber || "",
+                    paycomInDay: rec.paycomInDay || "",
+                    paycomOutLunch: rec.paycomOutLunch || "",
+                    paycomInLunch: rec.paycomInLunch || "",
+                    paycomOutDay: rec.paycomOutDay || "",
+                    punchStatus: rec.punchStatus || "",
+                    attendanceTime: rec.attendanceTime || "",
+                    amazonOutLunch: rec.amazonOutLunch || "",
+                    amazonInLunch: rec.amazonInLunch || "",
+                    amazonAppLogout: rec.amazonAppLogout || "",
+                    inspectionTime: rec.inspectionTime || "",
+                    totalHours: rec.totalHours || "",
+                    profileImage: emp?.profileImage || "",
+                };
+            });
+            setAllRoutes(rows);
+        };
+
+        // Try hydrating from global store for the first/default week
+        if (
+            !hydratedRoutesRef.current &&
+            store.initialized &&
+            store.dispatchingRoutes &&
+            store.dispatchingWeeks?.[0] === selectedWeek
+        ) {
+            hydratedRoutesRef.current = true;
+            transformRoutes(store.dispatchingRoutes);
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
         fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
             .then((r) => r.json())
             .then((data) => {
                 if (cancelled) return;
-                if (!data.routes || data.routes.length === 0) { setAllRoutes([]); return; }
-
-                const rows: RouteRow[] = data.routes.map((rec: any) => {
-                    const emp = data.employees?.[rec.transporterId];
-                    return {
-                        _id: rec._id,
-                        transporterId: rec.transporterId,
-                        date: rec.date,
-                        weekDay: rec.weekDay || "",
-                        employeeName: emp?.name || rec.transporterId,
-                        attendance: rec.attendance || "",
-                        type: rec.type || "",
-                        routeNumber: rec.routeNumber || "",
-                        paycomInDay: rec.paycomInDay || "",
-                        paycomOutLunch: rec.paycomOutLunch || "",
-                        paycomInLunch: rec.paycomInLunch || "",
-                        paycomOutDay: rec.paycomOutDay || "",
-                        punchStatus: rec.punchStatus || "",
-                        attendanceTime: rec.attendanceTime || "",
-                        amazonOutLunch: rec.amazonOutLunch || "",
-                        amazonInLunch: rec.amazonInLunch || "",
-                        amazonAppLogout: rec.amazonAppLogout || "",
-                        inspectionTime: rec.inspectionTime || "",
-                        totalHours: rec.totalHours || "",
-                        profileImage: emp?.profileImage || "",
-                    };
-                });
-                setAllRoutes(rows);
+                transformRoutes(data);
             })
             .catch(() => setAllRoutes([]))
             .finally(() => { if (!cancelled) setLoading(false); });
@@ -644,7 +719,7 @@ export default function TimePage() {
         const style = getAttendanceStyle(row.attendance);
         const Icon = style.icon;
         return (
-            <div className={cn("relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold border select-none px-1.5", style.bg, style.text, style.border)}>
+            <div className={cn("relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold border select-none pointer-events-none px-1.5", style.bg, style.text, style.border)}>
                 <Icon className="h-3 w-3 shrink-0" />
                 <span className="truncate">{row.attendance || "—"}</span>
             </div>
@@ -727,7 +802,7 @@ export default function TimePage() {
                                 {/* Inspection Time */}
                                 {renderCell(row, "inspectionTime", row.inspectionTime)}
                                 {/* Total Hours */}
-                                {renderCell(row, "totalHours", row.totalHours)}
+                                {renderCell(row, "totalHours", computeTotalHours(row))}
                                 {/* Actions */}
                                 <div className="flex justify-end pr-1">
                                     <button

@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import RoutesInfoPanel from "./_components/RoutesInfoPanel";
+import { useDataStore } from "@/hooks/use-data-store";
 
 // ── Shared Tab Definitions ──
 export const DISPATCHING_TABS = [
@@ -156,8 +157,22 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         }
     }, [weekDates]);
 
-    // ── Fetch available weeks ──
+    const store = useDataStore();
+
+    // ── Hydrate weeks from global store for instant load ──
+    const hydratedRef = React.useRef(false);
+    React.useEffect(() => {
+        if (hydratedRef.current) return;
+        if (store.initialized && store.dispatchingWeeks?.length) {
+            hydratedRef.current = true;
+            setWeeks(store.dispatchingWeeks);
+            setSelectedWeek(store.dispatchingWeeks[0]);
+        }
+    }, [store.initialized, store.dispatchingWeeks]);
+
+    // ── Fetch available weeks (fallback if store not ready) ──
     useEffect(() => {
+        if (hydratedRef.current) return; // already hydrated from store
         const fetchWeeks = async () => {
             try {
                 const res = await fetch("/api/schedules?weeksList=true");

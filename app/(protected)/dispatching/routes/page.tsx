@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
+import { useDataStore } from "@/hooks/use-data-store";
 import { cn } from "@/lib/utils";
 import {
     Users,
@@ -192,58 +193,78 @@ export default function RoutesPage() {
         { open: false, routeId: "", employeeName: "", profileImage: "" }
     );
 
+    const store = useDataStore();
+    const hydratedRoutesRef = useRef(false);
+
     // ── Fetch ALL routes for the week ──
     useEffect(() => {
         if (!selectedWeek) return;
         let cancelled = false;
-        setLoading(true);
 
+        const transformRoutes = (data: any) => {
+            if (!data.routes || data.routes.length === 0) {
+                setAllRoutes([]);
+                setAuditCounts({});
+                return;
+            }
+
+            setAuditCounts(data.auditCounts || {});
+
+            const rows: RouteRow[] = data.routes.map((rec: any) => {
+                const emp = data.employees?.[rec.transporterId];
+                return {
+                    _id: rec._id,
+                    transporterId: rec.transporterId,
+                    date: rec.date,
+                    weekDay: rec.weekDay || "",
+                    type: rec.type || "",
+                    subType: rec.subType || "",
+                    van: rec.van || "",
+                    serviceType: rec.serviceType || "",
+                    dashcam: rec.dashcam || "",
+                    routeSize: rec.routeSize || "",
+                    driverEfficiency: rec.driverEfficiency || 0,
+                    employeeName: emp?.name || rec.transporterId,
+                    phone: emp?.phoneNumber || "",
+                    routesCompleted: data.routeCounts?.[rec.transporterId] || 0,
+                    routeNumber: rec.routeNumber || "",
+                    stopCount: rec.stopCount || 0,
+                    packageCount: rec.packageCount || 0,
+                    routeDuration: rec.routeDuration || "",
+                    waveTime: rec.waveTime || "",
+                    pad: rec.pad || "",
+                    wst: rec.wst || "",
+                    wstDuration: rec.wstDuration || 0,
+                    bags: rec.bags || "",
+                    ov: rec.ov || "",
+                    stagingLocation: rec.stagingLocation || "",
+                    attendance: rec.attendance || "",
+                    profileImage: emp?.profileImage || "",
+                };
+            });
+
+            setAllRoutes(rows);
+        };
+
+        // Try hydrating from global store for the first/default week
+        if (
+            !hydratedRoutesRef.current &&
+            store.initialized &&
+            store.dispatchingRoutes &&
+            store.dispatchingWeeks?.[0] === selectedWeek
+        ) {
+            hydratedRoutesRef.current = true;
+            transformRoutes(store.dispatchingRoutes);
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
         fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
             .then((r) => r.json())
             .then((data) => {
                 if (cancelled) return;
-                if (!data.routes || data.routes.length === 0) {
-                    setAllRoutes([]);
-                    setAuditCounts({});
-                    return;
-                }
-
-                setAuditCounts(data.auditCounts || {});
-
-                const rows: RouteRow[] = data.routes.map((rec: any) => {
-                    const emp = data.employees?.[rec.transporterId];
-                    return {
-                        _id: rec._id,
-                        transporterId: rec.transporterId,
-                        date: rec.date,
-                        weekDay: rec.weekDay || "",
-                        type: rec.type || "",
-                        subType: rec.subType || "",
-                        van: rec.van || "",
-                        serviceType: rec.serviceType || "",
-                        dashcam: rec.dashcam || "",
-                        routeSize: rec.routeSize || "",
-                        driverEfficiency: rec.driverEfficiency || 0,
-                        employeeName: emp?.name || rec.transporterId,
-                        phone: emp?.phoneNumber || "",
-                        routesCompleted: data.routeCounts?.[rec.transporterId] || 0,
-                        routeNumber: rec.routeNumber || "",
-                        stopCount: rec.stopCount || 0,
-                        packageCount: rec.packageCount || 0,
-                        routeDuration: rec.routeDuration || "",
-                        waveTime: rec.waveTime || "",
-                        pad: rec.pad || "",
-                        wst: rec.wst || "",
-                        wstDuration: rec.wstDuration || 0,
-                        bags: rec.bags || "",
-                        ov: rec.ov || "",
-                        stagingLocation: rec.stagingLocation || "",
-                        attendance: rec.attendance || "",
-                        profileImage: emp?.profileImage || "",
-                    };
-                });
-
-                setAllRoutes(rows);
+                transformRoutes(data);
             })
             .catch(() => {
                 setAllRoutes([]);

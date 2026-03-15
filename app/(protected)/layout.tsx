@@ -2,6 +2,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { HeaderActionsProvider } from "@/components/providers/header-actions-provider";
+import { DataStoreInitializer } from "@/hooks/data-store-initializer";
 import { cookies } from "next/headers";
 import { getSession, logout } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -33,6 +34,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 
   return (
     <HeaderActionsProvider>
+      <DataStoreInitializer />
       <SidebarProvider
         defaultOpen={defaultOpen}
         className="h-screen overflow-hidden"

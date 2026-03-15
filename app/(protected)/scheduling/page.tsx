@@ -64,7 +64,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { toast } from "sonner";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import MessagingPanel, { type ActiveTabInfo, SUB_TABS } from "@/components/scheduling/messaging-panel";
-
+import { useDataStore } from "@/hooks/use-data-store";
 // ── Type Options with Icons & Colors ──
 interface TypeOption {
   label: string;
@@ -476,23 +476,44 @@ export default function SchedulingPage() {
     }
   }, [generatingWeek]);
 
+  const store = useDataStore();
+
   // Mark as mounted on client to avoid hydration mismatch
   useEffect(() => {
     setMounted(true);
-    // Fetch route type configs for auto-filling startTime
-    fetch("/api/admin/settings/route-types")
-      .then(res => res.json())
-      .then((types: any[]) => {
-        const map: Record<string, { color: string; startTime: string }> = {};
-        types.forEach((t: any) => { map[t.name.toLowerCase()] = { color: t.color, startTime: t.startTime || "" }; });
-        setRouteTypeConfigs(map);
-      })
-      .catch(() => { });
+    // Hydrate route type configs from global store if available
+    if (store.initialized && store.admin.routeTypes && Object.keys(store.admin.routeTypes).length > 0) {
+      setRouteTypeConfigs(store.admin.routeTypes);
+    } else {
+      // Fallback: Fetch route type configs for auto-filling startTime
+      fetch("/api/admin/settings/route-types")
+        .then(res => res.json())
+        .then((types: any[]) => {
+          const map: Record<string, { color: string; startTime: string }> = {};
+          types.forEach((t: any) => { map[t.name.toLowerCase()] = { color: t.color, startTime: t.startTime || "" }; });
+          setRouteTypeConfigs(map);
+        })
+        .catch(() => { });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch available weeks
+  // Hydrate weeks from global store for instant load
+  const hydratedWeeksRef = useRef(false);
+  useEffect(() => {
+    if (hydratedWeeksRef.current) return;
+    if (store.initialized && store.schedulingWeeks?.length) {
+      hydratedWeeksRef.current = true;
+      setWeeks(store.schedulingWeeks);
+      setSelectedWeek(store.schedulingWeeks[0]);
+      setLoading(false);
+    }
+  }, [store.initialized, store.schedulingWeeks]);
+
+  // Fetch available weeks (fallback if store not ready)
   useEffect(() => {
     if (!mounted) return;
+    if (hydratedWeeksRef.current) return; // already hydrated from store
     setLoading(true);
     const fetchWeeks = async () => {
       try {
@@ -514,10 +535,56 @@ export default function SchedulingPage() {
   // Track which weeks have been auto-synced to avoid redundant generate calls
   const syncedWeeksRef = useRef<Set<string>>(new Set());
 
+  // Hydrate first week's data from global store if available
+  const hydratedWeekDataRef = useRef(false);
+
   // Fetch week data + audit counts (bundled) + auto-sync missing employees (once per week)
   useEffect(() => {
     if (!selectedWeek) return;
     let cancelled = false;
+
+    // Try hydrating from global store for the first/default week
+    if (
+      !hydratedWeekDataRef.current &&
+      store.initialized &&
+      store.schedulingWeekData &&
+      store.schedulingWeeks?.[0] === selectedWeek
+    ) {
+      hydratedWeekDataRef.current = true;
+      setWeekData(store.schedulingWeekData);
+      if (store.schedulingWeekData.auditCounts) {
+        setAuditCounts(store.schedulingWeekData.auditCounts);
+      }
+      setLoadingData(false);
+
+      // Still run background sync
+      if (!syncedWeeksRef.current.has(selectedWeek)) {
+        syncedWeeksRef.current.add(selectedWeek);
+        fetch("/api/schedules/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ yearWeek: selectedWeek }),
+        })
+          .then(r => r.json())
+          .then(syncData => {
+            if (cancelled) return;
+            if (syncData.created > 0) {
+              toast.success(`Synced ${syncData.missingEmployees} new employee(s) — ${syncData.created} records added`);
+              fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`)
+                .then(r => r.json())
+                .then(refetchData => {
+                  if (cancelled) return;
+                  setWeekData(refetchData);
+                  if (refetchData.auditCounts) {
+                    setAuditCounts(refetchData.auditCounts);
+                  }
+                });
+            }
+          })
+          .catch(() => { });
+      }
+      return () => { cancelled = true; };
+    }
 
     const fetchData = async () => {
       setLoadingData(true);

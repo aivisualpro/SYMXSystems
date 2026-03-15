@@ -24,19 +24,40 @@ export async function GET(req: Request) {
 
     // Construct query
     const query: any = {};
-    if (!fetchTerminated) {
-      query.status = { $ne: 'Terminated' };
-    }
+
     if (search) {
+      // When searching, ignore all filters — search the ENTIRE database across all string fields
       const regex = new RegExp(search, 'i');
       query.$or = [
         { firstName: regex },
         { lastName: regex },
         { email: regex },
+        { phoneNumber: regex },
         { badgeNumber: regex },
         { transporterId: regex },
         { eeCode: regex },
+        { type: regex },
+        { status: regex },
+        { hourlyStatus: regex },
+        { gender: regex },
+        { city: regex },
+        { state: regex },
+        { zipCode: regex },
+        { streetAddress: regex },
+        { gasCardPin: regex },
+        { routesComp: regex },
+        { defaultVan1: regex },
+        { defaultVan2: regex },
+        { defaultVan3: regex },
+        { terminationReason: regex },
+        { resignationType: regex },
+        { ScheduleNotes: regex },
       ];
+    } else {
+      // No search — apply filters normally
+      if (!fetchTerminated) {
+        query.status = { $ne: 'Terminated' };
+      }
     }
 
     if (limit > 0) {

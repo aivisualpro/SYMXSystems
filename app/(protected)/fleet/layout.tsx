@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { useDataStore } from "@/hooks/use-data-store";
 import {
   IconChartDonut, IconCar, IconTool, IconClipboardCheck,
   IconFileInvoice, IconSearch, IconPlus, IconRotate2, IconCheck,
@@ -71,6 +72,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { setRightContent, setLeftContent } = useHeaderActions();
+  const store = useDataStore();
 
   const [data, setData] = useState<FleetData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,6 +90,23 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const [showReturned, setShowReturned] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [showStandardOnly, setShowStandardOnly] = useState(false);
+
+  // ── Hydrate from global data store for instant load ──
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    if (store.initialized && store.fleet.dashboard) {
+      hydratedRef.current = true;
+      // Use prefetched data — instant, zero loading
+      setData({ ...store.fleet.dashboard, vehicles: store.fleet.vehicles || [] });
+      const rep = store.fleet.repairs;
+      if (rep) setRepairsSeed({ data: rep.data ?? [], total: rep.total ?? 0, hasMore: rep.hasMore ?? false, fetchedAt: Date.now() });
+      const ins = store.fleet.inspections;
+      if (ins) setInspectionsSeed({ data: ins.data ?? [], total: ins.total ?? 0, hasMore: ins.hasMore ?? false, fetchedAt: Date.now() });
+      if (store.fleet.rentals?.length) setRentalsSeed(store.fleet.rentals);
+      setLoading(false);
+    }
+  }, [store.initialized, store.fleet]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -141,6 +160,8 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   }, [showReturned]);
 
   useEffect(() => {
+    // Skip fetch if already hydrated from global store
+    if (hydratedRef.current) return;
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // mount only
