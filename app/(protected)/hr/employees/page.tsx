@@ -161,11 +161,9 @@ export default function EmployeesPage() {
       header: "Image",
       cell: ({ row }) => {
         const img = row.original.profileImage;
-        // Skip broken AppSheet URLs that always 404
-        const hasValidImage = img && !img.includes("appsheet.com") && !img.includes("gettablefileurl");
         return (
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted overflow-hidden">
-          {hasValidImage ? (
+          {img ? (
             <>
               <img
                 src={img}
