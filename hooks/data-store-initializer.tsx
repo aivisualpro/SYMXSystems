@@ -59,8 +59,8 @@ export function DataStoreInitializer() {
             </svg>
 
             {/* Inner percentage */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-lg font-bold font-mono tabular-nums text-primary">
+            <div className="absolute inset-0 flex items-center justify-center" suppressHydrationWarning>
+              <span className="text-lg font-bold font-mono tabular-nums text-primary" suppressHydrationWarning>
                 {globalProgress}<span className="text-xs">%</span>
               </span>
             </div>

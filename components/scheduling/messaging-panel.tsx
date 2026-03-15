@@ -1642,15 +1642,17 @@ export default function MessagingPanel({
   // Hydrate from global store for the first week
   const hydratedMessagingRef = useRef(false);
   const fetchedWeekRef = useRef<string>("");
+  const activeWeekRef = useRef<string>("");
 
   useEffect(() => {
     if (!selectedWeek) return;
-    let cancelled = false;
-
+    activeWeekRef.current = selectedWeek;
+    
+    const effectWeek = selectedWeek;
     const isDefaultWeek = weeks?.[0] === selectedWeek;
 
     // ── Try hydrating from store (instant load) ──
-    if (isDefaultWeek && store.initialized) {
+    if (isDefaultWeek && store.initialized && !hydratedMessagingRef.current) {
       const storeEmployees = store.messagingEmployees;
       const hydrated: Record<string, EmployeeRecipient[]> = {};
       const stillLoading = new Set<string>();
@@ -1673,7 +1675,7 @@ export default function MessagingPanel({
         // Fetch any tabs not covered by global store
         for (const tabId of stillLoading) {
           fetchTabEmployees(tabId, selectedWeek).then((emps) => {
-            if (cancelled) return;
+            if (activeWeekRef.current !== effectWeek) return;
             setEmployeesByTab(prev => ({ ...prev, [tabId]: emps }));
             setLoadingTabs(prev => {
               const next = new Set(prev);
@@ -1682,25 +1684,24 @@ export default function MessagingPanel({
             });
           });
         }
-        return () => { cancelled = true; };
+        return; // Hydration handled this week
       }
     }
 
     // ── If default week but store not ready yet, wait for it ──
     if (isDefaultWeek && !store.initialized) {
-      // Don't fire API calls — store will initialize soon and re-trigger this effect
       return;
     }
 
-    // ── Non-default week: Skip if we already fetched this week ──
+    // ── Skip if we already fetched/hydrated this week ──
     if (fetchedWeekRef.current === selectedWeek) return;
     fetchedWeekRef.current = selectedWeek;
 
-    // ── Fallback: Fetch active tab first for fastest UX ──
+    // ── Fetch active tab first for fastest UX ──
     setLoadingTabs(new Set(SUB_TABS.map(t => t.id)));
 
     fetchTabEmployees(resolvedTab, selectedWeek).then((emps) => {
-      if (cancelled) return;
+      if (activeWeekRef.current !== effectWeek) return;
       setEmployeesByTab(prev => ({ ...prev, [resolvedTab]: emps }));
       setLoadingTabs(prev => {
         const next = new Set(prev);
@@ -1711,11 +1712,13 @@ export default function MessagingPanel({
 
     // Background-fetch remaining tabs after 100ms so active tab gets priority
     const bgTimer = setTimeout(() => {
+      if (activeWeekRef.current !== effectWeek) return;
+
       SUB_TABS
         .filter(t => t.id !== resolvedTab)
         .forEach((tab) => {
           fetchTabEmployees(tab.id, selectedWeek).then((emps) => {
-            if (cancelled) return;
+            if (activeWeekRef.current !== effectWeek) return;
             setEmployeesByTab(prev => ({ ...prev, [tab.id]: emps }));
             setLoadingTabs(prev => {
               const next = new Set(prev);
@@ -1726,7 +1729,7 @@ export default function MessagingPanel({
         });
     }, 100);
 
-    return () => { cancelled = true; clearTimeout(bgTimer); };
+    return () => clearTimeout(bgTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWeek, store.initialized, fetchTabEmployees]); // re-run when store initializes
 
