@@ -79,6 +79,11 @@ interface QuoPhoneNumber {
 // ── Helpers ──
 const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const BUSINESS_TZ = "America/Los_Angeles";
+
+function getTodayPacific(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
+}
 
 function getWeekDates(yearWeek: string): string[] {
   const match = yearWeek.match(/(\d{4})-W(\d{2})/);
@@ -1419,7 +1424,7 @@ export default function MessagingPanel({
   // Auto-select today when week changes
   useEffect(() => {
     if (weekDates.length === 0) return;
-    const today = new Date().toISOString().split("T")[0];
+    const today = getTodayPacific();
     if (weekDates.includes(today)) {
       setSelectedDate(today);
     } else {
@@ -1626,7 +1631,7 @@ export default function MessagingPanel({
                 const d = new Date(dateStr + "T00:00:00Z");
                 const dayNum = d.getUTCDate();
                 const monthShort = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
-                const today = new Date().toISOString().split("T")[0];
+                const today = getTodayPacific();
                 const isToday = dateStr === today;
 
                 return (

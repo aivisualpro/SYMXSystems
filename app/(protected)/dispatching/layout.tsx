@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useMemo, createContext, useContext } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
@@ -121,15 +121,47 @@ function getWeekDates(yearWeek: string): string[] {
     return dates;
 }
 
+/** Business timezone — all "today" checks use Pacific Time. */
+const BUSINESS_TZ = "America/Los_Angeles";
+
+/** Get today's date string (YYYY-MM-DD) in Pacific Time. */
+function getTodayPacific(): string {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
+}
+
+/** Compute current yearWeek (Sun-based) from today's date in Pacific Time. */
+function getCurrentYearWeek(): string {
+    const todayStr = getTodayPacific();
+    const date = new Date(todayStr + "T00:00:00.000Z");
+    const dayOfWeek = date.getUTCDay(); // 0=Sun … 6=Sat
+    // Find the Sunday of this week
+    const sundayOfThisWeek = new Date(date);
+    sundayOfThisWeek.setUTCDate(date.getUTCDate() - dayOfWeek);
+    const year = sundayOfThisWeek.getUTCFullYear();
+    const jan1 = new Date(Date.UTC(year, 0, 1));
+    const jan1Day = jan1.getUTCDay();
+    const firstSunday = new Date(jan1);
+    firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
+    const diffMs = sundayOfThisWeek.getTime() - firstSunday.getTime();
+    const diffDays = Math.round(diffMs / 86400000);
+    const weekNum = Math.floor(diffDays / 7) + 1;
+    return `${year}-W${weekNum.toString().padStart(2, "0")}`;
+}
+
 export default function DispatchingLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { setLeftContent, setRightContent } = useHeaderActions();
+
+    // ── Read initial values from URL search params ──
+    const urlWeek = searchParams.get("week") || "";
+    const urlDate = searchParams.get("date") || "";
 
     // ── State ──
     const [weeks, setWeeks] = useState<string[]>([]);
-    const [selectedWeek, setSelectedWeek] = useState("");
-    const [selectedDate, setSelectedDate] = useState("");
+    const [selectedWeek, setSelectedWeekState] = useState(urlWeek);
+    const [selectedDate, setSelectedDateState] = useState(urlDate);
     const [searchQuery, setSearchQuery] = useState("");
     const [generatingRoutes, setGeneratingRoutes] = useState(false);
     const [routesGenerated, setRoutesGenerated] = useState(false);
@@ -139,22 +171,50 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [showRoutesInfo, setShowRoutesInfo] = useState(false);
     const [globalEditMode, setGlobalEditMode] = useState(false);
 
+    // ── Sync state changes to URL ──
+    const updateURL = useCallback((week: string, date: string) => {
+        const params = new URLSearchParams();
+        if (week) params.set("week", week);
+        if (date) params.set("date", date);
+        const qs = params.toString();
+        router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+    }, [pathname, router]);
+
+    // Wrapped setters that also update the URL
+    const setSelectedWeek = useCallback((week: string) => {
+        setSelectedWeekState(week);
+        // Date will be set by the weekDates effect below
+    }, []);
+
+    const setSelectedDate = useCallback((date: string) => {
+        setSelectedDateState(date);
+        updateURL(selectedWeek, date);
+    }, [selectedWeek, updateURL]);
+
     // ── Compute week dates ──
     const weekDates = useMemo(() => {
         if (!selectedWeek) return [];
         return getWeekDates(selectedWeek);
     }, [selectedWeek]);
 
-    // ── Auto-select today's date when week changes ──
+    // ── Auto-select today's date when week changes (+ sync URL) ──
     useEffect(() => {
         if (weekDates.length === 0) return;
-        const today = new Date().toISOString().split("T")[0];
-        if (weekDates.includes(today)) {
-            setSelectedDate(today);
-        } else {
-            // Default to first day of the week
-            setSelectedDate(weekDates[0]);
+        const today = getTodayPacific();
+        // If URL has a valid date for this week, use it
+        if (urlDate && weekDates.includes(urlDate) && selectedWeek === urlWeek) {
+            setSelectedDateState(urlDate);
+            updateURL(selectedWeek, urlDate);
+            return;
         }
+        if (weekDates.includes(today)) {
+            setSelectedDateState(today);
+            updateURL(selectedWeek, today);
+        } else {
+            setSelectedDateState(weekDates[0]);
+            updateURL(selectedWeek, weekDates[0]);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [weekDates]);
 
     const store = useDataStore();
@@ -166,8 +226,16 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         if (store.initialized && store.dispatchingWeeks?.length) {
             hydratedRef.current = true;
             setWeeks(store.dispatchingWeeks);
-            setSelectedWeek(store.dispatchingWeeks[0]);
+            // Use URL week if valid, otherwise default to current week or first available
+            const currentWeek = getCurrentYearWeek();
+            const initWeek = urlWeek && store.dispatchingWeeks.includes(urlWeek)
+                ? urlWeek
+                : store.dispatchingWeeks.includes(currentWeek)
+                    ? currentWeek
+                    : store.dispatchingWeeks[0];
+            setSelectedWeek(initWeek);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [store.initialized, store.dispatchingWeeks]);
 
     // ── Fetch available weeks (fallback if store not ready) ──
@@ -179,13 +247,20 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                 const data = await res.json();
                 if (data.weeks?.length) {
                     setWeeks(data.weeks);
-                    setSelectedWeek(data.weeks[0]);
+                    const currentWeek = getCurrentYearWeek();
+                    const initWeek = urlWeek && data.weeks.includes(urlWeek)
+                        ? urlWeek
+                        : data.weeks.includes(currentWeek)
+                            ? currentWeek
+                            : data.weeks[0];
+                    setSelectedWeek(initWeek);
                 }
             } catch {
                 toast.error("Failed to load available weeks");
             }
         };
         fetchWeeks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // ── Check if routes exist for selected week ──
@@ -359,10 +434,14 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                         {DISPATCHING_TABS.map((tab) => {
                             const Icon = tab.icon;
                             const isActive = pathname.startsWith(tab.href);
+                            const tabParams = new URLSearchParams();
+                            if (selectedWeek) tabParams.set("week", selectedWeek);
+                            if (selectedDate) tabParams.set("date", selectedDate);
+                            const tabQs = tabParams.toString();
                             return (
                                 <Link
                                     key={tab.id}
-                                    href={tab.href}
+                                    href={`${tab.href}${tabQs ? `?${tabQs}` : ""}`}
                                     prefetch={true}
                                     className={cn(
                                         "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap select-none",
@@ -386,7 +465,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                     const d = new Date(dateStr + "T00:00:00Z");
                                     const dayNum = d.getUTCDate();
                                     const monthShort = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
-                                    const today = new Date().toISOString().split("T")[0];
+                                    const today = getTodayPacific();
                                     const isToday = dateStr === today;
 
                                     return (
@@ -402,7 +481,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                                         : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                             )}
                                         >
-                                            <span className="text-[9px] uppercase tracking-wider leading-tight opacity-80">{SHORT_DAYS[idx]}</span>
+                                            <span className="text-[9px] uppercase tracking-wider leading-tight opacity-80">{SHORT_DAYS[d.getUTCDay()]}</span>
                                             <span className="text-xs font-bold leading-tight">{dayNum}</span>
                                             <span className="text-[8px] uppercase leading-tight opacity-60">{monthShort}</span>
                                         </button>
@@ -425,6 +504,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                     <TableProperties className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                     Routes Info
                                 </button>
+
                             </>
                         )}
 
@@ -479,6 +559,8 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                 onClose={() => setShowRoutesInfo(false)}
                 date={selectedDate}
             />
+
+
         </DispatchingContext.Provider>
     );
 }

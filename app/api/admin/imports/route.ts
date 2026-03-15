@@ -256,24 +256,25 @@ function dateToISOWeek(dateStr: string): string | null {
 }
 
 /**
- * Convert a date to yearWeek format "yyyy-Wxx" where Sunday is the first day of the week.
- * Week 1 starts with the first Sunday of the year (or Jan 1 if it is a Sunday).
+ * Compute yearWeek (Sunday-based) from a date string.
+ * Weeks run Sun–Sat, matching getWeekDates() used throughout the app.
+ * Returns "YYYY-WXX" or null if parsing fails.
  */
 function dateToSundayWeek(dateStr: string): string | null {
     try {
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) return null;
-        // Find the Sunday that starts this week (Sunday=0)
-        const dayOfWeek = date.getUTCDay(); // 0=Sun,1=Mon...6=Sat
+        const dayOfWeek = date.getUTCDay(); // 0=Sun … 6=Sat
         const sundayOfThisWeek = new Date(date);
         sundayOfThisWeek.setUTCDate(date.getUTCDate() - dayOfWeek);
-        // Compute the year of that Sunday
         const year = sundayOfThisWeek.getUTCFullYear();
-        // The first day of that year
         const jan1 = new Date(Date.UTC(year, 0, 1));
-        // Day of year for that Sunday (0-indexed)
-        const dayOfYear = Math.floor((sundayOfThisWeek.getTime() - jan1.getTime()) / 86400000);
-        const weekNum = Math.floor(dayOfYear / 7) + 1;
+        const jan1Day = jan1.getUTCDay();
+        const firstSunday = new Date(jan1);
+        firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
+        const diffMs = sundayOfThisWeek.getTime() - firstSunday.getTime();
+        const diffDays = Math.round(diffMs / 86400000);
+        const weekNum = Math.floor(diffDays / 7) + 1;
         return `${year}-W${weekNum.toString().padStart(2, '0')}`;
     } catch {
         return null;

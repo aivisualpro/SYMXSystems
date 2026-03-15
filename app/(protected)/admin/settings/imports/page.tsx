@@ -11,6 +11,7 @@ import {
   FileText,
   Users,
   ListFilter,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 import Papa from "papaparse";
@@ -151,6 +152,36 @@ const importTypes = [
     iconColor: "text-sky-500",
     fields: ["description", "type"],
   },
+  {
+    id: "dispatching-routes",
+    name: "Dispatching Routes",
+    description: "Import dispatching route records from CSV. Upserts on Transporter ID + Date. Auto-syncs route info fields to Routes Info.",
+    icon: MapPin,
+    color: "from-orange-500 to-rose-500",
+    bgColor: "bg-orange-500/10",
+    borderColor: "border-orange-500/20",
+    iconColor: "text-orange-500",
+    endpoint: "/api/dispatching/routes/import",
+    fields: [
+      "date", "yearWeek", "transporterId", "type", "subType", "trainingDay",
+      "routeSize", "van", "serviceType", "dashcam", "routeNumber",
+      "stopCount", "packageCount", "routeDuration", "waveTime", "pad",
+      "wst", "wstDuration", "wstRevenue", "notes", "stagingLocation",
+      "extraStops", "stopsRescued", "departureDelay", "actualDepartureTime",
+      "plannedOutboundStem", "actualOutboundStem", "outboundDelay",
+      "plannedFirstStop", "actualFirstStop", "firstStopDelay",
+      "plannedLastStop", "actualLastStop", "lastStopDelay",
+      "plannedRTSTime", "plannedInboundStem", "estimatedRTSTime",
+      "plannedDuration1stToLast", "actualDuration1stToLast", "stopsPerHour",
+      "deliveryCompletionTime", "dctDelay", "driverEfficiency",
+      "attendance", "attendanceTime",
+      "amazonOutLunch", "amazonInLunch", "amazonAppLogout", "inspectionTime",
+      "paycomInDay", "paycomOutLunch", "paycomInLunch", "paycomOutDay",
+      "driversUpdatedForLunch", "totalHours", "regHrs", "otHrs",
+      "totalCost", "regPay", "otPay", "punchStatus", "whc",
+      "createdAt", "createdBy", "bags", "ov",
+    ],
+  },
 ];
 
 export default function ImportsSettingsPage() {
@@ -202,28 +233,31 @@ export default function ImportsSettingsPage() {
       let totalUpdated = 0;
       let totalCount = 0;
 
-      for (let i = 0; i < chunks.length; i++) {
-        setImportProgress(`Uploading batch ${i + 1} of ${chunks.length} (${chunks[i].length} rows)...`);
+        const importTypeDef = importTypes.find((t) => t.id === activeImportType);
+        const apiEndpoint = importTypeDef?.endpoint || "/api/admin/imports";
 
-        const res = await fetch("/api/admin/imports", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: activeImportType,
-            data: chunks[i],
-          }),
-        });
+        for (let i = 0; i < chunks.length; i++) {
+          setImportProgress(`Uploading batch ${i + 1} of ${chunks.length} (${chunks[i].length} rows)...`);
 
-        const result = await res.json();
+          const res = await fetch(apiEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: activeImportType,
+              data: chunks[i],
+            }),
+          });
 
-        if (!res.ok) {
-          throw new Error(result.error || `Import failed on batch ${i + 1}`);
+          const result = await res.json();
+
+          if (!res.ok) {
+            throw new Error(result.error || `Import failed on batch ${i + 1}`);
+          }
+
+          totalInserted += result.inserted || 0;
+          totalUpdated += result.updated || 0;
+          totalCount += result.count || 0;
         }
-
-        totalInserted += result.inserted || 0;
-        totalUpdated += result.updated || 0;
-        totalCount += result.count || 0;
-      }
 
       const finalResult: ImportResult = {
         success: true,

@@ -67,17 +67,21 @@ export function NavUser({
       try {
         const res = await fetch("/api/auth/session");
         if (res.ok) {
-          const { user: sessionUser } = await res.json();
-          setUser({
-            id: sessionUser.id,
-            name: sessionUser.name,
-            email: sessionUser.email,
-            role: sessionUser.role,
-            avatar: sessionUser.avatar
-          });
+          const data = await res.json();
+          if (data.user) {
+            setUser({
+              id: data.user.id || initialUser.id || "679e2a44ea73db1789c62981",
+              name: data.user.name || initialUser.name,
+              email: data.user.email || initialUser.email,
+              role: data.user.role || initialUser.role || "Administrator",
+              avatar: data.user.avatar || initialUser.avatar
+            });
+          }
         }
+        // Non-OK responses (401, etc.) silently fall back to initialUser defaults
       } catch (e) {
-        console.error("Failed to fetch session");
+        // Network error — silently use initialUser defaults
+        console.warn("NavUser: session fetch failed, using fallback data", e);
       } finally {
         setIsLoaded(true)
       }

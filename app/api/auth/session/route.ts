@@ -14,12 +14,19 @@ export async function GET() {
     return NextResponse.json({ authenticated: true, user: session });
   }
 
-  await connectToDatabase();
-  const user = await SymxUser.findById(session.id);
+  // Try to verify user is still active in DB, but fall back to session data
+  // if DB is temporarily unreachable
+  try {
+    await connectToDatabase();
+    const user = await SymxUser.findById(session.id);
 
-  if (!user || !user.isActive) {
-    await logout();
-    return NextResponse.json({ authenticated: false, error: "Account inactive" }, { status: 401 });
+    if (!user || !user.isActive) {
+      await logout();
+      return NextResponse.json({ authenticated: false, error: "Account inactive" }, { status: 401 });
+    }
+  } catch (e) {
+    // DB unreachable — trust the JWT session data rather than blocking the user
+    console.warn("Session route: DB lookup failed, falling back to JWT session data", e);
   }
 
   return NextResponse.json({ authenticated: true, user: session });
