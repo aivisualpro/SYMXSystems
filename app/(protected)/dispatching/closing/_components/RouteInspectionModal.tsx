@@ -1,9 +1,16 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { IconX, IconLoader2, IconUpload, IconPhoto } from "@tabler/icons-react";
 
 const inputClass = "w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors";
+
+/** Convert a date (ISO string or Date) to YYYY-MM-DD in Pacific Time */
+function toPacificDate(d: string | Date): string {
+    const date = typeof d === "string" ? new Date(d) : new Date(d.getTime());
+    if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) date.setUTCHours(12);
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(date);
+}
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
     return (
@@ -77,6 +84,21 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
     const [saving, setSaving] = useState(false);
     const [formData, setFormData] = useState<any>({});
     const [sessionEmail, setSessionEmail] = useState("");
+    const [repairStatuses, setRepairStatuses] = useState<{description: string; color?: string; icon?: string}[]>([]);
+
+    // Fetch repair statuses from dropdown settings
+    useEffect(() => {
+        if (!open) return;
+        fetch("/api/admin/settings/dropdowns?type=fleet repair status")
+            .then(r => r.json())
+            .then((data: any[]) => {
+                const statuses = data
+                    .filter((d: any) => d.isActive !== false)
+                    .map((d: any) => ({ description: d.description, color: d.color || "", icon: d.icon || "" }));
+                if (statuses.length > 0) setRepairStatuses(statuses);
+            })
+            .catch(() => { });
+    }, [open]);
 
     // Reset form when modal opens or route changes
     React.useEffect(() => {
@@ -97,7 +119,7 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
                 employeeName: route.employeeName || "",
                 vin: route.genuineVin || route.van || "",
                 vanDisplay: route.van ? `Van ${route.van}` : "",
-                routeDate: route.date ? route.date.split("T")[0] : "",
+                routeDate: route.date ? toPacificDate(route.date) : "",
                 mileage: 0,
                 anyRepairs: "",
                 comments: "",
@@ -210,10 +232,24 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
                                 <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Repair Details</p>
                                 <div className="grid grid-cols-2 gap-3">
                                     <FormField label="Repair Description"><input className={inputClass} value={formData.repairDescription || ""} onChange={e => updateForm("repairDescription", e.target.value)} /></FormField>
-                                    <FormField label="Repair Status"><input className={inputClass} value={formData.repairCurrentStatus || ""} onChange={e => updateForm("repairCurrentStatus", e.target.value)} placeholder="e.g. In Progress" /></FormField>
+                                    <FormField label="Repair Status">
+                                        {(() => {
+                                            const opts = repairStatuses.length > 0
+                                                ? repairStatuses
+                                                : [{ description: "Not Started" }, { description: "In Progress" }, { description: "Waiting for Parts" }, { description: "Sent to Repair Shop" }, { description: "Completed" }];
+                                            const matched = opts.find(s => s.description === formData.repairCurrentStatus);
+                                            return (
+                                                <select className={inputClass} value={formData.repairCurrentStatus || ""} onChange={e => updateForm("repairCurrentStatus", e.target.value)}
+                                                    style={matched?.color ? { borderLeftWidth: '3px', borderLeftColor: matched.color } : {}}>
+                                                    <option key="__none" value="">Select status…</option>
+                                                    {opts.map((s, i) => <option key={`status-${i}`} value={s.description}>{s.description}</option>)}
+                                                </select>
+                                            );
+                                        })()}
+                                    </FormField>
                                     <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.repairEstimatedDate || ""} onChange={e => updateForm("repairEstimatedDate", e.target.value)} /></FormField>
                                 </div>
-                                <FormField label="Repair Image URL"><input className={inputClass} value={formData.repairImage || ""} onChange={e => updateForm("repairImage", e.target.value)} placeholder="https://..." /></FormField>
+                                <PhotoUploadField label="Repair Image" value={formData.repairImage} onChange={v => updateForm("repairImage", v)} />
                             </div>
                         )}
 

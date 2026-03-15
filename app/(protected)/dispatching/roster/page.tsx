@@ -9,6 +9,7 @@ import {
     Phone,
     Loader2,
     TrendingUp,
+    TrendingDown,
     ChevronUp,
     ChevronDown,
     ChevronRight,
@@ -53,6 +54,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+
+/** Convert a date (ISO string or Date) to YYYY-MM-DD in Pacific Time */
+const BUSINESS_TZ = "America/Los_Angeles";
+function toPacificDate(d: string | Date): string {
+    const date = typeof d === "string" ? new Date(d) : new Date(d.getTime());
+    if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) date.setUTCHours(12);
+    return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(date);
+}
 
 // ── Type Options with Icons & Colors (same as scheduling) ──
 interface TypeOption {
@@ -124,6 +133,7 @@ interface RouteRow {
     employeeName: string;
     phone: string;
     routesCompleted: number;
+    routesCompletedPrev: number;
 }
 
 type SortKey = typeof COLUMNS[number]["key"];
@@ -143,6 +153,8 @@ export default function RosterPage() {
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
     const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
+    const [routeCountsByDate, setRouteCountsByDate] = useState<Record<string, Record<string, number>>>({});
+    const [initialRoutesComp, setInitialRoutesComp] = useState<Record<string, number>>({});
 
     // Audit panel state
     const [showAuditPanel, setShowAuditPanel] = useState(false);
@@ -170,6 +182,8 @@ export default function RosterPage() {
                 }
 
                 setAuditCounts(data.auditCounts || {});
+                setRouteCountsByDate(data.routeCountsByDate || {});
+                setInitialRoutesComp(data.initialRoutesComp || {});
 
                 // Build flat list of ALL route records
                 const rows: RouteRow[] = data.routes.map((rec: any) => {
@@ -189,6 +203,7 @@ export default function RosterPage() {
                         employeeName: emp?.name || rec.transporterId,
                         phone: emp?.phoneNumber || "",
                         routesCompleted: data.routeCounts?.[rec.transporterId] || 0,
+                        routesCompletedPrev: 0,
                     };
                 });
 
@@ -266,10 +281,48 @@ export default function RosterPage() {
         // 1. Filter by selected date
         let dateFiltered = allRoutes;
         if (selectedDate) {
-            dateFiltered = allRoutes.filter(r => r.date?.split("T")[0] === selectedDate);
+            dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         }
 
         const totalForDate = dateFiltered.length;
+
+        // Compute date-aware routesCompleted
+        const computeDateStr = selectedDate || dateFiltered.reduce((latest, r) => {
+            const d = r.date ? toPacificDate(r.date) : "";
+            return d > latest ? d : latest;
+        }, "");
+
+        if (computeDateStr) {
+            const prevDate = new Date(computeDateStr + "T12:00:00Z");
+            prevDate.setUTCDate(prevDate.getUTCDate() - 1);
+            const prevDateStr = toPacificDate(prevDate);
+
+            const empCumulative: Record<string, number> = {};
+            const empCumulativePrev: Record<string, number> = {};
+
+            Object.entries(routeCountsByDate).forEach(([tid, dateCounts]) => {
+                let totalUpTo = 0;
+                let totalUpToPrev = 0;
+                Object.entries(dateCounts).forEach(([dt, count]) => {
+                    if (dt <= computeDateStr) totalUpTo += count;
+                    if (dt <= prevDateStr) totalUpToPrev += count;
+                });
+                const initComp = initialRoutesComp[tid] || 0;
+                empCumulative[tid] = totalUpTo + initComp;
+                empCumulativePrev[tid] = totalUpToPrev + initComp;
+            });
+            Object.entries(initialRoutesComp).forEach(([tid, initVal]) => {
+                if (!(tid in empCumulative) && initVal > 0) {
+                    empCumulative[tid] = initVal;
+                    empCumulativePrev[tid] = initVal;
+                }
+            });
+
+            dateFiltered.forEach(r => {
+                r.routesCompleted = empCumulative[r.transporterId] || 0;
+                r.routesCompletedPrev = empCumulativePrev[r.transporterId] || 0;
+            });
+        }
 
         // 2. Search filter
         let filtered = dateFiltered;
@@ -334,7 +387,7 @@ export default function RosterPage() {
         }));
 
         return { groups, totalFiltered: sorted.length, totalForDate };
-    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir]);
+    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir, routeCountsByDate, initialRoutesComp]);
 
     // ── Push stats to layout ──
     useEffect(() => {
@@ -477,7 +530,12 @@ export default function RosterPage() {
 
                                                 {/* Employee */}
                                                 <div className="flex items-center gap-2 min-w-0">
-                                                    <span className="text-xs font-semibold truncate">
+                                                    {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                                    {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                                    <span
+                                                        className="text-xs font-semibold truncate"
+                                                        style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
+                                                    >
                                                         {row.employeeName}
                                                     </span>
                                                 </div>
@@ -569,11 +627,33 @@ export default function RosterPage() {
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <div className="flex items-center gap-1">
-                                                            <TrendingUp className="h-3 w-3 text-primary/50" />
+                                                            {row.routesCompleted > 0 && row.routesCompletedPrev > 0 ? (
+                                                                row.routesCompleted > row.routesCompletedPrev ? (
+                                                                    <TrendingUp className="h-3 w-3 text-emerald-500" />
+                                                                ) : row.routesCompleted === row.routesCompletedPrev ? (
+                                                                    <Minus className="h-3 w-3 text-amber-400" />
+                                                                ) : (
+                                                                    <TrendingDown className="h-3 w-3 text-red-400" />
+                                                                )
+                                                            ) : (
+                                                                <TrendingUp className="h-3 w-3 text-primary/50" />
+                                                            )}
                                                             <span className="text-xs font-medium">{row.routesCompleted}</span>
                                                         </div>
                                                     </TooltipTrigger>
-                                                    <TooltipContent>Total routes completed across all weeks</TooltipContent>
+                                                    <TooltipContent>
+                                                        Routes completed (up to selected date)
+                                                        {row.routesCompletedPrev > 0 && (
+                                                            <span className="block text-[10px] text-muted-foreground">
+                                                                Previous day: {row.routesCompletedPrev}
+                                                                {row.routesCompleted > row.routesCompletedPrev
+                                                                    ? ` (+${row.routesCompleted - row.routesCompletedPrev})`
+                                                                    : row.routesCompleted === row.routesCompletedPrev
+                                                                        ? " (no change)"
+                                                                        : ` (${row.routesCompleted - row.routesCompletedPrev})`}
+                                                            </span>
+                                                        )}
+                                                    </TooltipContent>
                                                 </Tooltip>
 
                                                 {/* Phone */}

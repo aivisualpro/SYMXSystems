@@ -23,6 +23,7 @@ import {
     Check,
     ArrowRight,
     TrendingUp,
+    TrendingDown,
     Navigation,
     DoorOpen,
     DoorClosed,
@@ -109,11 +110,74 @@ const getAttendanceStyle = (value: string) => {
     return ATTENDANCE_OPTIONS[2];
 };
 
-// ── Column Definitions (merged from Roster + Opening + old Routes) ──
+// ── Time arithmetic helpers ──
+function parseTime(t: string): number | null {
+    if (!t || !t.trim()) return null;
+    const s = t.trim();
+    // Handle negative duration: "-H:MM" or "H:MM"
+    const mNeg = s.match(/^(-?)(\d{1,2}):(\d{2})$/);
+    if (mNeg) {
+        const val = parseInt(mNeg[2]) * 60 + parseInt(mNeg[3]);
+        return mNeg[1] === "-" ? -val : val;
+    }
+    // Handle 12h format: "2:00 PM"
+    const m12 = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (m12) {
+        let h = parseInt(m12[1]);
+        const min = parseInt(m12[2]);
+        const pm = m12[3].toUpperCase() === "PM";
+        if (pm && h < 12) h += 12;
+        if (!pm && h === 12) h = 0;
+        return h * 60 + min;
+    }
+    return null;
+}
+function isDelayPositive(d: string): boolean {
+    return !!d && !d.startsWith("-") && d !== "0:00";
+}
+function fmtDur(mins: number | null): string {
+    if (mins === null || isNaN(mins)) return "";
+    const neg = mins < 0;
+    const abs = Math.abs(Math.round(mins));
+    const h = Math.floor(abs / 60);
+    const m = abs % 60;
+    return `${neg ? "-" : ""}${h}:${m.toString().padStart(2, "0")}`;
+}
+function fmtTime(mins: number | null): string {
+    if (mins === null || isNaN(mins)) return "";
+    let m = ((mins % 1440) + 1440) % 1440;
+    const h = Math.floor(m / 60);
+    const mn = m % 60;
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${h12}:${mn.toString().padStart(2, "0")} ${ampm}`;
+}
+function durToHrs(t: string): number {
+    const m = parseTime(t);
+    return m !== null ? m / 60 : 0;
+}
+/** Strip trailing seconds (":00" or ":SS") from time strings like "6:30:00" → "6:30" */
+function stripSec(v: string): string {
+    if (!v) return v;
+    return v.replace(/:\d{2}$/, "");
+}
+
+/** Business timezone — all date comparisons use Pacific Time */
+const BUSINESS_TZ = "America/Los_Angeles";
+/** Convert a date (ISO string or Date) to YYYY-MM-DD in Pacific Time.
+ *  Shifts UTC-midnight dates to noon to prevent timezone rollback. */
+function toPacificDate(d: string | Date): string {
+    const date = typeof d === "string" ? new Date(d) : new Date(d.getTime());
+    if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) date.setUTCHours(12);
+    return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(date);
+}
+
+// ── Column Definitions ──
 const COLUMNS = [
     { key: "employee", label: "Employee", minW: 140, sticky: true },
-    { key: "driverEfficiency", label: "Eff", minW: 44, sticky: false },
+
     { key: "wst", label: "WST", minW: 50, sticky: false },
+    { key: "wstRevenue", label: "WST Rev", minW: 62, sticky: false },
     { key: "routeNumber", label: "Route #", minW: 60, sticky: false },
     { key: "van", label: "Van", minW: 58, sticky: false },
     { key: "bags", label: "Bags", minW: 40, sticky: false },
@@ -129,6 +193,33 @@ const COLUMNS = [
     { key: "pad", label: "PAD", minW: 42, sticky: false },
     { key: "wstDuration", label: "WST Dur", minW: 52, sticky: false },
     { key: "stagingLocation", label: "Staging", minW: 60, sticky: false },
+    { key: "actualDepartureTime", label: "Act Dep", minW: 56, sticky: false },
+    { key: "departureDelay", label: "Dep Delay", minW: 60, sticky: false },
+    { key: "plannedOutboundStem", label: "Plan OB", minW: 54, sticky: false },
+    { key: "actualOutboundStem", label: "Act OB", minW: 54, sticky: false },
+    { key: "outboundDelay", label: "OB Delay", minW: 56, sticky: false },
+    { key: "plannedFirstStop", label: "Plan 1st", minW: 56, sticky: false },
+    { key: "actualFirstStop", label: "Act 1st", minW: 54, sticky: false },
+    { key: "firstStopDelay", label: "1st Delay", minW: 56, sticky: false },
+    { key: "plannedLastStop", label: "Plan Last", minW: 56, sticky: false },
+    { key: "actualLastStop", label: "Act Last", minW: 54, sticky: false },
+    { key: "lastStopDelay", label: "Last Delay", minW: 58, sticky: false },
+    { key: "deliveryCompletionTime", label: "DCT", minW: 50, sticky: false },
+    { key: "dctDelay", label: "DCT Delay", minW: 58, sticky: false },
+    { key: "plannedRTSTime", label: "Plan RTS", minW: 56, sticky: false },
+    { key: "plannedInboundStem", label: "Plan IB", minW: 52, sticky: false },
+    { key: "estimatedRTSTime", label: "Est RTS", minW: 54, sticky: false },
+    { key: "plannedDuration1stToLast", label: "Plan 1→L", minW: 56, sticky: false },
+    { key: "actualDuration1stToLast", label: "Act 1→L", minW: 56, sticky: false },
+    { key: "stopsPerHour", label: "Stops/Hr", minW: 52, sticky: false },
+    { key: "totalHours", label: "Total Hrs", minW: 56, sticky: false },
+    { key: "regHrs", label: "Reg Hrs", minW: 50, sticky: false },
+    { key: "otHrs", label: "OT Hrs", minW: 48, sticky: false },
+    { key: "regPay", label: "Reg Pay", minW: 56, sticky: false },
+    { key: "otPay", label: "OT Pay", minW: 52, sticky: false },
+    { key: "totalCost", label: "Total Cost", minW: 60, sticky: false },
+    { key: "hoursWorkedLast7Days", label: "7d Hrs", minW: 48, sticky: false },
+    { key: "driverEfficiency", label: "Eff %", minW: 48, sticky: false },
 ] as const;
 
 
@@ -147,6 +238,7 @@ interface RouteRow {
     driverEfficiency: number;
     employeeName: string;
     phone: string;
+    rate: number;
     routesCompleted: number;
     routeNumber: string;
     stopCount: number;
@@ -155,12 +247,43 @@ interface RouteRow {
     waveTime: string;
     pad: string;
     wst: string;
+    wstRevenue: number;
     wstDuration: number;
     bags: string;
     ov: string;
     stagingLocation: string;
     attendance: string;
     profileImage: string;
+    // Raw fields from DB
+    actualDepartureTime: string;
+    plannedOutboundStem: string;
+    actualOutboundStem: string;
+    plannedFirstStop: string;
+    actualFirstStop: string;
+    plannedLastStop: string;
+    actualLastStop: string;
+    deliveryCompletionTime: string;
+    totalHours: string;
+    stopsRescued: number;
+    // Computed fields
+    departureDelay: string;
+    outboundDelay: string;
+    firstStopDelay: string;
+    lastStopDelay: string;
+    plannedRTSTime: string;
+    plannedInboundStem: string;
+    estimatedRTSTime: string;
+    plannedDuration1stToLast: string;
+    actualDuration1stToLast: string;
+    stopsPerHour: number;
+    dctDelay: string;
+    regHrs: number;
+    otHrs: number;
+    totalCost: number;
+    regPay: number;
+    otPay: number;
+    hoursWorkedLast7Days: number;
+    routesCompletedPrev: number;
 }
 
 type SortKey = typeof COLUMNS[number]["key"];
@@ -180,6 +303,9 @@ export default function RoutesPage() {
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
     const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
+    const [wstRevenueMap, setWstRevenueMap] = useState<Record<string, number>>({});
+    const [routeCountsByDate, setRouteCountsByDate] = useState<Record<string, Record<string, number>>>({});
+    const [initialRoutesComp, setInitialRoutesComp] = useState<Record<string, number>>({});
 
 
     // Audit panel state
@@ -196,6 +322,22 @@ export default function RoutesPage() {
     const store = useDataStore();
     const hydratedRoutesRef = useRef(false);
 
+    // ── Fetch WST settings for revenue lookup ──
+    useEffect(() => {
+        fetch("/api/admin/settings/wst")
+            .then(r => r.json())
+            .then((data: any[]) => {
+                const map: Record<string, number> = {};
+                data.forEach((w: any) => {
+                    if (w.wst && w.isActive !== false) {
+                        map[w.wst.toLowerCase()] = w.revenue || 0;
+                    }
+                });
+                setWstRevenueMap(map);
+            })
+            .catch(() => { });
+    }, []);
+
     // ── Fetch ALL routes for the week ──
     useEffect(() => {
         if (!selectedWeek) return;
@@ -209,6 +351,8 @@ export default function RoutesPage() {
             }
 
             setAuditCounts(data.auditCounts || {});
+            setRouteCountsByDate(data.routeCountsByDate || {});
+            setInitialRoutesComp(data.initialRoutesComp || {});
 
             const rows: RouteRow[] = data.routes.map((rec: any) => {
                 const emp = data.employees?.[rec.transporterId];
@@ -226,6 +370,7 @@ export default function RoutesPage() {
                     driverEfficiency: rec.driverEfficiency || 0,
                     employeeName: emp?.name || rec.transporterId,
                     phone: emp?.phoneNumber || "",
+                    rate: emp?.rate || 0,
                     routesCompleted: data.routeCounts?.[rec.transporterId] || 0,
                     routeNumber: rec.routeNumber || "",
                     stopCount: rec.stopCount || 0,
@@ -234,12 +379,32 @@ export default function RoutesPage() {
                     waveTime: rec.waveTime || "",
                     pad: rec.pad || "",
                     wst: rec.wst || "",
+                    wstRevenue: 0,
                     wstDuration: rec.wstDuration || 0,
                     bags: rec.bags || "",
                     ov: rec.ov || "",
                     stagingLocation: rec.stagingLocation || "",
                     attendance: rec.attendance || "",
                     profileImage: emp?.profileImage || "",
+                    // Raw fields
+                    actualDepartureTime: rec.actualDepartureTime || "",
+                    plannedOutboundStem: rec.plannedOutboundStem || "",
+                    actualOutboundStem: rec.actualOutboundStem || "",
+                    plannedFirstStop: rec.plannedFirstStop || "",
+                    actualFirstStop: rec.actualFirstStop || "",
+                    plannedLastStop: rec.plannedLastStop || "",
+                    actualLastStop: rec.actualLastStop || "",
+                    deliveryCompletionTime: rec.deliveryCompletionTime || "",
+                    totalHours: rec.totalHours || "",
+                    stopsRescued: rec.stopsRescued || 0,
+                    // Computed fields (will be filled in useMemo)
+                    departureDelay: "", outboundDelay: "", firstStopDelay: "", lastStopDelay: "",
+                    plannedRTSTime: "", plannedInboundStem: "", estimatedRTSTime: "",
+                    plannedDuration1stToLast: "", actualDuration1stToLast: "",
+                    stopsPerHour: 0, dctDelay: "",
+                    regHrs: 0, otHrs: 0, totalCost: 0, regPay: 0, otPay: 0,
+                    hoursWorkedLast7Days: 0,
+                    routesCompletedPrev: 0,
                 };
             });
 
@@ -329,11 +494,161 @@ export default function RoutesPage() {
 
     // ── Filter by date, search, sort, and group ──
     const { groups, totalFiltered, totalForDate } = useMemo(() => {
-        let dateFiltered = allRoutes;
+        // STEP 1: Enrich ALL routes with computed fields (before date filter for 7d hrs)
+        const enriched: RouteRow[] = allRoutes.map(r => {
+            const waveM = parseTime(r.waveTime);
+            const durM = parseTime(r.routeDuration);
+            const actDepM = parseTime(r.actualDepartureTime);
+            const planOBM = parseTime(r.plannedOutboundStem);
+            const actOBM = parseTime(r.actualOutboundStem);
+            const planFirstM = parseTime(r.plannedFirstStop);
+            const actFirstM = parseTime(r.actualFirstStop);
+            const planLastM = parseTime(r.plannedLastStop);
+            const actLastM = parseTime(r.actualLastStop);
+            const dctM = parseTime(r.deliveryCompletionTime);
+
+            // 1. departureDelay = actualDepartureTime - (waveTime + 0:20)
+            const departureDelay = (actDepM !== null && waveM !== null)
+                ? fmtDur(actDepM - (waveM + 20)) : "";
+
+            // 2. outboundDelay = actualOutboundStem - plannedOutboundStem
+            const outboundDelay = (actOBM !== null && planOBM !== null)
+                ? fmtDur(actOBM - planOBM) : "";
+
+            // 3. firstStopDelay = actualFirstStop - plannedFirstStop
+            const firstStopDelay = (actFirstM !== null && planFirstM !== null)
+                ? fmtDur(actFirstM - planFirstM) : "";
+
+            // 4. lastStopDelay = actualLastStop - plannedLastStop
+            const lastStopDelay = (actLastM !== null && planLastM !== null)
+                ? fmtDur(actLastM - planLastM) : "";
+
+            // 5. plannedRTSTime = waveTime + routeDuration + 0:20
+            const plannedRTSM = (waveM !== null && durM !== null)
+                ? waveM + durM + 20 : null;
+            const plannedRTSTime = fmtTime(plannedRTSM);
+
+            // 8. plannedDuration1stToLast = plannedLastStop - plannedFirstStop
+            const planDur1LM = (planLastM !== null && planFirstM !== null)
+                ? planLastM - planFirstM : null;
+            const plannedDuration1stToLast = fmtDur(planDur1LM);
+
+            // 9. actualDuration1stToLast = actualLastStop - actualFirstStop
+            const actDur1LM = (actLastM !== null && actFirstM !== null)
+                ? actLastM - actFirstM : null;
+            const actualDuration1stToLast = fmtDur(actDur1LM);
+
+            // 6. plannedInboundStem = plannedRTSTime - plannedLastStop
+            const planIBM = (plannedRTSM !== null && planLastM !== null)
+                ? plannedRTSM - planLastM : null;
+            const plannedInboundStem = fmtDur(planIBM);
+
+            // 7. estimatedRTSTime = deliveryCompletionTime + plannedInboundStem
+            const estRTSM = (dctM !== null && planIBM !== null)
+                ? dctM + planIBM : null;
+            const estimatedRTSTime = fmtTime(estRTSM);
+
+            // 10. stopsPerHour = stopCount / (plannedDuration1stToLast in hours)
+            const stopsPerHour = (planDur1LM && planDur1LM > 0 && r.stopCount > 0)
+                ? Math.round((r.stopCount / (planDur1LM / 60)) * 10) / 10 : 0;
+
+            // 11. dctDelay = deliveryCompletionTime - actualLastStop
+            const dctDelay = (dctM !== null && actLastM !== null)
+                ? fmtDur(dctM - actLastM) : "";
+
+            // 12. driverEfficiency = plannedDuration1stToLast / (actualDuration1stToLast + stopsRescued * stopsPerHour_in_mins)
+            let driverEfficiency = r.driverEfficiency;
+            if (planDur1LM && planDur1LM > 0 && actDur1LM && actDur1LM > 0) {
+                const rescuedMins = stopsPerHour > 0 ? (r.stopsRescued * (60 / stopsPerHour)) : 0;
+                const eff = (planDur1LM / (actDur1LM + rescuedMins)) * 100;
+                if (isFinite(eff)) driverEfficiency = Math.round(eff);
+            }
+
+            // 13-14. regHrs / otHrs from totalHours
+            const totalHrsDecimal = durToHrs(r.totalHours);
+            const regHrs = totalHrsDecimal > 0 ? Math.min(totalHrsDecimal, 8) : 0;
+            const otHrs = totalHrsDecimal > 8 ? totalHrsDecimal - 8 : 0;
+
+            // 15-17. pay calculations using employee rate
+            const rate = r.rate || 0;
+            const regPay = Math.round(rate * regHrs * 100) / 100;
+            const otPay = Math.round(rate * 1.5 * otHrs * 100) / 100;
+            const totalCost = Math.round((regPay + otPay) * 100) / 100;
+
+            return {
+                ...r,
+                wstRevenue: r.wst ? (wstRevenueMap[r.wst.toLowerCase()] || 0) : 0,
+                departureDelay, outboundDelay, firstStopDelay, lastStopDelay,
+                plannedRTSTime, plannedInboundStem, estimatedRTSTime,
+                plannedDuration1stToLast, actualDuration1stToLast,
+                stopsPerHour, dctDelay, driverEfficiency,
+                regHrs: Math.round(regHrs * 100) / 100,
+                otHrs: Math.round(otHrs * 100) / 100,
+                totalCost, regPay, otPay,
+                hoursWorkedLast7Days: 0, // computed below
+            };
+        });
+
+        // 18. hoursWorkedLast7Days: sum totalHours across all routes for same employee
+        const empHrsMap: Record<string, number> = {};
+        enriched.forEach(r => {
+            const hrs = durToHrs(r.totalHours);
+            empHrsMap[r.transporterId] = (empHrsMap[r.transporterId] || 0) + hrs;
+        });
+        enriched.forEach(r => {
+            r.hoursWorkedLast7Days = Math.round((empHrsMap[r.transporterId] || 0) * 100) / 100;
+        });
+
+        let dateFiltered = enriched;
         if (selectedDate) {
-            dateFiltered = allRoutes.filter(r => r.date?.split("T")[0] === selectedDate);
+            dateFiltered = enriched.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         }
         const totalForDate = dateFiltered.length;
+
+        // ── Compute date-aware routesCompleted ──
+        // For each employee, sum all per-date counts up to (and including) selectedDate
+        // Also compute the count up to the day before for trend icon
+        const computeDateStr = selectedDate || enriched.reduce((latest, r) => {
+            const d = r.date ? toPacificDate(r.date) : "";
+            return d > latest ? d : latest;
+        }, "");
+
+        if (computeDateStr) {
+            // Get day before in Pacific Time
+            // Create a date at noon UTC to avoid any DST edge cases, then subtract a day
+            const prevDate = new Date(computeDateStr + "T12:00:00Z");
+            prevDate.setUTCDate(prevDate.getUTCDate() - 1);
+            const prevDateStr = toPacificDate(prevDate);
+
+            // Build cumulative counts per employee up to selectedDate and prevDate
+            const empCumulative: Record<string, number> = {};
+            const empCumulativePrev: Record<string, number> = {};
+
+            Object.entries(routeCountsByDate).forEach(([tid, dateCounts]) => {
+                let totalUpTo = 0;
+                let totalUpToPrev = 0;
+                Object.entries(dateCounts).forEach(([dt, count]) => {
+                    if (dt <= computeDateStr) totalUpTo += count;
+                    if (dt <= prevDateStr) totalUpToPrev += count;
+                });
+                // Add initial routesComp baseline
+                const initComp = initialRoutesComp[tid] || 0;
+                empCumulative[tid] = totalUpTo + initComp;
+                empCumulativePrev[tid] = totalUpToPrev + initComp;
+            });
+            // For employees with only initialRoutesComp and no route counts
+            Object.entries(initialRoutesComp).forEach(([tid, initVal]) => {
+                if (!(tid in empCumulative) && initVal > 0) {
+                    empCumulative[tid] = initVal;
+                    empCumulativePrev[tid] = initVal;
+                }
+            });
+
+            dateFiltered.forEach(r => {
+                r.routesCompleted = empCumulative[r.transporterId] || 0;
+                r.routesCompletedPrev = empCumulativePrev[r.transporterId] || 0;
+            });
+        }
 
         let filtered = dateFiltered;
         if (searchQuery) {
@@ -350,17 +665,19 @@ export default function RoutesPage() {
             );
         }
 
+        const numericKeys = new Set([
+            "driverEfficiency", "routesCompleted", "stopCount", "packageCount",
+            "wstDuration", "wstRevenue", "stopsPerHour", "regHrs", "otHrs",
+            "totalCost", "regPay", "otPay", "hoursWorkedLast7Days",
+        ]);
+
         const sorted = [...filtered].sort((a, b) => {
             let aVal: any, bVal: any;
-            switch (sortKey) {
-                case "employee": aVal = a.employeeName; bVal = b.employeeName; break;
-                case "driverEfficiency": aVal = a.driverEfficiency; bVal = b.driverEfficiency; break;
-                case "routesCompleted": aVal = a.routesCompleted; bVal = b.routesCompleted; break;
-                case "stopCount": aVal = a.stopCount; bVal = b.stopCount; break;
-                case "packageCount": aVal = a.packageCount; bVal = b.packageCount; break;
-                case "wstDuration": aVal = a.wstDuration; bVal = b.wstDuration; break;
-                default: aVal = (a as any)[sortKey] || ""; bVal = (b as any)[sortKey] || ""; break;
-            }
+            const key = sortKey;
+            if (key === "employee") { aVal = a.employeeName; bVal = b.employeeName; }
+            else if (numericKeys.has(key)) { aVal = (a as any)[key] || 0; bVal = (b as any)[key] || 0; }
+            else { aVal = (a as any)[key] || ""; bVal = (b as any)[key] || ""; }
+
             if (typeof aVal === "number" && typeof bVal === "number") {
                 return sortDir === "asc" ? aVal - bVal : bVal - aVal;
             }
@@ -393,7 +710,7 @@ export default function RoutesPage() {
         }));
 
         return { groups, totalFiltered: sorted.length, totalForDate };
-    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir]);
+    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir, wstRevenueMap, routeCountsByDate, initialRoutesComp]);
 
     // ── Push stats to layout ──
     useEffect(() => {
@@ -403,7 +720,8 @@ export default function RoutesPage() {
 
     // ── Render read-only cell ──
     const renderCell = (_row: RouteRow, _field: string, value: any) => {
-        const displayVal = value === 0 || value === "" ? "—" : String(value);
+        const raw = value === 0 || value === "" ? "—" : String(value);
+        const displayVal = raw === "—" ? raw : stripSec(raw);
         return (
             <span className={cn(
                 "text-[11px] whitespace-nowrap font-semibold",
@@ -555,25 +873,15 @@ export default function RoutesPage() {
                                                                         </span>
                                                                     </div>
                                                                 )}
-                                                                <span className="text-[11px] font-bold text-foreground whitespace-nowrap">
+                                                                {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                                                {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                                                <span
+                                                                    className="text-[11px] font-bold whitespace-nowrap"
+                                                                    style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
+                                                                >
                                                                     {row.employeeName}
                                                                 </span>
                                                             </div>
-                                                        </td>
-
-                                                        {/* 2. Efficiency */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.driverEfficiency > 0 ? (
-                                                                <span className={cn(
-                                                                    "text-[11px] font-bold",
-                                                                    row.driverEfficiency >= 90 ? "text-emerald-400" :
-                                                                        row.driverEfficiency >= 70 ? "text-amber-400" : "text-red-400"
-                                                                )}>
-                                                                    {row.driverEfficiency}%
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-[11px] text-muted-foreground/40">—</span>
-                                                            )}
                                                         </td>
 
                                                         {/* 3. WST */}
@@ -588,6 +896,17 @@ export default function RoutesPage() {
                                                                         : "text-foreground"
                                                                 )}>
                                                                     {row.wst}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>
+                                                            )}
+                                                        </td>
+
+                                                        {/* WST Revenue (auto-computed) */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.wstRevenue ? (
+                                                                <span className="text-[11px] font-semibold text-emerald-500 whitespace-nowrap">
+                                                                    ${row.wstRevenue.toFixed(2)}
                                                                 </span>
                                                             ) : (
                                                                 <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>
@@ -642,11 +961,33 @@ export default function RoutesPage() {
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
                                                                     <div className="flex items-center gap-0.5 whitespace-nowrap">
-                                                                        <TrendingUp className="h-2.5 w-2.5 text-primary/50" />
+                                                                        {row.routesCompleted > 0 && row.routesCompletedPrev > 0 ? (
+                                                                            row.routesCompleted > row.routesCompletedPrev ? (
+                                                                                <TrendingUp className="h-2.5 w-2.5 text-emerald-500" />
+                                                                            ) : row.routesCompleted === row.routesCompletedPrev ? (
+                                                                                <Minus className="h-2.5 w-2.5 text-amber-400" />
+                                                                            ) : (
+                                                                                <TrendingDown className="h-2.5 w-2.5 text-red-400" />
+                                                                            )
+                                                                        ) : (
+                                                                            <TrendingUp className="h-2.5 w-2.5 text-primary/50" />
+                                                                        )}
                                                                         <span className="text-[11px] font-medium">{row.routesCompleted}</span>
                                                                     </div>
                                                                 </TooltipTrigger>
-                                                                <TooltipContent>Total routes completed</TooltipContent>
+                                                                <TooltipContent>
+                                                                    Routes completed (up to selected date)
+                                                                    {row.routesCompletedPrev > 0 && (
+                                                                        <span className="block text-[10px] text-muted-foreground">
+                                                                            Previous day: {row.routesCompletedPrev}
+                                                                            {row.routesCompleted > row.routesCompletedPrev
+                                                                                ? ` (+${row.routesCompleted - row.routesCompletedPrev})`
+                                                                                : row.routesCompleted === row.routesCompletedPrev
+                                                                                    ? " (no change)"
+                                                                                    : ` (${row.routesCompleted - row.routesCompletedPrev})`}
+                                                                        </span>
+                                                                    )}
+                                                                </TooltipContent>
                                                             </Tooltip>
                                                         </td>
 
@@ -677,6 +1018,173 @@ export default function RoutesPage() {
 
                                                         {/* 18. Staging */}
                                                         <td className="px-2 py-1.5">{renderCell(row, "stagingLocation", row.stagingLocation)}</td>
+
+                                                        {/* Act Departure */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "actualDepartureTime", row.actualDepartureTime)}</td>
+
+                                                        {/* Departure Delay */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.departureDelay ? (
+                                                                <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.departureDelay) ? "text-red-400" : "text-emerald-500")}>
+                                                                    {stripSec(row.departureDelay)}
+                                                                </span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Plan OB, Act OB */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "plannedOutboundStem", row.plannedOutboundStem)}</td>
+                                                        <td className="px-2 py-1.5">{renderCell(row, "actualOutboundStem", row.actualOutboundStem)}</td>
+
+                                                        {/* OB Delay */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.outboundDelay ? (
+                                                                <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.outboundDelay) ? "text-red-400" : "text-emerald-500")}>
+                                                                    {stripSec(row.outboundDelay)}
+                                                                </span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Plan 1st, Act 1st */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "plannedFirstStop", row.plannedFirstStop)}</td>
+                                                        <td className="px-2 py-1.5">{renderCell(row, "actualFirstStop", row.actualFirstStop)}</td>
+
+                                                        {/* 1st Stop Delay */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.firstStopDelay ? (
+                                                                <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.firstStopDelay) ? "text-red-400" : "text-emerald-500")}>
+                                                                    {stripSec(row.firstStopDelay)}
+                                                                </span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Plan Last, Act Last */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "plannedLastStop", row.plannedLastStop)}</td>
+                                                        <td className="px-2 py-1.5">{renderCell(row, "actualLastStop", row.actualLastStop)}</td>
+
+                                                        {/* Last Stop Delay */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.lastStopDelay ? (
+                                                                <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.lastStopDelay) ? "text-red-400" : "text-emerald-500")}>
+                                                                    {stripSec(row.lastStopDelay)}
+                                                                </span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* DCT */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "deliveryCompletionTime", row.deliveryCompletionTime)}</td>
+
+                                                        {/* DCT Delay */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.dctDelay ? (
+                                                                <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.dctDelay) ? "text-red-400" : "text-emerald-500")}>
+                                                                    {stripSec(row.dctDelay)}
+                                                                </span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Plan RTS */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.plannedRTSTime ? (
+                                                                <span className="text-[11px] font-semibold text-blue-400 whitespace-nowrap">{stripSec(row.plannedRTSTime)}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Plan IB */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.plannedInboundStem ? (
+                                                                <span className="text-[11px] font-semibold text-foreground/70 whitespace-nowrap">{stripSec(row.plannedInboundStem)}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Est RTS */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.estimatedRTSTime ? (
+                                                                <span className="text-[11px] font-semibold text-violet-400 whitespace-nowrap">{stripSec(row.estimatedRTSTime)}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Plan 1st→Last */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.plannedDuration1stToLast ? (
+                                                                <span className="text-[11px] font-semibold text-foreground/70 whitespace-nowrap">{stripSec(row.plannedDuration1stToLast)}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Act 1st→Last */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.actualDuration1stToLast ? (
+                                                                <span className="text-[11px] font-semibold text-foreground/70 whitespace-nowrap">{stripSec(row.actualDuration1stToLast)}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Stops/Hr */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.stopsPerHour > 0 ? (
+                                                                <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">{row.stopsPerHour}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Total Hours */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "totalHours", row.totalHours)}</td>
+
+                                                        {/* Reg Hours */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.regHrs > 0 ? (
+                                                                <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">{row.regHrs.toFixed(2)}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* OT Hours */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.otHrs > 0 ? (
+                                                                <span className="text-[11px] font-bold text-amber-400 whitespace-nowrap">{row.otHrs.toFixed(2)}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Reg Pay */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.regPay > 0 ? (
+                                                                <span className="text-[11px] font-semibold text-emerald-500 whitespace-nowrap">${row.regPay.toFixed(2)}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* OT Pay */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.otPay > 0 ? (
+                                                                <span className="text-[11px] font-bold text-amber-400 whitespace-nowrap">${row.otPay.toFixed(2)}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Total Cost */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.totalCost > 0 ? (
+                                                                <span className="text-[11px] font-bold text-emerald-400 whitespace-nowrap">${row.totalCost.toFixed(2)}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* 7d Hrs */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.hoursWorkedLast7Days > 0 ? (
+                                                                <span className={cn("text-[11px] font-bold whitespace-nowrap", row.hoursWorkedLast7Days > 40 ? "text-red-400" : "text-blue-400")}>
+                                                                    {row.hoursWorkedLast7Days.toFixed(1)}h
+                                                                </span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* Eff % */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.driverEfficiency > 0 ? (
+                                                                <span className={cn(
+                                                                    "text-[11px] font-bold",
+                                                                    row.driverEfficiency >= 90 ? "text-emerald-400" :
+                                                                        row.driverEfficiency >= 70 ? "text-amber-400" : "text-red-400"
+                                                                )}>
+                                                                    {row.driverEfficiency}%
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[11px] text-muted-foreground/40">—</span>
+                                                            )}
+                                                        </td>
 
                                                     </tr>
                                                 );

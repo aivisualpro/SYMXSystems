@@ -295,10 +295,12 @@ function MessageStatusBadge({
   status,
   createdAt,
   changeRemarks,
+  isLiveUpdate,
 }: {
   status: string;
   createdAt?: string;
   changeRemarks?: string;
+  isLiveUpdate?: boolean;
 }) {
   const config = STATUS_CONFIG[status];
   if (!config) return null;
@@ -306,6 +308,7 @@ function MessageStatusBadge({
   const Icon = config.icon;
   const timeAgo = createdAt
     ? new Date(createdAt).toLocaleString("en-US", {
+      timeZone: "America/Los_Angeles",
       month: "short",
       day: "numeric",
       hour: "numeric",
@@ -313,29 +316,51 @@ function MessageStatusBadge({
     })
     : "";
 
+  // Celebration animation classes for live-updated "confirmed"
+  const isConfirmCelebration = isLiveUpdate && status === "confirmed";
+  const isChangeCelebration = isLiveUpdate && status === "change_requested";
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div
           className={cn(
-            "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ring-1 text-[9px] font-semibold uppercase tracking-wider shrink-0",
+            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 text-[11px] font-semibold uppercase tracking-wider shrink-0 transition-all duration-500",
             config.bg,
             config.color,
-            config.pulse && "animate-pulse"
+            config.pulse && "animate-pulse",
+            isConfirmCelebration && "ring-2 ring-emerald-400/60 shadow-[0_0_12px_rgba(16,185,129,0.4)] scale-110",
+            isChangeCelebration && "ring-2 ring-amber-400/60 shadow-[0_0_12px_rgba(245,158,11,0.4)] scale-110"
           )}
+          style={isLiveUpdate ? { animation: "statusPopIn 0.5s cubic-bezier(0.34,1.56,0.64,1)" } : undefined}
         >
-          <Icon className={cn("h-2.5 w-2.5", config.pulse && "animate-spin")} />
+          <Icon className={cn("h-3 w-3", config.pulse && "animate-spin")} />
           {config.label}
+          {isConfirmCelebration && <span className="ml-0.5">✓</span>}
         </div>
       </TooltipTrigger>
       <TooltipContent side="top" className="text-xs max-w-[250px]">
         <span className="font-semibold">{config.label}</span>
+        {isLiveUpdate && <span className="text-emerald-400 ml-1">• Live</span>}
         {timeAgo && <span className="text-muted-foreground ml-1">• {timeAgo}</span>}
         {changeRemarks && (
           <p className="text-white/90 mt-1 italic">&ldquo;{changeRemarks}&rdquo;</p>
         )}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/** Pulsing LIVE indicator for real-time monitoring */
+function LiveIndicator() {
+  return (
+    <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+      <span className="relative flex h-2 w-2">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+      </span>
+      <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Live</span>
+    </div>
   );
 }
 
@@ -726,6 +751,119 @@ function MessagingSubTab({
   const [saving, setSaving] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Live Status Polling ─────────────────────────────────────────────────
+  const [liveStatuses, setLiveStatuses] = useState<Record<string, { status: string; createdAt: string; changeRemarks?: string }>>({}); 
+  const [isPolling, setIsPolling] = useState(false);
+  const [liveUpdatedPhones, setLiveUpdatedPhones] = useState<Set<string>>(new Set());
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollStartRef = useRef<number>(0);
+  const sentPhonesRef = useRef<string[]>([]);
+  const prevStatusRef = useRef<Record<string, string>>({});
+
+  // Start polling after successful send
+  const startPolling = useCallback((phones: string[]) => {
+    sentPhonesRef.current = phones;
+    pollStartRef.current = Date.now();
+    // Snapshot current statuses so we can detect transitions
+    const snapshot: Record<string, string> = {};
+    phones.forEach(ph => snapshot[ph] = "sent");
+    prevStatusRef.current = snapshot;
+    setIsPolling(true);
+  }, []);
+
+  const stopPolling = useCallback(() => {
+    setIsPolling(false);
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  // Polling effect
+  useEffect(() => {
+    if (!isPolling || sentPhonesRef.current.length === 0) return;
+
+    const doPoll = async () => {
+      try {
+        // Stop after 10 minutes
+        if (Date.now() - pollStartRef.current > 10 * 60 * 1000) {
+          stopPolling();
+          return;
+        }
+
+        const params = new URLSearchParams({
+          messageType: tab.id,
+          phones: sentPhonesRef.current.join(","),
+        });
+        if (selectedWeek) params.set("yearWeek", selectedWeek);
+
+        const res = await fetch(`/api/messaging/live-status?${params.toString()}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const newStatuses = data.statuses || {};
+
+        // Detect status transitions and animate them
+        const updatedPhones = new Set<string>();
+        Object.entries(newStatuses).forEach(([phone, info]: [string, any]) => {
+          const prev = prevStatusRef.current[phone] || liveStatuses[phone]?.status;
+          if (prev && prev !== info.status) {
+            updatedPhones.add(phone);
+            // Show toast for confirmed/change_requested transitions
+            if (info.status === "confirmed") {
+              const empName = activeEmployees.find(e => {
+                const normalized = e.phoneNumber.startsWith("+") ? e.phoneNumber : `+1${e.phoneNumber.replace(/\D/g, "")}`;
+                return normalized === phone;
+              })?.name;
+              toast.success(`✅ ${empName || phone} confirmed their schedule!`, { duration: 5000 });
+            } else if (info.status === "change_requested") {
+              const empName = activeEmployees.find(e => {
+                const normalized = e.phoneNumber.startsWith("+") ? e.phoneNumber : `+1${e.phoneNumber.replace(/\D/g, "")}`;
+                return normalized === phone;
+              })?.name;
+              toast.info(`🔄 ${empName || phone} requested a change`, { duration: 5000 });
+            }
+          }
+          prevStatusRef.current[phone] = info.status;
+        });
+
+        if (updatedPhones.size > 0) {
+          setLiveUpdatedPhones(prev => {
+            const next = new Set(prev);
+            updatedPhones.forEach(p => next.add(p));
+            return next;
+          });
+          // Clear the "just updated" animation after 3 seconds
+          setTimeout(() => {
+            setLiveUpdatedPhones(prev => {
+              const next = new Set(prev);
+              updatedPhones.forEach(p => next.delete(p));
+              return next;
+            });
+          }, 3000);
+        }
+
+        setLiveStatuses(newStatuses);
+      } catch {
+        // Silently fail — will retry on next interval
+      }
+    };
+
+    // Poll immediately, then every 4 seconds
+    doPoll();
+    pollIntervalRef.current = setInterval(doPoll, 4000);
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPolling, tab.id, selectedWeek, stopPolling]);
+
+  // Cleanup on unmount
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
   // Sync template from parent prefetch when it arrives
   useEffect(() => {
     if (templatesLoaded && prefetchedTemplate && !templateLoaded) {
@@ -838,17 +976,40 @@ function MessagingSubTab({
     }
 
     // Build per-employee personalized messages
+    const NON_WORKING = ["off", "close", "request off", ""];
+    const todayPST = getTodayPacific();
+    const tomorrowPST = getTomorrowPacific();
+
     const recipients = selectedEmployees.map((emp) => {
-      // Find the first relevant schedule date for this employee
-      const relevantSchedule = emp.schedules?.find(
-        (s) => s.type && !["off", "close", "request off", ""].includes(s.type.toLowerCase().trim())
-      );
+      // Determine the correct schedule date based on tab context
+      let targetScheduleDate: string | undefined;
+
+      if (tab.id === "shift") {
+        // Shift notification → use TODAY's schedule (Pacific)
+        const todayShift = emp.schedules?.find(
+          (s) => s.date?.startsWith(todayPST) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
+        );
+        targetScheduleDate = todayShift?.date || undefined;
+      } else if (tab.id === "future-shift" || tab.id === "off-tomorrow") {
+        // Future shift / off-tomorrow → use TOMORROW's schedule (Pacific)
+        const tomorrowShift = emp.schedules?.find(
+          (s) => s.date?.startsWith(tomorrowPST) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
+        );
+        targetScheduleDate = tomorrowShift?.date || undefined;
+      } else {
+        // Default: first relevant non-off schedule
+        const relevantSchedule = emp.schedules?.find(
+          (s) => s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
+        );
+        targetScheduleDate = relevantSchedule?.date || undefined;
+      }
+
       return {
         phone: emp.phoneNumber.startsWith("+") ? emp.phoneNumber : `+1${emp.phoneNumber.replace(/\D/g, "")}`,
         name: emp.name,
         message: personalizeMessage(message.trim(), emp, tab.id, selectedWeek),
         transporterId: emp.transporterId,
-        scheduleDate: relevantSchedule?.date || undefined,
+        scheduleDate: targetScheduleDate,
         yearWeek: selectedWeek || undefined,
       };
     });
@@ -905,6 +1066,16 @@ function MessagingSubTab({
         toast.success(`${successCount} message(s) sent successfully!`);
       } else {
         toast.warning(`${successCount} sent, ${failCount} failed`);
+      }
+
+      // Start live polling for sent phones
+      const sentPhones = results
+        .filter((r) => r.success)
+        .map((r) => r.to);
+      if (sentPhones.length > 0) {
+        setLiveStatuses({});
+        setLiveUpdatedPhones(new Set());
+        startPolling(sentPhones);
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to send messages");
@@ -977,14 +1148,24 @@ function MessagingSubTab({
                       : `+1${emp.phoneNumber.replace(/\D/g, "")}`)
                 );
 
+                // Compute normalized phone for live status lookup
+                const normalizedPhone = emp.phoneNumber.startsWith("+")
+                  ? emp.phoneNumber
+                  : `+1${emp.phoneNumber.replace(/\D/g, "")}`;
+                const liveStatus = liveStatuses[normalizedPhone];
+                const isLiveHighlight = liveUpdatedPhones.has(normalizedPhone);
+
                 return (
                   <div
                     key={emp._id}
                     className={cn(
-                      "grid grid-cols-[40px_1fr_100px_120px_120px] items-center gap-2 px-3 py-2 border-b border-border/20 cursor-pointer transition-all hover:bg-muted/30",
+                      "grid grid-cols-[40px_1fr_100px_120px_120px] items-center gap-2 px-3 py-2 border-b border-border/20 cursor-pointer transition-all duration-500 hover:bg-muted/30",
                       isSelected &&
-                      "bg-primary/5 border-l-2 border-l-primary"
+                      "bg-primary/5 border-l-2 border-l-primary",
+                      isLiveHighlight && liveStatus?.status === "confirmed" && "bg-emerald-500/8 border-l-2 border-l-emerald-500",
+                      isLiveHighlight && liveStatus?.status === "change_requested" && "bg-amber-500/8 border-l-2 border-l-amber-500"
                     )}
+                    style={isLiveHighlight ? { animation: "rowFlash 1s ease-out" } : undefined}
                     onClick={() => toggleSelect(emp._id)}
                   >
                     {/* Select */}
@@ -1008,10 +1189,21 @@ function MessagingSubTab({
                       <span className="text-xs font-semibold truncate">
                         {emp.name}
                       </span>
-                      {/* Messaging status — prioritize DB status (reflects real-time confirmations) */}
+                      {/* Status priority: 1) Live polled status, 2) DB status, 3) Send result */}
                       {(() => {
+                        // 1. Live polled status (real-time from polling)
+                        if (liveStatus) {
+                          return (
+                            <MessageStatusBadge
+                              status={liveStatus.status}
+                              createdAt={liveStatus.createdAt}
+                              changeRemarks={liveStatus.changeRemarks}
+                              isLiveUpdate={isLiveHighlight}
+                            />
+                          );
+                        }
+                        // 2. DB status from initial fetch
                         const msgStatus = emp.messagingStatus?.[tab.id];
-                        // Show DB status if available (may have been updated by confirmation)
                         if (msgStatus) {
                           return (
                             <MessageStatusBadge
@@ -1021,7 +1213,7 @@ function MessagingSubTab({
                             />
                           );
                         }
-                        // Fallback: show live send result from this session
+                        // 3. Fallback: show live send result from this session
                         if (sendResult) {
                           return sendResult.success ? (
                             <MessageStatusBadge status="sent" />
@@ -1066,18 +1258,40 @@ function MessagingSubTab({
             <span className="text-[11px] text-muted-foreground">
               {selectedCount} of {filteredEmployees.length} selected
             </span>
-            {sendResults && (
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-emerald-500 font-medium">
-                  {sendResults.filter((r) => r.success).length} sent
-                </span>
-                {sendResults.some((r) => !r.success) && (
-                  <span className="text-[10px] text-red-500 font-medium">
-                    {sendResults.filter((r) => !r.success).length} failed
+            <div className="flex items-center gap-2">
+              {isPolling && <LiveIndicator />}
+              {/* Show live confirmed/changed counts */}
+              {Object.keys(liveStatuses).length > 0 && (() => {
+                const confirmed = Object.values(liveStatuses).filter(s => s.status === "confirmed").length;
+                const changed = Object.values(liveStatuses).filter(s => s.status === "change_requested").length;
+                return (
+                  <>
+                    {confirmed > 0 && (
+                      <span className="text-[10px] text-emerald-500 font-semibold">
+                        {confirmed} confirmed
+                      </span>
+                    )}
+                    {changed > 0 && (
+                      <span className="text-[10px] text-amber-500 font-semibold">
+                        {changed} change req
+                      </span>
+                    )}
+                  </>
+                );
+              })()}
+              {sendResults && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-emerald-500 font-medium">
+                    {sendResults.filter((r) => r.success).length} sent
                   </span>
-                )}
-              </div>
-            )}
+                  {sendResults.some((r) => !r.success) && (
+                    <span className="text-[10px] text-red-500 font-medium">
+                      {sendResults.filter((r) => !r.success).length} failed
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1427,17 +1641,16 @@ export default function MessagingPanel({
 
   // Hydrate from global store for the first week
   const hydratedMessagingRef = useRef(false);
+  const fetchedWeekRef = useRef<string>("");
 
   useEffect(() => {
     if (!selectedWeek) return;
     let cancelled = false;
 
-    // Try hydrating from global store for the first/default week
-    if (
-      !hydratedMessagingRef.current &&
-      store.initialized &&
-      weeks?.[0] === selectedWeek
-    ) {
+    const isDefaultWeek = weeks?.[0] === selectedWeek;
+
+    // ── Try hydrating from store (instant load) ──
+    if (isDefaultWeek && store.initialized) {
       const storeEmployees = store.messagingEmployees;
       const hydrated: Record<string, EmployeeRecipient[]> = {};
       const stillLoading = new Set<string>();
@@ -1453,6 +1666,7 @@ export default function MessagingPanel({
 
       if (Object.keys(hydrated).length > 0) {
         hydratedMessagingRef.current = true;
+        fetchedWeekRef.current = selectedWeek;
         setEmployeesByTab(hydrated);
         setLoadingTabs(stillLoading);
 
@@ -1472,7 +1686,17 @@ export default function MessagingPanel({
       }
     }
 
-    // Fallback: Fetch active tab first for fastest UX
+    // ── If default week but store not ready yet, wait for it ──
+    if (isDefaultWeek && !store.initialized) {
+      // Don't fire API calls — store will initialize soon and re-trigger this effect
+      return;
+    }
+
+    // ── Non-default week: Skip if we already fetched this week ──
+    if (fetchedWeekRef.current === selectedWeek) return;
+    fetchedWeekRef.current = selectedWeek;
+
+    // ── Fallback: Fetch active tab first for fastest UX ──
     setLoadingTabs(new Set(SUB_TABS.map(t => t.id)));
 
     fetchTabEmployees(resolvedTab, selectedWeek).then((emps) => {
@@ -1504,7 +1728,7 @@ export default function MessagingPanel({
 
     return () => { cancelled = true; clearTimeout(bgTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedWeek, fetchTabEmployees]); // intentionally exclude resolvedTab to avoid re-fetching on tab switch
+  }, [selectedWeek, store.initialized, fetchTabEmployees]); // re-run when store initializes
 
   // ── Report active tab info to parent ──────────────────────────────────────
   const activeTabConfig = SUB_TABS.find(t => t.id === resolvedTab) || SUB_TABS[0];

@@ -166,7 +166,22 @@ export default function FleetFormModal() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [inspectionTypes, setInspectionTypes] = useState<any[]>([]);
+  const [repairStatuses, setRepairStatuses] = useState<{description: string; color?: string; icon?: string}[]>([]);
   const [sessionEmail, setSessionEmail] = useState<string>("");
+
+  // Fetch repair statuses from dropdown settings
+  useEffect(() => {
+    if (!modalOpen || (modalType !== "repair" && modalType !== "inspection")) return;
+    fetch("/api/admin/settings/dropdowns?type=fleet repair status")
+      .then(r => r.json())
+      .then((data: any[]) => {
+        const statuses = data
+          .filter((d: any) => d.isActive !== false)
+          .map((d: any) => ({ description: d.description, color: d.color || "", icon: d.icon || "" }));
+        if (statuses.length > 0) setRepairStatuses(statuses);
+      })
+      .catch(() => { });
+  }, [modalOpen, modalType]);
 
   useEffect(() => {
     if (!modalOpen || modalType !== "inspection") return;
@@ -260,9 +275,16 @@ export default function FleetFormModal() {
               <FormField label="Unit Number"><input className={inputClass} value={formData.unitNumber || ""} onChange={e => updateForm("unitNumber", e.target.value)} /></FormField>
               <FormField label="Description"><textarea className={inputClass} rows={3} value={formData.description || ""} onChange={e => updateForm("description", e.target.value)} required /></FormField>
               <div className="grid grid-cols-2 gap-3">
-                <FormField label="Status"><select className={inputClass} value={formData.currentStatus || "Not Started"} onChange={e => updateForm("currentStatus", e.target.value)}>
-                  {["Not Started", "In Progress", "Waiting for Parts", "Sent to Repair Shop", "Completed"].map(s => <option key={s} value={s}>{s}</option>)}
-                </select></FormField>
+                <FormField label="Status">
+                  <select className={inputClass} value={formData.currentStatus || ""} onChange={e => updateForm("currentStatus", e.target.value)}
+                    style={repairStatuses.find(s => s.description === formData.currentStatus)?.color ? { borderLeftWidth: '3px', borderLeftColor: repairStatuses.find(s => s.description === formData.currentStatus)!.color } : {}}>
+                    <option value="">Select status…</option>
+                    {(repairStatuses.length > 0
+                      ? repairStatuses.map(s => <option key={s.description} value={s.description}>{s.description}</option>)
+                      : ["Not Started", "In Progress", "Waiting for Parts", "Sent to Repair Shop", "Completed"].map(s => <option key={s} value={s}>{s}</option>)
+                    )}
+                  </select>
+                </FormField>
                 <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.estimatedDate ? formData.estimatedDate.split("T")[0] : ""} onChange={e => updateForm("estimatedDate", e.target.value)} /></FormField>
                 <FormField label="Duration (days)"><input type="number" className={inputClass} value={formData.repairDuration || ""} onChange={e => updateForm("repairDuration", parseInt(e.target.value) || 0)} /></FormField>
               </div>
@@ -347,10 +369,19 @@ export default function FleetFormModal() {
                   <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Repair Details</p>
                   <div className="grid grid-cols-2 gap-3">
                     <FormField label="Repair Description"><input className={inputClass} value={formData.repairDescription || ""} onChange={e => updateForm("repairDescription", e.target.value)} /></FormField>
-                    <FormField label="Repair Status"><input className={inputClass} value={formData.repairCurrentStatus || ""} onChange={e => updateForm("repairCurrentStatus", e.target.value)} placeholder="e.g. In Progress" /></FormField>
+                    <FormField label="Repair Status">
+                      <select className={inputClass} value={formData.repairCurrentStatus || ""} onChange={e => updateForm("repairCurrentStatus", e.target.value)}
+                        style={repairStatuses.find(s => s.description === formData.repairCurrentStatus)?.color ? { borderLeftWidth: '3px', borderLeftColor: repairStatuses.find(s => s.description === formData.repairCurrentStatus)!.color } : {}}>
+                        <option value="">Select status…</option>
+                        {(repairStatuses.length > 0
+                          ? repairStatuses.map(s => <option key={s.description} value={s.description}>{s.description}</option>)
+                          : ["Not Started", "In Progress", "Waiting for Parts", "Sent to Repair Shop", "Completed"].map(s => <option key={s} value={s}>{s}</option>)
+                        )}
+                      </select>
+                    </FormField>
                     <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.repairEstimatedDate ? formData.repairEstimatedDate.split("T")[0] : ""} onChange={e => updateForm("repairEstimatedDate", e.target.value)} /></FormField>
                   </div>
-                  <FormField label="Repair Image URL"><input className={inputClass} value={formData.repairImage || ""} onChange={e => updateForm("repairImage", e.target.value)} placeholder="https://..." /></FormField>
+                  <PhotoUploadField label="Repair Image" value={formData.repairImage} onChange={v => updateForm("repairImage", v)} />
                 </div>
               )}
               <div className="space-y-3 rounded-lg border border-border/50 bg-muted/20 p-3">

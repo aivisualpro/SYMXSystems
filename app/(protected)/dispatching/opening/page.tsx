@@ -23,6 +23,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
+/** Convert a date (ISO string or Date) to YYYY-MM-DD in Pacific Time */
+const BUSINESS_TZ = "America/Los_Angeles";
+function toPacificDate(d: string | Date): string {
+    const date = typeof d === "string" ? new Date(d) : new Date(d.getTime());
+    if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) date.setUTCHours(12);
+    return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(date);
+}
+
 // ── Column Definitions ──
 const COLUMNS = [
     { key: "employee", label: "Employee", width: "flex-1 min-w-[160px]" },
@@ -189,7 +197,7 @@ export default function OpeningPage() {
         // 1. Filter by selected date
         let dateFiltered = allRoutes;
         if (selectedDate) {
-            dateFiltered = allRoutes.filter(r => r.date?.split("T")[0] === selectedDate);
+            dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         }
         const totalForDate = dateFiltered.length;
 
@@ -284,7 +292,8 @@ export default function OpeningPage() {
     const renderCell = (row: RouteRow, field: string, value: any) => {
         const isEditing = editingCell?.rowId === row._id && editingCell?.field === field;
         const isEditable = EDITABLE_FIELDS.has(field);
-        const displayVal = value === 0 || value === "" ? "—" : String(value);
+        const raw = value === 0 || value === "" ? "—" : String(value);
+        const displayVal = raw === "—" ? raw : raw.replace(/:\d{2}$/, "");
 
         if (isEditing) {
             return (

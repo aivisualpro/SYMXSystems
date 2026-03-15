@@ -31,38 +31,43 @@ interface ConfirmData {
     }[];
 }
 
+/** Schedule dates are stored as UTC midnight. Shift to noon UTC to prevent
+ *  timezone conversion from rolling back to the previous calendar day. */
+function safeDate(d: string): Date {
+    const date = new Date(d);
+    if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) {
+        date.setUTCHours(12);
+    }
+    return date;
+}
+
 function formatDate(d: string) {
     try {
-        const date = new Date(d);
-        return date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+        return safeDate(d).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" });
     } catch { return d; }
 }
 
 function formatDateOnly(d: string) {
     try {
-        const date = new Date(d);
-        return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+        return safeDate(d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" });
     } catch { return d; }
 }
 
 function formatShortDate(d: string) {
     try {
-        const date = new Date(d);
-        return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+        return safeDate(d).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
     } catch { return d; }
 }
 
 function formatDayName(d: string) {
     try {
-        const date = new Date(d);
-        return date.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+        return safeDate(d).toLocaleDateString("en-US", { weekday: "short", timeZone: "America/Los_Angeles" });
     } catch { return d; }
 }
 
 function formatFullDay(d: string) {
     try {
-        const date = new Date(d);
-        return date.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+        return safeDate(d).toLocaleDateString("en-US", { weekday: "long", timeZone: "America/Los_Angeles" });
     } catch { return d; }
 }
 
@@ -72,14 +77,22 @@ function formatTime(t: string) {
 }
 
 function getShiftConfig(type: string) {
-    const t = (type || "").toLowerCase();
-    if (t === "off" || !type) return { label: "OFF", color: "text-red-400", bg: "bg-red-500/10 ring-red-500/20", isOff: true };
-    if (t === "route") return { label: "Route", color: "text-emerald-400", bg: "bg-emerald-500/10 ring-emerald-500/20", isOff: false };
-    if (t.includes("modified")) return { label: "Modified Duty", color: "text-blue-400", bg: "bg-blue-500/10 ring-blue-500/20", isOff: false };
-    if (t.includes("stand")) return { label: "Stand By", color: "text-amber-400", bg: "bg-amber-500/10 ring-amber-500/20", isOff: false };
-    if (t.includes("suspend")) return { label: "Suspension", color: "text-red-400", bg: "bg-red-500/10 ring-red-500/20", isOff: true };
-    if (t.includes("pending")) return { label: type, color: "text-amber-400", bg: "bg-amber-500/10 ring-amber-500/20", isOff: false };
-    return { label: type, color: "text-zinc-300", bg: "bg-zinc-500/10 ring-zinc-500/20", isOff: false };
+    const t = (type || "").toLowerCase().trim();
+    if (t === "off" || !type) return { label: "OFF", color: "text-zinc-400", bg: "bg-zinc-700", isOff: true };
+    if (t === "route") return { label: "Route", color: "text-white", bg: "bg-emerald-600", isOff: false };
+    if (t === "open") return { label: "Open", color: "text-white", bg: "bg-amber-500", isOff: false };
+    if (t === "close") return { label: "Close", color: "text-white", bg: "bg-rose-500", isOff: false };
+    if (t === "fleet") return { label: "Fleet", color: "text-white", bg: "bg-blue-600", isOff: false };
+    if (t === "call out") return { label: "Call Out", color: "text-white", bg: "bg-yellow-500", isOff: false };
+    if (t === "request off") return { label: "Request Off", color: "text-white", bg: "bg-purple-600", isOff: true };
+    if (t === "amz training") return { label: "AMZ Training", color: "text-white", bg: "bg-indigo-600", isOff: false };
+    if (t === "trainer") return { label: "Trainer", color: "text-white", bg: "bg-teal-600", isOff: false };
+    if (t === "training otr") return { label: "Training OTR", color: "text-white", bg: "bg-violet-600", isOff: false };
+    if (t.includes("modified")) return { label: "Modified Duty", color: "text-white", bg: "bg-amber-600", isOff: false };
+    if (t.includes("stand")) return { label: "Stand By", color: "text-white", bg: "bg-cyan-600", isOff: false };
+    if (t.includes("suspend")) return { label: "Suspension", color: "text-white", bg: "bg-rose-700", isOff: true };
+    if (t.includes("pending")) return { label: type, color: "text-white", bg: "bg-amber-500", isOff: false };
+    return { label: type, color: "text-white", bg: "bg-zinc-600", isOff: false };
 }
 
 function getMessageTitle(messageType: string) {
@@ -139,9 +152,10 @@ function WeeklyScheduleCard({ weekSchedules, yearWeek }: { weekSchedules: Confir
                     const config = getShiftConfig(day.type);
                     const isToday = (() => {
                         try {
-                            const d = new Date(day.date);
-                            const now = new Date();
-                            return d.toDateString() === now.toDateString();
+                            const d = safeDate(day.date);
+                            const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+                            const dayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(d);
+                            return dayStr === todayStr;
                         } catch { return false; }
                     })();
 
@@ -162,7 +176,7 @@ function WeeklyScheduleCard({ weekSchedules, yearWeek }: { weekSchedules: Confir
 
                             {/* Shift Type */}
                             <div className="flex-1">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded ring-1 text-[9px] font-bold uppercase tracking-wider ${config.bg} ${config.color}`}>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${config.bg} ${config.color}`}>
                                     {config.label}
                                 </span>
                             </div>
@@ -271,7 +285,7 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                         <div className="text-center">
                             <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Shift Type</span>
                             <div className="mt-1.5 flex justify-center">
-                                <span className={`inline-flex items-center px-3 py-1 rounded-md ring-1 text-[11px] font-bold uppercase tracking-wider ${config.bg} ${config.color}`}>
+                                <span className={`inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${config.bg} ${config.color}`}>
                                     {config.label}
                                 </span>
                             </div>

@@ -219,13 +219,18 @@ const timeToMins = (t: string | undefined | null) => {
 };
 
 const BUSINESS_TZ = "America/Los_Angeles";
+function toPacificDate(d: string | Date): string {
+    const date = typeof d === "string" ? new Date(d) : new Date(d.getTime());
+    if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) date.setUTCHours(12);
+    return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(date);
+}
 
 const getElapsedMins = (inDayStr: string, dateStr: string) => {
     if (!inDayStr) return 0;
     const inMins = timeToMins(inDayStr);
     // Use Pacific Time for "today" comparison
     const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
-    const rowDate = dateStr?.split("T")[0];
+    const rowDate = dateStr ? toPacificDate(dateStr) : "";
 
     if (rowDate === todayStr) {
         // Get current Pacific time hours/minutes
@@ -552,7 +557,7 @@ export default function TimePage() {
     // ── Filter + sort ──
     const { rows: displayRows, totalFiltered, totalForDate } = useMemo(() => {
         let dateFiltered = allRoutes;
-        if (selectedDate) dateFiltered = allRoutes.filter(r => r.date?.split("T")[0] === selectedDate);
+        if (selectedDate) dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         const totalForDate = dateFiltered.length;
 
         let filtered = dateFiltered;
@@ -616,7 +621,8 @@ export default function TimePage() {
     // ── Editable cell renderer ──
     const renderCell = (row: RouteRow, field: string, value: any) => {
         const isEditable = EDITABLE_FIELDS.has(field);
-        const displayVal = value === 0 || value === "" ? "—" : String(value);
+        const raw = value === 0 || value === "" ? "—" : String(value);
+        const displayVal = raw === "—" ? raw : raw.replace(/:\d{2}$/, "");
 
         const style = getCellFormat(row, field);
         const Icon = style?.icon;
@@ -776,10 +782,18 @@ export default function TimePage() {
                                             <span className="text-[9px] font-bold text-primary">{row.employeeName.split(" ").map(n => n[0]).join("").slice(0, 2)}</span>
                                         </div>
                                     )}
-                                    <span className="text-xs font-semibold truncate hover:text-primary transition-colors cursor-pointer" onClick={() => {
-                                        setQuickEditRow(row);
-                                        setQuickEditForm({ ...row });
-                                    }}>{row.employeeName}</span>
+                                    {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                    {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                    <span
+                                        className="text-xs font-semibold truncate hover:text-primary transition-colors cursor-pointer"
+                                        style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
+                                        onClick={() => {
+                                            setQuickEditRow(row);
+                                            setQuickEditForm({ ...row });
+                                        }}
+                                    >
+                                        {row.employeeName}
+                                    </span>
                                 </div>
                                 {/* Attendance */}
                                 {renderAttendance(row)}

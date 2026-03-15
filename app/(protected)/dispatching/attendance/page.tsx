@@ -48,6 +48,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
+/** Convert a date (ISO string or Date) to YYYY-MM-DD in Pacific Time */
+const BUSINESS_TZ = "America/Los_Angeles";
+function toPacificDate(d: string | Date): string {
+    const date = typeof d === "string" ? new Date(d) : new Date(d.getTime());
+    if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) date.setUTCHours(12);
+    return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(date);
+}
+
 // ── Type Options (reused from roster for colored pills) ──
 const TYPE_OPTIONS = [
     { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700" },
@@ -307,7 +315,7 @@ export default function AttendancePage() {
     const { pendingRows, doneRows, totalFiltered } = useMemo(() => {
         let dateFiltered = allRoutes;
         if (selectedDate) {
-            dateFiltered = allRoutes.filter(r => r.date?.split("T")[0] === selectedDate);
+            dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         }
 
         let filtered = dateFiltered;
@@ -381,7 +389,8 @@ export default function AttendancePage() {
     const renderCell = (row: RouteRow, field: string, value: any) => {
         const isEditing = editingCell?.rowId === row._id && editingCell?.field === field;
         const isEditable = EDITABLE_FIELDS.has(field);
-        const displayVal = value === 0 || value === "" ? "—" : String(value);
+        const raw = value === 0 || value === "" ? "—" : String(value);
+        const displayVal = raw === "—" ? raw : raw.replace(/:\d{2}$/, "");
 
         if (isEditing) {
             return (
@@ -530,7 +539,11 @@ export default function AttendancePage() {
 
                                     {/* Info */}
                                     <div className="flex-1 min-w-0 pr-6">
-                                        <h3 className="text-sm font-bold truncate text-foreground group-hover:text-primary transition-colors">
+                                        <h3 className="text-sm font-bold truncate group-hover:text-primary transition-colors flex items-center gap-1.5"
+                                            style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
+                                        >
+                                            {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3.5 w-3.5 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                            {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "#FE9EC7" }} />}
                                             {row.employeeName}
                                         </h3>
                                         <div className="flex items-center gap-2 mt-1 text-[10px] font-medium text-muted-foreground/80">
@@ -623,7 +636,12 @@ export default function AttendancePage() {
                                                 </span>
                                             </div>
                                         )}
-                                        <span className="text-[11px] font-bold truncate text-foreground">
+                                        {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                        {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                        <span
+                                            className="text-[11px] font-bold truncate"
+                                            style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
+                                        >
                                             {row.employeeName}
                                         </span>
                                     </div>

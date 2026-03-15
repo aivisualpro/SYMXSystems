@@ -30,6 +30,14 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import RouteInspectionModal from "./_components/RouteInspectionModal";
 
+/** Convert a date (ISO string or Date) to YYYY-MM-DD in Pacific Time */
+const BUSINESS_TZ = "America/Los_Angeles";
+function toPacificDate(d: string | Date): string {
+    const date = typeof d === "string" ? new Date(d) : new Date(d.getTime());
+    if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) date.setUTCHours(12);
+    return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(date);
+}
+
 // ── Type Options (reused from roster for colored pills) ──
 const TYPE_OPTIONS = [
     { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700" },
@@ -100,6 +108,7 @@ export default function ClosingPage() {
 
     const [allRoutes, setAllRoutes] = useState<RouteRow[]>([]);
     const [vehiclesMap, setVehiclesMap] = useState<Record<string, string>>({});
+    const [vehicleNamesMap, setVehicleNamesMap] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(false);
     const [sortKey, setSortKey] = useState<SortKey>("employee");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -169,15 +178,19 @@ export default function ClosingPage() {
             .then(d => {
                 if (d.vehicles) {
                     const dict: Record<string, string> = {};
+                    const nameDict: Record<string, string> = {};
                     d.vehicles.forEach((v: any) => {
                         if (v.unitNumber) {
                             dict[v.unitNumber] = v.vin;
+                            if (v.vehicleName) nameDict[v.unitNumber] = v.vehicleName;
                         }
                         if (v.vehicleName) {
                             dict[v.vehicleName] = v.vin;
+                            nameDict[v.vehicleName] = v.vehicleName;
                         }
                     });
                     setVehiclesMap(dict);
+                    setVehicleNamesMap(nameDict);
                 }
             })
             .catch(() => { });
@@ -223,11 +236,19 @@ export default function ClosingPage() {
             // Also hydrate vehicles from store
             if (store.fleet.vehicles && Array.isArray(store.fleet.vehicles)) {
                 const dict: Record<string, string> = {};
+                const nameDict: Record<string, string> = {};
                 store.fleet.vehicles.forEach((v: any) => {
-                    if (v.unitNumber) dict[v.unitNumber] = v.vin;
-                    if (v.vehicleName) dict[v.vehicleName] = v.vin;
+                    if (v.unitNumber) {
+                        dict[v.unitNumber] = v.vin;
+                        if (v.vehicleName) nameDict[v.unitNumber] = v.vehicleName;
+                    }
+                    if (v.vehicleName) {
+                        dict[v.vehicleName] = v.vin;
+                        nameDict[v.vehicleName] = v.vehicleName;
+                    }
                 });
                 setVehiclesMap(dict);
+                setVehicleNamesMap(nameDict);
             }
             setLoading(false);
             return;
@@ -249,7 +270,7 @@ export default function ClosingPage() {
     const { pendingRows, doneRows, totalFiltered } = useMemo(() => {
         let dateFiltered = allRoutes;
         if (selectedDate) {
-            dateFiltered = allRoutes.filter(r => r.date?.split("T")[0] === selectedDate);
+            dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         }
 
         // Only include "Route" type for closing as only Routes need inspections
@@ -323,7 +344,8 @@ export default function ClosingPage() {
 
     // ── Helper: render cell ──
     const renderCell = (value: any) => {
-        const displayVal = value === 0 || value === "" ? "—" : String(value);
+        const raw = value === 0 || value === "" ? "—" : String(value);
+        const displayVal = raw === "—" ? raw : raw.replace(/:\d{2}$/, "");
         return (
             <span className={cn(
                 "text-[11px] truncate font-semibold",
@@ -382,7 +404,11 @@ export default function ClosingPage() {
 
                                 {/* Info */}
                                 <div className="flex-1 min-w-0 pr-6">
-                                    <h3 className="text-sm font-bold truncate text-foreground group-hover:text-primary transition-colors">
+                                    <h3 className="text-sm font-bold truncate group-hover:text-primary transition-colors flex items-center gap-1.5"
+                                        style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
+                                    >
+                                        {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3.5 w-3.5 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                        {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "#FE9EC7" }} />}
                                         {row.employeeName}
                                     </h3>
                                     <div className="flex items-center gap-2 mt-1 text-[10px] font-medium text-muted-foreground/80">
@@ -396,7 +422,7 @@ export default function ClosingPage() {
                                         {row.van && (
                                             <>
                                                 <span className="opacity-50">•</span>
-                                                <span>Van <span className="text-foreground/70">{row.van}</span></span>
+                                                <span>{vehicleNamesMap[row.van] || `Van ${row.van}`}</span>
                                             </>
                                         )}
                                     </div>
@@ -485,7 +511,12 @@ export default function ClosingPage() {
                                                 </span>
                                             </div>
                                         )}
-                                        <span className="text-[11px] font-bold truncate text-foreground">
+                                        {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                        {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                        <span
+                                            className="text-[11px] font-bold truncate"
+                                            style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
+                                        >
                                             {row.employeeName}
                                         </span>
                                     </div>

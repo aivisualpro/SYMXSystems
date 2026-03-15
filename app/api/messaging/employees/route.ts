@@ -21,6 +21,13 @@ function getTomorrowPacific(): string {
   return d.toISOString().split("T")[0];
 }
 
+/** Convert any date to YYYY-MM-DD in Pacific Time */
+function toPacificDate(d: string | Date): string {
+  const date = typeof d === "string" ? new Date(d) : new Date(d.getTime());
+  if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) date.setUTCHours(12);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(date);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
@@ -207,10 +214,10 @@ export async function GET(req: NextRequest) {
 
       filtered = enrichedEmployees.filter((emp: any) => {
         const todaySchedule = emp.schedules.find(
-          (s: any) => new Date(s.date).toISOString().split("T")[0] === todayStr
+          (s: any) => toPacificDate(s.date) === todayStr
         );
         const tomorrowSchedule = emp.schedules.find(
-          (s: any) => new Date(s.date).toISOString().split("T")[0] === tomorrowStr
+          (s: any) => toPacificDate(s.date) === tomorrowStr
         );
 
         const isOffToday =

@@ -12,6 +12,9 @@ import Vehicle from "@/lib/models/Vehicle";
 
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+/** Business timezone — all date computations use Pacific Time */
+const BUSINESS_TZ = "America/Los_Angeles";
+
 // Resolve performer name from session, with DB fallback
 async function resolvePerformerName(session: any): Promise<{ email: string; name: string }> {
     const email = session?.email || "unknown";
@@ -84,14 +87,14 @@ export async function GET(req: NextRequest) {
         }
 
         // ── PHASE 2: ALL enrichment queries in parallel ──
-        const [employees, routeCounts, auditCountsRaw, vehicleDocs] = await Promise.all([
+        const [employees, routeCountsByDate, auditCountsRaw, vehicleDocs] = await Promise.all([
             SymxEmployee.find(
                 { transporterId: { $in: transporterIds } },
-                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, profileImage: 1, routesComp: 1 }
+                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, profileImage: 1, routesComp: 1, rate: 1 }
             ).lean(),
             SYMXRoute.aggregate([
                 { $match: routeCountMatch },
-                { $group: { _id: "$transporterId", count: { $sum: 1 } } },
+                { $group: { _id: { transporterId: "$transporterId", date: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: BUSINESS_TZ } } }, count: { $sum: 1 } } },
             ]),
             ScheduleAuditLog.aggregate([
                 { $match: { yearWeek } },
@@ -113,17 +116,26 @@ export async function GET(req: NextRequest) {
                 phoneNumber: emp.phoneNumber || "",
                 type: emp.type || "",
                 profileImage: emp.profileImage || "",
+                rate: emp.rate || 0,
             };
             initialCompMap[emp.transporterId] = parseInt(emp.routesComp) || 0;
         });
 
+        // Build per-employee per-date count map: { transporterId: { "2026-03-15": 1, ... } }
+        const routeDateMap: Record<string, Record<string, number>> = {};
+        // Also build the flat total for backward compatibility
         const routeCountMap: Record<string, number> = {};
-        routeCounts.forEach((rc: any) => {
-            routeCountMap[rc._id] = rc.count + (initialCompMap[rc._id] || 0);
+        routeCountsByDate.forEach((rc: any) => {
+            const tid = rc._id.transporterId;
+            const dt = rc._id.date;
+            if (!routeDateMap[tid]) routeDateMap[tid] = {};
+            routeDateMap[tid][dt] = rc.count;
+            routeCountMap[tid] = (routeCountMap[tid] || 0) + rc.count;
         });
+        // Add initial routesComp
         Object.entries(initialCompMap).forEach(([tid, initVal]) => {
-            if (!(tid in routeCountMap) && initVal > 0) {
-                routeCountMap[tid] = initVal;
+            if (initVal > 0) {
+                routeCountMap[tid] = (routeCountMap[tid] || 0) + initVal;
             }
         });
 
@@ -139,6 +151,8 @@ export async function GET(req: NextRequest) {
             routes,
             employees: employeeMap,
             routeCounts: routeCountMap,
+            routeCountsByDate: routeDateMap,
+            initialRoutesComp: initialCompMap,
             auditCounts,
             vehicleNames,
             routesGenerated: true,

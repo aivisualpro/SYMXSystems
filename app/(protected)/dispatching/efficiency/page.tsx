@@ -44,6 +44,14 @@ import {
 } from "@/components/ui/sheet";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 
+/** Convert a date (ISO string or Date) to YYYY-MM-DD in Pacific Time */
+const BUSINESS_TZ = "America/Los_Angeles";
+function toPacificDate(d: string | Date): string {
+    const date = typeof d === "string" ? new Date(d) : new Date(d.getTime());
+    if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) date.setUTCHours(12);
+    return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(date);
+}
+
 // ── Type Options (colored pills) ──
 const TYPE_OPTIONS = [
     { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700" },
@@ -100,16 +108,21 @@ const COLUMNS = [
     { key: "actions", label: "", width: "w-[40px] shrink-0" },
 ] as const;
 
-// ── Editable fields ──
+// ── Editable fields (raw inputs only — computed fields are read-only) ──
 const EDITABLE_FIELDS = new Set([
-    // Only efficiency-specific fields (NOT from routes info, attendance, time, or closing)
-    "actualDepartureTime", "departureDelay",
-    "plannedOutboundStem", "actualOutboundStem", "outboundDelay",
-    "plannedFirstStop", "actualFirstStop", "firstStopDelay",
-    "plannedLastStop", "actualLastStop", "lastStopDelay",
-    "plannedRTSTime", "estimatedRTSTime", "plannedInboundStem",
+    "actualDepartureTime",
+    "plannedOutboundStem", "actualOutboundStem",
+    "plannedFirstStop", "actualFirstStop",
+    "plannedLastStop", "actualLastStop",
+    "deliveryCompletionTime", "stopsRescued",
+]);
+
+// Auto-computed fields (never editable)
+const COMPUTED_FIELDS = new Set([
+    "departureDelay", "outboundDelay", "firstStopDelay", "lastStopDelay",
+    "plannedRTSTime", "plannedInboundStem", "estimatedRTSTime",
     "plannedDuration1stToLast", "actualDuration1stToLast",
-    "stopsPerHour", "deliveryCompletionTime", "dctDelay", "stopsRescued", "driverEfficiency",
+    "stopsPerHour", "dctDelay", "driverEfficiency",
 ]);
 
 const SHORT_DAYS: Record<string, string> = {
@@ -303,7 +316,7 @@ export default function EfficiencyPage() {
     // ── Filter + sort ──
     const { rows: displayRows, totalFiltered, totalForDate } = useMemo(() => {
         let dateFiltered = allRoutes;
-        if (selectedDate) dateFiltered = allRoutes.filter(r => r.date?.split("T")[0] === selectedDate);
+        if (selectedDate) dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         const totalForDate = dateFiltered.length;
 
         let filtered = dateFiltered;
@@ -371,7 +384,8 @@ export default function EfficiencyPage() {
     // ── Cell renderer ──
     const renderCell = (row: RouteRow, field: keyof RouteRow, value: any) => {
         const isEditable = EDITABLE_FIELDS.has(field);
-        const displayVal = value === 0 || value === "" ? "—" : String(value);
+        const raw = value === 0 || value === "" ? "—" : String(value);
+        const displayVal = raw === "—" ? raw : raw.replace(/:\d{2}$/, "");
 
         const isTimeField = field.toLowerCase().includes("time") || field.toLowerCase().includes("delay") || field.toLowerCase().includes("duration") || field.toLowerCase().includes("stem") || field.toLowerCase().includes("stop");
         const isNumeric = ["stopCount", "stopsPerHour", "stopsRescued", "driverEfficiency"].includes(field);
@@ -492,8 +506,15 @@ export default function EfficiencyPage() {
                         <div className="flex-1">
                             {displayRows.map((row) => (
                                 <div key={row._id} className="flex items-center gap-1 px-3 py-1.5 border-b border-border/20 hover:bg-muted/20 transition-colors group/row">
-                                    <div className="w-[150px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold group-hover/row:bg-muted/20 transition-colors flex items-center min-w-0 pr-2">
-                                        <span className="text-[11px] font-semibold truncate">{row.employeeName}</span>
+                                    <div className="w-[150px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold group-hover/row:bg-muted/20 transition-colors flex items-center gap-1.5 min-w-0 pr-2">
+                                        {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                        {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                        <span
+                                            className="text-[11px] font-semibold truncate"
+                                            style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
+                                        >
+                                            {row.employeeName}
+                                        </span>
                                     </div>
                                     <div className="w-[95px] shrink-0 pr-2">
                                         {renderType(row)}
@@ -580,38 +601,26 @@ export default function EfficiencyPage() {
                                 {[{
                                     title: "Departure", color: "text-blue-500", fields: [
                                         { key: "actualDepartureTime", label: "Act Dep" },
-                                        { key: "departureDelay", label: "Dep Delay" },
                                     ]
                                 },
                                 {
                                     title: "Stem Timing", color: "text-orange-500", fields: [
                                         { key: "plannedOutboundStem", label: "Pln OB Stem" },
                                         { key: "actualOutboundStem", label: "Act OB Stem" },
-                                        { key: "outboundDelay", label: "OB Delay" },
-                                        { key: "plannedInboundStem", label: "Pln IB Stem" },
                                     ]
                                 },
                                 {
                                     title: "Stop Timings", color: "text-rose-500", fields: [
                                         { key: "plannedFirstStop", label: "Pln 1st Stop" },
                                         { key: "actualFirstStop", label: "Act 1st Stop" },
-                                        { key: "firstStopDelay", label: "1st Stop Delay" },
                                         { key: "plannedLastStop", label: "Pln Last Stop" },
                                         { key: "actualLastStop", label: "Act Last Stop" },
-                                        { key: "lastStopDelay", label: "Last Stop Delay" },
                                     ]
                                 },
                                 {
-                                    title: "Summary & Performance", color: "text-emerald-500", fields: [
-                                        { key: "plannedDuration1stToLast", label: "Pln 1st-Last" },
-                                        { key: "actualDuration1stToLast", label: "Act 1st-Last" },
-                                        { key: "stopsPerHour", label: "Stops/Hr" },
+                                    title: "Delivery & Rescue", color: "text-emerald-500", fields: [
                                         { key: "deliveryCompletionTime", label: "DCT" },
-                                        { key: "dctDelay", label: "DCT Delay" },
-                                        { key: "plannedRTSTime", label: "Pln RTS" },
-                                        { key: "estimatedRTSTime", label: "Est RTS" },
                                         { key: "stopsRescued", label: "Stops Rescued" },
-                                        { key: "driverEfficiency", label: "Efficiency %" },
                                     ]
                                 }].map((group, i) => (
                                     <div key={i} className="col-span-2">

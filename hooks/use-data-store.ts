@@ -192,6 +192,12 @@ function _getPhase2Datasets(firstWeek: string): DatasetConfig[] {
       ttl: 3 * 60 * 1000,
     },
     {
+      key: "messaging.employees.off-tomorrow",
+      url: `/api/messaging/employees?filter=off-tomorrow&yearWeek=${encodeURIComponent(firstWeek)}`,
+      transform: (raw: any) => raw?.employees ?? [],
+      ttl: 3 * 60 * 1000,
+    },
+    {
       key: "messaging.employees.week-schedule",
       url: `/api/messaging/employees?filter=week-schedule&yearWeek=${encodeURIComponent(firstWeek)}`,
       transform: (raw: any) => raw?.employees ?? [],
@@ -471,6 +477,7 @@ export function useDataStore() {
     messagingEmployees: {
       "future-shift": state.datasets["messaging.employees.future-shift"]?.data ?? null,
       "shift": state.datasets["messaging.employees.shift"]?.data ?? null,
+      "off-tomorrow": state.datasets["messaging.employees.off-tomorrow"]?.data ?? null,
       "week-schedule": state.datasets["messaging.employees.week-schedule"]?.data ?? null,
       "route-itinerary": state.datasets["messaging.employees.route-itinerary"]?.data ?? null,
     },

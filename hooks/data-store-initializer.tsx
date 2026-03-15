@@ -61,7 +61,7 @@ export function DataStoreInitializer() {
             {/* Inner percentage */}
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-lg font-bold font-mono tabular-nums text-primary">
-                {globalProgress}
+                {globalProgress}<span className="text-xs">%</span>
               </span>
             </div>
           </div>
