@@ -218,16 +218,22 @@ const timeToMins = (t: string | undefined | null) => {
     return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 };
 
+const BUSINESS_TZ = "America/Los_Angeles";
+
 const getElapsedMins = (inDayStr: string, dateStr: string) => {
     if (!inDayStr) return 0;
     const inMins = timeToMins(inDayStr);
-    const today = new Date();
-    // Use local time for comparison since time strings are local
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    // Use Pacific Time for "today" comparison
+    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
     const rowDate = dateStr?.split("T")[0];
 
     if (rowDate === todayStr) {
-        return (today.getHours() * 60 + today.getMinutes()) - inMins;
+        // Get current Pacific time hours/minutes
+        const nowParts = new Intl.DateTimeFormat("en-US", {
+            timeZone: BUSINESS_TZ, hour: "numeric", minute: "numeric", hour12: false
+        }).format(new Date());
+        const [h, m] = nowParts.split(":").map(Number);
+        return (h * 60 + m) - inMins;
     } else if (rowDate && rowDate < todayStr) {
         return 9999;
     } else {

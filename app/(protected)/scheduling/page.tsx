@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   CalendarDays,
@@ -374,9 +374,39 @@ function EditableNote({
   );
 }
 
+/** Business timezone — all "today" checks use Pacific Time. */
+const BUSINESS_TZ = "America/Los_Angeles";
+
+/** Get today's date string (YYYY-MM-DD) in Pacific Time. */
+function getTodayPacific(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
+}
+
+/** Compute current yearWeek (Sun-based) from today's date in Pacific Time. */
+function getCurrentYearWeek(): string {
+  const todayStr = getTodayPacific();
+  const date = new Date(todayStr + "T00:00:00.000Z");
+  const dayOfWeek = date.getUTCDay(); // 0=Sun … 6=Sat
+  const sundayOfThisWeek = new Date(date);
+  sundayOfThisWeek.setUTCDate(date.getUTCDate() - dayOfWeek);
+  const year = sundayOfThisWeek.getUTCFullYear();
+  const jan1 = new Date(Date.UTC(year, 0, 1));
+  const jan1Day = jan1.getUTCDay();
+  const firstSunday = new Date(jan1);
+  firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
+  const diffMs = sundayOfThisWeek.getTime() - firstSunday.getTime();
+  const diffDays = Math.round(diffMs / 86400000);
+  const weekNum = Math.floor(diffDays / 7) + 1;
+  return `${year}-W${weekNum.toString().padStart(2, "0")}`;
+}
+
 export default function SchedulingPage() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // ── Read initial week from URL ──
+  const urlWeek = searchParams.get("week") || "";
 
   // ── State-driven tab switching — NO route navigation, instant!
   const [activeMainTab, setActiveMainTab] = useState<"scheduling" | "messaging">(
@@ -386,6 +416,17 @@ export default function SchedulingPage() {
     const match = pathname.match(/\/scheduling\/messaging\/([^\/]+)/);
     return match?.[1] || "future-shift";
   });
+
+  // ── Sync state changes to URL ──
+  const updateURL = useCallback((tab: "scheduling" | "messaging", subTab: string, week: string) => {
+    const params = new URLSearchParams();
+    if (week) params.set("week", week);
+    const qs = params.toString();
+    const basePath = tab === "messaging"
+      ? `/scheduling/messaging/${subTab}`
+      : "/scheduling";
+    router.replace(`${basePath}${qs ? `?${qs}` : ""}`, { scroll: false });
+  }, [router]);
 
   // Keep router in a ref so it never triggers the sync effect
   const routerRef = useRef(router);
@@ -398,15 +439,13 @@ export default function SchedulingPage() {
       isFirstRender.current = false;
       return; // skip the initial mount — URL is already correct
     }
-    if (activeMainTab === "messaging") {
-      routerRef.current.replace(`/scheduling/messaging/${activeSubTab}`, { scroll: false });
-    } else {
-      routerRef.current.replace("/scheduling", { scroll: false });
-    }
-  }, [activeMainTab, activeSubTab]); // router intentionally excluded — held in ref
+    updateURL(activeMainTab, activeSubTab, selectedWeek);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMainTab, activeSubTab]);
+
   const [mounted, setMounted] = useState(false);
   const [weeks, setWeeks] = useState<string[]>([]);
-  const [selectedWeek, setSelectedWeek] = useState<string>("");
+  const [selectedWeek, setSelectedWeekState] = useState<string>(urlWeek);
   const [weekData, setWeekData] = useState<WeekData | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
@@ -425,6 +464,12 @@ export default function SchedulingPage() {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const { setLeftContent, setRightContent } = useHeaderActions();
+
+  // Wrapped setter that also updates URL
+  const setSelectedWeek = useCallback((week: string) => {
+    setSelectedWeekState(week);
+    updateURL(activeMainTab, activeSubTab, week);
+  }, [activeMainTab, activeSubTab, updateURL]);
 
   // Helpers to compute next/prev yearWeek strings
   const getNextYearWeek = (yw: string): string => {
@@ -505,7 +550,15 @@ export default function SchedulingPage() {
     if (store.initialized && store.schedulingWeeks?.length) {
       hydratedWeeksRef.current = true;
       setWeeks(store.schedulingWeeks);
-      setSelectedWeek(store.schedulingWeeks[0]);
+      // Pick week: URL param > current week > first in list
+      const currentWeek = getCurrentYearWeek();
+      if (urlWeek && store.schedulingWeeks.includes(urlWeek)) {
+        setSelectedWeek(urlWeek);
+      } else if (store.schedulingWeeks.includes(currentWeek)) {
+        setSelectedWeek(currentWeek);
+      } else {
+        setSelectedWeek(store.schedulingWeeks[0]);
+      }
       setLoading(false);
     }
   }, [store.initialized, store.schedulingWeeks]);
@@ -521,7 +574,15 @@ export default function SchedulingPage() {
         const data = await res.json();
         if (data.weeks?.length) {
           setWeeks(data.weeks);
-          setSelectedWeek(data.weeks[0]);
+          // Pick week: URL param > current week > first in list
+          const currentWeek = getCurrentYearWeek();
+          if (urlWeek && data.weeks.includes(urlWeek)) {
+            setSelectedWeek(urlWeek);
+          } else if (data.weeks.includes(currentWeek)) {
+            setSelectedWeek(currentWeek);
+          } else {
+            setSelectedWeek(data.weeks[0]);
+          }
         }
       } catch (err) {
         toast.error("Failed to load available weeks");

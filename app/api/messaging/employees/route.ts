@@ -7,6 +7,20 @@ import MessageLog from "@/lib/models/MessageLog";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
+/** Business timezone — all "today" / "tomorrow" checks use Pacific Time. */
+const BUSINESS_TZ = "America/Los_Angeles";
+
+function getTodayPacific(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
+}
+
+function getTomorrowPacific(): string {
+  const todayStr = getTodayPacific();
+  const d = new Date(todayStr + "T12:00:00.000Z");
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().split("T")[0];
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
@@ -167,12 +181,12 @@ export async function GET(req: NextRequest) {
     let filtered = enrichedEmployees;
 
     if (filter === "future-shift") {
-      // Employees with future scheduled shifts
-      const now = new Date();
+      // Employees with future scheduled shifts (relative to Pacific today)
+      const todayPacificDate = new Date(getTodayPacific() + "T00:00:00.000Z");
       filtered = enrichedEmployees.filter((emp: any) =>
         emp.schedules.some(
           (s: any) =>
-            new Date(s.date) > now &&
+            new Date(s.date) > todayPacificDate &&
             s.type &&
             !["off", "close", "request off", ""].includes(s.type.toLowerCase().trim())
         )
@@ -187,12 +201,9 @@ export async function GET(req: NextRequest) {
         )
       );
     } else if (filter === "off-tomorrow") {
-      // Off today but scheduled tomorrow
-      const today = new Date();
-      const todayStr = today.toISOString().split("T")[0];
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().split("T")[0];
+      // Off today but scheduled tomorrow (Pacific Time)
+      const todayStr = getTodayPacific();
+      const tomorrowStr = getTomorrowPacific();
 
       filtered = enrichedEmployees.filter((emp: any) => {
         const todaySchedule = emp.schedules.find(

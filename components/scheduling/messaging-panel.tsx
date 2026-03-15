@@ -85,6 +85,14 @@ function getTodayPacific(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
 }
 
+/** Get tomorrow's date string (YYYY-MM-DD) in Pacific Time. */
+function getTomorrowPacific(): string {
+  const todayStr = getTodayPacific();
+  const d = new Date(todayStr + "T12:00:00.000Z"); // noon UTC to avoid DST edge
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().split("T")[0];
+}
+
 function getWeekDates(yearWeek: string): string[] {
   const match = yearWeek.match(/(\d{4})-W(\d{2})/);
   if (!match) return [];
@@ -156,22 +164,19 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
     (s) => s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
   );
 
-  const now = new Date();
+  const todayPacific = getTodayPacific();
+  const tomorrowPacific = getTomorrowPacific();
 
   if (tabId === "shift") {
-    // Shift notification → use TODAY's schedule
-    const todayStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")}`;
+    // Shift notification → use TODAY's schedule (Pacific)
     const todayShift = emp.schedules?.find(
-      (s) => s.date?.startsWith(todayStr) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
+      (s) => s.date?.startsWith(todayPacific) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
     );
     if (todayShift) targetShift = todayShift;
   } else if (tabId === "future-shift" || tabId === "off-tomorrow") {
-    // Future shift / off-tomorrow → use TOMORROW's schedule
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = `${tomorrow.getFullYear()}-${(tomorrow.getMonth() + 1).toString().padStart(2, "0")}-${tomorrow.getDate().toString().padStart(2, "0")}`;
+    // Future shift / off-tomorrow → use TOMORROW's schedule (Pacific)
     const tomorrowShift = emp.schedules?.find(
-      (s) => s.date?.startsWith(tomorrowStr) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
+      (s) => s.date?.startsWith(tomorrowPacific) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
     );
     if (tomorrowShift) targetShift = tomorrowShift;
   }
@@ -185,13 +190,13 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
   let dayOfWeek = "";
 
   if (tabId === "shift") {
-    shiftDate = formatDateMMDDYYYY(now.toISOString());
-    dayOfWeek = FULL_DAY_NAMES[now.getDay()];
+    const todayDate = new Date(todayPacific + "T00:00:00Z");
+    shiftDate = formatDateMMDDYYYY(todayDate.toISOString());
+    dayOfWeek = FULL_DAY_NAMES[todayDate.getUTCDay()];
   } else if (tabId === "future-shift" || tabId === "off-tomorrow") {
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    shiftDate = formatDateMMDDYYYY(tomorrow.toISOString());
-    dayOfWeek = FULL_DAY_NAMES[tomorrow.getDay()];
+    const tomorrowDate = new Date(tomorrowPacific + "T00:00:00Z");
+    shiftDate = formatDateMMDDYYYY(tomorrowDate.toISOString());
+    dayOfWeek = FULL_DAY_NAMES[tomorrowDate.getUTCDay()];
   } else {
     shiftDate = targetShift?.date ? formatDateMMDDYYYY(targetShift.date) : "";
     dayOfWeek = targetShift?.date
@@ -918,34 +923,6 @@ function MessagingSubTab({
         <div className="rounded-xl border border-border/50 bg-card flex flex-col overflow-hidden">
           {/* Table Header */}
           <div className="border-b border-border/50 bg-muted/30 sticky top-0 z-10">
-            {/* Off-Today Toggle — only for future-shift tab */}
-            {tab.id === "future-shift" && (
-              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/30">
-                <button
-                  onClick={() => setShowOffToday(!showOffToday)}
-                  className={cn(
-                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
-                    showOffToday ? "bg-amber-500" : "bg-zinc-600"
-                  )}
-                >
-                  <span className={cn(
-                    "pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform",
-                    showOffToday ? "translate-x-4" : "translate-x-0"
-                  )} />
-                </button>
-                <span className={cn(
-                  "text-[11px] font-medium",
-                  showOffToday ? "text-amber-500" : "text-muted-foreground"
-                )}>
-                  Off Today
-                </span>
-                {showOffToday && (
-                  <span className="text-[10px] text-muted-foreground">
-                    — showing employees off today but working tomorrow
-                  </span>
-                )}
-              </div>
-            )}
             <div className="grid grid-cols-[40px_1fr_100px_120px_120px] items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
               <div className="flex items-center justify-center">
                 <Checkbox
