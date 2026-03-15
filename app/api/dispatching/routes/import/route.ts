@@ -226,18 +226,41 @@ export async function POST(req: NextRequest) {
                 continue;
             }
 
-            // Parse and normalize date
-            let dateObj: Date;
-            try {
-                dateObj = new Date(mapped.date);
-                if (isNaN(dateObj.getTime())) {
-                    skipped++;
-                    continue;
+            // Parse and normalize date — timezone-safe
+            let dateObj: Date | null = null;
+            {
+                const raw = String(mapped.date).trim();
+                let y = 0, m = 0, d = 0;
+
+                // M/D/YYYY or MM/DD/YYYY
+                const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                // YYYY-MM-DD (may include time portion)
+                const dashMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+
+                if (slashMatch) {
+                    m = parseInt(slashMatch[1]);
+                    d = parseInt(slashMatch[2]);
+                    y = parseInt(slashMatch[3]);
+                } else if (dashMatch) {
+                    y = parseInt(dashMatch[1]);
+                    m = parseInt(dashMatch[2]);
+                    d = parseInt(dashMatch[3]);
+                } else {
+                    // Fallback: parse and use LOCAL date components (not UTC)
+                    const parsed = new Date(raw);
+                    if (!isNaN(parsed.getTime())) {
+                        y = parsed.getFullYear();
+                        m = parsed.getMonth() + 1;
+                        d = parsed.getDate();
+                    }
                 }
-                // Normalize to midnight UTC
-                const dateStr = dateObj.toISOString().split("T")[0];
-                dateObj = new Date(`${dateStr}T00:00:00.000Z`);
-            } catch {
+
+                if (y > 0 && m > 0 && d > 0) {
+                    dateObj = new Date(Date.UTC(y, m - 1, d));
+                }
+            }
+
+            if (!dateObj) {
                 skipped++;
                 continue;
             }
@@ -245,8 +268,8 @@ export async function POST(req: NextRequest) {
             // Compute weekDay
             const weekDay = FULL_DAY_NAMES[dateObj.getUTCDay()];
 
-            // Compute yearWeek if not provided
-            const yearWeek = mapped.yearWeek || dateToSundayWeek(dateObj);
+            // Always compute yearWeek from date for consistency
+            const yearWeek = dateToSundayWeek(dateObj);
 
             // Build the $set payload (exclude date, transporterId, yearWeek as they go into filter/fixed fields)
             const setFields: Record<string, any> = {

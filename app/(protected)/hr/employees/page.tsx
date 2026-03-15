@@ -17,6 +17,13 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function EmployeesPage() {
   const [data, setData] = useState<ISymxEmployee[]>([]);
@@ -33,6 +40,43 @@ export default function EmployeesPage() {
   const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const PAGE_SIZE = 50;
   const router = useRouter();
+  const [vehicleNames, setVehicleNames] = useState<string[]>([]);
+
+  const DAY_OPTIONS = ["Assign Schedule", "OFF", "Route"];
+
+  // Fetch vehicle names for van dropdowns
+  useEffect(() => {
+    fetch("/api/fleet?section=vehicles")
+      .then(r => r.json())
+      .then((data: any) => {
+        const vehicles = data?.vehicles || [];
+        const names = vehicles
+          .map((v: any) => v.vehicleName)
+          .filter(Boolean)
+          .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
+        setVehicleNames(names);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Inline update helper
+  const updateEmployeeField = async (id: string, field: string, value: string) => {
+    try {
+      // Optimistic update
+      setData(prev => prev.map(emp =>
+        String(emp._id) === id ? { ...emp, [field]: value } as any : emp
+      ));
+      const res = await fetch(`/api/admin/employees/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      toast.error("Failed to update");
+      fetchEmployees(true);
+    }
+  };
 
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
@@ -196,6 +240,59 @@ export default function EmployeesPage() {
       cell: ({ row }) => formatPhoneNumber(row.original.phoneNumber || "")
     },
     { accessorKey: "type", header: "Type" },
+    // Availability — inline dropdowns
+    ...(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const).map(day => ({
+      accessorKey: day,
+      header: day.charAt(0).toUpperCase() + day.slice(1, 3),
+      cell: ({ row }: any) => {
+        const val = row.original[day] || "OFF";
+        return (
+          <Select
+            value={val}
+            onValueChange={(v) => updateEmployeeField(String(row.original._id), day, v)}
+          >
+            <SelectTrigger
+              className="h-7 w-[90px] text-[10px] font-medium px-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent onClick={(e) => e.stopPropagation()}>
+              {DAY_OPTIONS.map(t => (
+                <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      },
+    })),
+    // Default Vans — dropdowns from fleet vehicles
+    ...(['defaultVan1', 'defaultVan2', 'defaultVan3'] as const).map((field, idx) => ({
+      accessorKey: field,
+      header: `Van ${idx + 1}`,
+      cell: ({ row }: any) => {
+        const val = row.original[field] || "";
+        return (
+          <Select
+            value={val || "__none__"}
+            onValueChange={(v) => updateEmployeeField(String(row.original._id), field, v === "__none__" ? "" : v)}
+          >
+            <SelectTrigger
+              className="h-7 w-[80px] text-[10px] font-medium px-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
+            <SelectContent onClick={(e) => e.stopPropagation()}>
+              <SelectItem value="__none__" className="text-xs text-muted-foreground">— None —</SelectItem>
+              {vehicleNames.map(name => (
+                <SelectItem key={name} value={name} className="text-xs">{name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      },
+    })),
     {
       accessorKey: "status",
       header: "Status",
@@ -224,20 +321,8 @@ export default function EmployeesPage() {
     { accessorKey: "gasCardPin", header: "Gas Card PIN" },
     { accessorKey: "dlExpiration", header: "DL Exp", cell: ({ row }) => row.original.dlExpiration ? new Date(row.original.dlExpiration).toLocaleDateString() : "" },
     { accessorKey: "motorVehicleReportDate", header: "MVR Date", cell: ({ row }) => row.original.motorVehicleReportDate ? new Date(row.original.motorVehicleReportDate).toLocaleDateString() : "" },
-    { accessorKey: "defaultVan1", header: "Van 1" },
-    { accessorKey: "defaultVan2", header: "Van 2" },
-    { accessorKey: "defaultVan3", header: "Van 3" },
     { accessorKey: "routesComp", header: "Routes Comp" },
     { accessorKey: "ScheduleNotes", header: "Schedule Notes" },
-
-    // Availability
-    { accessorKey: "sunday", header: "Sun", cell: ({ row }) => row.original.sunday || "OFF" },
-    { accessorKey: "monday", header: "Mon", cell: ({ row }) => row.original.monday || "OFF" },
-    { accessorKey: "tuesday", header: "Tue", cell: ({ row }) => row.original.tuesday || "OFF" },
-    { accessorKey: "wednesday", header: "Wed", cell: ({ row }) => row.original.wednesday || "OFF" },
-    { accessorKey: "thursday", header: "Thu", cell: ({ row }) => row.original.thursday || "OFF" },
-    { accessorKey: "friday", header: "Fri", cell: ({ row }) => row.original.friday || "OFF" },
-    { accessorKey: "saturday", header: "Sat", cell: ({ row }) => row.original.saturday || "OFF" },
 
     // Files
     { accessorKey: "offerLetterFile", header: "Offer Letter", cell: ({ row }) => <FileLinkCell value={row.original.offerLetterFile} /> },
@@ -281,18 +366,8 @@ export default function EmployeesPage() {
     gasCardPin: false,
     dlExpiration: false,
     motorVehicleReportDate: false,
-    defaultVan1: false,
-    defaultVan2: false,
-    defaultVan3: false,
     routesComp: false,
     ScheduleNotes: false,
-    sunday: false,
-    monday: false,
-    tuesday: false,
-    wednesday: false,
-    thursday: false,
-    friday: false,
-    saturday: false,
     offerLetterFile: false,
     handbookFile: false,
     driversLicenseFile: false,

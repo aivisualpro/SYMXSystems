@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +59,17 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
   });
 
   const [activeTab, setActiveTab] = useState<TabKey>("personal");
+  const [routeTypes, setRouteTypes] = useState<string[]>([]);
+
+  // Fetch route types for day dropdowns
+  useEffect(() => {
+    fetch("/api/admin/settings/route-types")
+      .then(r => r.json())
+      .then((types: any[]) => {
+        if (Array.isArray(types)) setRouteTypes(types.map(t => t.name));
+      })
+      .catch(() => {});
+  }, []);
 
   const handleChange = (field: keyof FormEmployee, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -316,11 +327,15 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
                           <SelectValue placeholder="Select Status" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Route">Route</SelectItem>
-                          <SelectItem value="Assign Schedule">Assign Schedule</SelectItem>
-                          <SelectItem value="OFF">OFF</SelectItem>
-                          <SelectItem value="Open">Open</SelectItem>
-                          <SelectItem value="Close">Close</SelectItem>
+                          {routeTypes.map(t => (
+                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                          ))}
+                          {!routeTypes.includes("OFF") && (
+                            <SelectItem value="OFF">OFF</SelectItem>
+                          )}
+                          {!routeTypes.includes("Assign Schedule") && (
+                            <SelectItem value="Assign Schedule">Assign Schedule</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>

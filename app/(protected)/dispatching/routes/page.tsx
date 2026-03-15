@@ -219,7 +219,7 @@ export default function RoutesPage() {
                     weekDay: rec.weekDay || "",
                     type: rec.type || "",
                     subType: rec.subType || "",
-                    van: rec.van || "",
+                    van: (rec.van && data.vehicleNames?.[rec.van]) || rec.van || "",
                     serviceType: rec.serviceType || "",
                     dashcam: rec.dashcam || "",
                     routeSize: rec.routeSize || "",

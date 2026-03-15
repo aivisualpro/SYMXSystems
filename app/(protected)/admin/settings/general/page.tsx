@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function GeneralSettingsPage() {
-  redirect("/admin/settings/general/default-routes");
+  redirect("/admin/settings/general/general");
 }

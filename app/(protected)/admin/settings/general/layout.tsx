@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Route, ListFilter, Settings, Plus } from "lucide-react";
+import { Route, ListFilter, Settings, Plus, Wrench } from "lucide-react";
 import { useRef, createContext, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -13,6 +13,7 @@ const AddRefContext = createContext<AddRefCtx>({ addRef: { current: null } });
 export const useAddRef = () => useContext(AddRefContext);
 
 const SUB_TABS = [
+    { id: "general", label: "General", icon: Wrench },
     { id: "default-routes", label: "Default Routes", icon: Route },
     { id: "dropdowns", label: "Dropdowns", icon: ListFilter },
     { id: "wst", label: "WST", icon: Settings },

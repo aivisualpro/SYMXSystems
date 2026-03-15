@@ -23,10 +23,25 @@ interface DropdownRow {
     isEditing?: boolean;
 }
 
-const TAILWIND_COLORS = [
-    "bg-red-600", "bg-emerald-600", "bg-blue-600", "bg-amber-600", "bg-zinc-600",
-    "bg-rose-600", "bg-pink-600", "bg-purple-600", "bg-indigo-600", "bg-cyan-600",
-    "bg-teal-600", "bg-lime-600", "bg-orange-600", "bg-sky-600", "bg-slate-600"
+const COLOR_OPTIONS = [
+    // Reds & Pinks
+    "#DC2626", "#EB4C4C", "#FF3E9B", "#E11D48", "#853953",
+    // Oranges & Ambers
+    "#EA580C", "#D97706", "#F2D479", "#FFDE42",
+    // Greens
+    "#059669", "#48A111", "#25671E", "#65A30D", "#44A194",
+    // Blues
+    "#2563EB", "#5478FF", "#2FA4D7", "#53CBF3", "#0284C7",
+    "#003049", "#111FA2", "#355872", "#7AAACE", "#81A6C6",
+    // Purples & Indigos
+    "#9333EA", "#612D53", "#281C59", "#4F46E5", "#6367FF",
+    // Neutrals & Grays
+    "#52525B", "#475569", "#8E977D", "#AEB784",
+    // Natural & Earthy tones
+    "#C4A882", "#A0845C", "#8A7650", "#6B4F36",
+    "#D4A574", "#B87333", "#A0522D", "#8B4513",
+    "#C9B99A", "#BDB76B", "#808000", "#556B2F",
+    "#D2B48C", "#DEB887", "#F5DEB3", "#FFFBF1",
 ];
 
 const LUCIDE_ICONS = [
@@ -46,6 +61,12 @@ const LUCIDE_ICONS = [
 ];
 
 function ColorPicker({ value, onChange, disabled }: { value: string, onChange: (v: string) => void, disabled: boolean }) {
+    const [search, setSearch] = useState("");
+    const filtered = useMemo(() => {
+        if (!search) return COLOR_OPTIONS;
+        return COLOR_OPTIONS.filter(c => c.toLowerCase().includes(search.toLowerCase()));
+    }, [search]);
+
     return (
         <Popover>
             <PopoverTrigger asChild>
@@ -58,7 +79,7 @@ function ColorPicker({ value, onChange, disabled }: { value: string, onChange: (
                 >
                     {value ? (
                         <div className="flex items-center gap-2 overflow-hidden">
-                            <div className={cn("w-3.5 h-3.5 rounded-full shrink-0 shadow-sm", value)} />
+                            <div className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: value }} />
                             <span className="truncate">{value}</span>
                         </div>
                     ) : (
@@ -67,30 +88,49 @@ function ColorPicker({ value, onChange, disabled }: { value: string, onChange: (
                     <ChevronDown className="h-3 w-3 shrink-0 opacity-50 ml-2" />
                 </button>
             </PopoverTrigger>
-            <PopoverContent className="w-[180px] p-2" align="start">
-                <div className="grid grid-cols-5 gap-1.5">
-                    <button
-                        onClick={() => onChange("")}
-                        className={cn(
-                            "w-7 h-7 rounded-full border border-dashed flex items-center justify-center transition-transform hover:scale-110",
-                            !value && "ring-2 ring-primary ring-offset-2 ring-offset-background"
-                        )}
-                        title="None"
-                    >
-                        <X className="h-3.5 w-3.5 text-muted-foreground" />
-                    </button>
-                    {TAILWIND_COLORS.map(c => (
-                        <button
-                            key={c}
-                            onClick={() => onChange(c)}
-                            className={cn(
-                                "w-7 h-7 rounded-full shadow-sm transition-transform hover:scale-110",
-                                c,
-                                value === c && "ring-2 ring-primary ring-offset-2 ring-offset-background"
-                            )}
-                            title={c}
+            <PopoverContent className="w-[280px] p-0" align="start" onOpenAutoFocus={e => e.preventDefault()}>
+                <div className="p-2 border-b border-border/50">
+                    <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                            placeholder="Search colors..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="h-8 pl-8 text-[11px] bg-muted/30 border-muted-foreground/20 focus-visible:ring-1"
                         />
-                    ))}
+                    </div>
+                </div>
+                <div className="p-2 max-h-[220px] overflow-y-auto">
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px" }}>
+                        <button
+                            onClick={() => onChange("")}
+                            className={cn(
+                                "aspect-square rounded flex items-center justify-center hover:bg-muted/50 transition-colors",
+                                !value && "bg-primary/10 text-primary font-medium"
+                            )}
+                            title="None"
+                        >
+                            <span className="text-[9px]">None</span>
+                        </button>
+                        {filtered.map(c => (
+                            <button
+                                key={c}
+                                onClick={() => onChange(c)}
+                                className={cn(
+                                    "aspect-square rounded flex items-center justify-center hover:scale-110 transition-transform",
+                                    value === c && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                                )}
+                                title={c}
+                            >
+                                <div className="w-5 h-5 rounded-full shadow-sm" style={{ backgroundColor: c }} />
+                            </button>
+                        ))}
+                    </div>
+                    {filtered.length === 0 && (
+                        <div className="py-4 text-center text-xs text-muted-foreground">
+                            No colors found
+                        </div>
+                    )}
                 </div>
             </PopoverContent>
         </Popover>

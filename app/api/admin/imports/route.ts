@@ -260,6 +260,45 @@ function dateToISOWeek(dateStr: string): string | null {
  * Weeks run Sun–Sat, matching getWeekDates() used throughout the app.
  * Returns "YYYY-WXX" or null if parsing fails.
  */
+/** Timezone-safe date parser: extracts the calendar date the user intended
+ *  (using local getters) and stores as UTC midnight. This prevents the -1 day
+ *  shift that occurs when CSV parsers create Date objects at local midnight
+ *  in positive UTC-offset timezones. */
+function parseToUTCMidnight(value: any): Date | null {
+    if (!value) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    let y = 0, m = 0, d = 0;
+    // M/D/YYYY or MM/DD/YYYY
+    const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    // YYYY-MM-DD
+    const dashMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+
+    if (slashMatch) {
+        m = parseInt(slashMatch[1]);
+        d = parseInt(slashMatch[2]);
+        y = parseInt(slashMatch[3]);
+    } else if (dashMatch) {
+        y = parseInt(dashMatch[1]);
+        m = parseInt(dashMatch[2]);
+        d = parseInt(dashMatch[3]);
+    } else {
+        // Fallback: parse and use LOCAL date components (not UTC)
+        const parsed = new Date(raw);
+        if (!isNaN(parsed.getTime())) {
+            y = parsed.getFullYear();
+            m = parsed.getMonth() + 1;
+            d = parsed.getDate();
+        }
+    }
+
+    if (y > 0 && m > 0 && d > 0) {
+        return new Date(Date.UTC(y, m - 1, d));
+    }
+    return null;
+}
+
 function dateToSundayWeek(dateStr: string): string | null {
     try {
         const date = new Date(dateStr);
@@ -364,11 +403,9 @@ export async function POST(req: NextRequest) {
                     } else if (instance === "Date") {
                         if (value && value.toString().trim() !== "") {
                             try {
-                                const date = new Date(value);
-                                if (!isNaN(date.getTime())) {
-                                    // Normalize to YYYY-MM-DDT00:00:00.000Z to avoid timezone shifts
-                                    const dateStr = date.toISOString().split('T')[0];
-                                    processedData[key] = new Date(`${dateStr}T00:00:00.000Z`);
+                                const utcDate = parseToUTCMidnight(value);
+                                if (utcDate) {
+                                    processedData[key] = utcDate;
                                 }
                             } catch (e) {
                                 // Ignore invalid dates
@@ -1028,44 +1065,49 @@ export async function POST(req: NextRequest) {
                 // Parse the date field — timezone-safe, store as UTC midnight
                 let dateVal: Date | null = null;
                 if (processedData.date) {
-                    const raw = processedData.date.toString().trim();
-                    // Try to parse common formats: MM/DD/YYYY, M/D/YYYY, YYYY-MM-DD
-                    let y: number, m: number, d: number;
+                    let y = 0, m = 0, d = 0;
+                    const rawVal = processedData.date;
+
+                    // If CSV parser already converted to a Date object (toString'd),
+                    // try to match common string formats first
+                    const raw = String(rawVal).trim();
                     const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
                     const dashMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+
                     if (slashMatch) {
+                        // M/D/YYYY or MM/DD/YYYY
                         m = parseInt(slashMatch[1]);
                         d = parseInt(slashMatch[2]);
                         y = parseInt(slashMatch[3]);
                     } else if (dashMatch) {
+                        // YYYY-MM-DD
                         y = parseInt(dashMatch[1]);
                         m = parseInt(dashMatch[2]);
                         d = parseInt(dashMatch[3]);
                     } else {
-                        // Fallback: parse with Date but extract UTC components
+                        // Fallback: parse with Date and extract LOCAL components
+                        // (CSV parsers create Dates at midnight LOCAL time,
+                        //  so local getters give the correct calendar date)
                         const parsed = new Date(raw);
                         if (!isNaN(parsed.getTime())) {
-                            // Extract date parts to avoid timezone shift
-                            const isoStr = parsed.toISOString().split('T')[0];
-                            const [yy, mm, dd] = isoStr.split('-').map(Number);
-                            y = yy; m = mm; d = dd;
-                        } else {
-                            y = 0; m = 0; d = 0;
+                            y = parsed.getFullYear();
+                            m = parsed.getMonth() + 1;
+                            d = parsed.getDate();
                         }
                     }
-                    if (y! > 0 && m! > 0 && d! > 0) {
-                        dateVal = new Date(Date.UTC(y!, m! - 1, d!));
+
+                    if (y > 0 && m > 0 && d > 0) {
+                        dateVal = new Date(Date.UTC(y, m - 1, d));
                         processedData.date = dateVal;
                     }
                 }
                 if (!dateVal) return null;
 
-                // Only compute yearWeek if NOT already present in CSV data
-                if (!processedData.yearWeek) {
-                    const computedWeek = dateToSundayWeek(dateVal.toISOString());
-                    if (computedWeek) {
-                        processedData.yearWeek = computedWeek;
-                    }
+                // Always compute yearWeek from the date for consistency
+                // (CSV may use ISO weeks which differ from our Sun-based weeks)
+                const computedWeek = dateToSundayWeek(dateVal.toISOString());
+                if (computedWeek) {
+                    processedData.yearWeek = computedWeek;
                 }
 
                 // Link Employee
@@ -1131,11 +1173,12 @@ export async function POST(req: NextRequest) {
                             const parsed = new Date(value.toString());
                             if (!isNaN(parsed.getTime())) {
                                 if (schemaKey === 'date') {
-                                    const dateStr = parsed.toISOString().split('T')[0];
-                                    processedData[schemaKey] = new Date(`${dateStr}T00:00:00.000Z`);
-                                    // Compute week from date
-                                    const computedWeek = dateToSundayWeek(dateStr);
-                                    if (computedWeek) processedData.week = computedWeek;
+                                    const utcDate = parseToUTCMidnight(value);
+                                    if (utcDate) {
+                                        processedData[schemaKey] = utcDate;
+                                        const computedWeek = dateToSundayWeek(utcDate.toISOString());
+                                        if (computedWeek) processedData.week = computedWeek;
+                                    }
                                 } else {
                                     processedData[schemaKey] = parsed;
                                 }
@@ -1232,10 +1275,9 @@ export async function POST(req: NextRequest) {
                     if (schemaKey && value !== undefined && value !== null && value !== "") {
                         const val = value.toString().trim();
                         if (dateFields.has(schemaKey)) {
-                            const parsed = new Date(val);
-                            if (!isNaN(parsed.getTime())) {
-                                const dateStr = parsed.toISOString().split('T')[0];
-                                processedData[schemaKey] = new Date(`${dateStr}T00:00:00.000Z`);
+                            const utcDate = parseToUTCMidnight(val);
+                            if (utcDate) {
+                                processedData[schemaKey] = utcDate;
                             }
                         } else if (numericFields.has(schemaKey)) {
                             const num = parseFloat(val.replace(/[^0-9.-]/g, ''));
@@ -1311,10 +1353,9 @@ export async function POST(req: NextRequest) {
                     if (schemaKey && value !== undefined && value !== null && value !== "") {
                         const val = value.toString().trim();
                         if (dateFields.has(schemaKey)) {
-                            const parsed = new Date(val);
-                            if (!isNaN(parsed.getTime())) {
-                                const dateStr = parsed.toISOString().split('T')[0];
-                                processedData[schemaKey] = new Date(`${dateStr}T00:00:00.000Z`);
+                            const utcDate = parseToUTCMidnight(val);
+                            if (utcDate) {
+                                processedData[schemaKey] = utcDate;
                             }
                         } else if (numericFields.has(schemaKey)) {
                             const num = parseFloat(val.replace(/[^0-9.-]/g, ''));

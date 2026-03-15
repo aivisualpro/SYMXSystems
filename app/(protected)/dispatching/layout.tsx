@@ -20,6 +20,7 @@ import {
     MapPin,
     Users,
     TableProperties,
+    FileDown,
 } from "lucide-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,7 @@ import {
 import { toast } from "sonner";
 import RoutesInfoPanel from "./_components/RoutesInfoPanel";
 import { useDataStore } from "@/hooks/use-data-store";
+import { generateRoutesPDF } from "@/lib/generate-routes-pdf";
 
 // ── Shared Tab Definitions ──
 export const DISPATCHING_TABS = [
@@ -170,6 +172,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [stats, setStats] = useState<DispatchingStats>({});
     const [showRoutesInfo, setShowRoutesInfo] = useState(false);
     const [globalEditMode, setGlobalEditMode] = useState(false);
+    const [pdfLoading, setPdfLoading] = useState(false);
 
     // ── Sync state changes to URL ──
     const updateURL = useCallback((week: string, date: string) => {
@@ -263,13 +266,14 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // ── Check if routes exist for selected week ──
+    // ── Check if routes exist for selected week (lightweight) ──
     useEffect(() => {
         if (!selectedWeek) return;
         let cancelled = false;
         setRoutesLoading(true);
 
-        fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
+        // Use a lightweight HEAD-style check instead of fetching ALL route data
+        fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&checkOnly=true`)
             .then((r) => r.json())
             .then((data) => {
                 if (cancelled) return;
@@ -504,7 +508,35 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                     <TableProperties className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                     Routes Info
                                 </button>
-
+                                <button
+                                    onClick={async () => {
+                                        if (!selectedWeek || !selectedDate) {
+                                            toast.error("No date selected");
+                                            return;
+                                        }
+                                        setPdfLoading(true);
+                                        try {
+                                            await generateRoutesPDF(selectedWeek, selectedDate);
+                                            toast.success("PDF downloaded");
+                                        } catch (err: any) {
+                                            toast.error(err.message || "Failed to generate PDF");
+                                        } finally {
+                                            setPdfLoading(false);
+                                        }
+                                    }}
+                                    disabled={pdfLoading}
+                                    className={cn(
+                                        "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap select-none",
+                                        "bg-emerald-600 text-white shadow-lg shadow-emerald-600/25 hover:brightness-110 hover:shadow-xl hover:shadow-emerald-600/30"
+                                    )}
+                                >
+                                    {pdfLoading ? (
+                                        <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
+                                    ) : (
+                                        <FileDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                    )}
+                                    PDF
+                                </button>
                             </>
                         )}
 

@@ -6,6 +6,7 @@ import SYMXRoutesInfo from "@/lib/models/SYMXRoutesInfo";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
+import SYMXSetting from "@/lib/models/SYMXSetting";
 import SymxUser from "@/lib/models/SymxUser";
 import Vehicle from "@/lib/models/Vehicle";
 
@@ -45,41 +46,65 @@ export async function GET(req: NextRequest) {
 
         await connectToDatabase();
 
+        // Fast path: layout just needs to know if routes exist (no full data fetch)
+        const checkOnly = searchParams.get("checkOnly") === "true";
+        if (checkOnly) {
+            const count = await SYMXRoute.countDocuments({ yearWeek });
+            return NextResponse.json({ routesGenerated: count > 0 });
+        }
+
         // Build query — exclude "Off" type records from all dispatching views
         const query: any = { yearWeek };
         if (date) query.date = new Date(date);
         query.type = { $not: { $regex: /^off$/i } };
 
-        const routes = await SYMXRoute.find(query)
-            .sort({ date: 1, transporterId: 1 })
-            .lean();
+        // ── PHASE 1: Fetch routes + completion setting in parallel ──
+        const [routes, completionSetting] = await Promise.all([
+            SYMXRoute.find(query).sort({ date: 1, transporterId: 1 }).lean(),
+            SYMXSetting.findOne({ key: "routes_completion_types" }).lean(),
+        ]);
 
         if (routes.length === 0) {
             return NextResponse.json({ routes: [], employees: {}, routesGenerated: false });
         }
 
-        // Enrich with employee data
+        // Extract unique IDs for lookups
         const transporterIds = [...new Set(routes.map((r: any) => r.transporterId))];
+        const allVins = [...new Set(routes.map((r: any) => r.van).filter(Boolean))];
 
-        const [employees, routeCounts, auditCountsRaw] = await Promise.all([
+        // Build completion types filter
+        const completionTypes: string[] = Array.isArray(completionSetting?.value) && (completionSetting as any).value.length > 0
+            ? (completionSetting as any).value.map((t: string) => t.toLowerCase().trim())
+            : [];
+        const routeCountMatch: any = { transporterId: { $in: transporterIds } };
+        if (completionTypes.length > 0) {
+            routeCountMatch.type = { $in: completionTypes.map(t => new RegExp(`^${t}$`, "i")) };
+        } else {
+            routeCountMatch.type = { $ne: "" };
+        }
+
+        // ── PHASE 2: ALL enrichment queries in parallel ──
+        const [employees, routeCounts, auditCountsRaw, vehicleDocs] = await Promise.all([
             SymxEmployee.find(
                 { transporterId: { $in: transporterIds } },
-                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, profileImage: 1 }
+                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, profileImage: 1, routesComp: 1 }
             ).lean(),
-            // Count total routes per transporter (across all weeks) for "routesCompleted" virtual column
             SYMXRoute.aggregate([
-                { $match: { transporterId: { $in: transporterIds }, type: { $ne: "" } } },
+                { $match: routeCountMatch },
                 { $group: { _id: "$transporterId", count: { $sum: 1 } } },
             ]),
-            // Audit counts per employee for this week
             ScheduleAuditLog.aggregate([
                 { $match: { yearWeek } },
                 { $group: { _id: "$transporterId", count: { $sum: 1 } } },
             ]),
+            allVins.length > 0
+                ? Vehicle.find({ vin: { $in: allVins } }, { vin: 1, vehicleName: 1 }).lean()
+                : [],
         ]);
 
-        // Build employee map
+        // ── Build maps (all O(n), very fast) ──
         const employeeMap: Record<string, any> = {};
+        const initialCompMap: Record<string, number> = {};
         employees.forEach((emp: any) => {
             employeeMap[emp.transporterId] = {
                 name: `${emp.firstName} ${emp.lastName}`.toUpperCase(),
@@ -89,21 +114,33 @@ export async function GET(req: NextRequest) {
                 type: emp.type || "",
                 profileImage: emp.profileImage || "",
             };
+            initialCompMap[emp.transporterId] = parseInt(emp.routesComp) || 0;
         });
 
-        // Build route count map
         const routeCountMap: Record<string, number> = {};
-        routeCounts.forEach((rc: any) => { routeCountMap[rc._id] = rc.count; });
+        routeCounts.forEach((rc: any) => {
+            routeCountMap[rc._id] = rc.count + (initialCompMap[rc._id] || 0);
+        });
+        Object.entries(initialCompMap).forEach(([tid, initVal]) => {
+            if (!(tid in routeCountMap) && initVal > 0) {
+                routeCountMap[tid] = initVal;
+            }
+        });
 
-        // Build audit counts map
         const auditCounts: Record<string, number> = {};
         auditCountsRaw.forEach((c: any) => { auditCounts[c._id] = c.count; });
+
+        const vehicleNames: Record<string, string> = {};
+        (vehicleDocs as any[]).forEach((v: any) => {
+            if (v.vin && v.vehicleName) vehicleNames[v.vin] = v.vehicleName;
+        });
 
         return NextResponse.json({
             routes,
             employees: employeeMap,
             routeCounts: routeCountMap,
             auditCounts,
+            vehicleNames,
             routesGenerated: true,
         });
     } catch (error: any) {
