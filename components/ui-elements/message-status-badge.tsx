@@ -1,5 +1,5 @@
 import React from "react";
-import { CheckCircle2, AlertCircle, Clock, Loader2, RefreshCw } from "lucide-react";
+import { CheckCircle2, AlertCircle, Clock, Loader2, RefreshCw, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -22,9 +22,9 @@ export const STATUS_CONFIG: Record<string, {
     pulse: true,
   },
   sent: {
-    icon: Clock,
-    color: "text-slate-400",
-    bg: "bg-slate-400/10 border border-slate-400/20",
+    icon: Send,
+    color: "text-blue-400",
+    bg: "bg-blue-400/10 border border-blue-400/20",
     label: "Sent",
   },
   delivered: {
@@ -70,11 +70,13 @@ export function MessageStatusBadge({
   createdAt,
   changeRemarks,
   isLiveUpdate,
+  iconOnly,
 }: {
   status: string;
   createdAt?: string;
   changeRemarks?: string;
   isLiveUpdate?: boolean;
+  iconOnly?: boolean;
 }) {
   const config = STATUS_CONFIG[status];
   if (!config) return null;
@@ -99,7 +101,8 @@ export function MessageStatusBadge({
       <TooltipTrigger asChild>
         <div
           className={cn(
-            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 text-[11px] font-semibold uppercase tracking-wider shrink-0 transition-all duration-500",
+            "inline-flex items-center justify-center rounded-full ring-1 shrink-0 transition-all duration-500",
+            iconOnly ? "w-6 h-6" : "gap-1 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider",
             config.bg,
             config.color,
             config.pulse && "animate-pulse",
@@ -108,9 +111,9 @@ export function MessageStatusBadge({
           )}
           style={isLiveUpdate ? { animation: "statusPopIn 0.5s cubic-bezier(0.34,1.56,0.64,1)" } : undefined}
         >
-          <Icon className={cn("h-3 w-3", config.pulse && "animate-spin")} />
-          {config.label}
-          {isConfirmCelebration && <span className="ml-0.5">✓</span>}
+          <Icon className={cn(iconOnly ? "h-3.5 w-3.5" : "h-3 w-3", config.pulse && "animate-spin")} />
+          {!iconOnly && config.label}
+          {!iconOnly && isConfirmCelebration && <span className="ml-0.5">✓</span>}
         </div>
       </TooltipTrigger>
       <TooltipContent side="top" className="text-xs max-w-[250px]">
