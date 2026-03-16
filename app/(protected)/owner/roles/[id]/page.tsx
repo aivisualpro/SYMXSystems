@@ -54,16 +54,12 @@ const FALLBACK_MODULES: any[] = [
     group: "Application Modules", 
     items: [
       { name: "Dashboard" },
-      { name: "Owner", subModules: ["App Users"] },
-      { name: "Dispatch", subModules: ["Roster", "Performance Dashboard", "Opening", "Attendance", "Repairs", "Loadout", "Time", "Schedule", "Closing", "Contacts", "Verbal Coaching", "Messaging", "Efficiency", "Routes", "Incidents", "Coaching", "Checklist"] },
-      { name: "Scheduling" },
-      { name: "Everyday" },
-      { name: "Fleet" },
-      { name: "HR", subModules: ["Employees"] },
-      { name: "Incidents" }, 
-      { name: "Insurance" }, 
-      { name: "Manager", subModules: ["Routes Manager", "Punch Ins Manager", "Punch Ins Import", "RTS Manager", "Rescue Manager", "Driver Efficiency Manager", "Performance Summary", "Scorecard Performance", "Employee Ranking", "HR Tickets Managers", "Notices", "Work Hours Compliance", "Paycom Schedule Export", "Work Summary Tool", "Fleet Summary", "Repairs", "Scorecard History", "Weekly ScoreCard", "Lunch Compliance"] },
-      { name: "Reports", subModules: ["Company Performance Dashboard"] },
+      { name: "Owner", subModules: ["App Users", "Roles & Permissions"] },
+      { name: "Fleet", subModules: ["Overview", "Vehicles", "Repairs", "Inspections", "Rental Agreements"] },
+      { name: "Scheduling", subModules: ["Messaging"] },
+      { name: "Dispatching", subModules: ["Roster", "Opening", "Attendance", "Repairs", "Time", "Closing", "Efficiency", "Routes"] },
+      { name: "HR", subModules: ["Employees", "Reimbursement", "Claims", "Employee Audit", "HR Tickets", "Timesheet", "Interviews", "Onboarding", "Hired", "Uniforms", "Terminations"] },
+      { name: "Scorecard" },
       { name: "Notifications" }, 
       { name: "Settings" }
     ] 

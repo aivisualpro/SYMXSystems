@@ -109,6 +109,7 @@ const data = {
       icon: IconCrown,
       subModules: [
         { name: "App Users", url: "/owner/app-users" },
+        { name: "Roles & Permissions", url: "/owner/roles" },
       ]
     },
     {
@@ -116,13 +117,11 @@ const data = {
       url: "/fleet",
       icon: IconCar,
       subModules: [
-        { name: "Dashboard", url: "/fleet" },
+        { name: "Overview", url: "/fleet" },
         { name: "Vehicles", url: "/fleet/vehicles" },
-        { name: "Vehicle Slots", url: "/fleet/slots" },
         { name: "Repairs", url: "/fleet/repairs" },
         { name: "Inspections", url: "/fleet/inspections" },
         { name: "Rental Agreements", url: "/fleet/rentals" },
-        { name: "Activity Logs", url: "/fleet/activity" },
       ]
     },
     {
@@ -130,12 +129,7 @@ const data = {
       url: "/scheduling",
       icon: IconCalendarTime,
       subModules: [
-        { name: "Schedule", url: "#" },
-        { name: "Confirm Schedules", url: "#" },
-        { name: "Work Hour Compliance", url: "#" },
-        { name: "Capacity Planning", url: "#" },
-        { name: "Availability", url: "#" },
-        { name: "Schedule Check", url: "#" },
+        { name: "Messaging", url: "/scheduling/messaging" },
       ],
     },
     {
@@ -150,17 +144,17 @@ const data = {
         { name: "Time", url: "/dispatching/time" },
         { name: "Closing", url: "/dispatching/closing" },
         { name: "Efficiency", url: "/dispatching/efficiency" },
+        { name: "Routes", url: "/dispatching/routes" },
       ],
     },
     {
-      name: "Employees",
+      name: "HR",
       url: "/hr",
       icon: IconUsersGroup,
       subModules: [
-        { name: "Dashboard", url: "/hr" },
         { name: "Employees", url: "/hr/employees" },
         { name: "Reimbursement", url: "/hr/reimbursement" },
-        { name: "Claims Dashboard", url: "/hr/claims" },
+        { name: "Claims", url: "/hr/claims" },
         { name: "Employee Audit", url: "/hr/audit" },
         { name: "HR Tickets", url: "/hr/tickets" },
         { name: "Timesheet", url: "/hr/timesheet" },
@@ -188,7 +182,7 @@ let sidebarCache: {
   timestamp: number;
 } | null = null;
 
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 1 * 60 * 1000; // 1 minute
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [permissions, setPermissions] = React.useState<any[]>([]);
@@ -294,7 +288,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const hasPermissionsDefined = permissions.length > 0;
     const permFiltered = isAdmin ? items : items.filter(item => {
       const itemName = item.name || item.title;
-      if (itemName === "Dashboard" || type === 'secondary') return true;
+      if (itemName === "Dashboard") return true;
 
       const perm = permissions.find((p: any) => p.module === itemName);
       if (perm) {
@@ -336,8 +330,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   };
 
   const filteredAdmin = filterItems(adminItems, 'admin');
-  // Secondary nav usually stays visible or matches its own titles
-  const filteredSecondary = data.navSecondary.map(item =>
+  // Secondary nav: filter by permissions too, but Search always stays visible
+  const filteredSecondary = data.navSecondary.filter(item => {
+    if (item.title === "Search") return true;
+    if (isAdmin || !permissions.length) return true;
+    const perm = permissions.find((p: any) => p.module === item.title);
+    if (perm) return perm.actions?.view === true;
+    return false; // deny-by-default
+  }).map(item =>
     item.title === "Search" ? { ...item, onClick: handleSearchClick } : item
   );
 
