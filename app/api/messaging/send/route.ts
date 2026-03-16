@@ -67,7 +67,9 @@ export async function POST(req: NextRequest) {
         // ── Generate confirmation link if template uses {confirmationLink} ──
         let confirmationDoc: any = null;
         if (personalizedContent.includes("{confirmationLink}") && recipient.transporterId) {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+            || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+            || req.nextUrl.origin;
           confirmationDoc = await ScheduleConfirmation.create({
             transporterId: recipient.transporterId,
             employeeName: recipient.name || "",
@@ -87,7 +89,7 @@ export async function POST(req: NextRequest) {
             to: [recipient.phone],
           };
 
-          console.log("[Messaging] Sending to OpenPhone:", JSON.stringify(requestBody, null, 2));
+
 
           const res = await fetch(`${QUO_API_BASE}/messages`, {
             method: "POST",
@@ -122,7 +124,7 @@ export async function POST(req: NextRequest) {
             };
           }
 
-          console.log("[Messaging] OpenPhone success:", JSON.stringify(responseData, null, 2));
+
 
           const openPhoneMessageId: string = responseData?.data?.id ?? "";
 
@@ -173,11 +175,9 @@ export async function POST(req: NextRequest) {
                     },
                   }
                 );
-                console.log(
-                  `[Messaging] Pushed 'sent' to ${scheduleField} for ${recipient.transporterId} (${targetSchedule.date})`
-                );
+
               } else {
-                console.warn(`[Messaging] No schedule found for transporterId=${recipient.transporterId}, skipping`);
+
               }
             } catch (schedErr: any) {
               console.error("[Messaging] Schedule update error:", schedErr.message);

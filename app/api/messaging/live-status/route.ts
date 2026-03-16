@@ -29,13 +29,19 @@ export async function GET(req: NextRequest) {
 
     // Build match — scope to yearWeek if provided
     let weekLogIdFilter: any = null;
+    let weekConfirmations: any[] = [];
     if (yearWeek) {
-      const weekConfirmations = await ScheduleConfirmation.find(
+      weekConfirmations = await ScheduleConfirmation.find(
         { yearWeek, messageType, messageLogId: { $exists: true } },
-        { messageLogId: 1 }
+        { messageLogId: 1, status: 1, changeRemarks: 1 }
       ).lean();
       const wkLogIds = weekConfirmations.map((c: any) => c.messageLogId);
       weekLogIdFilter = wkLogIds.length > 0 ? { $in: wkLogIds } : null;
+    }
+
+    if (yearWeek && !weekLogIdFilter) {
+      // No confirmations for this week — return empty
+      return NextResponse.json({ statuses: {} });
     }
 
     const matchStage: any = { messageType, toNumber: { $in: phones } };
@@ -55,24 +61,9 @@ export async function GET(req: NextRequest) {
       },
     ]);
 
-    // Check ScheduleConfirmation for these logs
-    const logIds = latestLogs.map((l: any) => l.messageLogId);
-    const confirmations =
-      logIds.length > 0
-        ? await ScheduleConfirmation.find(
-            { messageLogId: { $in: logIds } },
-            {
-              messageLogId: 1,
-              status: 1,
-              confirmedAt: 1,
-              changeRequestedAt: 1,
-              changeRemarks: 1,
-            }
-          ).lean()
-        : [];
-
+    // Reuse the confirmations we already fetched (no 2nd query needed)
     const confirmMap: Record<string, any> = {};
-    confirmations.forEach((c: any) => {
+    weekConfirmations.forEach((c: any) => {
       confirmMap[c.messageLogId.toString()] = c;
     });
 

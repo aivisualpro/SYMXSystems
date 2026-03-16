@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
 
-    // Run employee + schedule queries IN PARALLEL
+    // ── Run all queries IN PARALLEL for maximum speed ──
     const employeePromise = SymxEmployee.find(
       { status: "Active", phoneNumber: { $exists: true, $ne: "" } },
       { _id: 1, firstName: 1, lastName: 1, transporterId: 1, phoneNumber: 1, type: 1, status: 1, email: 1 }
@@ -60,7 +60,71 @@ export async function GET(req: NextRequest) {
         .lean()
       : Promise.resolve(null);
 
-    const [employees, schedules] = await Promise.all([employeePromise, schedulePromise]);
+    // ── Messaging status — single optimized aggregation ──
+    // Combines ScheduleConfirmation + MessageLog lookups into one pipeline
+    const messagingStatusPromise = (filter && yearWeek)
+      ? (async () => {
+        // Step 1: Get messageLogIds scoped to this week+messageType
+        const weekConfirmations = await ScheduleConfirmation.find(
+          { yearWeek, messageType: filter, messageLogId: { $exists: true } },
+          { messageLogId: 1, status: 1, changeRemarks: 1 }
+        ).lean();
+
+        const wkLogIds = weekConfirmations.map((c: any) => c.messageLogId);
+
+        if (wkLogIds.length === 0) {
+          return { logMap: {} as Record<string, any>, confirmMap: {} as Record<string, any> };
+        }
+
+        // Step 2: Get latest log per phone — scoped to week's messageLogIds
+        const [latestLogs] = await Promise.all([
+          MessageLog.aggregate([
+            { $match: { _id: { $in: wkLogIds }, messageType: filter } },
+            { $sort: { sentAt: -1 } },
+            {
+              $group: {
+                _id: "$toNumber",
+                status: { $first: "$status" },
+                sentAt: { $first: "$sentAt" },
+                messageLogId: { $first: "$_id" },
+              }
+            },
+          ]),
+        ]);
+
+        // Build confirmation map from the already-fetched confirmations
+        const confirmMap: Record<string, any> = {};
+        weekConfirmations.forEach((c: any) => {
+          confirmMap[c.messageLogId.toString()] = c;
+        });
+
+        // Build log map keyed by phone number
+        const logMap: Record<string, any> = {};
+        latestLogs.forEach((log: any) => {
+          const confirmation = confirmMap[log.messageLogId.toString()];
+          let finalStatus = log.status;
+          let changeRemarks = "";
+          if (confirmation?.status === "confirmed") finalStatus = "confirmed";
+          else if (confirmation?.status === "change_requested") {
+            finalStatus = "change_requested";
+            changeRemarks = confirmation.changeRemarks || "";
+          }
+          logMap[log._id] = {
+            status: finalStatus,
+            createdAt: log.sentAt?.toISOString?.() || log.sentAt,
+            ...(changeRemarks ? { changeRemarks } : {}),
+          };
+        });
+
+        return { logMap, confirmMap };
+      })()
+      : Promise.resolve({ logMap: {} as Record<string, any>, confirmMap: {} as Record<string, any> });
+
+    const [employees, schedules, { logMap: messageLogStatusMap }] = await Promise.all([
+      employeePromise,
+      schedulePromise,
+      messagingStatusPromise,
+    ]);
 
     if (!yearWeek && !date) {
       return NextResponse.json({
@@ -83,71 +147,6 @@ export async function GET(req: NextRequest) {
       schedules.forEach((s: any) => {
         if (!scheduleMap[s.transporterId]) scheduleMap[s.transporterId] = [];
         scheduleMap[s.transporterId].push(s);
-      });
-    }
-
-    // ── Fetch latest MessageLog status per employee for this tab ──
-    // This is the source of truth (updated on confirmation/reply)
-    const allPhones = employees.map((emp: any) => {
-      const ph = emp.phoneNumber;
-      return ph.startsWith("+") ? ph : `+1${ph.replace(/\D/g, "")}`;
-    });
-
-    let messageLogStatusMap: Record<string, { status: string; createdAt: string; changeRemarks?: string }> = {};
-    if (filter) {
-      let weekLogIdFilter: any = null;
-      if (yearWeek) {
-        const weekConfirmations = await ScheduleConfirmation.find(
-          { yearWeek, messageType: filter, messageLogId: { $exists: true } },
-          { messageLogId: 1 }
-        ).lean();
-        const wkLogIds = weekConfirmations.map((c: any) => c.messageLogId);
-        weekLogIdFilter = wkLogIds.length > 0 ? { $in: wkLogIds } : null;
-      }
-
-      // Build match: by messageType + phone numbers, optionally scoped to week's messageLogIds
-      const matchStage: any = { messageType: filter, toNumber: { $in: allPhones } };
-      if (weekLogIdFilter) matchStage._id = weekLogIdFilter;
-
-      const latestLogs = await MessageLog.aggregate([
-        { $match: matchStage },
-        { $sort: { sentAt: -1 } },
-        {
-          $group: {
-            _id: "$toNumber",
-            status: { $first: "$status" },
-            sentAt: { $first: "$sentAt" },
-            messageLogId: { $first: "$_id" },
-          }
-        },
-      ]);
-
-      // Also check for ScheduleConfirmation linked to these logs
-      const logIds = latestLogs.map((l: any) => l.messageLogId);
-      const confirmations = logIds.length > 0
-        ? await ScheduleConfirmation
-          .find({ messageLogId: { $in: logIds } }, { messageLogId: 1, status: 1, confirmedAt: 1, changeRequestedAt: 1, changeRemarks: 1 })
-          .lean()
-        : [];
-      const confirmMap: Record<string, any> = {};
-      confirmations.forEach((c: any) => {
-        confirmMap[c.messageLogId.toString()] = c;
-      });
-
-      latestLogs.forEach((log: any) => {
-        const confirmation = confirmMap[log.messageLogId.toString()];
-        let finalStatus = log.status; // "sent", "delivered", "failed", "received_reply"
-        let changeRemarks = "";
-        if (confirmation?.status === "confirmed") finalStatus = "confirmed";
-        else if (confirmation?.status === "change_requested") {
-          finalStatus = "change_requested";
-          changeRemarks = confirmation.changeRemarks || "";
-        }
-        messageLogStatusMap[log._id] = {
-          status: finalStatus,
-          createdAt: log.sentAt?.toISOString?.() || log.sentAt,
-          ...(changeRemarks ? { changeRemarks } : {}),
-        };
       });
     }
 

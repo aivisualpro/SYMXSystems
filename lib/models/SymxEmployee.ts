@@ -128,6 +128,9 @@ const SymxEmployeeSchema: Schema = new Schema({
   ScheduleNotes: { type: String },
 }, { timestamps: true, collection: 'SYMXEmployees' });
 
+// Compound index for messaging employees query (status: Active + phoneNumber exists)
+SymxEmployeeSchema.index({ status: 1, phoneNumber: 1 });
+
 const SymxEmployee: Model<ISymxEmployee> = mongoose.models.SymxEmployee || mongoose.model<ISymxEmployee>('SymxEmployee', SymxEmployeeSchema);
 
 export default SymxEmployee;

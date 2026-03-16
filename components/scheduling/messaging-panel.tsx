@@ -263,7 +263,7 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-blue-500",
     borderColor: "border-blue-500/30",
     defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease reply Y to confirm your route. See you tomorrow!",
+      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease confirm here: {confirmationLink}\n\nSee you tomorrow!",
     variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
   },
   {
@@ -275,7 +275,7 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-emerald-500",
     borderColor: "border-emerald-500/30",
     defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou have a shift scheduled today @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease check your schedule for details. Thank you!",
+      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou have a shift scheduled today @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease confirm here: {confirmationLink}\n\nThank you!",
     variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
   },
   {
@@ -287,7 +287,7 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-amber-500",
     borderColor: "border-amber-500/30",
     defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are off today. Reminder: you are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease reply Y to confirm your route. See you tomorrow!",
+      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are off today. Reminder: you are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease confirm here: {confirmationLink}\n\nSee you tomorrow!",
     variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
     hidden: true,
   },
@@ -300,7 +300,7 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-violet-500",
     borderColor: "border-violet-500/30",
     defaultMessage:
-      "Hi {name}\n\nHere is your schedule for next week {yearWeek}\n----------------------\n\n{weekSchedule}\n\n----------------------\nPlease confirm with a Y.  Please check your start times!",
+      "Hi {name}\n\nHere is your schedule for next week {yearWeek}\n----------------------\n\n{weekSchedule}\n\n----------------------\nPlease confirm here: {confirmationLink}\n\nPlease check your start times!",
     variables: ["name", "yearWeek", "weekSchedule", "confirmationLink"],
   },
   {
@@ -567,6 +567,7 @@ function MessagingSubTab({
   loadingPhones,
   prefetchedEmployees,
   employeesLoading,
+  routeTypeMap,
   prefetchedTemplate,
   templatesLoaded,
   onSelectionReport,
@@ -585,6 +586,7 @@ function MessagingSubTab({
   loadingPhones: boolean;
   prefetchedEmployees?: EmployeeRecipient[];
   employeesLoading: boolean;
+  routeTypeMap: Record<string, string>;
   prefetchedTemplate?: string;
   templatesLoaded: boolean;
   onSelectionReport?: (count: number) => void;
@@ -625,6 +627,8 @@ function MessagingSubTab({
   const [templateLoaded, setTemplateLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Route Types received from parent (fetched ONCE, shared across all tabs)
 
   // ── Live Status Polling ─────────────────────────────────────────────────
   const [liveStatuses, setLiveStatuses] = useState<Record<string, { status: string; createdAt: string; changeRemarks?: string }>>({}); 
@@ -723,9 +727,9 @@ function MessagingSubTab({
       }
     };
 
-    // Poll immediately, then every 4 seconds
+    // Poll immediately, then every 8 seconds (reduced from 4s for performance)
     doPoll();
-    pollIntervalRef.current = setInterval(doPoll, 4000);
+    pollIntervalRef.current = setInterval(doPoll, 8000);
 
     return () => {
       if (pollIntervalRef.current) {
@@ -893,56 +897,57 @@ function MessagingSubTab({
     setSendResults(null);
 
     try {
-      // Send each personalized message individually
-      const results: SendResult[] = [];
+      // Build a single batch payload with all recipients
+      const payload = {
+        recipients: recipients.map((r) => ({
+          phone: r.phone,
+          name: r.name,
+          message: r.message,
+          transporterId: r.transporterId,
+          scheduleDate: r.scheduleDate,
+          yearWeek: r.yearWeek,
+        })),
+        message: message.trim(),
+        from: fromNumber,
+        messageType: tab.id,
+      };
 
-      const sendPromises = recipients.map(async (r) => {
-        try {
-          const payload = {
-            recipients: [{
-              phone: r.phone,
-              name: r.name,
-              message: r.message,
-              transporterId: r.transporterId,
-              scheduleDate: r.scheduleDate,
-            }],
-            message: r.message,
-            from: fromNumber,
-            messageType: tab.id,
-          };
-
-          const res = await fetch("/api/messaging/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-
-          const data = await res.json();
-
-          if (!res.ok) throw new Error(data.error || "Failed");
-
-          return { to: r.phone, name: r.name, success: true };
-        } catch (err: any) {
-          console.error("[Messaging] Error for", r.name, ":", err.message);
-          return { to: r.phone, name: r.name, success: false, error: err.message };
-        }
+      const res = await fetch("/api/messaging/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
-      const batchResults = await Promise.all(sendPromises);
-      results.push(...batchResults);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send messages");
+      }
+
+      // The API returns per-recipient results — check each one
+      const results: SendResult[] = (data.results || []).map((r: any) => ({
+        to: r.to,
+        name: r.name || "",
+        success: r.success,
+        error: r.error,
+      }));
 
       setSendResults(results);
 
       const successCount = results.filter((r) => r.success).length;
       const failCount = results.filter((r) => !r.success).length;
 
-      if (failCount === 0) {
+      if (failCount === 0 && successCount > 0) {
         toast.success(`${successCount} message(s) sent successfully!`);
-      } else {
+      } else if (successCount === 0 && failCount > 0) {
+        // All failed — show the first error message for user context
+        const firstError = results.find((r) => !r.success)?.error || "Unknown error";
+        toast.error(`All ${failCount} message(s) failed: ${firstError}`);
+      } else if (failCount > 0) {
         toast.warning(`${successCount} sent, ${failCount} failed`);
       }
 
-      // Start live polling for sent phones
+      // Start live polling for successfully sent phones
       const sentPhones = results
         .filter((r) => r.success)
         .map((r) => r.to);
@@ -1094,9 +1099,12 @@ function MessagingSubTab({
                           ) : (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-red-500/15 text-red-500 ring-1 ring-red-500/30 cursor-help">
+                                  <XCircle className="h-3 w-3" />
+                                  FAILED
+                                </span>
                               </TooltipTrigger>
-                              <TooltipContent>{sendResult.error}</TooltipContent>
+                              <TooltipContent className="max-w-xs text-xs">{sendResult.error || "Message failed to send"}</TooltipContent>
                             </Tooltip>
                           );
                         }
@@ -1115,12 +1123,20 @@ function MessagingSubTab({
                     </span>
 
                     {/* Schedule Type */}
-                    <span className={cn(
-                      "text-[11px] font-medium truncate",
-                      nextShift ? "text-emerald-500" : "text-muted-foreground/40"
-                    )}>
-                      {nextShift ? `${nextShift.type}` : "—"}
-                    </span>
+                    {nextShift ? (() => {
+                      const typeKey = nextShift.type.toLowerCase().trim();
+                      const color = routeTypeMap[typeKey] || "#10b981";
+                      return (
+                        <span
+                          className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded truncate"
+                          style={{ backgroundColor: color + "20", color: color }}
+                        >
+                          {nextShift.type}
+                        </span>
+                      );
+                    })() : (
+                      <span className="text-[11px] text-muted-foreground/40 truncate">—</span>
+                    )}
                   </div>
                 );
               })
@@ -1236,11 +1252,14 @@ function MessagingSubTab({
                     Select employees to see message previews
                   </p>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredEmployees
-                    .filter((e) => selectedIds.has(e._id))
-                    .map((emp) => (
+              ) : (() => {
+                const selectedEmps = filteredEmployees.filter((e) => selectedIds.has(e._id));
+                const previewLimit = 10;
+                const showing = selectedEmps.slice(0, previewLimit);
+                const remaining = selectedEmps.length - previewLimit;
+                return (
+                  <div className="space-y-3">
+                    {showing.map((emp) => (
                       <div
                         key={emp._id}
                         className="rounded-lg border border-border/30 bg-muted/10 p-3"
@@ -1258,8 +1277,14 @@ function MessagingSubTab({
                         </pre>
                       </div>
                     ))}
-                </div>
-              )}
+                    {remaining > 0 && (
+                      <p className="text-center text-[11px] text-muted-foreground py-2">
+                        + {remaining} more preview{remaining > 1 ? "s" : ""} not shown
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -1474,6 +1499,19 @@ export default function MessagingPanel({
       }
     };
     fetchPhoneNumbers();
+  }, []);
+
+  // ── Route Types fetched ONCE here, shared to all sub-tabs via props ──
+  const [routeTypeMap, setRouteTypeMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    fetch("/api/admin/settings/route-types")
+      .then(r => r.json())
+      .then((data: any[]) => {
+        const map: Record<string, string> = {};
+        if (Array.isArray(data)) data.forEach(rt => { map[rt.name.toLowerCase().trim()] = rt.color; });
+        setRouteTypeMap(map);
+      })
+      .catch(() => {});
   }, []);
 
   const store = useDataStore();
@@ -1735,31 +1773,35 @@ export default function MessagingPanel({
           )}
         </div>
 
-        {/* ── Sub-tab panels — all mounted, data pre-loaded ── */}
+        {/* ── Only render active sub-tab (no hidden mounts) ── */}
         <div className="flex-1 min-h-0">
-          {SUB_TABS.map((tab) => (
-            <div key={tab.id} className={cn("h-full", resolvedTab !== tab.id && "hidden")}>
-              <MessagingSubTab
-                tab={tab}
-                weeks={weeks}
-                selectedWeek={selectedWeek}
-                setSelectedWeek={setSelectedWeek}
-                searchQuery={searchQuery}
-                selectAllTrigger={selectAllTrigger}
-                phoneNumbers={phoneNumbers}
-                fromNumber={fromNumber}
-                fromNumberDisplay={fromNumberDisplay}
-                setFromNumber={setFromNumber}
-                setFromNumberDisplay={setFromNumberDisplay}
-                loadingPhones={loadingPhones}
-                prefetchedEmployees={employeesByTab[tab.id]}
-                employeesLoading={loadingTabs.has(tab.id)}
-                prefetchedTemplate={templatesByTab[tab.id]}
-                templatesLoaded={templatesLoaded}
-                onSelectionReport={tab.id === resolvedTab ? setActiveSelectedCount : undefined}
-              />
-            </div>
-          ))}
+          {(() => {
+            const tab = SUB_TABS.find(t => t.id === resolvedTab) || SUB_TABS[0];
+            return (
+              <div key={tab.id} className="h-full">
+                <MessagingSubTab
+                  tab={tab}
+                  weeks={weeks}
+                  selectedWeek={selectedWeek}
+                  setSelectedWeek={setSelectedWeek}
+                  searchQuery={searchQuery}
+                  selectAllTrigger={selectAllTrigger}
+                  phoneNumbers={phoneNumbers}
+                  fromNumber={fromNumber}
+                  fromNumberDisplay={fromNumberDisplay}
+                  setFromNumber={setFromNumber}
+                  setFromNumberDisplay={setFromNumberDisplay}
+                  loadingPhones={loadingPhones}
+                  routeTypeMap={routeTypeMap}
+                  prefetchedEmployees={employeesByTab[tab.id]}
+                  employeesLoading={loadingTabs.has(tab.id)}
+                  prefetchedTemplate={templatesByTab[tab.id]}
+                  templatesLoaded={templatesLoaded}
+                  onSelectionReport={setActiveSelectedCount}
+                />
+              </div>
+            );
+          })()}
         </div>
       </div>
     </TooltipProvider>

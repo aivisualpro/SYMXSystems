@@ -268,16 +268,16 @@ export async function POST(req: NextRequest) {
             // Compute weekDay
             const weekDay = FULL_DAY_NAMES[dateObj.getUTCDay()];
 
-            // Always compute yearWeek from date for consistency
-            const yearWeek = dateToSundayWeek(dateObj);
+            // Use yearWeek from CSV if provided, otherwise compute from date
+            const yearWeek = mapped.yearWeek || dateToSundayWeek(dateObj);
 
-            // Build the $set payload (exclude date, transporterId, yearWeek as they go into filter/fixed fields)
+            // Build the $set payload (exclude date, transporterId as they go into filter)
             const setFields: Record<string, any> = {
                 weekDay,
                 yearWeek,
             };
 
-            // Copy all mapped fields except date/transporterId (those are in the filter)
+            // Copy all mapped fields except date/transporterId/yearWeek (those are handled above)
             for (const [key, val] of Object.entries(mapped)) {
                 if (key === "date" || key === "transporterId" || key === "yearWeek") continue;
 

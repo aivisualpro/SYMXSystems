@@ -13,6 +13,7 @@ const publicPaths = [
   "/api/auth/forgot-password",
   "/api/public/",
   "/api/messaging/webhook",
+  "/c/",
 ];
 
 function isPublicPath(path: string) {
