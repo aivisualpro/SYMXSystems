@@ -14,12 +14,15 @@ import { useFleet } from "./layout";
 import { KPICard, GlassCard, StatusBadge, FleetLoading } from "./components/fleet-ui";
 import FleetFormModal from "./components/fleet-form-modal";
 
-const tooltipStyle = {
-  backgroundColor: "var(--popover)",
-  border: "1px solid var(--border)",
+const tooltipStyle: React.CSSProperties = {
+  backgroundColor: "hsl(224 10% 14%)",
+  border: "1px solid hsl(224 10% 22%)",
   borderRadius: "8px",
   fontSize: "12px",
-  color: "var(--popover-foreground)",
+  color: "#e4e4e7",
+  padding: "8px 12px",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+  zIndex: 50,
 };
 
 export default function FleetOverviewPage() {
