@@ -914,19 +914,76 @@ export default function RoutesPage() {
                                                             </div>
                                                         </td>
 
-                                                        {/* Confirmation Status */}
+                                                        {/* Confirmation Status — clickable to update */}
                                                         <td className="px-2 py-1.5 align-middle">
-                                                            {row.confirmationStatus ? (
-                                                                <MessageStatusBadge
-                                                                    status={row.confirmationStatus.status}
-                                                                    createdAt={row.confirmationStatus.updatedAt}
-                                                                    changeRemarks={row.confirmationStatus.changeRemarks}
-                                                                    history={row.confirmationStatus.history}
-                                                                    iconOnly
-                                                                />
-                                                            ) : (
-                                                                <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>
-                                                            )}
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <button className="cursor-pointer hover:scale-110 transition-transform focus:outline-none">
+                                                                        {row.confirmationStatus ? (
+                                                                            <MessageStatusBadge
+                                                                                status={row.confirmationStatus.status}
+                                                                                createdAt={row.confirmationStatus.updatedAt}
+                                                                                changeRemarks={row.confirmationStatus.changeRemarks}
+                                                                                history={row.confirmationStatus.history}
+                                                                                iconOnly
+                                                                            />
+                                                                        ) : (
+                                                                            <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>
+                                                                        )}
+                                                                    </button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="start" className="min-w-[180px]">
+                                                                    <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                                                        Set Confirmation
+                                                                    </DropdownMenuLabel>
+                                                                    <DropdownMenuSeparator />
+                                                                    {[
+                                                                        { value: "confirmed", label: "Confirmed", icon: CheckCircle2, color: "text-emerald-400" },
+                                                                        { value: "change_requested", label: "Change Requested", icon: RefreshCw, color: "text-amber-400" },
+                                                                        { value: "pending", label: "Pending", icon: Clock, color: "text-blue-400" },
+                                                                    ].map((opt) => (
+                                                                        <DropdownMenuItem
+                                                                            key={opt.value}
+                                                                            className="gap-2 cursor-pointer"
+                                                                            disabled={row.confirmationStatus?.status === opt.value}
+                                                                            onClick={async () => {
+                                                                                let remarks = "";
+                                                                                if (opt.value === "change_requested") {
+                                                                                    const input = window.prompt("Change remarks (optional):");
+                                                                                    if (input === null) return; // cancelled
+                                                                                    remarks = input;
+                                                                                }
+                                                                                try {
+                                                                                    const dateStr = row.date && typeof row.date === 'string' ? row.date.split('T')[0] : "";
+                                                                                    const res = await fetch("/api/dispatching/confirmation-status", {
+                                                                                        method: "PUT",
+                                                                                        headers: { "Content-Type": "application/json" },
+                                                                                        body: JSON.stringify({
+                                                                                            transporterId: row.transporterId,
+                                                                                            scheduleDate: dateStr,
+                                                                                            yearWeek: selectedWeek,
+                                                                                            status: opt.value,
+                                                                                            changeRemarks: remarks,
+                                                                                        }),
+                                                                                    });
+                                                                                    const data = await res.json();
+                                                                                    if (!res.ok) throw new Error(data.error);
+                                                                                    toast.success(`${row.employeeName}: ${opt.label}`);
+                                                                                    refreshRoutes();
+                                                                                } catch (err: any) {
+                                                                                    toast.error(err.message || "Failed to update status");
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            <opt.icon className={cn("h-3.5 w-3.5", opt.color)} />
+                                                                            <span className="text-xs font-medium">{opt.label}</span>
+                                                                            {row.confirmationStatus?.status === opt.value && (
+                                                                                <Check className="h-3 w-3 ml-auto text-primary" />
+                                                                            )}
+                                                                        </DropdownMenuItem>
+                                                                    ))}
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
                                                         </td>
 
                                                         {/* 3. WST */}
