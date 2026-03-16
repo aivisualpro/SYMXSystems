@@ -465,12 +465,28 @@ function EmployeePerformanceDashboardInner() {
     fetch("/api/scorecard/employee-performance")
       .then(r => r.json())
       .then(data => {
-        setWeeks(data.weeks || []);
-        // Only auto-select first week if no week was specified in URL
-        if (!selectedWeek && data.weeks?.length > 0) {
-          const initialWeek = data.weeks[0];
+        const fetchedWeeks: string[] = data.weeks || [];
+
+        // Compute current week (Sunday-based to match app convention)
+        const now = new Date();
+        const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+        const year = d.getUTCFullYear();
+        const jan1 = new Date(Date.UTC(year, 0, 1));
+        const jan1Day = jan1.getUTCDay(); // 0=Sun
+        const w01Start = new Date(jan1);
+        w01Start.setUTCDate(jan1.getUTCDate() - jan1Day);
+        const diffDays = Math.floor((d.getTime() - w01Start.getTime()) / 86400000);
+        const weekNum = Math.floor(diffDays / 7) + 1;
+        const currentWeek = `${year}-W${weekNum.toString().padStart(2, '0')}`;
+
+        setWeeks(fetchedWeeks);
+
+        // Default to latest available week that is <= current week
+        if (!selectedWeek) {
+          // Filter weeks that are not in the future, then pick the latest
+          const validWeeks = fetchedWeeks.filter(w => w <= currentWeek).sort().reverse();
+          const initialWeek = validWeeks.length > 0 ? validWeeks[0] : currentWeek;
           setSelectedWeek(initialWeek);
-          // Sync to URL
           const url = new URL(window.location.href);
           url.searchParams.set('week', initialWeek);
           window.history.replaceState({}, '', url.toString());

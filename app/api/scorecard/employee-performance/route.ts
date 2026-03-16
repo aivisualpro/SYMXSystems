@@ -9,7 +9,6 @@ import ScoreCardCDFNegative from "@/lib/models/ScoreCardCDFNegative";
 import ScoreCardQualityDSBDNR from "@/lib/models/ScoreCardQualityDSBDNR";
 import ScoreCardDCR from "@/lib/models/ScoreCardDCR";
 import ScoreCardRTS from "@/lib/models/ScoreCardRTS";
-import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -125,28 +124,23 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
 
-    // If no week specified, return available weeks
+    // If no week specified, return weeks that actually have data
     if (!week) {
-      let docs = await SymxAvailableWeek.find({}, { week: 1, _id: 0 }).lean();
-
-      // One-time backfill: if SymxAvailableWeeks is empty, seed from existing data collections
-      if (docs.length === 0) {
-        const [deWeeks, podWeeks, dvicWeeks, safetyWeeks] = await Promise.all([
-          SymxDeliveryExcellence.distinct("week"),
-          SymxPhotoOnDelivery.distinct("week"),
-          SymxDVICVehicleInspection.distinct("week"),
-          SymxSafetyDashboardDFO2.distinct("week"),
-        ]);
-        const allWeeks = [...new Set([...deWeeks, ...podWeeks, ...dvicWeeks, ...safetyWeeks])];
-        if (allWeeks.length > 0) {
-          await SymxAvailableWeek.bulkWrite(
-            allWeeks.map(w => ({ updateOne: { filter: { week: w }, update: { $set: { week: w } }, upsert: true } }))
-          );
-          docs = await SymxAvailableWeek.find({}, { week: 1, _id: 0 }).lean();
-        }
-      }
-
-      const weeks = docs.map((d: any) => d.week).sort((a: string, b: string) => b.localeCompare(a));
+      // Query distinct weeks from ALL data collections to find weeks with real data
+      const [deWeeks, podWeeks, dvicWeeks, safetyWeeks, cdfWeeks, dsbWeeks, dcrWeeks, rtsWeeks] = await Promise.all([
+        SymxDeliveryExcellence.distinct("week"),
+        SymxPhotoOnDelivery.distinct("week"),
+        SymxDVICVehicleInspection.distinct("week"),
+        SymxSafetyDashboardDFO2.distinct("week"),
+        ScoreCardCDFNegative.distinct("week"),
+        ScoreCardQualityDSBDNR.distinct("week"),
+        ScoreCardDCR.distinct("week"),
+        ScoreCardRTS.distinct("week"),
+      ]);
+      const allWeeks = [...new Set([...deWeeks, ...podWeeks, ...dvicWeeks, ...safetyWeeks, ...cdfWeeks, ...dsbWeeks, ...dcrWeeks, ...rtsWeeks])];
+      const weeks = allWeeks
+        .filter((w: string) => /^\d{4}-W\d{2}$/.test(w))
+        .sort((a: string, b: string) => b.localeCompare(a));
       return NextResponse.json({ weeks });
     }
 

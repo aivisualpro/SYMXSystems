@@ -82,12 +82,18 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => {
-          // Offline → try cache
-          return caches.match(request).then((cached) => {
-            if (cached) return cached;
-            // If nothing cached, return the offline fallback (dashboard or login)
-            return caches.match('/dashboard') || caches.match('/login');
+        .catch(async () => {
+          // Offline → try cache in order of preference
+          const cached = await caches.match(request);
+          if (cached) return cached;
+          const dashboard = await caches.match('/dashboard');
+          if (dashboard) return dashboard;
+          const login = await caches.match('/login');
+          if (login) return login;
+          // Last resort: return a minimal offline response
+          return new Response('Offline – please check your connection.', {
+            status: 503,
+            headers: { 'Content-Type': 'text/html' },
           });
         })
     );
@@ -144,7 +150,10 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(request))
+      .catch(async () => {
+        const cached = await caches.match(request);
+        return cached || new Response('Offline', { status: 503 });
+      })
   );
 });
 

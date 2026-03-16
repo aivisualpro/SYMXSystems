@@ -1751,22 +1751,19 @@ export default function MessagingPanel({
                 const isToday = dateStr === today;
 
                 return (
-                  <button
+                  <div
                     key={dateStr}
-                    onClick={() => setSelectedDate(isActive ? "" : dateStr)}
                     className={cn(
-                      "flex flex-col items-center px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap min-w-[48px] select-none shrink-0",
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-                        : isToday
-                          ? "bg-primary/10 text-primary hover:bg-primary/20"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      "flex flex-col items-center px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap min-w-[48px] select-none shrink-0",
+                      isToday
+                        ? "bg-primary/10 text-primary ring-1 ring-primary/30"
+                        : "text-muted-foreground"
                     )}
                   >
                     <span className="text-[9px] uppercase tracking-wider leading-tight opacity-80">{SHORT_DAYS[idx]}</span>
                     <span className="text-xs font-bold leading-tight">{dayNum}</span>
                     <span className="text-[8px] uppercase leading-tight opacity-60">{monthShort}</span>
-                  </button>
+                  </div>
                 );
               })}
             </>

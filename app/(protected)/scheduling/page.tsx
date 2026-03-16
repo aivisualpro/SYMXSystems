@@ -543,6 +543,15 @@ export default function SchedulingPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Pick best default week: URL > current > closest ≤ current > latest */
+  const pickDefaultWeek = useCallback((availableWeeks: string[], urlW: string) => {
+    const currentWeek = getCurrentYearWeek();
+    if (urlW && availableWeeks.includes(urlW)) return urlW;
+    if (availableWeeks.includes(currentWeek)) return currentWeek;
+    const prior = availableWeeks.filter(w => w <= currentWeek).sort((a, b) => b.localeCompare(a));
+    return prior.length > 0 ? prior[0] : availableWeeks[0];
+  }, []);
+
   // Hydrate weeks from global store for instant load
   const hydratedWeeksRef = useRef(false);
   useEffect(() => {
@@ -550,15 +559,7 @@ export default function SchedulingPage() {
     if (store.initialized && store.schedulingWeeks?.length) {
       hydratedWeeksRef.current = true;
       setWeeks(store.schedulingWeeks);
-      // Pick week: URL param > current week > first in list
-      const currentWeek = getCurrentYearWeek();
-      if (urlWeek && store.schedulingWeeks.includes(urlWeek)) {
-        setSelectedWeek(urlWeek);
-      } else if (store.schedulingWeeks.includes(currentWeek)) {
-        setSelectedWeek(currentWeek);
-      } else {
-        setSelectedWeek(store.schedulingWeeks[0]);
-      }
+      setSelectedWeek(pickDefaultWeek(store.schedulingWeeks, urlWeek));
       setLoading(false);
     }
   }, [store.initialized, store.schedulingWeeks]);
@@ -574,15 +575,7 @@ export default function SchedulingPage() {
         const data = await res.json();
         if (data.weeks?.length) {
           setWeeks(data.weeks);
-          // Pick week: URL param > current week > first in list
-          const currentWeek = getCurrentYearWeek();
-          if (urlWeek && data.weeks.includes(urlWeek)) {
-            setSelectedWeek(urlWeek);
-          } else if (data.weeks.includes(currentWeek)) {
-            setSelectedWeek(currentWeek);
-          } else {
-            setSelectedWeek(data.weeks[0]);
-          }
+          setSelectedWeek(pickDefaultWeek(data.weeks, urlWeek));
         }
       } catch (err) {
         toast.error("Failed to load available weeks");

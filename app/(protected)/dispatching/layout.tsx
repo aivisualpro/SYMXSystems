@@ -196,10 +196,24 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         window.history.replaceState(null, "", newUrl);
     }, []);
 
+    /** Pick best default week: URL > current > closest ≤ current > latest */
+    const pickDefaultWeek = useCallback((availableWeeks: string[], urlW: string) => {
+        const currentWeek = getCurrentYearWeek();
+        if (urlW && availableWeeks.includes(urlW)) return urlW;
+        if (availableWeeks.includes(currentWeek)) return currentWeek;
+        // Closest available week that is ≤ current week
+        const prior = availableWeeks.filter(w => w <= currentWeek).sort((a, b) => b.localeCompare(a));
+        return prior.length > 0 ? prior[0] : availableWeeks[0];
+    }, []);
+
     // Wrapped setters that also update the URL
     const setSelectedWeek = useCallback((week: string) => {
         setSelectedWeekState(week);
-        // Date will be set by the weekDates effect below
+        // Sync week to URL immediately (date will be set by the weekDates effect)
+        const params = new URLSearchParams(window.location.search);
+        params.set("week", week);
+        const currentPath = pathnameRef.current;
+        window.history.replaceState(null, "", `${currentPath}?${params.toString()}`);
     }, []);
 
     const setSelectedDate = useCallback((date: string) => {
@@ -242,13 +256,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         if (store.initialized && store.dispatchingWeeks?.length) {
             hydratedRef.current = true;
             setWeeks(store.dispatchingWeeks);
-            // Use URL week if valid, otherwise default to current week or first available
-            const currentWeek = getCurrentYearWeek();
-            const initWeek = urlWeek && store.dispatchingWeeks.includes(urlWeek)
-                ? urlWeek
-                : store.dispatchingWeeks.includes(currentWeek)
-                    ? currentWeek
-                    : store.dispatchingWeeks[0];
+            const initWeek = pickDefaultWeek(store.dispatchingWeeks, urlWeek);
             setSelectedWeek(initWeek);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -263,12 +271,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                 const data = await res.json();
                 if (data.weeks?.length) {
                     setWeeks(data.weeks);
-                    const currentWeek = getCurrentYearWeek();
-                    const initWeek = urlWeek && data.weeks.includes(urlWeek)
-                        ? urlWeek
-                        : data.weeks.includes(currentWeek)
-                            ? currentWeek
-                            : data.weeks[0];
+                    const initWeek = pickDefaultWeek(data.weeks, urlWeek);
                     setSelectedWeek(initWeek);
                 }
             } catch {
