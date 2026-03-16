@@ -49,7 +49,7 @@ export function NavDocuments({
       {label && <SidebarGroupLabel>{label}</SidebarGroupLabel>}
       <SidebarMenu>
         {items.map((item) => (
-          <SidebarMenuItem key={item.name}>
+          <SidebarMenuItem key={`${item.name}-${item.url}`}>
             <SidebarMenuButton 
               asChild 
               isActive={pathname.startsWith(item.url)}

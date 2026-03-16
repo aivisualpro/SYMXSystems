@@ -60,7 +60,7 @@ export default function LoginPage() {
       }
       
       toast.success(`Welcome back, ${result.user.name}`);
-      window.location.href = "/dashboard";
+      window.location.href = "/profile";
     } catch (err: any) {
       console.error("[Login Error]", err);
       if (err.name === 'AbortError' || err.message === 'Failed to fetch') {

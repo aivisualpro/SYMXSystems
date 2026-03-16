@@ -469,13 +469,13 @@ export default function RoleDetailsPage() {
                 }).filter(moduleName => {
                       const p = getPermission(moduleName);
                       return p ? p.actions.view : true; 
-                  }).map((moduleName) => {
+                  }).map((moduleName, idx) => {
                     const perm = getPermission(moduleName);
                     const fieldCount = perm && perm.fieldScope ? Object.keys(perm.fieldScope).length : 0;
                     const hiddenCount = perm && perm.fieldScope ? Object.values(perm.fieldScope).filter(v => !v).length : 0;
                     
                     return (
-                        <TableRow key={moduleName} className="hover:bg-muted/50">
+                        <TableRow key={`${moduleName}-${idx}`} className="hover:bg-muted/50">
                             <TableCell className="font-medium">
                                 <div className="flex items-center gap-2">
                                     <CheckCircle2 className="h-4 w-4 text-green-500" />

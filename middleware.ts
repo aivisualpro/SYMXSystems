@@ -74,7 +74,7 @@ export default async function middleware(req: NextRequest) {
 
   // If authenticated user tries to visit /login, redirect to dashboard
   if (path === "/login") {
-    return NextResponse.redirect(new URL("/dashboard", req.nextUrl));
+    return NextResponse.redirect(new URL("/profile", req.nextUrl));
   }
 
   return NextResponse.next();

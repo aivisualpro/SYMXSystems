@@ -15,7 +15,7 @@ export function SiteHeader() {
   const router = useRouter();
 
   const segments = pathname.split("/").filter(Boolean);
-  const showBackButton = pathname !== "/dashboard" && segments.length > 0;
+  const showBackButton = pathname !== "/dashboard" && pathname !== "/profile" && segments.length > 0;
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -45,6 +45,7 @@ export function SiteHeader() {
 
   const getTitle = (path: string) => {
     if (path === "/dashboard") return "Dashboard";
+    if (path === "/profile") return "My Profile";
     if (path.includes("andres-tracker")) return "Andres Tracker";
 
     // Fleet sub-routes: show "Fleet – SubPage"
