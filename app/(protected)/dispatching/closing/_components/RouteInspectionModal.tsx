@@ -216,39 +216,24 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
                                 <input type="number" className={inputClass} value={formData.mileage || ""} onChange={e => updateForm("mileage", parseInt(e.target.value) || 0)} required />
                             </FormField>
                             <FormField label="Any Repairs?">
-                                <select className={inputClass} value={formData.anyRepairs || ""} onChange={e => updateForm("anyRepairs", e.target.value)}>
+                                <select className={inputClass} value={formData.anyRepairs || ""} onChange={e => {
+                                    updateForm("anyRepairs", e.target.value);
+                                    if (e.target.value === "TRUE" && !formData.repairCurrentStatus) {
+                                        updateForm("repairCurrentStatus", "Not Started");
+                                    }
+                                }}>
                                     <option value="">No</option>
                                     <option value="TRUE">Yes</option>
                                 </select>
                             </FormField>
                         </div>
 
-                        <FormField label="Comments">
-                            <textarea className={inputClass} rows={2} value={formData.comments || ""} onChange={e => updateForm("comments", e.target.value)} />
-                        </FormField>
-
                         {formData.anyRepairs === "TRUE" && (
                             <div className="space-y-3 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
                                 <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Repair Details</p>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <FormField label="Repair Description"><input className={inputClass} value={formData.repairDescription || ""} onChange={e => updateForm("repairDescription", e.target.value)} /></FormField>
-                                    <FormField label="Repair Status">
-                                        {(() => {
-                                            const opts = repairStatuses.length > 0
-                                                ? repairStatuses
-                                                : [{ description: "Not Started" }, { description: "In Progress" }, { description: "Waiting for Parts" }, { description: "Sent to Repair Shop" }, { description: "Completed" }];
-                                            const matched = opts.find(s => s.description === formData.repairCurrentStatus);
-                                            return (
-                                                <select className={inputClass} value={formData.repairCurrentStatus || ""} onChange={e => updateForm("repairCurrentStatus", e.target.value)}
-                                                    style={matched?.color ? { borderLeftWidth: '3px', borderLeftColor: matched.color } : {}}>
-                                                    <option key="__none" value="">Select status…</option>
-                                                    {opts.map((s, i) => <option key={`status-${i}`} value={s.description}>{s.description}</option>)}
-                                                </select>
-                                            );
-                                        })()}
-                                    </FormField>
-                                    <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.repairEstimatedDate || ""} onChange={e => updateForm("repairEstimatedDate", e.target.value)} /></FormField>
-                                </div>
+                                <FormField label="Repair Description">
+                                    <textarea className={inputClass} rows={3} value={formData.repairDescription || ""} onChange={e => updateForm("repairDescription", e.target.value)} placeholder="Describe the repair needed..." />
+                                </FormField>
                                 <PhotoUploadField label="Repair Image" value={formData.repairImage} onChange={v => updateForm("repairImage", v)} />
                             </div>
                         )}
@@ -266,6 +251,10 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
                                 <PhotoUploadField label="Additional" value={formData.additionalPicture} onChange={v => updateForm("additionalPicture", v)} />
                             </div>
                         </div>
+
+                        <FormField label="Comments">
+                            <textarea className={inputClass} rows={2} value={formData.comments || ""} onChange={e => updateForm("comments", e.target.value)} />
+                        </FormField>
                     </div>
 
                     <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border shrink-0 bg-card">
