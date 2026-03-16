@@ -304,17 +304,18 @@ function dateToSundayWeek(dateStr: string): string | null {
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) return null;
 
-        // ISO 8601 week number calculation (Thursday-based rule)
-        // This is the standard for YYYY-Wxx format
+        // Sunday-based week: Sunday is the FIRST day of the week
         const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-        // Set to nearest Thursday: current date + 4 - current day number (Mon=1, Sun=7)
-        const dayNum = d.getUTCDay() || 7; // Convert Sun=0 to Sun=7
-        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-        // Get first day of year
-        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-        // Calculate week number
-        const weekNum = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-        return `${d.getUTCFullYear()}-W${weekNum.toString().padStart(2, '0')}`;
+        const year = d.getUTCFullYear();
+        // Find Jan 1 and the Sunday on or before it (= start of W01)
+        const jan1 = new Date(Date.UTC(year, 0, 1));
+        const jan1Day = jan1.getUTCDay(); // 0=Sun..6=Sat
+        const w01Start = new Date(jan1);
+        w01Start.setUTCDate(jan1.getUTCDate() - jan1Day);
+        // Days from W01 start to this date
+        const diffDays = Math.floor((d.getTime() - w01Start.getTime()) / 86400000);
+        const weekNum = Math.floor(diffDays / 7) + 1;
+        return `${year}-W${weekNum.toString().padStart(2, '0')}`;
     } catch {
         return null;
     }
@@ -1004,6 +1005,7 @@ export async function POST(req: NextRequest) {
                             week: computedWeek,
                             transporterId,
                             trackingId: processedData.trackingId || '',
+                            plannedDeliveryDate: processedData.plannedDeliveryDate || '',
                         },
                         update: { $set: processedData },
                         upsert: true

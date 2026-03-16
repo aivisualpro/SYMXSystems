@@ -29,7 +29,7 @@ const ScoreCardRTSSchema: Schema = new Schema({
 }, { timestamps: true, collection: 'ScoreCard_rts' });
 
 // Unique: transporterId + trackingId to avoid duplicates
-ScoreCardRTSSchema.index({ week: 1, transporterId: 1, trackingId: 1 }, { unique: true });
+ScoreCardRTSSchema.index({ week: 1, transporterId: 1, trackingId: 1, plannedDeliveryDate: 1 }, { unique: true });
 
 const ScoreCardRTS: Model<IScoreCardRTS> =
   mongoose.models.ScoreCardRTS ||

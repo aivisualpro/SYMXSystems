@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import {
   Download, Loader2, Upload, Search, Check, Hash,
-  X, Play, ChevronRight,
+  X, Play, ChevronRight, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -28,12 +28,8 @@ import {
 import { DriverDetailDialog } from "@/components/scorecard/driver-detail-dialog";
 
 
-
-
-
-
 // ── Main Component ────────────────────────────────────────────────────────
-export default function EmployeePerformanceDashboard() {
+function EmployeePerformanceDashboardInner() {
   const params = useParams<{ tab: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,6 +62,8 @@ export default function EmployeePerformanceDashboard() {
   const [sortKey, setSortKey] = useState<string>('nfc');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const reportRef = useRef<HTMLDivElement>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // ── Remarks & Signatures State ──────────────────────────────────────────
   const [driverRemarks, setDriverRemarks] = useState("");
@@ -225,14 +223,17 @@ export default function EmployeePerformanceDashboard() {
               try {
                 const parsed = new Date(dateVal);
                 if (!isNaN(parsed.getTime())) {
-                  // Proper ISO 8601 week number (Thursday-based rule)
+                  // Sunday-based week: Sunday is the FIRST day of the week
                   const d = new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()));
-                  const dayNum = d.getUTCDay() || 7;
-                  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-                  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-                  const weekNum = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+                  const year = d.getUTCFullYear();
+                  const jan1 = new Date(Date.UTC(year, 0, 1));
+                  const jan1Day = jan1.getUTCDay();
+                  const w01Start = new Date(jan1);
+                  w01Start.setUTCDate(jan1.getUTCDate() - jan1Day);
+                  const diffDays = Math.floor((d.getTime() - w01Start.getTime()) / 86400000);
+                  const weekNum = Math.floor(diffDays / 7) + 1;
                   if (weekNum >= 1 && weekNum <= 53) {
-                    resolve(`${d.getUTCFullYear()}-W${weekNum.toString().padStart(2, '0')}`);
+                    resolve(`${year}-W${weekNum.toString().padStart(2, '0')}`);
                     return;
                   }
                 }
@@ -724,7 +725,7 @@ export default function EmployeePerformanceDashboard() {
       </Dialog>
 
       {/* Import Progress Dialog */}
-      <Dialog open={isImporting} onOpenChange={() => {}}>
+      <Dialog open={isImporting} onOpenChange={() => { }}>
         <DialogContent className="sm:max-w-md" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Importing Data</DialogTitle>
@@ -748,28 +749,91 @@ export default function EmployeePerformanceDashboard() {
     <>
       {importDialogElements}
 
-    <div className="space-y-4 print:space-y-2">
-      {/* Tab Navigation */}
-      <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 w-fit print:hidden">
-        {TAB_MAP.map(({ slug, icon: Icon, label }) => (
-          <button
-            key={slug}
-            onClick={() => {
-              const weekParam = selectedWeek ? `?week=${encodeURIComponent(selectedWeek)}` : '';
-              router.push(`/scorecard/${slug}${weekParam}`);
-            }}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200",
-              activeTab === slug
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-            )}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {label}
-          </button>
-        ))}
-      </div>
+      <div className="space-y-4 print:space-y-2">
+        {/* Tab Navigation + Delete Button */}
+        <div className="flex items-center justify-between gap-2 print:hidden">
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 w-fit">
+            {TAB_MAP.map(({ slug, icon: Icon, label }) => (
+              <button
+                key={slug}
+                onClick={() => {
+                  const weekParam = selectedWeek ? `?week=${encodeURIComponent(selectedWeek)}` : '';
+                  router.push(`/scorecard/${slug}${weekParam}`);
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200",
+                  activeTab === slug
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {activeTab !== 'SYMX' && activeTab !== 'Drivers' && selectedWeek && !loading && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={deleting}
+            >
+              {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Delete {TAB_MAP.find(t => t.slug === activeTab)?.label || activeTab} Data
+            </Button>
+          )}
+        </div>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="sm:max-w-[420px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <Trash2 className="h-5 w-5" /> Delete Week Data
+              </DialogTitle>
+              <DialogDescription>
+                This will permanently delete all <strong>{TAB_MAP.find(t => t.slug === activeTab)?.label || activeTab}</strong> data
+                for week <strong>{selectedWeek}</strong>. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" size="sm" onClick={() => setDeleteConfirmOpen(false)} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleting}
+                className="gap-1.5"
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    const res = await fetch(
+                      `/api/scorecard/delete-week?week=${encodeURIComponent(selectedWeek)}&tab=${encodeURIComponent(activeTab)}`,
+                      { method: 'DELETE' }
+                    );
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Failed to delete');
+                    toast.success(`Deleted ${data.deleted} record${data.deleted !== 1 ? 's' : ''} for ${activeTab} — ${selectedWeek}`);
+                    setDeleteConfirmOpen(false);
+                    // Refresh data
+                    if (selectedWeek) fetchData(selectedWeek);
+                  } catch (err: any) {
+                    toast.error(err.message || 'Failed to delete data');
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+              >
+                {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                Delete Permanently
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -777,95 +841,95 @@ export default function EmployeePerformanceDashboard() {
           </div>
         ) : (<>
 
-        {activeTab === 'Drivers' && (
-          <DriversTab
-            drivers={drivers}
-            driverSearch={driverSearch}
-            sortKey={sortKey}
-            sortDir={sortDir}
-            setSortKey={setSortKey}
-            setSortDir={(d) => setSortDir(d)}
-            signatureMap={signatureMap}
-            onSelectDriver={setSelectedDriver}
-            onPlayVideo={setVideoDialogUrl}
-          />
-        )}
+          {activeTab === 'Drivers' && (
+            <DriversTab
+              drivers={drivers}
+              driverSearch={driverSearch}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              setSortKey={setSortKey}
+              setSortDir={(d) => setSortDir(d)}
+              signatureMap={signatureMap}
+              onSelectDriver={setSelectedDriver}
+              onPlayVideo={setVideoDialogUrl}
+            />
+          )}
 
-        {activeTab === 'SYMX' && (
-          <SYMXTab
-            dspMetrics={dspMetrics}
-            selectedWeek={selectedWeek}
-            totalDrivers={totalDrivers}
-            totalDelivered={totalDelivered}
-            driversWithIssues={drivers.filter(d => d.issueCount > 0).length}
-            currentTips={currentTips}
-          />
-        )}
+          {activeTab === 'SYMX' && (
+            <SYMXTab
+              dspMetrics={dspMetrics}
+              selectedWeek={selectedWeek}
+              totalDrivers={totalDrivers}
+              totalDelivered={totalDelivered}
+              driversWithIssues={drivers.filter(d => d.issueCount > 0).length}
+              currentTips={currentTips}
+            />
+          )}
 
-        {activeTab === 'POD' && (
-          <PodTab podRows={podRows} />
-        )}
+          {activeTab === 'POD' && (
+            <PodTab podRows={podRows} />
+          )}
 
-        {activeTab === 'CDF-Negative' && (
-          <CdfNegativeTab cdfNegativeRows={cdfNegativeRows} />
-        )}
+          {activeTab === 'CDF-Negative' && (
+            <CdfNegativeTab cdfNegativeRows={cdfNegativeRows} />
+          )}
 
-        {activeTab === 'Delivery-Excellence' && (
-          <DeliveryExcellenceTab deliveryExcellenceRows={deliveryExcellenceRows} />
-        )}
+          {activeTab === 'Delivery-Excellence' && (
+            <DeliveryExcellenceTab deliveryExcellenceRows={deliveryExcellenceRows} />
+          )}
 
-        {activeTab === 'DCR' && (
-          <DcrTab dcrRows={dcrRows} />
-        )}
+          {activeTab === 'DCR' && (
+            <DcrTab dcrRows={dcrRows} />
+          )}
 
-        {activeTab === 'DSB' && (
-          <DsbTab dsbRows={dsbRows} />
-        )}
+          {activeTab === 'DSB' && (
+            <DsbTab dsbRows={dsbRows} />
+          )}
 
-        {activeTab === 'Safety' && (
-          <SafetyTab safetyRows={safetyRows} onPlayVideo={setVideoDialogUrl} />
-        )}
+          {activeTab === 'Safety' && (
+            <SafetyTab safetyRows={safetyRows} onPlayVideo={setVideoDialogUrl} />
+          )}
 
-        {activeTab === 'DVIC' && (
-          <DvicTab dvicRawRows={dvicRawRows} />
-        )}
+          {activeTab === 'DVIC' && (
+            <DvicTab dvicRawRows={dvicRawRows} />
+          )}
 
-        {activeTab === 'RTS' && (
-          <RtsTab rtsRows={rtsRows} />
-        )}
+          {activeTab === 'RTS' && (
+            <RtsTab rtsRows={rtsRows} />
+          )}
 
         </>)}
 
-      {/* ══ PRINT-ONLY: Weekly Driver Coaching Report ══ */}
-      <div ref={reportRef} className="hidden print:block">
-        <div className="text-center mb-8 pt-8">
-          <h1 className="text-2xl font-bold mb-2">Weekly Driver Coaching Report</h1>
-          <p className="text-lg text-gray-600">DFO2 / SYMX — {selectedWeek}</p>
-          <Separator className="my-6" />
-        </div>
-        {drivers.map((driver) => (
-          <div key={driver.transporterId} className="mb-6 border border-gray-300 rounded-lg p-4 break-inside-avoid">
-            <div className="flex justify-between items-start mb-3">
-              <div><span className="font-bold text-base">{driver.name}</span><span className="text-sm text-gray-500 ml-2">({driver.transporterId})</span></div>
-              <div className="text-sm text-gray-500 text-right">Coached: ☐ Yes ☐ No &nbsp;&nbsp; DA Initials: ____ &nbsp;&nbsp; Mgr: __ &nbsp;&nbsp; Date: ___/___</div>
-            </div>
-            <div className="font-bold text-sm mb-1">DSB: {driver.dsb} &nbsp;|&nbsp; POD Rejects: {driver.podRejects}</div>
-            <div className="text-xs text-gray-600 mb-3">Overall: {driver.overallScore ?? "N/A"} ({driver.overallStanding}), FICO: {driver.ficoMetric ?? "No Data"} ({driver.ficoTier}), DCR: {driver.dcr} ({driver.dcrTier}), POD: {driver.pod} ({driver.podTier})</div>
-            <div className="text-sm mb-2">
-              <span className="font-semibold">Issues to Address:</span>
-              {driver.podRejects === 0 && driver.dsb === 0
-                ? <span className="text-gray-500 ml-2">No issues flagged this week.</span>
-                : <ul className="list-disc list-inside mt-1 text-xs space-y-0.5">
-                    {driver.podRejects > 0 && <li>POD Rejects ({driver.podRejects}): {Object.entries(driver.podRejectBreakdown).sort(([,a],[,b]) => b - a).map(([r,c]) => `${r}: ${c}`).join(", ")}</li>}
+        {/* ══ PRINT-ONLY: Weekly Driver Coaching Report ══ */}
+        <div ref={reportRef} className="hidden print:block">
+          <div className="text-center mb-8 pt-8">
+            <h1 className="text-2xl font-bold mb-2">Weekly Driver Coaching Report</h1>
+            <p className="text-lg text-gray-600">DFO2 / SYMX — {selectedWeek}</p>
+            <Separator className="my-6" />
+          </div>
+          {drivers.map((driver) => (
+            <div key={driver.transporterId} className="mb-6 border border-gray-300 rounded-lg p-4 break-inside-avoid">
+              <div className="flex justify-between items-start mb-3">
+                <div><span className="font-bold text-base">{driver.name}</span><span className="text-sm text-gray-500 ml-2">({driver.transporterId})</span></div>
+                <div className="text-sm text-gray-500 text-right">Coached: ☐ Yes ☐ No &nbsp;&nbsp; DA Initials: ____ &nbsp;&nbsp; Mgr: __ &nbsp;&nbsp; Date: ___/___</div>
+              </div>
+              <div className="font-bold text-sm mb-1">DSB: {driver.dsb} &nbsp;|&nbsp; POD Rejects: {driver.podRejects}</div>
+              <div className="text-xs text-gray-600 mb-3">Overall: {driver.overallScore ?? "N/A"} ({driver.overallStanding}), FICO: {driver.ficoMetric ?? "No Data"} ({driver.ficoTier}), DCR: {driver.dcr} ({driver.dcrTier}), POD: {driver.pod} ({driver.podTier})</div>
+              <div className="text-sm mb-2">
+                <span className="font-semibold">Issues to Address:</span>
+                {driver.podRejects === 0 && driver.dsb === 0
+                  ? <span className="text-gray-500 ml-2">No issues flagged this week.</span>
+                  : <ul className="list-disc list-inside mt-1 text-xs space-y-0.5">
+                    {driver.podRejects > 0 && <li>POD Rejects ({driver.podRejects}): {Object.entries(driver.podRejectBreakdown).sort(([, a], [, b]) => b - a).map(([r, c]) => `${r}: ${c}`).join(", ")}</li>}
                     {driver.dsb > 0 && <li>DSB: {driver.dsb} delivery success behavior event(s)</li>}
                   </ul>
-              }
+                }
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      <style jsx global>{`
+        <style jsx global>{`
         @media print {
           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           .print\\:hidden { display: none !important; }
@@ -873,54 +937,63 @@ export default function EmployeePerformanceDashboard() {
           @page { margin: 0.75in; size: letter; }
         }
       `}</style>
-    </div>
-    {/* ═══ DRIVER DETAIL DIALOG ═══ */}
-    <DriverDetailDialog
-      selectedDriver={selectedDriver}
-      drivers={drivers}
-      selectedWeek={selectedWeek}
-      loggedInUserName={loggedInUserName}
-      driverRemarks={driverRemarks}
-      setDriverRemarks={setDriverRemarks}
-      managerRemarks={managerRemarks}
-      setManagerRemarks={setManagerRemarks}
-      driverSignature={driverSignature}
-      setDriverSignature={setDriverSignature}
-      managerSignature={managerSignature}
-      setManagerSignature={setManagerSignature}
-      driverSigTimestamp={driverSigTimestamp}
-      managerSigTimestamp={managerSigTimestamp}
-      savingRemarks={savingRemarks}
-      saveRemarks={saveRemarks}
-      onClose={() => setSelectedDriver(null)}
-    />
+      </div>
+      {/* ═══ DRIVER DETAIL DIALOG ═══ */}
+      <DriverDetailDialog
+        selectedDriver={selectedDriver}
+        drivers={drivers}
+        selectedWeek={selectedWeek}
+        loggedInUserName={loggedInUserName}
+        driverRemarks={driverRemarks}
+        setDriverRemarks={setDriverRemarks}
+        managerRemarks={managerRemarks}
+        setManagerRemarks={setManagerRemarks}
+        driverSignature={driverSignature}
+        setDriverSignature={setDriverSignature}
+        managerSignature={managerSignature}
+        setManagerSignature={setManagerSignature}
+        driverSigTimestamp={driverSigTimestamp}
+        managerSigTimestamp={managerSigTimestamp}
+        savingRemarks={savingRemarks}
+        saveRemarks={saveRemarks}
+        onClose={() => setSelectedDriver(null)}
+      />
 
-    <Dialog open={!!videoDialogUrl} onOpenChange={() => setVideoDialogUrl(null)}>
-      <DialogContent className="sm:max-w-[720px] p-0 gap-0 overflow-hidden">
-        <DialogHeader className="p-4 pb-2">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Play className="h-4 w-4 text-blue-500" />
-            Safety Event Video
-          </DialogTitle>
-          <DialogDescription>Video from ScoreCard Safety Dashboard</DialogDescription>
-        </DialogHeader>
-        <div className="px-4 pb-4">
-          {videoDialogUrl && (
-            <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
-              <video
-                src={videoDialogUrl!}
-                controls
-                autoPlay
-                className="w-full h-full"
-              >
-                Your browser does not support the video tag.
-              </video>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+      <Dialog open={!!videoDialogUrl} onOpenChange={() => setVideoDialogUrl(null)}>
+        <DialogContent className="sm:max-w-[720px] p-0 gap-0 overflow-hidden">
+          <DialogHeader className="p-4 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Play className="h-4 w-4 text-blue-500" />
+              Safety Event Video
+            </DialogTitle>
+            <DialogDescription>Video from ScoreCard Safety Dashboard</DialogDescription>
+          </DialogHeader>
+          <div className="px-4 pb-4">
+            {videoDialogUrl && (
+              <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
+                <video
+                  src={videoDialogUrl!}
+                  controls
+                  autoPlay
+                  className="w-full h-full"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </>
+  );
+}
+
+// Wrap with Suspense for useSearchParams (required by Next.js App Router)
+export default function EmployeePerformanceDashboard() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+      <EmployeePerformanceDashboardInner />
+    </Suspense>
   );
 }
