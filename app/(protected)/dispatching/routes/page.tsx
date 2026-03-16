@@ -178,7 +178,6 @@ const COLUMNS = [
     { key: "employee", label: "Employee", minW: 140, sticky: true },
     { key: "confirmationStatus", label: "Conf Status", minW: 100, sticky: false },
     { key: "wst", label: "WST", minW: 50, sticky: false },
-    { key: "wstRevenue", label: "WST Rev", minW: 62, sticky: false },
     { key: "routeNumber", label: "Route #", minW: 60, sticky: false },
     { key: "van", label: "Van", minW: 58, sticky: false },
     { key: "bags", label: "Bags", minW: 40, sticky: false },
@@ -941,17 +940,6 @@ export default function RoutesPage() {
                                                                         : "text-foreground"
                                                                 )}>
                                                                     {row.wst}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>
-                                                            )}
-                                                        </td>
-
-                                                        {/* WST Revenue (auto-computed) */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.wstRevenue ? (
-                                                                <span className="text-[11px] font-semibold text-emerald-500 whitespace-nowrap">
-                                                                    ${row.wstRevenue.toFixed(2)}
                                                                 </span>
                                                             ) : (
                                                                 <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>

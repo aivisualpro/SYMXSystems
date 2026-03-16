@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -36,10 +36,12 @@ import { DriverDetailDialog } from "@/components/scorecard/driver-detail-dialog"
 export default function EmployeePerformanceDashboard() {
   const params = useParams<{ tab: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const activeTab = params.tab || 'Drivers';
+  const urlWeek = searchParams.get('week') || '';
   const { setRightContent, setLeftContent } = useHeaderActions();
   const [weeks, setWeeks] = useState<string[]>([]);
-  const [selectedWeek, setSelectedWeek] = useState("");
+  const [selectedWeek, setSelectedWeek] = useState(urlWeek);
   const [loading, setLoading] = useState(false);
   const [loadingWeeks, setLoadingWeeks] = useState(true);
   const [drivers, setDrivers] = useState<DriverData[]>([]);
@@ -223,12 +225,14 @@ export default function EmployeePerformanceDashboard() {
               try {
                 const parsed = new Date(dateVal);
                 if (!isNaN(parsed.getTime())) {
-                  // Get ISO week
-                  const jan4 = new Date(parsed.getFullYear(), 0, 4);
-                  const dayDiff = Math.floor((parsed.getTime() - jan4.getTime()) / 86400000);
-                  const weekNum = Math.ceil((dayDiff + jan4.getDay() + 1) / 7);
+                  // Proper ISO 8601 week number (Thursday-based rule)
+                  const d = new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()));
+                  const dayNum = d.getUTCDay() || 7;
+                  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+                  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+                  const weekNum = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
                   if (weekNum >= 1 && weekNum <= 53) {
-                    resolve(`${parsed.getFullYear()}-W${weekNum.toString().padStart(2, '0')}`);
+                    resolve(`${d.getUTCFullYear()}-W${weekNum.toString().padStart(2, '0')}`);
                     return;
                   }
                 }
@@ -432,6 +436,10 @@ export default function EmployeePerformanceDashboard() {
     setSelectedWeek(week);
     setWeekSearchInput("");
     setWeekPopoverOpen(false);
+    // Sync week to URL
+    const url = new URL(window.location.href);
+    url.searchParams.set('week', week);
+    window.history.replaceState({}, '', url.toString());
   };
 
   const handleAddCustomWeek = () => {
@@ -445,13 +453,28 @@ export default function EmployeePerformanceDashboard() {
     setSelectedWeek(normalizedWeekInput);
     setWeekSearchInput("");
     setWeekPopoverOpen(false);
+    // Sync week to URL
+    const url = new URL(window.location.href);
+    url.searchParams.set('week', normalizedWeekInput);
+    window.history.replaceState({}, '', url.toString());
   };
 
   useEffect(() => {
     setLoadingWeeks(true);
     fetch("/api/scorecard/employee-performance")
       .then(r => r.json())
-      .then(data => { setWeeks(data.weeks || []); if (data.weeks?.length > 0) setSelectedWeek(data.weeks[0]); })
+      .then(data => {
+        setWeeks(data.weeks || []);
+        // Only auto-select first week if no week was specified in URL
+        if (!selectedWeek && data.weeks?.length > 0) {
+          const initialWeek = data.weeks[0];
+          setSelectedWeek(initialWeek);
+          // Sync to URL
+          const url = new URL(window.location.href);
+          url.searchParams.set('week', initialWeek);
+          window.history.replaceState({}, '', url.toString());
+        }
+      })
       .catch(() => toast.error("Failed to load weeks"))
       .finally(() => setLoadingWeeks(false));
   }, []);
@@ -731,7 +754,10 @@ export default function EmployeePerformanceDashboard() {
         {TAB_MAP.map(({ slug, icon: Icon, label }) => (
           <button
             key={slug}
-            onClick={() => router.push(`/scorecard/${slug}`)}
+            onClick={() => {
+              const weekParam = selectedWeek ? `?week=${encodeURIComponent(selectedWeek)}` : '';
+              router.push(`/scorecard/${slug}${weekParam}`);
+            }}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200",
               activeTab === slug

@@ -303,18 +303,18 @@ function dateToSundayWeek(dateStr: string): string | null {
     try {
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) return null;
-        const dayOfWeek = date.getUTCDay(); // 0=Sun … 6=Sat
-        const sundayOfThisWeek = new Date(date);
-        sundayOfThisWeek.setUTCDate(date.getUTCDate() - dayOfWeek);
-        const year = sundayOfThisWeek.getUTCFullYear();
-        const jan1 = new Date(Date.UTC(year, 0, 1));
-        const jan1Day = jan1.getUTCDay();
-        const firstSunday = new Date(jan1);
-        firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
-        const diffMs = sundayOfThisWeek.getTime() - firstSunday.getTime();
-        const diffDays = Math.round(diffMs / 86400000);
-        const weekNum = Math.floor(diffDays / 7) + 1;
-        return `${year}-W${weekNum.toString().padStart(2, '0')}`;
+
+        // ISO 8601 week number calculation (Thursday-based rule)
+        // This is the standard for YYYY-Wxx format
+        const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+        // Set to nearest Thursday: current date + 4 - current day number (Mon=1, Sun=7)
+        const dayNum = d.getUTCDay() || 7; // Convert Sun=0 to Sun=7
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        // Get first day of year
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        // Calculate week number
+        const weekNum = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+        return `${d.getUTCFullYear()}-W${weekNum.toString().padStart(2, '0')}`;
     } catch {
         return null;
     }
