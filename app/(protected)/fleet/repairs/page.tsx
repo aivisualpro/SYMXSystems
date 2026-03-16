@@ -5,13 +5,21 @@ import {
   IconEdit, IconTrash, IconArrowUp, IconArrowDown, IconArrowsSort,
   IconPhoto, IconTool, IconLoader2,
 } from "@tabler/icons-react";
+import * as LucideIcons from "lucide-react";
 import { useFleet } from "../layout";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { StatusBadge, STATUS_COLORS } from "../components/fleet-ui";
-import FleetFormModal from "../components/fleet-form-modal";
 
-/* ── repair statuses ─────────────────────────────────────────────── */
-const REPAIR_STATUSES = ["Not Started", "In Progress", "Waiting for Parts", "Sent to Repair Shop", "Completed"];
+import FleetFormModal from "../components/fleet-form-modal";
+import { useDataStore } from "@/hooks/use-data-store";
+
+/* ── fallback repair statuses (used if no dropdown options configured) ── */
+const FALLBACK_STATUSES = ["Not Started", "In Progress", "Waiting for Parts", "Sent to Repair Shop", "Completed"];
+
+interface RepairStatusOption {
+  description: string;
+  color: string;
+  icon: string;
+}
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 const fmtDate = (d: string | Date | undefined) => {
@@ -52,7 +60,7 @@ const columns: Column[] = [
   { key: "description", label: "Description", accessor: (r) => r.description || "", className: "max-w-[220px] truncate" },
   {
     key: "currentStatus", label: "Current Status", accessor: (r) => r.currentStatus || "",
-    render: (r) => <StatusBadge status={r.currentStatus} />,
+    // render handled inline in the table body for dynamic dropdown
   },
   {
     key: "estimatedDate", label: "Estimated Date", accessor: (r) => r.estimatedDate || "",
@@ -121,6 +129,30 @@ const PAGE_SIZE = 50;
 export default function FleetRepairsPage() {
   const { search, openEditModal, handleDelete, openCreateModal, repairsSeed, showCompleted } = useFleet();
   const { setLeftContent } = useHeaderActions();
+  const store = useDataStore();
+
+  // Build repair status options from admin dropdowns
+  const repairStatusOptions = useMemo(() => {
+    const allDropdowns = store.admin?.dropdowns as any[] || [];
+    const opts = allDropdowns.filter(
+      (d: any) => d.type === "fleet repair status" && d.isActive !== false
+    );
+    if (opts.length === 0) {
+      return FALLBACK_STATUSES.map(s => ({ description: s, color: "", icon: "" }));
+    }
+    return opts.sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((d: any) => ({
+      description: d.description,
+      color: d.color || "",
+      icon: d.icon || "",
+    }));
+  }, [store.admin?.dropdowns]);
+
+  // Build a lookup map for quick color/icon access by status name
+  const statusMap = useMemo(() => {
+    const map: Record<string, RepairStatusOption> = {};
+    repairStatusOptions.forEach(opt => { map[opt.description] = opt; });
+    return map;
+  }, [repairStatusOptions]);
 
   // Start with seed data if already prefetched by the layout — instant first paint
   const [repairs, setRepairs] = useState<any[]>(() => repairsSeed?.data ?? []);
@@ -324,44 +356,65 @@ export default function FleetRepairsPage() {
                 {columns.map((col) => {
                   const val = col.accessor(r);
 
-                  // Status column — clickable dropdown
+                  // Status column — clickable dropdown with dynamic config
                   if (col.key === "currentStatus") {
+                    const statusOpt = statusMap[r.currentStatus];
+                    const statusColor = statusOpt?.color || "";
+                    const StatusIcon = statusOpt?.icon ? (LucideIcons as any)[statusOpt.icon] : null;
                     return (
                       <td key={col.key} className="px-3 py-2.5 text-xs" onClick={(e) => e.stopPropagation()}>
-                        <select
-                          value={r.currentStatus || "Not Started"}
-                          onChange={async (e) => {
-                            const newStatus = e.target.value;
-                            try {
-                              const res = await fetch("/api/fleet", {
-                                method: "PUT",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  section: "repair",
-                                  id: r._id,
-                                  data: { currentStatus: newStatus, lastEditOn: new Date() },
-                                }),
-                              });
-                              if (!res.ok) throw new Error("Failed to update");
-                              // Optimistic update
-                              setRepairs(prev => prev.map(item =>
-                                item._id === r._id ? { ...item, currentStatus: newStatus, lastEditOn: new Date().toISOString() } : item
-                              ));
-                            } catch {
-                              // revert will happen on next fetch
-                            }
-                          }}
-                          className={`
-                            px-2 py-0.5 rounded-md text-[11px] font-medium border cursor-pointer
-                            focus:outline-none focus:ring-1 focus:ring-primary/40
-                            ${STATUS_COLORS[r.currentStatus] || "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30"}
-                          `}
-                          style={{ appearance: "none", WebkitAppearance: "none", paddingRight: "16px", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 3px center" }}
-                        >
-                          {REPAIR_STATUSES.map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
+                        <div className="relative inline-flex items-center">
+                          {StatusIcon && (
+                            <StatusIcon
+                              className="h-3 w-3 absolute left-1.5 pointer-events-none z-10"
+                              style={{ color: statusColor || undefined }}
+                            />
+                          )}
+                          <select
+                            value={r.currentStatus || "Not Started"}
+                            onChange={async (e) => {
+                              const newStatus = e.target.value;
+                              try {
+                                const res = await fetch("/api/fleet", {
+                                  method: "PUT",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    section: "repair",
+                                    id: r._id,
+                                    data: { currentStatus: newStatus, lastEditOn: new Date() },
+                                  }),
+                                });
+                                if (!res.ok) throw new Error("Failed to update");
+                                setRepairs(prev => prev.map(item =>
+                                  item._id === r._id ? { ...item, currentStatus: newStatus, lastEditOn: new Date().toISOString() } : item
+                                ));
+                              } catch {
+                                // revert will happen on next fetch
+                              }
+                            }}
+                            className="rounded-md text-[11px] font-medium border cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            style={{
+                              appearance: "none",
+                              WebkitAppearance: "none",
+                              paddingLeft: StatusIcon ? "22px" : "8px",
+                              paddingRight: "18px",
+                              paddingTop: "2px",
+                              paddingBottom: "2px",
+                              backgroundColor: statusColor ? `${statusColor}15` : undefined,
+                              color: statusColor || undefined,
+                              borderColor: statusColor ? `${statusColor}50` : undefined,
+                              backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+                              backgroundRepeat: "no-repeat",
+                              backgroundPosition: "right 4px center",
+                            }}
+                          >
+                            {repairStatusOptions.map((opt) => (
+                              <option key={opt.description} value={opt.description}>
+                                {opt.description}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </td>
                     );
                   }
