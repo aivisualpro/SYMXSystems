@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo, createContext, useContext } from "react";
+import React, { useEffect, useState, useCallback, useMemo, createContext, useContext, Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -154,15 +154,17 @@ function getCurrentYearWeek(): string {
     return `${year}-W${weekNum.toString().padStart(2, "0")}`;
 }
 
-export default function DispatchingLayout({ children }: { children: React.ReactNode }) {
+function DispatchingLayoutInner({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
     const searchParams = useSearchParams();
     const { setLeftContent, setRightContent } = useHeaderActions();
 
-    // ── Read initial values from URL search params ──
-    const urlWeek = searchParams.get("week") || "";
-    const urlDate = searchParams.get("date") || "";
+    // ── Read initial values from URL search params (once only) ──
+    const urlWeekRef = React.useRef(searchParams.get("week") || "");
+    const urlDateRef = React.useRef(searchParams.get("date") || "");
+    const urlWeek = urlWeekRef.current;
+    const urlDate = urlDateRef.current;
 
     // ── State ──
     const [weeks, setWeeks] = useState<string[]>([]);
@@ -179,7 +181,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [pdfLoading, setPdfLoading] = useState(false);
     const [confirmationFilter, setConfirmationFilter] = useState("all");
 
-    // ── Sync state changes to URL ──
+    // ── Sync state changes to URL (uses replaceState to avoid re-renders) ──
     const pathnameRef = React.useRef(pathname);
     pathnameRef.current = pathname;
     const updateURL = useCallback((week: string, date: string) => {
@@ -188,8 +190,9 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         if (date) params.set("date", date);
         const qs = params.toString();
         const currentPath = pathnameRef.current;
-        router.replace(`${currentPath}${qs ? `?${qs}` : ""}`, { scroll: false });
-    }, [router]);
+        const newUrl = `${currentPath}${qs ? `?${qs}` : ""}`;
+        window.history.replaceState(null, "", newUrl);
+    }, []);
 
     // Wrapped setters that also update the URL
     const setSelectedWeek = useCallback((week: string) => {
@@ -616,5 +619,18 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
 
 
         </DispatchingContext.Provider>
+    );
+}
+
+// Wrap with Suspense for useSearchParams (required by Next.js App Router)
+export default function DispatchingLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <Suspense fallback={
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        }>
+            <DispatchingLayoutInner>{children}</DispatchingLayoutInner>
+        </Suspense>
     );
 }
