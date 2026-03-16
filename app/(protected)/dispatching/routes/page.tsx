@@ -928,7 +928,9 @@ export default function RoutesPage() {
                                                                                 iconOnly
                                                                             />
                                                                         ) : (
-                                                                            <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>
+                                                                            <div className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                                                                                <Plus className="h-2.5 w-2.5 text-muted-foreground/40" />
+                                                                            </div>
                                                                         )}
                                                                     </button>
                                                                 </DropdownMenuTrigger>
