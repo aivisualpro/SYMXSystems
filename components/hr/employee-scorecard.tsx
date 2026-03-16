@@ -148,9 +148,9 @@ export function EmployeeScorecard({ transporterId, employeeName }: EmployeeScore
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {/* Main Standing Card */}
-          <Card className="md:col-span-2 lg:col-span-3 rounded-[32px] overflow-hidden border border-border/50 shadow-sm bg-card">
+          <Card className="md:col-span-2 xl:col-span-3 rounded-[32px] overflow-hidden border border-border/50 shadow-sm bg-card">
             <CardContent className="p-6">
               <OverallStandingBar score={data.overallScore || 0} tier={data.overallStanding || 'Poor'} />
               
@@ -201,7 +201,7 @@ export function EmployeeScorecard({ transporterId, employeeName }: EmployeeScore
           </Card>
 
           {/* DVIC & Others */}
-          <div className="space-y-6">
+          <div className="md:col-span-2 xl:col-span-1 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-6">
             <Card className="rounded-[24px] overflow-hidden border border-border/50 bg-card">
               <SectionHeader title="Inspections (DVIC)" icon={Truck} tier={data.dvicRushedCount === 0 ? 'Fantastic' : 'Poor'} />
               <CardContent className="p-4 space-y-3">

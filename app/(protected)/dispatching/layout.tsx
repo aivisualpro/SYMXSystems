@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useMemo, createContext, useContext } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
@@ -159,14 +159,9 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const router = useRouter();
     const { setLeftContent, setRightContent } = useHeaderActions();
 
-    // ── Read initial URL params once on mount (avoids useSearchParams hydration issues) ──
-    const urlParamsRef = React.useRef<{ week: string; date: string } | null>(null);
-    if (urlParamsRef.current === null && typeof window !== 'undefined') {
-        const sp = new URLSearchParams(window.location.search);
-        urlParamsRef.current = { week: sp.get('week') || '', date: sp.get('date') || '' };
-    }
-    const urlWeek = urlParamsRef.current?.week || '';
-    const urlDate = urlParamsRef.current?.date || '';
+    const searchParams = useSearchParams();
+    const urlWeek = searchParams.get("week") || "";
+    const urlDate = searchParams.get("date") || "";
 
     // ── State ──
     const [weeks, setWeeks] = useState<string[]>([]);
@@ -183,19 +178,6 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [pdfLoading, setPdfLoading] = useState(false);
     const [confirmationFilter, setConfirmationFilter] = useState("all");
 
-    // ── Sync state changes to URL (uses replaceState to avoid re-renders) ──
-    const pathnameRef = React.useRef(pathname);
-    pathnameRef.current = pathname;
-    const updateURL = useCallback((week: string, date: string) => {
-        const params = new URLSearchParams();
-        if (week) params.set("week", week);
-        if (date) params.set("date", date);
-        const qs = params.toString();
-        const currentPath = pathnameRef.current;
-        const newUrl = `${currentPath}${qs ? `?${qs}` : ""}`;
-        window.history.replaceState(null, "", newUrl);
-    }, []);
-
     /** Pick best default week: URL > current > closest ≤ current > latest */
     const pickDefaultWeek = useCallback((availableWeeks: string[], urlW: string) => {
         const currentWeek = getCurrentYearWeek();
@@ -206,15 +188,25 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         return prior.length > 0 ? prior[0] : availableWeeks[0];
     }, []);
 
+    // ── Sync state changes to URL (uses router.replace to notify Next.js) ──
+    const updateURL = useCallback((week: string, date: string) => {
+        const params = new URLSearchParams();
+        if (week) params.set("week", week);
+        if (date) params.set("date", date);
+        const qs = params.toString();
+        const currentPath = pathname;
+        router.replace(`${currentPath}${qs ? `?${qs}` : ""}`, { scroll: false });
+    }, [pathname, router]);
+
     // Wrapped setters that also update the URL
     const setSelectedWeek = useCallback((week: string) => {
         setSelectedWeekState(week);
         // Sync week to URL immediately (date will be set by the weekDates effect)
-        const params = new URLSearchParams(window.location.search);
+        const params = new URLSearchParams();
         params.set("week", week);
-        const currentPath = pathnameRef.current;
-        window.history.replaceState(null, "", `${currentPath}?${params.toString()}`);
-    }, []);
+        const currentPath = pathname;
+        router.replace(`${currentPath}?${params.toString()}`, { scroll: false });
+    }, [pathname, router]);
 
     const setSelectedDate = useCallback((date: string) => {
         setSelectedDateState(date);
