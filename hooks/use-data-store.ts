@@ -69,7 +69,7 @@ const DATASETS: DatasetConfig[] = [
   },
   {
     key: "fleet.repairs",
-    url: "/api/fleet?section=repairs&skip=0&limit=50",
+    url: "/api/fleet?section=repairs&skip=0&limit=50&excludeCompleted=true",
     transform: (raw: any) => ({
       data: raw?.repairs ?? [],
       total: raw?.total ?? 0,
