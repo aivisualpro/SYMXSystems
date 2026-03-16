@@ -388,7 +388,7 @@ function InspectionsTab({ inspections }: { inspections: any[] }) {
     if (!inspections?.length) return <NoData label="inspection" />;
 
     const cols = [
-        { key: "isStandardPhoto", label: "★", className: "w-8 text-center", render: (r: any) => r.isStandardPhoto ? <span className="text-amber-500 text-sm leading-none" title="Standard Photo">★</span> : <span className="text-muted-foreground/15 text-sm leading-none">☆</span> },
+        { key: "isStandardPhoto", label: "★", className: "w-8 text-center", render: (r: any) => r.isStandardPhoto ? <span className="text-amber-500 text-sm leading-none" title="Master Photo">★</span> : <span className="text-muted-foreground/15 text-sm leading-none">☆</span> },
         { key: "routeDate", label: "Date", render: (r: any) => fmtDate(r.routeDate) },
         { key: "driverName", label: "Driver", className: "font-medium text-foreground", render: (r: any) => r.driverName || r.driver || "—" },
         { key: "mileage", label: "Mileage", render: (r: any) => r.mileage ? r.mileage.toLocaleString() : <span className="text-muted-foreground/30">—</span> },

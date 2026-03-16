@@ -922,6 +922,7 @@ export default function RoutesPage() {
                                                                     status={row.confirmationStatus.status}
                                                                     createdAt={row.confirmationStatus.updatedAt}
                                                                     changeRemarks={row.confirmationStatus.changeRemarks}
+                                                                    iconOnly
                                                                 />
                                                             ) : (
                                                                 <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>

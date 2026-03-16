@@ -180,13 +180,16 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [confirmationFilter, setConfirmationFilter] = useState("all");
 
     // ── Sync state changes to URL ──
+    const pathnameRef = React.useRef(pathname);
+    pathnameRef.current = pathname;
     const updateURL = useCallback((week: string, date: string) => {
         const params = new URLSearchParams();
         if (week) params.set("week", week);
         if (date) params.set("date", date);
         const qs = params.toString();
-        router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
-    }, [pathname, router]);
+        const currentPath = pathnameRef.current;
+        router.replace(`${currentPath}${qs ? `?${qs}` : ""}`, { scroll: false });
+    }, [router]);
 
     // Wrapped setters that also update the URL
     const setSelectedWeek = useCallback((week: string) => {
@@ -376,7 +379,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                             <ChevronLeft className="h-4 w-4" />
                         </Button>
                         <Select value={selectedWeek} onValueChange={setSelectedWeek}>
-                            <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm">
+                            <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm" suppressHydrationWarning>
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -500,24 +503,10 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                             </>
                         )}
 
-                        {/* Routes Info button — only on /dispatching/routes */}
+                        {/* Routes Info + PDF + Filter — only on /dispatching/routes */}
                         {pathname.includes("/dispatching/routes") && (
                             <>
                                 <div className="w-px h-6 bg-border/60 mx-1" />
-                                <Select value={confirmationFilter} onValueChange={setConfirmationFilter}>
-                                    <SelectTrigger className="h-8 sm:h-9 min-w-[130px] sm:min-w-[150px] bg-card text-[11px] sm:text-xs">
-                                        <SelectValue placeholder="All Status" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Conf Status</SelectItem>
-                                        <SelectItem value="confirmed">Confirmed</SelectItem>
-                                        <SelectItem value="change_requested">Change Requested</SelectItem>
-                                        <SelectItem value="sent">Sent</SelectItem>
-                                        <SelectItem value="pending">Pending</SelectItem>
-                                        <SelectItem value="none">None (—)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-
                                 <button
                                     onClick={() => setShowRoutesInfo(true)}
                                     className={cn(
@@ -557,6 +546,19 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                     )}
                                     PDF
                                 </button>
+                                <Select value={confirmationFilter} onValueChange={setConfirmationFilter}>
+                                    <SelectTrigger className="h-8 sm:h-9 min-w-[130px] sm:min-w-[150px] bg-card text-[11px] sm:text-xs" suppressHydrationWarning>
+                                        <SelectValue placeholder="All Status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Conf Status</SelectItem>
+                                        <SelectItem value="confirmed">Confirmed</SelectItem>
+                                        <SelectItem value="change_requested">Change Requested</SelectItem>
+                                        <SelectItem value="sent">Sent</SelectItem>
+                                        <SelectItem value="pending">Pending</SelectItem>
+                                        <SelectItem value="none">None (—)</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </>
                         )}
 

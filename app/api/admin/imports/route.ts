@@ -1433,6 +1433,11 @@ export async function POST(req: NextRequest) {
                 "isCompared?": "isCompared",
                 "isCompared": "isCompared",
                 "IsCompared": "isCompared",
+                "Inspection Type": "inspectionType",
+                "InspectionType": "inspectionType",
+                "inspectionType": "inspectionType",
+                "inspection_type": "inspectionType",
+                "Type": "inspectionType",
             };
 
             const dateFields = new Set(["routeDate", "timeStamp", "repairEstimatedDate"]);

@@ -274,7 +274,7 @@ export default function InspectionDetailPage() {
                 else setCompareError("No previous inspection found for this VIN before this date.");
             } else {
                 if (j.master) { setMaster(j.master); setCompareSource("master"); setCompareMode(true); }
-                else setCompareError("No standard photo inspection found for this VIN. Mark one as Standard Photo first.");
+                else setCompareError("No master photo inspection found for this VIN. Mark one as Master Photo first.");
             }
         } catch { setCompareError("Failed to load comparison."); }
         finally { setCompareLoading(false); }
@@ -297,7 +297,7 @@ export default function InspectionDetailPage() {
                     <span className="hidden sm:inline">Edit</span>
                 </button>
 
-                {/* Standard Photo toggle */}
+                {/* Master Photo toggle */}
                 <button
                     onClick={toggleStandardPhoto}
                     disabled={togglingStandard}
@@ -305,12 +305,12 @@ export default function InspectionDetailPage() {
                         ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
                         : "bg-card border-border hover:border-amber-500/50 hover:text-amber-600 dark:hover:text-amber-400"
                         }`}
-                    title={isStandardPhoto ? "Remove as Standard Photo" : "Set as Standard Photo"}
+                    title={isStandardPhoto ? "Remove as Master Photo" : "Set as Master Photo"}
                 >
                     {togglingStandard
                         ? <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
                         : <span className="text-base leading-none">{isStandardPhoto ? "★" : "☆"}</span>}
-                    <span className="hidden sm:inline">Standard Photo</span>
+                    <span className="hidden sm:inline">Master Photo</span>
                 </button>
 
                 {/* Compare button/dropdown */}
@@ -365,7 +365,7 @@ export default function InspectionDetailPage() {
                                         </div>
                                         <div>
                                             <p className="font-medium">Master Photo</p>
-                                            <p className="text-[10px] text-muted-foreground">{hasStandardPhoto ? "Compare with standard reference" : "No standard photo available"}</p>
+                                            <p className="text-[10px] text-muted-foreground">{hasStandardPhoto ? "Compare with master reference" : "No master photo available"}</p>
                                         </div>
                                         {compareMode && compareSource === "master" && (
                                             <span className="ml-auto text-primary text-xs">●</span>
@@ -374,7 +374,7 @@ export default function InspectionDetailPage() {
                                     {!hasStandardPhoto && (
                                         <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover/master:block z-50 pointer-events-none">
                                             <div className="bg-foreground text-background text-[10px] px-2.5 py-1.5 rounded-lg shadow-lg whitespace-nowrap max-w-[220px] text-wrap text-center">
-                                                No standard photo inspection found for this VIN. Mark one as Standard Photo first.
+                                                No master photo inspection found for this VIN. Mark one as Master Photo first.
                                             </div>
                                         </div>
                                     )}
@@ -745,7 +745,7 @@ export default function InspectionDetailPage() {
                             {compareMode && compareData && (
                                 <div className="rounded-xl sm:rounded-2xl border border-primary/20 bg-primary/5 px-3 sm:px-5 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-3 text-xs sm:text-sm mb-3 sm:mb-4">
                                     {compareSource === "master" ? (
-                                        <><span className="text-amber-500 text-base leading-none">★</span> Comparing with <strong>Standard Photo</strong> — {fmtDateShort(compareData.routeDate)}</>
+                                        <><span className="text-amber-500 text-base leading-none">★</span> Comparing with <strong>Master Photo</strong> — {fmtDateShort(compareData.routeDate)}</>
                                     ) : (
                                         <><IconArrowsLeftRight size={14} className="text-primary" /> Comparing with <strong>Previous Inspection</strong> — {fmtDateShort(compareData.routeDate)}</>
                                     )}
@@ -759,22 +759,22 @@ export default function InspectionDetailPage() {
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[0]?.label}</p>
-                                            <ImageCompareSlider before={photos[0]?.url} after={prevPhotos[0]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                            <ImageCompareSlider before={photos[0]?.url} after={prevPhotos[0]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
                                         </div>
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[2]?.label}</p>
-                                            <ImageCompareSlider before={photos[2]?.url} after={prevPhotos[2]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                            <ImageCompareSlider before={photos[2]?.url} after={prevPhotos[2]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
                                         </div>
                                     </div>
                                     {/* Row 2: Front & Back */}
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[3]?.label}</p>
-                                            <ImageCompareSlider before={photos[3]?.url} after={prevPhotos[3]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                            <ImageCompareSlider before={photos[3]?.url} after={prevPhotos[3]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
                                         </div>
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[1]?.label}</p>
-                                            <ImageCompareSlider before={photos[1]?.url} after={prevPhotos[1]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                            <ImageCompareSlider before={photos[1]?.url} after={prevPhotos[1]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
                                         </div>
                                     </div>
                                     {/* Row 3: Dashboard & Additional */}
@@ -783,13 +783,13 @@ export default function InspectionDetailPage() {
                                             {photos[4]?.url && (
                                                 <div>
                                                     <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[4].label}</p>
-                                                    <ImageCompareSlider before={photos[4].url} after={prevPhotos[4]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                    <ImageCompareSlider before={photos[4].url} after={prevPhotos[4]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
                                                 </div>
                                             )}
                                             {photos[5]?.url && (
                                                 <div>
                                                     <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[5].label}</p>
-                                                    <ImageCompareSlider before={photos[5].url} after={prevPhotos[5]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Standard" : fmtDateShort(compareData.routeDate)} />
+                                                    <ImageCompareSlider before={photos[5].url} after={prevPhotos[5]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
                                                 </div>
                                             )}
                                         </div>

@@ -37,7 +37,7 @@ const columns: Column[] = [
     key: "isStandardPhoto", label: "★", sortable: false,
     accessor: r => r.isStandardPhoto ? 1 : 0,
     render: r => r.isStandardPhoto ? (
-      <span className="text-amber-500 text-sm leading-none" title="Standard Photo">★</span>
+      <span className="text-amber-500 text-sm leading-none" title="Master Photo">★</span>
     ) : <span className="text-muted-foreground/15 text-sm leading-none">☆</span>,
     className: "w-8 text-center",
   },
@@ -51,10 +51,10 @@ const columns: Column[] = [
   },
   { key: "vin", label: "VIN", accessor: r => r.vin || "", className: "font-mono text-[11px]" },
   {
-    key: "type", label: "Type", accessor: r => r.type || "",
-    render: r => r.type ? (
+    key: "inspectionType", label: "Type", accessor: r => r.inspectionType || "",
+    render: r => r.inspectionType ? (
       <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-primary/10 text-primary border border-primary/15">
-        {r.type}
+        {r.inspectionType}
       </span>
     ) : <span className="text-muted-foreground/30">—</span>,
   },

@@ -344,10 +344,10 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
                 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
                 : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
                 }`}
-              title={showStandardOnly ? "Show all inspections" : "Show only standard photo inspections"}
+              title={showStandardOnly ? "Show all inspections" : "Show only master photo inspections"}
             >
               <span className="text-sm leading-none">{showStandardOnly ? "★" : "☆"}</span>
-              <span className="hidden sm:inline">Standard Only</span>
+              <span className="hidden sm:inline">Master Only</span>
               <div className={`w-6 h-3.5 rounded-full transition-colors relative flex-shrink-0 ${showStandardOnly ? "bg-amber-500" : "bg-muted-foreground/30"
                 }`}>
                 <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white shadow-sm transition-all ${showStandardOnly ? "left-3" : "left-0.5"
