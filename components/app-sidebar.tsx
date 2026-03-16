@@ -289,7 +289,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     // (matching the roles editor UI which defaults missing modules to all-true).
     const permFiltered = isAdmin ? items : items.filter(item => {
       const itemName = item.name || item.title;
-      if (itemName === "Dashboard") return true;
 
       const perm = permissions.find((p: any) => p.module === itemName);
       if (perm) {
