@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo, createContext, useContext, Suspense } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import React, { useEffect, useState, useCallback, useMemo, createContext, useContext } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
@@ -154,17 +154,19 @@ function getCurrentYearWeek(): string {
     return `${year}-W${weekNum.toString().padStart(2, "0")}`;
 }
 
-function DispatchingLayoutInner({ children }: { children: React.ReactNode }) {
+export default function DispatchingLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
-    const searchParams = useSearchParams();
     const { setLeftContent, setRightContent } = useHeaderActions();
 
-    // ── Read initial values from URL search params (once only) ──
-    const urlWeekRef = React.useRef(searchParams.get("week") || "");
-    const urlDateRef = React.useRef(searchParams.get("date") || "");
-    const urlWeek = urlWeekRef.current;
-    const urlDate = urlDateRef.current;
+    // ── Read initial URL params once on mount (avoids useSearchParams hydration issues) ──
+    const urlParamsRef = React.useRef<{ week: string; date: string } | null>(null);
+    if (urlParamsRef.current === null && typeof window !== 'undefined') {
+        const sp = new URLSearchParams(window.location.search);
+        urlParamsRef.current = { week: sp.get('week') || '', date: sp.get('date') || '' };
+    }
+    const urlWeek = urlParamsRef.current?.week || '';
+    const urlDate = urlParamsRef.current?.date || '';
 
     // ── State ──
     const [weeks, setWeeks] = useState<string[]>([]);
@@ -619,18 +621,5 @@ function DispatchingLayoutInner({ children }: { children: React.ReactNode }) {
 
 
         </DispatchingContext.Provider>
-    );
-}
-
-// Wrap with Suspense for useSearchParams (required by Next.js App Router)
-export default function DispatchingLayout({ children }: { children: React.ReactNode }) {
-    return (
-        <Suspense fallback={
-            <div className="flex items-center justify-center py-20">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        }>
-            <DispatchingLayoutInner>{children}</DispatchingLayoutInner>
-        </Suspense>
     );
 }
