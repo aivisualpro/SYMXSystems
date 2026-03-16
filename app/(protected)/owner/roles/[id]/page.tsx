@@ -119,16 +119,20 @@ export default function RoleDetailsPage() {
         if (res.ok) {
           const data = await res.json();
           if (data.modules?.length > 0) {
-            // Transform DB modules into the SYSTEM_MODULES format
-            const dynamicItems = data.modules.map((m: any) => ({
-              name: m.name,
-              ...(m.subModules?.length > 0 ? { subModules: m.subModules.map((sm: any) => sm.name) } : {}),
-            }));
+            // Transform DB modules into the SYSTEM_MODULES format — deduplicate by name
+            const seen = new Set<string>();
+            const dynamicItems: any[] = [];
+            data.modules.forEach((m: any) => {
+              if (seen.has(m.name)) return;
+              seen.add(m.name);
+              dynamicItems.push({
+                name: m.name,
+                ...(m.subModules?.length > 0 ? { subModules: m.subModules.map((sm: any) => sm.name) } : {}),
+              });
+            });
             // Add Notifications and Settings (they are nav-secondary, not stored in DB modules)
-            const hasNotifications = dynamicItems.some((i: any) => i.name === "Notifications");
-            const hasSettings = dynamicItems.some((i: any) => i.name === "Settings");
-            if (!hasNotifications) dynamicItems.push({ name: "Notifications" });
-            if (!hasSettings) dynamicItems.push({ name: "Settings" });
+            if (!seen.has("Notifications")) dynamicItems.push({ name: "Notifications" });
+            if (!seen.has("Settings")) dynamicItems.push({ name: "Settings" });
 
             setSystemModules([{ group: "Application Modules", items: dynamicItems }]);
           }
@@ -320,14 +324,14 @@ export default function RoleDetailsPage() {
     <div className="h-[calc(100vh-8rem)] flex flex-col">
 
       <Tabs defaultValue="modules" className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-4 py-2 border-b">
-          <TabsList className="grid w-full max-w-[400px] grid-cols-2">
-            <TabsTrigger value="modules">Modules</TabsTrigger>
-            <TabsTrigger value="scope">Scope</TabsTrigger>
+        <div className="px-4 py-3">
+          <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-muted/50 p-1 text-muted-foreground border border-border/50">
+            <TabsTrigger value="modules" className="rounded-md px-4 py-1.5 text-xs font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm transition-all">Modules</TabsTrigger>
+            <TabsTrigger value="scope" className="rounded-md px-4 py-1.5 text-xs font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm transition-all">Scope</TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="modules" className="flex-1 mt-6 border rounded-lg overflow-hidden m-1">
+        <TabsContent value="modules" className="flex-1 border rounded-lg overflow-hidden mx-1 mb-1">
           <ScrollArea className="h-full">
             <Table>
               <TableHeader>
@@ -447,7 +451,7 @@ export default function RoleDetailsPage() {
           </ScrollArea>
         </TabsContent>
 
-        <TabsContent value="scope" className="flex-1 mt-6 border rounded-lg overflow-hidden m-1">
+        <TabsContent value="scope" className="flex-1 border rounded-lg overflow-hidden mx-1 mb-1">
           <ScrollArea className="h-full">
             <Table>
               <TableHeader>
