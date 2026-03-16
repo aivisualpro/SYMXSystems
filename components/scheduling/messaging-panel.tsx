@@ -910,7 +910,6 @@ function MessagingSubTab({
             from: fromNumber,
             messageType: tab.id,
           };
-          console.log("[Messaging] Sending:", JSON.stringify(payload, null, 2));
 
           const res = await fetch("/api/messaging/send", {
             method: "POST",
@@ -919,7 +918,7 @@ function MessagingSubTab({
           });
 
           const data = await res.json();
-          console.log("[Messaging] Response:", res.status, JSON.stringify(data, null, 2));
+
           if (!res.ok) throw new Error(data.error || "Failed");
 
           return { to: r.phone, name: r.name, success: true };

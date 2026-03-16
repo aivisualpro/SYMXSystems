@@ -24,7 +24,7 @@ export function ServiceWorkerRegistration() {
     navigator.serviceWorker
       .register("/sw.js")
       .then((registration) => {
-        console.log("[PWA] Service Worker registered, scope:", registration.scope);
+        // Service Worker registered successfully
 
         // Detect updates
         registration.addEventListener("updatefound", () => {
@@ -76,7 +76,6 @@ export function ServiceWorkerRegistration() {
 
     // Suppress the browser's native install prompt — we can trigger it later
     const handleBeforeInstall = (e: Event) => {
-      e.preventDefault();
       // Store the event for potential "Install App" button
       (window as any).__pwaInstallPrompt = e;
     };

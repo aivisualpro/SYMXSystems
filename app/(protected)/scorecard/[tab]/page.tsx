@@ -506,7 +506,7 @@ export default function EmployeePerformanceDashboard() {
             onChange={(e) => setDriverSearch(e.target.value)}
           />
         </div>
-        <Button size="sm" variant="outline" onClick={() => { console.log("IMPORT BUTTON CLICKED", showImportDialog); setShowImportDialog(true); }} className="gap-2">
+        <Button size="sm" variant="outline" onClick={() => { setShowImportDialog(true); }} className="gap-2">
           <Upload className="h-4 w-4" /> Import
         </Button>
         <div className="relative">
