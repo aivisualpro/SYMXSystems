@@ -224,7 +224,7 @@ export default function RolesSettingsPage() {
             <Card 
               key={role._id} 
               className="group relative overflow-hidden transition-all hover:shadow-lg border-0 bg-gradient-to-br from-card to-muted/50 cursor-pointer"
-              onClick={() => router.push(`/admin/settings/roles/${role._id}`)}
+              onClick={() => router.push(`/owner/roles/${role._id}`)}
               >
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
               

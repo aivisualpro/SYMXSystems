@@ -157,7 +157,7 @@ export default function RoleDetailsPage() {
       } catch (error) {
         console.error(error);
         toast.error("Failed to load role details");
-        router.push("/admin/settings/roles");
+        router.push("/owner/roles");
       } finally {
         setLoading(false);
       }

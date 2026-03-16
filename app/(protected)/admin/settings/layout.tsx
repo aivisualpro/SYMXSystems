@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Settings, Shield, Upload } from "lucide-react";
+import { Settings, Upload } from "lucide-react";
 
 interface SettingsLayoutProps {
   children: React.ReactNode;
@@ -14,11 +14,6 @@ const tabs = [
     title: "General",
     href: "/admin/settings/general",
     icon: Settings,
-  },
-  {
-    title: "Roles & Permissions",
-    href: "/admin/settings/roles",
-    icon: Shield,
   },
   {
     title: "Imports",

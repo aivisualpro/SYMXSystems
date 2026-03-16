@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { IconUsers, IconSearch, IconPlus } from "@tabler/icons-react";
+import { IconUsers, IconSearch, IconPlus, IconShield } from "@tabler/icons-react";
 
 // ── Owner Context ─────────────────────────────────────────────────────
 interface OwnerContextType {
@@ -29,6 +29,7 @@ export function useOwner() {
 // ── Tabs config ───────────────────────────────────────────────────────
 const tabs = [
     { id: "app-users", label: "App Users", icon: IconUsers, href: "/owner/app-users" },
+    { id: "roles", label: "Roles & Permissions", icon: IconShield, href: "/owner/roles" },
 ];
 
 // ── Layout ────────────────────────────────────────────────────────────
@@ -146,9 +147,9 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
 
     // Determine active tab from pathname
     const activeTab = (() => {
-        if (pathname === "/owner" || pathname === "/owner/app-users") return "app-users";
-        const seg = pathname.replace("/owner/", "");
-        return seg || "app-users";
+        if (pathname === "/owner") return "app-users";
+        const matched = tabs.find(t => pathname === t.href || pathname.startsWith(t.href + "/"));
+        return matched?.id || "app-users";
     })();
 
     // Redirect /owner to /owner/app-users
