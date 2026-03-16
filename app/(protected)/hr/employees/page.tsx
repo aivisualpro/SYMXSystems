@@ -231,8 +231,16 @@ export default function EmployeesPage() {
         );
       },
     },
-    { accessorKey: "firstName", header: "First Name" },
-    { accessorKey: "lastName", header: "Last Name" },
+    {
+      id: "fullName",
+      header: "Name",
+      accessorFn: (row) => `${row.firstName || ""} ${row.lastName || ""}`.trim(),
+      cell: ({ row }) => (
+        <span className="font-medium whitespace-nowrap">
+          {`${row.original.firstName || ""} ${row.original.lastName || ""}`.trim() || "—"}
+        </span>
+      ),
+    },
     { accessorKey: "email", header: "Email" },
     {
       accessorKey: "phoneNumber",
@@ -254,6 +262,7 @@ export default function EmployeesPage() {
             <SelectTrigger
               className="h-7 w-[90px] text-[10px] font-medium px-2"
               onClick={(e) => e.stopPropagation()}
+              suppressHydrationWarning
             >
               <SelectValue />
             </SelectTrigger>
@@ -280,6 +289,7 @@ export default function EmployeesPage() {
             <SelectTrigger
               className="h-7 w-[80px] text-[10px] font-medium px-2"
               onClick={(e) => e.stopPropagation()}
+              suppressHydrationWarning
             >
               <SelectValue placeholder="—" />
             </SelectTrigger>

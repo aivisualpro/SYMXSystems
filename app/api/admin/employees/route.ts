@@ -26,9 +26,10 @@ export async function GET(req: Request) {
     const query: any = {};
 
     if (search) {
-      // When searching, ignore all filters — search the ENTIRE database across all string fields
-      const regex = new RegExp(search, 'i');
-      query.$or = [
+      // Escape special regex characters to prevent crashes
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escaped, 'i');
+      const orConditions: any[] = [
         { firstName: regex },
         { lastName: regex },
         { email: regex },
@@ -53,6 +54,26 @@ export async function GET(req: Request) {
         { resignationType: regex },
         { ScheduleNotes: regex },
       ];
+
+      // Support full-name search (e.g. "Abraham Romo") by matching concatenated firstName + lastName
+      if (search.includes(' ')) {
+        orConditions.push({
+          $expr: {
+            $regexMatch: {
+              input: { $concat: [{ $ifNull: ['$firstName', ''] }, ' ', { $ifNull: ['$lastName', ''] }] },
+              regex: escaped,
+              options: 'i',
+            },
+          },
+        });
+      }
+
+      query.$or = orConditions;
+
+      // Still respect the terminated filter when searching
+      if (!fetchTerminated) {
+        query.status = { $ne: 'Terminated' };
+      }
     } else {
       // No search — apply filters normally
       if (!fetchTerminated) {

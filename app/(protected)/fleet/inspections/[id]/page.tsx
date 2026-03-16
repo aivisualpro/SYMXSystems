@@ -759,22 +759,22 @@ export default function InspectionDetailPage() {
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[0]?.label}</p>
-                                            <ImageCompareSlider before={photos[0]?.url} after={prevPhotos[0]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
+                                            <ImageCompareSlider before={photos[0]?.url} after={prevPhotos[0]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? `★ Master · ${fmtDateShort(compareData.routeDate)}` : fmtDateShort(compareData.routeDate)} />
                                         </div>
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[2]?.label}</p>
-                                            <ImageCompareSlider before={photos[2]?.url} after={prevPhotos[2]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
+                                            <ImageCompareSlider before={photos[2]?.url} after={prevPhotos[2]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? `★ Master · ${fmtDateShort(compareData.routeDate)}` : fmtDateShort(compareData.routeDate)} />
                                         </div>
                                     </div>
                                     {/* Row 2: Front & Back */}
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[3]?.label}</p>
-                                            <ImageCompareSlider before={photos[3]?.url} after={prevPhotos[3]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
+                                            <ImageCompareSlider before={photos[3]?.url} after={prevPhotos[3]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? `★ Master · ${fmtDateShort(compareData.routeDate)}` : fmtDateShort(compareData.routeDate)} />
                                         </div>
                                         <div>
                                             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[1]?.label}</p>
-                                            <ImageCompareSlider before={photos[1]?.url} after={prevPhotos[1]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
+                                            <ImageCompareSlider before={photos[1]?.url} after={prevPhotos[1]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? `★ Master · ${fmtDateShort(compareData.routeDate)}` : fmtDateShort(compareData.routeDate)} />
                                         </div>
                                     </div>
                                     {/* Row 3: Dashboard & Additional */}
@@ -783,13 +783,13 @@ export default function InspectionDetailPage() {
                                             {photos[4]?.url && (
                                                 <div>
                                                     <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[4].label}</p>
-                                                    <ImageCompareSlider before={photos[4].url} after={prevPhotos[4]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
+                                                    <ImageCompareSlider before={photos[4].url} after={prevPhotos[4]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? `★ Master · ${fmtDateShort(compareData.routeDate)}` : fmtDateShort(compareData.routeDate)} />
                                                 </div>
                                             )}
                                             {photos[5]?.url && (
                                                 <div>
                                                     <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{photos[5].label}</p>
-                                                    <ImageCompareSlider before={photos[5].url} after={prevPhotos[5]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? "★ Master" : fmtDateShort(compareData.routeDate)} />
+                                                    <ImageCompareSlider before={photos[5].url} after={prevPhotos[5]?.url} beforeLabel={fmtDateShort(inspection.routeDate)} afterLabel={compareSource === "master" ? `★ Master · ${fmtDateShort(compareData.routeDate)}` : fmtDateShort(compareData.routeDate)} />
                                                 </div>
                                             )}
                                         </div>

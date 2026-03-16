@@ -1,4 +1,5 @@
 import { ChartAreaInteractive } from "@/components/chart-area-interactive";
+import { ChartRevenueCost } from "@/components/chart-revenue-cost";
 import { DashboardWidgets } from "@/components/dashboard-widgets";
 
 export default function Page() {
@@ -9,9 +10,13 @@ export default function Page() {
       <div className="w-full min-h-[300px]">
         <ChartAreaInteractive data={chartData} />
       </div>
+      <div className="w-full min-h-[300px]">
+        <ChartRevenueCost />
+      </div>
       <div>
         <DashboardWidgets />
       </div>
     </div>
   );
 }
+
