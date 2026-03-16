@@ -155,18 +155,33 @@ export async function GET(req: NextRequest) {
             if (v.vin && v.vehicleName) vehicleNames[v.vin] = v.vehicleName;
         });
 
-        // Build Confirmation Status Map
+        // Build Confirmation Status Map (with full history)
         const confirmationMap: Record<string, any> = {};
-        confirmationDocs.forEach((c: any) => {
+        // Sort by updatedAt ascending so we process oldest first, latest overwrites
+        const sortedConfirmations = [...confirmationDocs as any[]].sort(
+            (a: any, b: any) => new Date(a.updatedAt || a.createdAt).getTime() - new Date(b.updatedAt || b.createdAt).getTime()
+        );
+        sortedConfirmations.forEach((c: any) => {
             const dateStr = c.scheduleDate && typeof c.scheduleDate === 'string' ? c.scheduleDate.split('T')[0] : "";
             const key = `${c.transporterId}_${dateStr}`;
-            // If multiple records for same day, prioritize "confirmed" or "change_requested" over "pending"
-            if (!confirmationMap[key] || c.status === "confirmed" || c.status === "change_requested") {
-                confirmationMap[key] = {
-                    status: c.status,
-                    changeRemarks: c.changeRemarks || "",
-                    updatedAt: c.updatedAt
-                };
+            
+            const entry = {
+                status: c.status,
+                changeRemarks: c.changeRemarks || "",
+                updatedAt: c.updatedAt || c.createdAt,
+                messageType: c.messageType || "",
+            };
+
+            if (!confirmationMap[key]) {
+                confirmationMap[key] = { ...entry, history: [entry] };
+            } else {
+                confirmationMap[key].history.push(entry);
+                // Latest status wins (prioritize confirmed/change_requested)
+                if (c.status === "confirmed" || c.status === "change_requested") {
+                    confirmationMap[key].status = c.status;
+                    confirmationMap[key].changeRemarks = c.changeRemarks || "";
+                    confirmationMap[key].updatedAt = c.updatedAt || c.createdAt;
+                }
             }
         });
 

@@ -71,12 +71,14 @@ export function MessageStatusBadge({
   changeRemarks,
   isLiveUpdate,
   iconOnly,
+  history,
 }: {
   status: string;
   createdAt?: string;
   changeRemarks?: string;
   isLiveUpdate?: boolean;
   iconOnly?: boolean;
+  history?: Array<{ status: string; changeRemarks?: string; updatedAt?: string; messageType?: string }>;
 }) {
   const config = STATUS_CONFIG[status];
   if (!config) return null;
@@ -95,6 +97,12 @@ export function MessageStatusBadge({
   // Celebration animation classes for live-updated "confirmed"
   const isConfirmCelebration = isLiveUpdate && status === "confirmed";
   const isChangeCelebration = isLiveUpdate && status === "change_requested";
+
+  // Format message type for display
+  const formatMessageType = (type?: string) => {
+    if (!type) return "";
+    return type.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  };
 
   return (
     <Tooltip>
@@ -116,12 +124,50 @@ export function MessageStatusBadge({
           {!iconOnly && isConfirmCelebration && <span className="ml-0.5">✓</span>}
         </div>
       </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs max-w-[250px]">
-        <span className="font-semibold">{config.label}</span>
-        {isLiveUpdate && <span className="text-emerald-400 ml-1">• Live</span>}
-        {timeAgo && <span className="text-white/80 ml-1 tracking-wide">• {timeAgo}</span>}
-        {changeRemarks && (
-          <p className="text-white/95 mt-1.5 italic">&ldquo;{changeRemarks}&rdquo;</p>
+      <TooltipContent side="top" className="text-xs max-w-[300px] p-0">
+        <div className="p-2">
+          <span className="font-semibold">{config.label}</span>
+          {isLiveUpdate && <span className="text-emerald-400 ml-1">• Live</span>}
+          {timeAgo && <span className="text-white/80 ml-1 tracking-wide">• {timeAgo}</span>}
+          {changeRemarks && (
+            <p className="text-white/95 mt-1.5 italic">&ldquo;{changeRemarks}&rdquo;</p>
+          )}
+        </div>
+
+        {/* History Timeline */}
+        {history && history.length > 1 && (
+          <div className="border-t border-white/10 px-2 py-1.5 space-y-0">
+            <p className="text-[10px] uppercase tracking-wider text-white/40 font-semibold mb-1">History</p>
+            {[...history].reverse().map((h, i) => {
+              const hConfig = STATUS_CONFIG[h.status];
+              if (!hConfig) return null;
+              const HIcon = hConfig.icon;
+              const hTime = h.updatedAt
+                ? new Date(h.updatedAt).toLocaleString("en-US", {
+                    timeZone: "America/Los_Angeles",
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })
+                : "";
+              return (
+                <div key={i} className="flex items-start gap-1.5 py-0.5">
+                  <HIcon className={cn("h-3 w-3 mt-0.5 shrink-0", hConfig.color)} />
+                  <div className="min-w-0">
+                    <span className={cn("font-medium", hConfig.color)}>{hConfig.label}</span>
+                    {h.messageType && (
+                      <span className="text-white/40 ml-1">({formatMessageType(h.messageType)})</span>
+                    )}
+                    {hTime && <span className="text-white/50 ml-1">{hTime}</span>}
+                    {h.changeRemarks && (
+                      <p className="text-white/70 italic text-[10px] truncate">&ldquo;{h.changeRemarks}&rdquo;</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </TooltipContent>
     </Tooltip>

@@ -237,7 +237,7 @@ interface RouteRow {
     routeSize: string;
     driverEfficiency: number;
     employeeName: string;
-    confirmationStatus?: { status: string; changeRemarks?: string; updatedAt?: string } | null;
+    confirmationStatus?: { status: string; changeRemarks?: string; updatedAt?: string; history?: Array<{ status: string; changeRemarks?: string; updatedAt?: string; messageType?: string }> } | null;
     phone: string;
     rate: number;
     routesCompleted: number;
@@ -921,6 +921,7 @@ export default function RoutesPage() {
                                                                     status={row.confirmationStatus.status}
                                                                     createdAt={row.confirmationStatus.updatedAt}
                                                                     changeRemarks={row.confirmationStatus.changeRemarks}
+                                                                    history={row.confirmationStatus.history}
                                                                     iconOnly
                                                                 />
                                                             ) : (
