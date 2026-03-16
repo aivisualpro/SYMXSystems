@@ -290,7 +290,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const filterItems = (items: any[], type: 'admin' | 'secondary') => {
     if (loadingPermissions) return [];
 
-    // First, filter by permissions
+    // First, filter by permissions (deny-by-default when role has permissions defined)
+    const hasPermissionsDefined = permissions.length > 0;
     const permFiltered = isAdmin ? items : items.filter(item => {
       const itemName = item.name || item.title;
       if (itemName === "Dashboard" || type === 'secondary') return true;
@@ -299,7 +300,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       if (perm) {
         return perm.actions?.view === true;
       }
-      return true;
+      // If the role has permissions defined but this module isn't listed → hide it
+      // If no permissions exist at all (legacy/new role) → show everything
+      return !hasPermissionsDefined;
     });
 
     // Then, filter by search query (including sub-modules)
