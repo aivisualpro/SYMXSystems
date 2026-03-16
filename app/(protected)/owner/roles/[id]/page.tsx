@@ -168,6 +168,42 @@ export default function RoleDetailsPage() {
     }
   }, [roleId, router]);
 
+  // Auto-populate missing permissions: when both role and systemModules are loaded,
+  // ensure every module in systemModules has a permissions entry in the role.
+  // This prevents the bug where the UI shows "on" (default) but the permission
+  // was never saved, causing the sidebar to not know about it.
+  useEffect(() => {
+    if (!role || !systemModules.length) return;
+
+    const allModuleNames: string[] = [];
+    systemModules.forEach((group: any) => {
+      group.items?.forEach((item: any) => {
+        allModuleNames.push(item.name);
+        if (item.subModules) {
+          item.subModules.forEach((sub: any) => {
+            const subName = typeof sub === 'string' ? sub : sub.name;
+            allModuleNames.push(subName);
+          });
+        }
+      });
+    });
+
+    const existingModules = new Set(role.permissions.map((p: any) => p.module));
+    const missing = allModuleNames.filter(name => !existingModules.has(name));
+
+    if (missing.length > 0) {
+      const newPermissions = [...role.permissions];
+      missing.forEach(name => {
+        newPermissions.push({
+          module: name,
+          actions: { view: true, create: true, edit: true, delete: true, approve: true, download: true },
+          fieldScope: {},
+        });
+      });
+      setRole((prev: any) => ({ ...prev, permissions: newPermissions }));
+    }
+  }, [role?._id, systemModules]);
+
   // Helper to get or create permission object for a module
   const getPermission = (moduleName: string) => {
     if (!role) return null;

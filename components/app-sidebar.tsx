@@ -284,19 +284,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const filterItems = (items: any[], type: 'admin' | 'secondary') => {
     if (loadingPermissions) return [];
 
-    // First, filter by permissions (deny-by-default when role has permissions defined)
-    const hasPermissionsDefined = permissions.length > 0;
+    // Filter by permissions: a module is hidden ONLY if explicitly set to view: false.
+    // If a module is not in the permissions array at all, it's treated as allowed
+    // (matching the roles editor UI which defaults missing modules to all-true).
     const permFiltered = isAdmin ? items : items.filter(item => {
       const itemName = item.name || item.title;
       if (itemName === "Dashboard") return true;
 
       const perm = permissions.find((p: any) => p.module === itemName);
       if (perm) {
-        return perm.actions?.view === true;
+        return perm.actions?.view !== false;
       }
-      // If the role has permissions defined but this module isn't listed → hide it
-      // If no permissions exist at all (legacy/new role) → show everything
-      return !hasPermissionsDefined;
+      // Not in permissions array → allowed (matches roles UI default behavior)
+      return true;
     });
 
     // Then, filter by search query (including sub-modules)
@@ -333,10 +333,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // Secondary nav: filter by permissions too, but Search always stays visible
   const filteredSecondary = data.navSecondary.filter(item => {
     if (item.title === "Search") return true;
-    if (isAdmin || !permissions.length) return true;
+    if (isAdmin) return true;
     const perm = permissions.find((p: any) => p.module === item.title);
-    if (perm) return perm.actions?.view === true;
-    return false; // deny-by-default
+    if (perm) return perm.actions?.view !== false;
+    return true; // not in permissions → allowed
   }).map(item =>
     item.title === "Search" ? { ...item, onClick: handleSearchClick } : item
   );
