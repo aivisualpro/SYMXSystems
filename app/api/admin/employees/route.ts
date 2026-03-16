@@ -22,6 +22,11 @@ export async function GET(req: Request) {
     const search = searchParams.get('search') || '';
     const fetchTerminated = searchParams.get('terminated') === 'true';
 
+    const filterStatus = searchParams.get('status');
+    const filterType = searchParams.get('type');
+    const filterHourly = searchParams.get('hourlyStatus');
+    const filterSpecial = searchParams.get('filter'); // dlExpiring, missingDocs
+
     // Construct query
     const query: any = {};
 
@@ -70,15 +75,46 @@ export async function GET(req: Request) {
 
       query.$or = orConditions;
 
-      // Still respect the terminated filter when searching
-      if (!fetchTerminated) {
-        query.status = { $ne: 'Terminated' };
-      }
     } else {
-      // No search — apply filters normally
-      if (!fetchTerminated) {
-        query.status = { $ne: 'Terminated' };
+      // No search — apply basic filtering
+    }
+
+    // Apply exact filters
+    if (filterStatus) {
+      if (filterStatus === "Resigned") {
+        query.$or = [{ status: "Resigned" }, { resignationDate: { $ne: null } }];
+      } else {
+        query.status = filterStatus;
       }
+    } else if (!fetchTerminated) {
+      // Still hide Terminated unless searching explicitly or asking for it
+      query.status = { $ne: 'Terminated' };
+    }
+
+    if (filterType) query.type = filterType;
+    if (filterHourly) query.hourlyStatus = filterHourly;
+
+    // Apply special compliance filters
+    if (filterSpecial === 'dlExpiring') {
+      const now = new Date();
+      const thirtyDays = new Date();
+      thirtyDays.setDate(thirtyDays.getDate() + 30);
+      query.dlExpiration = { $gte: now, $lte: thirtyDays };
+      query.status = "Active";
+    } else if (filterSpecial === 'missingDocs') {
+      // If we already have $or from Resigned filtering (rare to mix, but just in case), we use $and
+      const missingCondition = [
+        { offerLetterFile: null }, { offerLetterFile: "" },
+        { driversLicenseFile: null }, { driversLicenseFile: "" },
+        { i9File: null }, { i9File: "" }
+      ];
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, { $or: missingCondition }];
+        delete query.$or;
+      } else {
+        query.$or = missingCondition;
+      }
+      query.status = "Active";
     }
 
     if (limit > 0) {

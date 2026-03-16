@@ -106,7 +106,7 @@ export default function EmployeesDashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/admin/employees");
+        const res = await fetch("/api/admin/employees?terminated=true");
         if (res.ok) {
           const data = await res.json();
           setEmployees(data);
@@ -123,14 +123,16 @@ export default function EmployeesDashboardPage() {
   // ── Computed Stats ──
   const stats = useMemo(() => {
     const total = employees.length;
-    const active = employees.filter(e => e.status === "Active").length;
-    const terminated = employees.filter(e => e.status === "Terminated").length;
-    const resigned = employees.filter(e => e.status === "Resigned" || e.resignationDate).length;
+    // Categorize cleanly to handle blanks/nulls
+    const active = employees.filter(e => e.status === "Active" || !e.status || (!["Terminated", "Resigned", "Inactive"].includes(e.status))).length;
+    const terminated = employees.filter(e => e.status === "Terminated" && !e.resignationDate).length;
+    const resigned = employees.filter(e => e.status === "Resigned" || (e.resignationDate && e.status !== "Terminated")).length;
     const inactive = employees.filter(e => e.status === "Inactive").length;
 
     // Type breakdown
     const typeMap: Record<string, number> = {};
     employees.forEach(e => {
+      // Exclude terminated from type counts, or keep? The user's screenshot had 74 total where we know total was 74. Let's keep all.
       const t = e.type || "Unassigned";
       typeMap[t] = (typeMap[t] || 0) + 1;
     });

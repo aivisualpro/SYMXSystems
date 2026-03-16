@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useSearchParams } from "next/navigation";
 
 export default function EmployeesPage() {
   const [data, setData] = useState<ISymxEmployee[]>([]);
@@ -40,6 +41,7 @@ export default function EmployeesPage() {
   const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const PAGE_SIZE = 50;
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [vehicleNames, setVehicleNames] = useState<string[]>([]);
 
   const DAY_OPTIONS = ["Assign Schedule", "OFF", "Route"];
@@ -101,6 +103,17 @@ export default function EmployeesPage() {
       });
       if (debouncedSearch) params.set("search", debouncedSearch);
 
+      // Add URL filters forwarded from the browser URL (clicked from dashboard)
+      const queryStatus = searchParams.get('status');
+      const queryType = searchParams.get('type');
+      const queryFilter = searchParams.get('filter');
+      const queryHourly = searchParams.get('hourlyStatus');
+      
+      if (queryStatus) params.set("status", queryStatus);
+      if (queryType) params.set("type", queryType);
+      if (queryFilter) params.set("filter", queryFilter);
+      if (queryHourly) params.set("hourlyStatus", queryHourly);
+
       const response = await fetch(`/api/admin/employees?${params}`);
       if (response.ok) {
         const result = await response.json();
@@ -133,7 +146,7 @@ export default function EmployeesPage() {
   useEffect(() => {
     fetchEmployees(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, showTerminated]);
+  }, [debouncedSearch, showTerminated, searchParams]);
 
   const handleSubmit = async (formData: any) => {
     setIsSubmitting(true);
