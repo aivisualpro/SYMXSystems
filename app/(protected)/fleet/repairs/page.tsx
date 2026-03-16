@@ -7,8 +7,11 @@ import {
 } from "@tabler/icons-react";
 import { useFleet } from "../layout";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { StatusBadge } from "../components/fleet-ui";
+import { StatusBadge, STATUS_COLORS } from "../components/fleet-ui";
 import FleetFormModal from "../components/fleet-form-modal";
+
+/* ── repair statuses ─────────────────────────────────────────────── */
+const REPAIR_STATUSES = ["Not Started", "In Progress", "Waiting for Parts", "Sent to Repair Shop", "Completed"];
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 const fmtDate = (d: string | Date | undefined) => {
@@ -311,14 +314,58 @@ export default function FleetRepairsPage() {
             {!isFetching && sortedRepairs.map((r: any, idx: number) => (
               <tr
                 key={r._id}
+                onClick={() => openEditModal("repair", r)}
                 className={`
-                  relative group cursor-default transition-all duration-150
+                  relative group cursor-pointer transition-all duration-150
                   hover:bg-primary/[0.035] hover:shadow-[inset_3px_0_0_hsl(var(--primary))]
                   ${idx % 2 === 0 ? "bg-transparent" : "bg-muted/[0.015]"}
                 `}
               >
                 {columns.map((col) => {
                   const val = col.accessor(r);
+
+                  // Status column — clickable dropdown
+                  if (col.key === "currentStatus") {
+                    return (
+                      <td key={col.key} className="px-3 py-2.5 text-xs" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={r.currentStatus || "Not Started"}
+                          onChange={async (e) => {
+                            const newStatus = e.target.value;
+                            try {
+                              const res = await fetch("/api/fleet", {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  section: "repair",
+                                  id: r._id,
+                                  data: { currentStatus: newStatus, lastEditOn: new Date() },
+                                }),
+                              });
+                              if (!res.ok) throw new Error("Failed to update");
+                              // Optimistic update
+                              setRepairs(prev => prev.map(item =>
+                                item._id === r._id ? { ...item, currentStatus: newStatus, lastEditOn: new Date().toISOString() } : item
+                              ));
+                            } catch {
+                              // revert will happen on next fetch
+                            }
+                          }}
+                          className={`
+                            px-2 py-0.5 rounded-md text-[11px] font-medium border cursor-pointer
+                            focus:outline-none focus:ring-1 focus:ring-primary/40
+                            ${STATUS_COLORS[r.currentStatus] || "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30"}
+                          `}
+                          style={{ appearance: "none", WebkitAppearance: "none", paddingRight: "16px", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 3px center" }}
+                        >
+                          {REPAIR_STATUSES.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </td>
+                    );
+                  }
+
                   const display = col.render ? col.render(r) : (val || "—");
                   return (
                     <td
@@ -330,7 +377,7 @@ export default function FleetRepairsPage() {
                     </td>
                   );
                 })}
-                <td className="px-3 py-2.5">
+                <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150 translate-x-1 group-hover:translate-x-0">
                     <button
                       onClick={() => openEditModal("repair", r)}
