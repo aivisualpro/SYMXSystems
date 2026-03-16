@@ -34,10 +34,7 @@ export async function GET(req: NextRequest) {
       // All counts + small fetches in parallel — no full collection scans
       const [
         totalVehicles,
-        activeVehicles,
-        maintenanceVehicles,
-        groundedVehicles,
-        inactiveVehicles,
+        vehicleStatusAgg,
         ownedCount,
         leasedCount,
         rentedCount,
@@ -52,10 +49,10 @@ export async function GET(req: NextRequest) {
         expiringSoonDocs,
       ] = await Promise.all([
         Vehicle.countDocuments(notReturned),
-        Vehicle.countDocuments({ status: "Active" }),
-        Vehicle.countDocuments({ status: "Maintenance" }),
-        Vehicle.countDocuments({ status: "Grounded" }),
-        Vehicle.countDocuments({ status: "Inactive" }),
+        Vehicle.aggregate([
+          { $match: notReturned },
+          { $group: { _id: "$status", count: { $sum: 1 } } },
+        ]),
         Vehicle.countDocuments({ ...notReturned, ownership: "Owned" }),
         Vehicle.countDocuments({ ...notReturned, ownership: "Leased" }),
         Vehicle.countDocuments({ ...notReturned, ownership: "Rented" }),
@@ -80,6 +77,38 @@ export async function GET(req: NextRequest) {
           .select("agreementNumber vin registrationEndDate amount").lean(),
       ]);
 
+      // Build vehicle status breakdown from aggregation
+      const vehicleStatusColorMap: Record<string, string> = {
+        "Active": "#10b981",
+        "Maintenance": "#f59e0b",
+        "Grounded": "#ef4444",
+        "Inactive": "#6b7280",
+        "Decommissioned": "#8b5cf6",
+        "Empty": "#3b82f6",
+      };
+      const vehicleStatusMap: Record<string, number> = {};
+      (vehicleStatusAgg as any[]).forEach((r: any) => {
+        if (r._id) vehicleStatusMap[r._id] = r.count;
+      });
+
+      const statusBreakdown = Object.entries(vehicleStatusMap).map(([name, value]) => ({
+        name,
+        value,
+        color: vehicleStatusColorMap[name] || "#6b7280",
+      }));
+      // Sort so consistent order: Active first, then by count descending
+      const statusOrder = ["Active", "Maintenance", "Grounded", "Inactive", "Decommissioned"];
+      statusBreakdown.sort((a, b) => {
+        const ai = statusOrder.indexOf(a.name);
+        const bi = statusOrder.indexOf(b.name);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      });
+
+      const activeVehicles = vehicleStatusMap["Active"] || 0;
+      const maintenanceVehicles = vehicleStatusMap["Maintenance"] || 0;
+      const groundedVehicles = vehicleStatusMap["Grounded"] || 0;
+      const inactiveVehicles = vehicleStatusMap["Inactive"] || 0;
+
       // Build repair status breakdown from aggregation
       const repairStatusMap: Record<string, number> = {};
       (repairStatusAgg as any[]).forEach((r: any) => { repairStatusMap[r._id] = r.count; });
@@ -102,12 +131,7 @@ export async function GET(req: NextRequest) {
           groundedVehicles,
           inactiveVehicles,
         },
-        statusBreakdown: [
-          { name: "Active", value: activeVehicles, color: "#10b981" },
-          { name: "Maintenance", value: maintenanceVehicles, color: "#f59e0b" },
-          { name: "Grounded", value: groundedVehicles, color: "#ef4444" },
-          { name: "Inactive", value: inactiveVehicles, color: "#6b7280" },
-        ],
+        statusBreakdown,
         ownershipBreakdown: [
           { name: "Owned", value: ownedCount, color: "#3b82f6" },
           { name: "Leased", value: leasedCount, color: "#8b5cf6" },
