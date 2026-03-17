@@ -197,7 +197,9 @@ export default function FleetFormModal() {
         const routes = data.routes || [];
         const empMap = data.employees || {};
         // Merge employee name into each route
-        const entries = routes.map((rt: any) => {
+        const entries = routes
+          .filter((rt: any) => rt.van) // Only include routes with a van assigned
+          .map((rt: any) => {
           const emp = empMap[rt.transporterId];
           const empName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() : rt.transporterId;
           return { ...rt, employeeName: empName };
@@ -437,23 +439,29 @@ export default function FleetFormModal() {
                   </FormField>
                 )}
 
-                {/* VIN dropdown — shows vehicleName - vin */}
-                <FormField label="VIN">
-                  <SearchableSelect
-                    value={formData.vin || ""}
-                    placeholder="Search VIN…"
-                    options={vehicles.map((v: any) => ({
-                      value: v.vin,
-                      label: `${v.vehicleName ? v.vehicleName + " — " : ""}${v.vin}`,
-                      raw: v,
-                    }))}
-                    onChange={(val, raw) => {
-                      updateForm("vin", val);
-                      if (raw?.unitNumber) updateForm("unitNumber", raw.unitNumber);
-                      if (raw?.vehicleName) updateForm("vehicleName", raw.vehicleName);
-                    }}
-                  />
-                </FormField>
+                {/* VIN — read-only for Route Inspection, dropdown for others */}
+                {formData.type === "Route Inspection" ? (
+                  <FormField label="VIN">
+                    <input className={inputClass} value={formData.vin || ""} readOnly disabled style={{ opacity: 0.7, cursor: "not-allowed" }} />
+                  </FormField>
+                ) : (
+                  <FormField label="VIN">
+                    <SearchableSelect
+                      value={formData.vin || ""}
+                      placeholder="Search VIN…"
+                      options={vehicles.map((v: any) => ({
+                        value: v.vin,
+                        label: `${v.vehicleName ? v.vehicleName + " — " : ""}${v.vin}`,
+                        raw: v,
+                      }))}
+                      onChange={(val, raw) => {
+                        updateForm("vin", val);
+                        if (raw?.unitNumber) updateForm("unitNumber", raw.unitNumber);
+                        if (raw?.vehicleName) updateForm("vehicleName", raw.vehicleName);
+                      }}
+                    />
+                  </FormField>
+                )}
 
                 {/* Inspection Date — for all OTHER types (not Route Inspection) */}
                 {formData.type && formData.type !== "Route Inspection" && (
