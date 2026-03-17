@@ -288,6 +288,16 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      // Batch-resolve VINs → vehicleName
+      const inspVins = [...new Set(inspections.map((i: any) => i.vin).filter(Boolean))];
+      const vinVehicles = inspVins.length > 0
+        ? await Vehicle.find({ vin: { $in: inspVins } }, { vin: 1, vehicleName: 1 }).lean()
+        : [];
+      const vinNameMap: Record<string, string> = {};
+      for (const v of vinVehicles as any[]) {
+        if (v.vin && v.vehicleName) vinNameMap[v.vin] = v.vehicleName;
+      }
+
       const photoFields = ["vehiclePicture1", "vehiclePicture2", "vehiclePicture3", "vehiclePicture4", "dashboardImage", "additionalPicture"];
       const requiredPhotoFields = ["vehiclePicture1", "vehiclePicture2", "vehiclePicture3", "vehiclePicture4", "dashboardImage"];
 
@@ -297,6 +307,7 @@ export async function GET(req: NextRequest) {
           ...insp,
           driverName: insp.driver ? (driverMap[insp.driver] || insp.driver) : "",
           inspectedByName: insp.inspectedBy ? (inspectorMap[insp.inspectedBy.toLowerCase()] || insp.inspectedBy) : "",
+          vehicleName: insp.vin ? (vinNameMap[insp.vin] || "") : "",
           photoCount,
         };
         // Remove the actual URLs from the response to keep it lightweight

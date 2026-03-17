@@ -49,6 +49,7 @@ const columns: Column[] = [
     key: "driverName", label: "Driver", accessor: r => r.driverName || r.driver || "",
     className: "font-medium text-foreground",
   },
+  { key: "vehicleName", label: "Vehicle", accessor: r => r.vehicleName || "", className: "font-semibold text-foreground" },
   { key: "vin", label: "VIN", accessor: r => r.vin || "", className: "font-mono text-[11px]" },
   {
     key: "inspectionType", label: "Type", accessor: r => r.inspectionType || "",
