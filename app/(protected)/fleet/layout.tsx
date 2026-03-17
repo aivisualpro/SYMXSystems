@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { useDataStore } from "@/hooks/use-data-store";
+import { sidebarCache } from "@/components/app-sidebar";
 import {
   IconChartDonut, IconCar, IconTool, IconClipboardCheck,
   IconFileInvoice, IconSearch, IconPlus, IconRotate2, IconCheck,
@@ -82,8 +83,14 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
 
-  // Permissions for tab filtering
-  const [permissions, setPermissions] = useState<any[] | null>(null);
+  // Permissions for tab filtering — read from sidebar cache (already loaded by sidebar)
+  const [permissions, setPermissions] = useState<any[]>(() => {
+    // Sidebar loads before fleet layout, so cache is usually already populated
+    if (sidebarCache) {
+      return sidebarCache.isAdmin ? [] : sidebarCache.permissions;
+    }
+    return [];
+  });
 
   // Prefetched first pages — populated on layout mount, consumed by tab pages
   const [repairsSeed, setRepairsSeed] = useState<SeedPage | null>(null);
@@ -93,13 +100,14 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const [showStandardOnly, setShowStandardOnly] = useState(false);
 
-  // ── Fetch user permissions for tab filtering ──
+  // Fallback: if sidebar cache wasn't ready, fetch permissions
   useEffect(() => {
+    if (sidebarCache) return; // Already have permissions from cache
     fetch("/api/user/permissions")
       .then(r => r.json())
       .then(d => {
         if (d.role === "Super Admin") {
-          setPermissions([]); // Super Admin sees everything
+          setPermissions([]);
         } else {
           setPermissions(d.permissions || []);
         }
@@ -108,7 +116,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   }, []);
 
   // Filter tabs based on permissions
-  const visibleTabs = permissions === null ? tabs : tabs.filter(tab => {
+  const visibleTabs = tabs.filter(tab => {
     if (permissions.length === 0) return true; // Super Admin or no restrictions
     const perm = permissions.find((p: any) => p.module === tab.permModule);
     if (!perm) return true; // Not in permissions array → allowed by default
@@ -117,7 +125,6 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
 
   // Redirect to first allowed tab if current page is not permitted
   const isOnRestrictedPage = (() => {
-    if (permissions === null) return false; // Still loading, don't know yet
     if (visibleTabs.length === 0) return false;
     const currentTab = tabs.find(t => t.href === pathname || (t.href === "/fleet" && pathname === "/fleet"));
     if (!currentTab) return false; // Detail page or unknown, allow
@@ -129,9 +136,6 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       router.replace(visibleTabs[0].href);
     }
   }, [isOnRestrictedPage, visibleTabs, router]);
-
-  // Don't render content until permissions are loaded (prevents flash of restricted pages)
-  const permissionsLoading = permissions === null;
 
   // ── Hydrate from global data store for instant load ──
   const hydratedRef = useRef(false);
@@ -461,7 +465,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
 
         {/* ── Page Content (fills remaining height, scrollable) ── */}
         <div className="flex-1 min-h-0 mt-3 rounded-[var(--radius-xl)] bg-card overflow-y-auto p-4">
-          {permissionsLoading || isOnRestrictedPage ? (
+          {isOnRestrictedPage ? (
             <div className="flex items-center justify-center h-32">
               <div className="w-6 h-6 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
             </div>

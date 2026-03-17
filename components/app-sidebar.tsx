@@ -175,7 +175,7 @@ const data = {
 };
 
 // Global cache for sidebar data to prevent refetching on navigation
-let sidebarCache: {
+export let sidebarCache: {
   permissions: any[];
   isAdmin: boolean;
   dynamicModules: any[] | null;
