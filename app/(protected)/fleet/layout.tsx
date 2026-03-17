@@ -116,13 +116,22 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   });
 
   // Redirect to first allowed tab if current page is not permitted
-  useEffect(() => {
-    if (permissions === null || visibleTabs.length === 0) return;
+  const isOnRestrictedPage = (() => {
+    if (permissions === null) return false; // Still loading, don't know yet
+    if (visibleTabs.length === 0) return false;
     const currentTab = tabs.find(t => t.href === pathname || (t.href === "/fleet" && pathname === "/fleet"));
-    if (currentTab && !visibleTabs.find(t => t.id === currentTab.id)) {
+    if (!currentTab) return false; // Detail page or unknown, allow
+    return !visibleTabs.find(t => t.id === currentTab.id);
+  })();
+
+  useEffect(() => {
+    if (isOnRestrictedPage && visibleTabs.length > 0) {
       router.replace(visibleTabs[0].href);
     }
-  }, [permissions, visibleTabs, pathname, router]);
+  }, [isOnRestrictedPage, visibleTabs, router]);
+
+  // Don't render content until permissions are loaded (prevents flash of restricted pages)
+  const permissionsLoading = permissions === null;
 
   // ── Hydrate from global data store for instant load ──
   const hydratedRef = useRef(false);
@@ -452,7 +461,11 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
 
         {/* ── Page Content (fills remaining height, scrollable) ── */}
         <div className="flex-1 min-h-0 mt-3 rounded-[var(--radius-xl)] bg-card overflow-y-auto p-4">
-          {children}
+          {permissionsLoading || isOnRestrictedPage ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="w-6 h-6 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+            </div>
+          ) : children}
         </div>
       </div>
     </FleetContext.Provider>
