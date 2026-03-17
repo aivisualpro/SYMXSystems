@@ -169,6 +169,47 @@ export default function FleetFormModal() {
   const [repairStatuses, setRepairStatuses] = useState<{description: string; color?: string; icon?: string}[]>([]);
   const [sessionEmail, setSessionEmail] = useState<string>("");
 
+  // Route Inspection: auto-fetch routes by date
+  const [routeEntries, setRouteEntries] = useState<any[]>([]);
+  const [routesLoading, setRoutesLoading] = useState(false);
+
+  // Helper: compute ISO yearWeek from a date string
+  const getYearWeek = (dateStr: string) => {
+    const d = new Date(dateStr + "T12:00:00.000Z");
+    const jan1 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const dayOfYear = Math.floor((d.getTime() - jan1.getTime()) / 86400000) + 1;
+    const jan1Day = jan1.getUTCDay();
+    const week = Math.ceil((dayOfYear + jan1Day) / 7);
+    return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+  };
+
+  // Fetch routes when Route Date changes for Route Inspection
+  useEffect(() => {
+    if (!modalOpen || modalType !== "inspection" || formData.type !== "Route Inspection") return;
+    const dateVal = formData.routeDate ? (typeof formData.routeDate === "string" ? formData.routeDate.split("T")[0] : "") : "";
+    if (!dateVal) { setRouteEntries([]); return; }
+
+    setRoutesLoading(true);
+    const yearWeek = getYearWeek(dateVal);
+    fetch(`/api/dispatching/routes?yearWeek=${yearWeek}&date=${dateVal}`)
+      .then(r => r.json())
+      .then(data => {
+        const routes = data.routes || [];
+        const empMap = data.employees || {};
+        // Merge employee name into each route
+        const entries = routes.map((rt: any) => {
+          const emp = empMap[rt.transporterId];
+          const empName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() : rt.transporterId;
+          return { ...rt, employeeName: empName };
+        });
+        // Sort by employee name ascending
+        entries.sort((a: any, b: any) => (a.employeeName || "").localeCompare(b.employeeName || ""));
+        setRouteEntries(entries);
+      })
+      .catch(() => setRouteEntries([]))
+      .finally(() => setRoutesLoading(false));
+  }, [modalOpen, modalType, formData.type, formData.routeDate]);
+
   // Fetch repair statuses from dropdown settings
   useEffect(() => {
     if (!modalOpen || (modalType !== "repair" && modalType !== "inspection")) return;
@@ -340,9 +381,49 @@ export default function FleetFormModal() {
                 </select>
               </FormField>
 
+              {/* ── Route Inspection: Date first, then auto-select route ── */}
+              {formData.type === "Route Inspection" && (
+                <>
+                  <FormField label="Route Date">
+                    <input type="date" className={inputClass} value={formData.routeDate ? (typeof formData.routeDate === "string" ? formData.routeDate.split("T")[0] : "") : ""} onChange={e => {
+                      updateForm("routeDate", e.target.value);
+                      // Clear driver/vin when date changes so user picks fresh
+                      updateForm("driver", "");
+                      updateForm("vin", "");
+                      updateForm("vehicleName", "");
+                      updateForm("unitNumber", "");
+                    }} />
+                  </FormField>
+
+                  {formData.routeDate && (
+                    <FormField label={routesLoading ? "Loading routes…" : `Route (${routeEntries.length} found)`}>
+                      <SearchableSelect
+                        value={formData.driver || ""}
+                        placeholder={routesLoading ? "Loading…" : "Select employee route…"}
+                        options={routeEntries.map((rt: any) => ({
+                          value: rt.transporterId,
+                          label: `${rt.employeeName}${rt.van ? " — " + rt.van : ""}`,
+                          raw: rt,
+                        }))}
+                        onChange={(val, raw) => {
+                          updateForm("driver", val);
+                          if (raw?.van) {
+                            updateForm("vin", raw.van);
+                            // Also try to resolve vehicleName from vehicles list
+                            const vehicle = vehicles.find((v: any) => v.vin === raw.van);
+                            if (vehicle?.vehicleName) updateForm("vehicleName", vehicle.vehicleName);
+                            if (vehicle?.unitNumber) updateForm("unitNumber", vehicle.unitNumber);
+                          }
+                        }}
+                      />
+                    </FormField>
+                  )}
+                </>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
-                {/* Driver — only for Route Inspection */}
-                {formData.type === "Route Inspection" && (
+                {/* Driver — only for NON-Route Inspection types that need it */}
+                {formData.type && formData.type !== "Route Inspection" && (
                   <FormField label="Driver">
                     <SearchableSelect
                       value={formData.driver || ""}
@@ -373,13 +454,6 @@ export default function FleetFormModal() {
                     }}
                   />
                 </FormField>
-
-                {/* Route Date — only for Route Inspection */}
-                {formData.type === "Route Inspection" && (
-                  <FormField label="Route Date">
-                    <input type="date" className={inputClass} value={formData.routeDate ? (typeof formData.routeDate === "string" ? formData.routeDate.split("T")[0] : "") : ""} onChange={e => updateForm("routeDate", e.target.value)} />
-                  </FormField>
-                )}
 
                 {/* Inspection Date — for all OTHER types (not Route Inspection) */}
                 {formData.type && formData.type !== "Route Inspection" && (
