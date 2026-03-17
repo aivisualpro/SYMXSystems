@@ -183,6 +183,22 @@ export default function FleetFormModal() {
       .catch(() => { });
   }, [modalOpen, modalType]);
 
+  // Fetch vehicles for repair form dropdown
+  useEffect(() => {
+    if (!modalOpen || modalType !== "repair") return;
+    fetch("/api/fleet?section=vehicles")
+      .then(r => r.json())
+      .then(d => {
+        if (d.vehicles) {
+          const sorted = [...d.vehicles].sort((a: any, b: any) =>
+            String(a.vehicleName || "").localeCompare(String(b.vehicleName || ""), undefined, { numeric: true, sensitivity: "base" })
+          );
+          setVehicles(sorted);
+        }
+      })
+      .catch(() => {});
+  }, [modalOpen, modalType]);
+
   useEffect(() => {
     if (!modalOpen || modalType !== "inspection") return;
 
@@ -272,7 +288,22 @@ export default function FleetFormModal() {
 
 
             {modalType === "repair" && (<>
-              <FormField label="Unit Number"><input className={inputClass} value={formData.unitNumber || ""} onChange={e => updateForm("unitNumber", e.target.value)} /></FormField>
+              <FormField label="Vehicle Name">
+                <SearchableSelect
+                  value={formData.vehicleName || ""}
+                  placeholder="Search vehicle…"
+                  options={vehicles.map((v: any) => ({
+                    value: v.vehicleName || "",
+                    label: v.vehicleName || v.vin || "—",
+                    raw: v,
+                  }))}
+                  onChange={(val, raw) => {
+                    updateForm("vehicleName", val);
+                    if (raw?.vin) updateForm("vin", raw.vin);
+                    if (raw?.unitNumber) updateForm("unitNumber", raw.unitNumber);
+                  }}
+                />
+              </FormField>
               <FormField label="Description"><textarea className={inputClass} rows={3} value={formData.description || ""} onChange={e => updateForm("description", e.target.value)} required /></FormField>
               <div className="grid grid-cols-2 gap-3">
                 <FormField label="Status">

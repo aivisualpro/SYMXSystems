@@ -182,6 +182,7 @@ export async function GET(req: NextRequest) {
               { description: { $regex: q, $options: "i" } },
               { currentStatus: { $regex: q, $options: "i" } },
               { unitNumber: { $regex: q, $options: "i" } },
+              { vehicleName: { $regex: q, $options: "i" } },
             ],
           };
         } else {
@@ -196,15 +197,27 @@ export async function GET(req: NextRequest) {
       }
 
       // Select only fields needed for the list view
-      const listFields = "vin unitNumber description currentStatus estimatedDate creationDate lastEditOn repairDuration image";
+      const listFields = "vin unitNumber vehicleName description currentStatus estimatedDate creationDate lastEditOn repairDuration image";
 
       const [repairs, total] = await Promise.all([
         VehicleRepair.find(filter).select(listFields).sort({ creationDate: -1 }).skip(skip).limit(limit).lean(),
         VehicleRepair.countDocuments(filter),
       ]);
 
+      // Enrich: resolve vehicleName from Vehicle collection for records missing it
+      const vinsToResolve = repairs.filter((r: any) => r.vin && !r.vehicleName).map((r: any) => r.vin);
+      let vinToNameMap: Record<string, string> = {};
+      if (vinsToResolve.length > 0) {
+        const vehicles = await Vehicle.find({ vin: { $in: vinsToResolve } }, { vin: 1, vehicleName: 1 }).lean();
+        vehicles.forEach((v: any) => { if (v.vin && v.vehicleName) vinToNameMap[v.vin] = v.vehicleName; });
+      }
+      const enrichedRepairs = repairs.map((r: any) => ({
+        ...r,
+        vehicleName: r.vehicleName || vinToNameMap[r.vin] || "",
+      }));
+
       return NextResponse.json({
-        repairs,
+        repairs: enrichedRepairs,
         total,
         hasMore: skip + repairs.length < total,
       });

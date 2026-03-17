@@ -4,6 +4,7 @@ export interface IVehicleRepair extends Document {
   vehicleId: mongoose.Types.ObjectId;
   vin: string;
   unitNumber: string;
+  vehicleName: string;
   description: string;
   currentStatus: 'Not Started' | 'In Progress' | 'Waiting for Parts' | 'Sent to Repair Shop' | 'Completed';
   estimatedDate: Date;
@@ -19,6 +20,7 @@ const VehicleRepairSchema: Schema = new Schema({
   vehicleId: { type: Schema.Types.ObjectId, ref: 'Vehicle', index: true },
   vin: { type: String, default: '', index: true },
   unitNumber: { type: String, default: '' },
+  vehicleName: { type: String, default: '' },
   description: { type: String, default: '' },
   currentStatus: {
     type: String,

@@ -56,6 +56,7 @@ const columns: Column[] = [
       </div>
     ),
   },
+  { key: "vehicleName", label: "Vehicle", accessor: (r) => r.vehicleName || "", className: "font-semibold text-foreground" },
   { key: "vin", label: "VIN", accessor: (r) => r.vin || "", className: "font-mono text-[11px]" },
   { key: "description", label: "Description", accessor: (r) => r.description || "", className: "max-w-[220px] truncate" },
   {
