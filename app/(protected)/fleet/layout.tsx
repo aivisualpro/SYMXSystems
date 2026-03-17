@@ -59,12 +59,11 @@ export function useFleet() {
 
 // ── Tabs config ───────────────────────────────────────────────────────
 const tabs = [
-  { id: "overview", label: "Overview", icon: IconChartDonut, href: "/fleet" },
-  { id: "vehicles", label: "Vehicles", icon: IconCar, href: "/fleet/vehicles" },
-
-  { id: "repairs", label: "Repairs", icon: IconTool, href: "/fleet/repairs" },
-  { id: "inspections", label: "Inspections", icon: IconClipboardCheck, href: "/fleet/inspections" },
-  { id: "rentals", label: "Rental Agreements", icon: IconFileInvoice, href: "/fleet/rentals" },
+  { id: "overview", label: "Overview", permModule: "Overview", icon: IconChartDonut, href: "/fleet" },
+  { id: "vehicles", label: "Vehicles", permModule: "Vehicles", icon: IconCar, href: "/fleet/vehicles" },
+  { id: "repairs", label: "Repairs", permModule: "Repairs", icon: IconTool, href: "/fleet/repairs" },
+  { id: "inspections", label: "Inspections", permModule: "Inspections", icon: IconClipboardCheck, href: "/fleet/inspections" },
+  { id: "rentals", label: "Rental Agreements", permModule: "Rental Agreements", icon: IconFileInvoice, href: "/fleet/rentals" },
 ];
 
 // ── Layout ────────────────────────────────────────────────────────────
@@ -83,6 +82,9 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
 
+  // Permissions for tab filtering
+  const [permissions, setPermissions] = useState<any[] | null>(null);
+
   // Prefetched first pages — populated on layout mount, consumed by tab pages
   const [repairsSeed, setRepairsSeed] = useState<SeedPage | null>(null);
   const [inspectionsSeed, setInspectionsSeed] = useState<SeedPage | null>(null);
@@ -90,6 +92,37 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const [showReturned, setShowReturned] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [showStandardOnly, setShowStandardOnly] = useState(false);
+
+  // ── Fetch user permissions for tab filtering ──
+  useEffect(() => {
+    fetch("/api/user/permissions")
+      .then(r => r.json())
+      .then(d => {
+        if (d.role === "Super Admin") {
+          setPermissions([]); // Super Admin sees everything
+        } else {
+          setPermissions(d.permissions || []);
+        }
+      })
+      .catch(() => setPermissions([]));
+  }, []);
+
+  // Filter tabs based on permissions
+  const visibleTabs = permissions === null ? tabs : tabs.filter(tab => {
+    if (permissions.length === 0) return true; // Super Admin or no restrictions
+    const perm = permissions.find((p: any) => p.module === tab.permModule);
+    if (!perm) return true; // Not in permissions array → allowed by default
+    return perm.actions?.view !== false;
+  });
+
+  // Redirect to first allowed tab if current page is not permitted
+  useEffect(() => {
+    if (permissions === null || visibleTabs.length === 0) return;
+    const currentTab = tabs.find(t => t.href === pathname || (t.href === "/fleet" && pathname === "/fleet"));
+    if (currentTab && !visibleTabs.find(t => t.id === currentTab.id)) {
+      router.replace(visibleTabs[0].href);
+    }
+  }, [permissions, visibleTabs, pathname, router]);
 
   // ── Hydrate from global data store for instant load ──
   const hydratedRef = useRef(false);
@@ -401,7 +434,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
 
         {/* ── Tab Navigation (sticky) ──────────────────────────── */}
         <div data-tab-nav className="flex-shrink-0 flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
-          {tabs.map((tab) => (
+          {visibleTabs.map((tab) => (
             <Link
               key={tab.id}
               href={tab.href}
