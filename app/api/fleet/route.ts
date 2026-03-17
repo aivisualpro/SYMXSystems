@@ -289,9 +289,10 @@ export async function GET(req: NextRequest) {
       }
 
       const photoFields = ["vehiclePicture1", "vehiclePicture2", "vehiclePicture3", "vehiclePicture4", "dashboardImage", "additionalPicture"];
+      const requiredPhotoFields = ["vehiclePicture1", "vehiclePicture2", "vehiclePicture3", "vehiclePicture4", "dashboardImage"];
 
       const enrichedInspections = inspections.map((insp: any) => {
-        const photoCount = photoFields.filter(f => !!insp[f]).length;
+        const photoCount = requiredPhotoFields.filter(f => !!insp[f]).length;
         const result: any = {
           ...insp,
           driverName: insp.driver ? (driverMap[insp.driver] || insp.driver) : "",

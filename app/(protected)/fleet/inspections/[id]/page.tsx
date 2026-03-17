@@ -433,7 +433,8 @@ export default function InspectionDetailPage() {
         { url: inspection.additionalPicture, label: "Additional" },
     ];
     const hasPhotos = photos.some(p => p.url);
-    const missingPhotos = photos.filter(p => !p.url);
+    const requiredPhotos = photos.filter(p => p.label !== "Additional");
+    const missingPhotos = requiredPhotos.filter(p => !p.url);
     const availablePhotos = photos.filter(p => p.url);
 
     const prevPhotos = compareData ? [
@@ -735,7 +736,7 @@ export default function InspectionDetailPage() {
                                 <div>
                                     <h2 className="text-base font-bold text-foreground">Inspection Photos</h2>
                                     <p className="text-[10px] text-muted-foreground/50">
-                                        {availablePhotos.length} of 6 photos captured
+                                        {requiredPhotos.filter(p => p.url).length} of 5 photos captured
                                         {compareMode && compareData && " — Drag slider to compare"}
                                     </p>
                                 </div>

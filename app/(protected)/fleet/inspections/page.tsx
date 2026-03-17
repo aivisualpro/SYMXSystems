@@ -72,8 +72,8 @@ const columns: Column[] = [
     render: r => {
       const count = r.photoCount ?? 0;
       return (
-        <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${count === 6 ? "text-emerald-500" : count > 0 ? "text-foreground" : "text-muted-foreground/30"}`}>
-          <IconCamera size={11} />{count}/6
+        <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${count === 5 ? "text-emerald-500" : count > 0 ? "text-foreground" : "text-muted-foreground/30"}`}>
+          <IconCamera size={11} />{count}/5
         </span>
       );
     },
