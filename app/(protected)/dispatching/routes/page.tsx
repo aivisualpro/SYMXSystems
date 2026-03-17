@@ -323,6 +323,69 @@ export default function RoutesPage() {
     const store = useDataStore();
     const hydratedRoutesRef = useRef(false);
 
+    // ── Fetch active vehicles ──
+    const [vehicles, setVehicles] = useState<any[]>([]);
+    useEffect(() => {
+        let mounted = true;
+        fetch("/api/fleet?section=vehicles")
+            .then(r => r.json())
+            .then(data => {
+                if (mounted && data.vehicles) {
+                    const activeVans = data.vehicles.filter((v: any) => v.status === "Active" || v.status === "active");
+                    activeVans.sort((a: any, b: any) => String(a.vehicleName).localeCompare(String(b.vehicleName), undefined, { numeric: true, sensitivity: 'base' }));
+                    setVehicles(activeVans);
+                }
+            })
+            .catch(() => {});
+        return () => { mounted = false; };
+    }, []);
+
+    // ── Get available vans for a date ──
+    const getAvailableVans = useCallback((dateStr: string, currentVan: string) => {
+        if (!dateStr || !vehicles.length) return vehicles;
+        
+        const assignedOnDay = new Set<string>();
+        allRoutes.forEach(r => {
+            if (r.date && r.van) {
+                const rd = r.date.split('T')[0];
+                const cd = dateStr.split('T')[0];
+                if (rd === cd) {
+                    assignedOnDay.add(r.van);
+                }
+            }
+        });
+
+        return vehicles.filter(v => {
+            if (v.vehicleName === currentVan) return true;
+            return !assignedOnDay.has(v.vehicleName);
+        });
+    }, [vehicles, allRoutes]);
+
+    // ── Handle Van Change ──
+    const handleVanChange = useCallback(async (routeId: string, newVan: string, transporterId: string) => {
+        const vehicle = vehicles.find(v => v.vehicleName === newVan);
+        const serviceType = vehicle?.serviceType || "";
+        const dashcam = vehicle?.dashcam || "";
+
+        setAllRoutes(prev => prev.map(r =>
+            r._id === routeId ? { ...r, van: newVan, serviceType, dashcam } : r
+        ));
+        try {
+            const res = await fetch("/api/dispatching/routes", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ routeId, updates: { van: newVan } }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to update van");
+            toast.success(newVan ? `Van updated to ${newVan}` : "Van cleared");
+            setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
+        } catch (err: any) {
+            toast.error(err.message || "Failed to update van");
+            refreshRoutes();
+        }
+    }, [vehicles, refreshRoutes]);
+
     // ── Fetch WST settings for revenue lookup ──
     useEffect(() => {
         fetch("/api/admin/settings/wst")
@@ -1010,7 +1073,41 @@ export default function RoutesPage() {
                                                         <td className="px-2 py-1.5">{renderCell(row, "routeNumber", row.routeNumber)}</td>
 
                                                         {/* 5. Van */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "van", row.van)}</td>
+                                                        <td className="px-2 py-1.5 align-middle" onClick={(e) => e.stopPropagation()}>
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <button className="cursor-pointer hover:bg-muted/50 rounded py-0.5 px-1 -ml-1 transition-colors focus:outline-none flex items-center gap-1 w-full text-left group">
+                                                                        {renderCell(row, "van", row.van)}
+                                                                        <ChevronDown className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                                    </button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="start" className="min-w-[150px] max-h-[300px] overflow-y-auto">
+                                                                    <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider sticky top-0 bg-popover z-10 pt-2 pb-1">
+                                                                        Select Van
+                                                                    </DropdownMenuLabel>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem 
+                                                                        onClick={() => handleVanChange(row._id, "", row.transporterId)}
+                                                                        className="text-[11px] cursor-pointer text-muted-foreground"
+                                                                    >
+                                                                        <span className="flex-1">Clear Van</span>
+                                                                        {!row.van && <Check className="h-3 w-3 ml-auto text-primary" />}
+                                                                    </DropdownMenuItem>
+                                                                    {getAvailableVans(row.date, row.van).map(v => (
+                                                                        <DropdownMenuItem
+                                                                            key={v.vehicleName}
+                                                                            onClick={() => handleVanChange(row._id, v.vehicleName, row.transporterId)}
+                                                                            className="text-[11px] cursor-pointer font-medium"
+                                                                        >
+                                                                            <span className="flex-1">{v.vehicleName}</span>
+                                                                            {row.van === v.vehicleName && (
+                                                                                <Check className="h-3 w-3 ml-auto text-primary" />
+                                                                            )}
+                                                                        </DropdownMenuItem>
+                                                                    ))}
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </td>
 
                                                         {/* 6. Bags */}
                                                         <td className="px-2 py-1.5">{renderCell(row, "bags", row.bags)}</td>
