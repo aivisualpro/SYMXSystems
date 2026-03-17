@@ -14,6 +14,7 @@ const publicPaths = [
   "/api/public/",
   "/api/messaging/webhook",
   "/c/",
+  "/confirm/",
 ];
 
 function isPublicPath(path: string) {

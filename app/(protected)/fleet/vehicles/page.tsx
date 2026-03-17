@@ -87,6 +87,7 @@ interface Column {
   render?: (v: any, meta?: any) => React.ReactNode;
   className?: string;
   width?: string;
+  sticky?: boolean;
 }
 
 /* ── Page ────────────────────────────────────────────────────────── */
@@ -109,6 +110,7 @@ export default function FleetVehiclesPage() {
   };
 
   const columns: Column[] = useMemo(() => [
+    { key: "vehicleName", label: "Vehicle", accessor: (v) => v.vehicleName || "", className: "font-semibold text-foreground", sticky: true },
     {
       key: "image",
       label: "Photo",
@@ -153,7 +155,6 @@ export default function FleetVehiclesPage() {
     },
     { key: "vin", label: "VIN", accessor: (v) => v.vin || "", className: "font-mono text-[11px]" },
     { key: "year", label: "Year", accessor: (v) => v.year || "" },
-    { key: "vehicleName", label: "Vehicle Name", accessor: (v) => v.vehicleName || "", className: "font-medium text-foreground" },
     { key: "licensePlate", label: "License Plate", accessor: (v) => v.licensePlate || "", className: "font-mono" },
     { key: "make", label: "Make", accessor: (v) => v.make || "" },
     { key: "vehicleModel", label: "Model", accessor: (v) => v.vehicleModel || "" },
@@ -255,6 +256,7 @@ export default function FleetVehiclesPage() {
                       ${isSortable ? "cursor-pointer hover:text-foreground hover:bg-muted/60 group/th" : ""}
                       ${isActive ? "text-primary bg-primary/5" : "text-muted-foreground/70"}
                       ${col.width ?? ""}
+                      ${col.sticky ? "sticky left-0 z-30 bg-card/95 backdrop-blur-sm shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]" : ""}
                     `}
                   >
                     <div className="flex items-center gap-1">
@@ -323,6 +325,7 @@ export default function FleetVehiclesPage() {
                         ${col.className || ""}
                         ${isTruncated ? "max-w-[140px] truncate" : ""}
                         ${col.width ?? ""}
+                        ${col.sticky ? "sticky left-0 z-[5] bg-card shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]" : ""}
                       `}
                       title={isTruncated ? (val || "") : undefined}
                     >
