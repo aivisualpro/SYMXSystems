@@ -44,7 +44,7 @@ export default function EmployeesPage() {
   const searchParams = useSearchParams();
   const [vehicleNames, setVehicleNames] = useState<string[]>([]);
 
-  const DAY_OPTIONS = ["Assign Schedule", "OFF", "Route"];
+  const DAY_OPTIONS = ["Assign Schedule", "Scheduled", "OFF"];
 
   // Fetch vehicle names for van dropdowns
   useEffect(() => {
@@ -254,9 +254,7 @@ export default function EmployeesPage() {
         </span>
       ),
     },
-    { accessorKey: "email", header: "Email" },
-    {
-      accessorKey: "phoneNumber",
+    { accessorKey: "phoneNumber",
       header: "Phone",
       cell: ({ row }) => formatPhoneNumber(row.original.phoneNumber || "")
     },
@@ -291,7 +289,7 @@ export default function EmployeesPage() {
     // Default Vans — dropdowns from fleet vehicles
     ...(['defaultVan1', 'defaultVan2', 'defaultVan3'] as const).map((field, idx) => ({
       accessorKey: field,
-      header: `Van ${idx + 1}`,
+      header: ['Primary', 'Backup 1', 'Backup 2'][idx],
       cell: ({ row }: any) => {
         const val = row.original[field] || "";
         return (

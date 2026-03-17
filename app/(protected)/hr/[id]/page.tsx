@@ -56,10 +56,8 @@ type PageProps = {
 /* ── Availability Card (top-level for perf) ── */
 const AvailabilityCard = ({ day, date, status, dayKey, handleStatusChange }: any) => {
   const statusConfig: Record<string, { icon: any; color: string; bg: string; border: string; text: string }> = {
-    'Route':           { icon: Truck,         color: 'text-[#16C47F]',     bg: 'bg-[#16C47F]/10',     border: 'border-[#16C47F]/20',   text: 'text-[#16C47F]' },
     'Assign Schedule': { icon: CalendarCheck,  color: 'text-[#F29727]',     bg: 'bg-[#F29727]/10',     border: 'border-[#F29727]/20',   text: 'text-[#F29727]' },
-    'Open':            { icon: CheckCircle2,   color: 'text-[#D2665A]',     bg: 'bg-[#D2665A]/10',     border: 'border-[#D2665A]/20',   text: 'text-[#D2665A]' },
-    'Close':           { icon: Clock,          color: 'text-[#FFB4A2]',     bg: 'bg-[#FFB4A2]/10',     border: 'border-[#FFB4A2]/20',   text: 'text-[#FFB4A2]' },
+    'Scheduled':       { icon: CheckCircle2,   color: 'text-[#16C47F]',     bg: 'bg-[#16C47F]/10',     border: 'border-[#16C47F]/20',   text: 'text-[#16C47F]' },
     'OFF':             { icon: XCircle,        color: 'text-[#5E686D]',     bg: 'bg-transparent',      border: 'border-[#5E686D]/20',   text: 'text-[#5E686D]' },
   };
   const config = statusConfig[status] || statusConfig['OFF'];
@@ -152,6 +150,41 @@ export default function EmployeeDetailPage(props: PageProps) {
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { setLeftContent, setRightContent } = useHeaderActions();
+  const [vehicleNames, setVehicleNames] = useState<string[]>([]);
+
+  // Fetch vehicle names for van dropdowns
+  useEffect(() => {
+    fetch("/api/fleet?section=vehicles")
+      .then(r => r.json())
+      .then((data: any) => {
+        const vehicles = data?.vehicles || [];
+        const names = vehicles
+          .map((v: any) => v.vehicleName)
+          .filter(Boolean)
+          .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
+        setVehicleNames(names);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleVanChange = async (field: string, value: string) => {
+    if (!employee) return;
+    const oldEmployee = employee;
+    const updatedEmployee = { ...employee, [field]: value };
+    setEmployee(updatedEmployee as ISymxEmployee);
+    try {
+      const response = await fetch(`/api/admin/employees/${employee._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (!response.ok) throw new Error("Failed to update van");
+      toast.success(`Van updated`);
+    } catch (error) {
+      setEmployee(oldEmployee);
+      toast.error("Failed to update van");
+    }
+  };
 
   const handleStatusChange = async (dayKey: string, newStatus: string) => {
     if (!employee) return;
@@ -273,7 +306,7 @@ export default function EmployeeDetailPage(props: PageProps) {
   );
 
   return (
-    <div className="max-w-7xl mx-auto animate-in fade-in duration-500">
+    <div className="animate-in fade-in duration-500">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* ════════ LEFT COLUMN: Profile + Employee Info ════════ */}
@@ -432,6 +465,65 @@ export default function EmployeeDetailPage(props: PageProps) {
                            </p>
                         </div>
                      )}
+
+                     {/* Default Van Assignments — clickable dropdowns */}
+                     <div className="space-y-2 pt-1">
+                        <div className="flex items-center gap-2 px-1">
+                           <Truck className="w-3 h-3 text-muted-foreground/70" />
+                           <span className="text-[9px] font-black text-muted-foreground/70 uppercase tracking-widest">Default Vans</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                           {[
+                             { field: 'defaultVan1', label: 'Primary' },
+                             { field: 'defaultVan2', label: 'Backup 1' },
+                             { field: 'defaultVan3', label: 'Backup 2' },
+                           ].map(({ field, label }) => {
+                             const val = String((employee as any)[field] || '');
+                             return (
+                               <DropdownMenu key={field}>
+                                 <DropdownMenuTrigger asChild>
+                                   <button className={cn(
+                                     "flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all hover:scale-[1.02] active:scale-95 group relative overflow-hidden cursor-pointer min-h-[60px]",
+                                     val ? "bg-blue-500/10 border-blue-500/20" : "bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800"
+                                   )}>
+                                     <span className="text-[8px] font-bold text-muted-foreground/50 uppercase tracking-widest mb-1">{label}</span>
+                                     <Truck className={cn("w-4 h-4 mb-1", val ? "text-blue-500" : "text-muted-foreground/30")} />
+                                     <span className={cn("text-[10px] font-bold truncate max-w-full", val ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground/50")}>
+                                       {val || '—'}
+                                     </span>
+                                   </button>
+                                 </DropdownMenuTrigger>
+                                 <DropdownMenuContent align="center" className="min-w-[140px] rounded-xl p-1.5 shadow-2xl border border-border bg-popover/95 backdrop-blur-md">
+                                   <div className="max-h-[180px] overflow-y-auto">
+                                   <DropdownMenuItem
+                                     onClick={() => handleVanChange(field, '')}
+                                     className={cn(
+                                       "text-[10px] font-bold py-2 px-3 rounded-lg cursor-pointer",
+                                       !val ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground"
+                                     )}
+                                   >
+                                     — None —
+                                   </DropdownMenuItem>
+                                   {vehicleNames.map(name => (
+                                     <DropdownMenuItem
+                                       key={name}
+                                       onClick={() => handleVanChange(field, name)}
+                                       className={cn(
+                                         "text-[10px] font-bold py-2 px-3 rounded-lg cursor-pointer flex items-center justify-between",
+                                         val === name ? "bg-primary/10 text-primary" : "hover:bg-accent"
+                                       )}
+                                     >
+                                       {name}
+                                       {val === name && <CheckCircle2 className="w-3 h-3 text-primary" />}
+                                     </DropdownMenuItem>
+                                   ))}
+                                   </div>
+                                 </DropdownMenuContent>
+                               </DropdownMenu>
+                             );
+                           })}
+                        </div>
+                     </div>
                   </div>
 
 
