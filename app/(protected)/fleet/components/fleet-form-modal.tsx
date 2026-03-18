@@ -226,9 +226,9 @@ export default function FleetFormModal() {
       .catch(() => { });
   }, [modalOpen, modalType]);
 
-  // Fetch vehicles for repair form dropdown
+  // Fetch vehicles for repair + rental form dropdowns
   useEffect(() => {
-    if (!modalOpen || modalType !== "repair") return;
+    if (!modalOpen || (modalType !== "repair" && modalType !== "rental")) return;
     fetch("/api/fleet?section=vehicles")
       .then(r => r.json())
       .then(d => {
@@ -513,6 +513,33 @@ export default function FleetFormModal() {
             </>)}
 
             {modalType === "rental" && (<>
+              {/* Vehicle Name — searchable dropdown, auto-fills VIN + Unit # */}
+              <FormField label="Vehicle Name">
+                <SearchableSelect
+                  value={formData.vehicleName || ""}
+                  placeholder="Search vehicle…"
+                  options={vehicles.map((v: any) => ({
+                    value: v.vehicleName || "",
+                    label: v.vehicleName || v.vin || "—",
+                    raw: v,
+                  }))}
+                  onChange={(val, raw) => {
+                    updateForm("vehicleName", val);
+                    if (raw?.vin) updateForm("vin", raw.vin);
+                    if (raw?.unitNumber) updateForm("unitNumber", raw.unitNumber);
+                  }}
+                />
+              </FormField>
+              {/* VIN — read-only, populated from vehicle selection */}
+              <FormField label="VIN #">
+                <input
+                  className={inputClass}
+                  value={formData.vin || ""}
+                  readOnly
+                  placeholder="Auto-filled from vehicle selection"
+                  style={{ opacity: formData.vin ? 1 : 0.5, cursor: "not-allowed" }}
+                />
+              </FormField>
               <div className="grid grid-cols-2 gap-3">
                 <FormField label="Unit Number"><input className={inputClass} value={formData.unitNumber || ""} onChange={e => updateForm("unitNumber", e.target.value)} /></FormField>
                 <FormField label="Agreement #"><input className={inputClass} value={formData.agreementNumber || ""} onChange={e => updateForm("agreementNumber", e.target.value)} /></FormField>

@@ -436,7 +436,24 @@ export async function GET(req: NextRequest) {
 
     if (section === "rentals") {
       const rentals = await VehicleRentalAgreement.find({}).sort({ createdAt: -1 }).lean();
-      return NextResponse.json({ rentals });
+
+      // Enrich with vehicleName by batch-resolving VINs → Vehicle collection
+      let enrichedRentals: any[] = rentals as any[];
+      try {
+        const uniqueVins: string[] = Array.from(
+          new Set((rentals as any[]).map((r: any) => r.vin).filter((v: any) => typeof v === "string" && v.length > 0))
+        );
+        if (uniqueVins.length > 0) {
+          const vinNameMap: Record<string, string> = {};
+          const vehicles = await Vehicle.find({ vin: { $in: uniqueVins } }, { vin: 1, vehicleName: 1 }).lean();
+          (vehicles as any[]).forEach((v: any) => { if (v.vin && v.vehicleName) vinNameMap[v.vin] = v.vehicleName; });
+          enrichedRentals = (rentals as any[]).map((r: any) => ({ ...r, vehicleName: vinNameMap[r.vin] || "" }));
+        }
+      } catch (enrichErr) {
+        console.warn("[Fleet] Rentals vehicleName enrichment failed, returning without:", enrichErr);
+      }
+
+      return NextResponse.json({ rentals: enrichedRentals });
     }
 
     // Dropdowns for inspection form — employees + vehicles

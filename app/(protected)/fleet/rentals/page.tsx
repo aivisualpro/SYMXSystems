@@ -189,6 +189,18 @@ export default function FleetRentalsPage() {
   };
 
   const columns: Column[] = [
+    {
+      key: "vehicleName", label: "Vehicle Name", accessor: (r) => r.vehicleName || "",
+      render: (r) => r.vehicleName
+        ? <span className="font-semibold text-foreground">{r.vehicleName}</span>
+        : <span className="text-muted-foreground/40">—</span>,
+    },
+    {
+      key: "vin", label: "VIN", accessor: (r) => r.vin || "",
+      render: (r) => r.vin
+        ? <span className="font-mono text-[11px] text-muted-foreground tracking-wide">{r.vin}</span>
+        : <span className="text-muted-foreground/40">—</span>,
+    },
     { key: "unitNumber", label: "Unit #", accessor: (r) => r.unitNumber || "", className: "font-medium text-foreground" },
     { key: "agreementNumber", label: "Agreement #", accessor: (r) => r.agreementNumber || "", className: "font-mono text-[11px]" },
     { key: "invoiceNumber", label: "Invoice #", accessor: (r) => r.invoiceNumber || "", className: "font-mono text-[11px]" },
