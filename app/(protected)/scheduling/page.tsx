@@ -1024,6 +1024,40 @@ export default function SchedulingPage() {
     }).length;
   }, 0) || 0;
 
+  // ── Derived KPIs ──
+  const totalCallOuts = useMemo(() => {
+    if (!weekData?.employees) return 0;
+    return weekData.employees.reduce((sum, emp) => {
+      return sum + Object.values(emp.days).filter((d: DayData) =>
+        (d.type || "").trim().toLowerCase() === "call out"
+      ).length;
+    }, 0);
+  }, [weekData]);
+
+  const totalStandBy = useMemo(() => {
+    if (!weekData?.employees) return 0;
+    return weekData.employees.reduce((sum, emp) => {
+      return sum + Object.values(emp.days).filter((d: DayData) =>
+        (d.type || "").trim().toLowerCase() === "stand by"
+      ).length;
+    }, 0);
+  }, [weekData]);
+
+  // Percentage of scheduled slots that are "working" (not off)
+  const activityRate = useMemo(() => {
+    if (!totalScheduleEntries || totalScheduleEntries === 0) return 0;
+    const working = totalScheduleEntries - totalOff;
+    return Math.round((working / totalScheduleEntries) * 100);
+  }, [totalScheduleEntries, totalOff]);
+
+  // How many unique employees have at least one Route day this week
+  const activeRouteEmployees = useMemo(() => {
+    if (!weekData?.employees) return 0;
+    return weekData.employees.filter(emp =>
+      Object.values(emp.days).some((d: DayData) => (d.type || "").trim().toLowerCase() === "route")
+    ).length;
+  }, [weekData]);
+
   if (!mounted) return null;
 
   return (
@@ -1105,57 +1139,97 @@ export default function SchedulingPage() {
 
             {/* ── KPI Cards ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 shrink-0">
-              {[
-                {
-                  label: "Employees",
-                  value: totalEmployees,
-                  icon: Users,
-                  gradient: "from-blue-500/15 to-cyan-500/15",
-                  iconColor: "text-blue-500",
-                  borderColor: "border-blue-500/20",
-                },
 
-                {
-                  label: "Routes",
-                  value: totalRoutes,
-                  icon: TruckIcon,
-                  gradient: "from-violet-500/15 to-purple-500/15",
-                  iconColor: "text-violet-500",
-                  borderColor: "border-violet-500/20",
-                },
-                {
-                  label: "Days Off",
-                  value: totalOff,
-                  icon: XCircle,
-                  gradient: "from-zinc-500/15 to-gray-500/15",
-                  iconColor: "text-zinc-400",
-                  borderColor: "border-zinc-500/20",
-                },
-              ].map((kpi) => (
-                <div
-                  key={kpi.label}
-                  className={`relative overflow-hidden rounded-xl border ${kpi.borderColor} p-3 sm:p-4 bg-gradient-to-br ${kpi.gradient}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{kpi.label}</p>
-                      <p className="text-lg sm:text-2xl font-bold mt-1">{loadingData ? "—" : kpi.value}</p>
+              {/* Employees */}
+              <div className="relative overflow-hidden rounded-xl border border-blue-500/20 p-3 sm:p-4 bg-gradient-to-br from-blue-500/15 to-cyan-500/15">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent rounded-xl" />
+                <div className="relative flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] uppercase tracking-widest text-blue-400/80 font-semibold">Employees</p>
+                    <p className="text-2xl sm:text-3xl font-black mt-0.5 tabular-nums tracking-tight">
+                      {loadingData ? <span className="text-muted-foreground/40">—</span> : totalEmployees}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        {loadingData ? "—" : activeRouteEmployees} on routes
+                      </span>
+                      <span className="text-muted-foreground/30 text-[10px]">·</span>
+                      <span className="inline-flex items-center gap-1 text-[10px] text-cyan-400 font-medium">
+                        {loadingData ? "—" : totalStandBy} stand-by
+                      </span>
                     </div>
-                    <kpi.icon className={`h-6 w-6 sm:h-8 sm:w-8 ${kpi.iconColor} opacity-50`} />
+                  </div>
+                  <div className="p-2 rounded-lg bg-blue-500/15 flex-shrink-0">
+                    <Users className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400" />
                   </div>
                 </div>
-              ))}
-              {/* Warnings Card */}
-              <div className="relative overflow-hidden rounded-xl border border-amber-500/30 p-3 sm:p-4 bg-gradient-to-br from-zinc-500/10 to-zinc-500/5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Warnings</p>
+              </div>
+
+              {/* Routes */}
+              <div className="relative overflow-hidden rounded-xl border border-violet-500/20 p-3 sm:p-4 bg-gradient-to-br from-violet-500/15 to-purple-500/15">
+                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent rounded-xl" />
+                <div className="relative flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] uppercase tracking-widest text-violet-400/80 font-semibold">Routes</p>
+                    <p className="text-2xl sm:text-3xl font-black mt-0.5 tabular-nums tracking-tight">
+                      {loadingData ? <span className="text-muted-foreground/40">—</span> : totalRoutes}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[10px] text-muted-foreground/60 font-medium">
+                        <span className="text-violet-400">{loadingData ? "—" : (totalEmployees > 0 ? Math.round((activeRouteEmployees / totalEmployees) * 100) : 0)}%</span> of team on route
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-violet-500/15 flex-shrink-0">
+                    <TruckIcon className="h-5 w-5 sm:h-6 sm:w-6 text-violet-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Activity Rate — replaces Days Off */}
+              <div className="relative overflow-hidden rounded-xl border border-emerald-500/20 p-3 sm:p-4 bg-gradient-to-br from-emerald-500/15 to-teal-500/10">
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent rounded-xl" />
+                <div className="relative flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] uppercase tracking-widest text-emerald-400/80 font-semibold">Activity Rate</p>
+                    <p className="text-2xl sm:text-3xl font-black mt-0.5 tabular-nums tracking-tight">
+                      {loadingData ? <span className="text-muted-foreground/40">—</span> : <>{activityRate}<span className="text-base font-medium text-muted-foreground">%</span></>}
+                    </p>
+                    {/* Gradient progress bar */}
+                    <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-700"
+                        style={{ width: loadingData ? "0%" : `${activityRate}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/60 mt-1">
+                      <span className="text-yellow-400 font-medium">{loadingData ? "—" : totalCallOuts}</span> call-out{totalCallOuts !== 1 ? "s" : ""} · <span className="text-zinc-400">{loadingData ? "—" : totalOff}</span> off
+                    </p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-emerald-500/15 flex-shrink-0">
+                    <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Warnings */}
+              <div className="relative overflow-hidden rounded-xl border border-amber-500/25 p-3 sm:p-4 bg-gradient-to-br from-amber-500/10 to-orange-500/5">
+                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent rounded-xl" />
+                <div className="relative flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] uppercase tracking-widest text-amber-400/80 font-semibold">Streak Alerts</p>
                     <div className="flex items-center gap-3 mt-1">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <div className="flex items-center gap-1.5 cursor-default">
-                            <span className="h-2.5 w-2.5 rounded-full bg-orange-400 animate-pulse" />
-                            <span className="text-lg font-bold text-orange-400">{loadingData ? "—" : warningCounts.caution}</span>
+                          <div className="flex flex-col items-start cursor-default group/tip">
+                            <span className="text-2xl sm:text-3xl font-black tabular-nums text-orange-400 group-hover/tip:text-orange-300 transition-colors">
+                              {loadingData ? "—" : warningCounts.caution}
+                            </span>
+                            <span className="flex items-center gap-1 text-[10px] text-orange-400/70 font-medium -mt-0.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+                              6-day streak
+                            </span>
                           </div>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-[250px] bg-popover text-popover-foreground border shadow-lg">
@@ -1166,12 +1240,17 @@ export default function SchedulingPage() {
                           }
                         </TooltipContent>
                       </Tooltip>
-                      <span className="text-muted-foreground/30">|</span>
+                      <div className="w-px h-8 bg-border/40" />
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <div className="flex items-center gap-1.5 cursor-default">
-                            <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-                            <span className="text-lg font-bold text-red-500">{loadingData ? "—" : warningCounts.danger}</span>
+                          <div className="flex flex-col items-start cursor-default group/tip">
+                            <span className="text-2xl sm:text-3xl font-black tabular-nums text-red-500 group-hover/tip:text-red-400 transition-colors">
+                              {loadingData ? "—" : warningCounts.danger}
+                            </span>
+                            <span className="flex items-center gap-1 text-[10px] text-red-500/70 font-medium -mt-0.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                              7+ days
+                            </span>
                           </div>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-[250px] bg-popover text-popover-foreground border shadow-lg">
@@ -1184,9 +1263,12 @@ export default function SchedulingPage() {
                       </Tooltip>
                     </div>
                   </div>
-                  <AlertTriangle className="h-8 w-8 text-amber-500 opacity-50" />
+                  <div className="p-2 rounded-lg bg-amber-500/15 flex-shrink-0">
+                    <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400" />
+                  </div>
                 </div>
               </div>
+
             </div>
 
 
