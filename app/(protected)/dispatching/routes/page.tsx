@@ -868,14 +868,14 @@ export default function RoutesPage() {
                         <table className="w-full border-collapse" style={{ minWidth: 1200 }}>
                             {/* Header */}
                             <thead className="sticky top-0 z-10">
-                                <tr className="bg-muted/50 border-b border-border/50">
+                                <tr className="bg-muted border-b border-border/50">
                                     {COLUMNS.map((col) => (
                                         <th
                                             key={col.key}
                                             onClick={() => handleSort(col.key)}
                                             className={cn(
                                                 "text-left px-2 py-2 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap",
-                                                col.sticky && "sticky left-0 z-20 bg-muted/50"
+                                                col.sticky && "sticky left-0 z-20 bg-muted"
                                             )}
                                             style={{ minWidth: col.minW }}
                                         >

@@ -28,6 +28,7 @@ interface ColumnDef {
 
 const COLUMNS: ColumnDef[] = [
     { key: "rowNum", label: "#", width: 40, readOnly: true, type: "index" },
+    { key: "transporterId", label: "Driver", width: 160, type: "dropdown", dropdownKind: "driver" },
     { key: "routeNumber", label: "Route #", width: 90, type: "text" },
     { key: "stopCount", label: "Stops", width: 65, type: "text" },
     { key: "packageCount", label: "Pkgs", width: 65, type: "text" },
@@ -39,7 +40,6 @@ const COLUMNS: ColumnDef[] = [
     { key: "bags", label: "Bags", width: 60, type: "text" },
     { key: "ov", label: "OV", width: 55, type: "text" },
     { key: "stagingLocation", label: "Staging", width: 85, type: "text" },
-    { key: "transporterId", label: "Driver", width: 160, type: "dropdown", dropdownKind: "driver" },
 ];
 
 const EDITABLE_COLUMNS = COLUMNS.filter(c => !c.readOnly);

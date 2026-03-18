@@ -73,37 +73,47 @@ export async function generateRoutesPDF(
 
     // ── Header: SYMX Logistics ──
     const headerY = 30;
-    const logoSize = 22;
+    const logoSize = 20;
+
+    // Measure the title parts to center the whole header (logo + text)
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    const symxWidth = doc.getTextWidth("SYMX ");
+    doc.setFont("helvetica", "bolditalic");
+    const logisticsWidth = doc.getTextWidth("Logistics");
+    const totalTitleW = logoSize + 6 + symxWidth + logisticsWidth;
+    const titleStartX = (pageW - totalTitleW) / 2;
 
     // Add logo image (or fallback circle)
     if (logoDataUrl) {
-        doc.addImage(logoDataUrl, "PNG", pageW / 2 - 90, headerY - 4, logoSize, logoSize);
+        doc.addImage(logoDataUrl, "PNG", titleStartX, headerY - 2, logoSize, logoSize);
     } else {
         doc.setFillColor(41, 121, 255);
-        doc.circle(pageW / 2 - 80, headerY + 6, 8, "F");
+        doc.circle(titleStartX + logoSize / 2, headerY + 8, 8, "F");
     }
 
-    // Title
+    // Title — "SYMX" bold + "Logistics" bold italic
+    const textX = titleStartX + logoSize + 6;
     doc.setTextColor(0, 0, 0);
-    doc.setFontSize(16);
+    doc.setFontSize(18);
     doc.setFont("helvetica", "bold");
-    doc.text("SYMX", pageW / 2 - 64, headerY + 12);
-    doc.setFont("helvetica", "normal");
-    doc.text("Logistics", pageW / 2 - 24, headerY + 12);
+    doc.text("SYMX ", textX, headerY + 14);
+    doc.setFont("helvetica", "bolditalic");
+    doc.text("Logistics", textX + symxWidth, headerY + 14);
 
     // ── Subheader: Date | Clock-in notice ──
-    const subY = headerY + 32;
+    const subY = headerY + 30;
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.5);
-    doc.line(36, subY - 5, pageW - 36, subY - 5);
+    doc.line(36, subY - 3, pageW - 36, subY - 3);
 
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(0, 0, 0);
-    doc.text(dateLabel, 40, subY + 8);
+    doc.text(dateLabel, 40, subY + 10);
 
     doc.setFont("helvetica", "bold");
-    doc.text("Clock in NO earlier than 10:30 AM", pageW / 2, subY + 8, { align: "center" });
+    doc.text("Clock in NO earlier than 10:30 AM", pageW / 2, subY + 10, { align: "center" });
 
     // ── Table ──
     const tableData = routes.map((r, idx) => [
@@ -116,13 +126,13 @@ export async function generateRoutesPDF(
     ]);
 
     autoTable(doc, {
-        startY: subY + 18,
+        startY: subY + 20,
         head: [["NAME", "VAN", "PAD", "WAVE TIME", "STG LOCATION", "#"]],
         body: tableData,
         margin: { left: 36, right: 36 },
         styles: {
-            fontSize: 9,
-            cellPadding: { top: 4, bottom: 4, left: 6, right: 6 },
+            fontSize: 10,
+            cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
             lineColor: [0, 0, 0],
             lineWidth: 0.5,
             textColor: [0, 0, 0],
@@ -132,22 +142,22 @@ export async function generateRoutesPDF(
             fillColor: [255, 255, 255],
             textColor: [0, 0, 0],
             fontStyle: "bold",
-            fontSize: 9,
+            fontSize: 10,
             halign: "left",
         },
         bodyStyles: {
             fillColor: [255, 255, 255],
         },
         alternateRowStyles: {
-            fillColor: [245, 245, 245],
+            fillColor: [230, 230, 230],
         },
         columnStyles: {
             0: { cellWidth: "auto", halign: "left" },   // NAME
             1: { cellWidth: 60, halign: "center" },       // VAN
             2: { cellWidth: 60, halign: "center" },       // PAD
-            3: { cellWidth: 90, halign: "center" },       // WAVE TIME
-            4: { cellWidth: 100, halign: "center" },      // STG LOCATION
-            5: { cellWidth: 30, halign: "center" },        // #
+            3: { cellWidth: 100, halign: "center" },      // WAVE TIME
+            4: { cellWidth: 110, halign: "center" },      // STG LOCATION
+            5: { cellWidth: 30, halign: "center", textColor: [140, 140, 140] },  // # (grey)
         },
         theme: "grid",
     });
