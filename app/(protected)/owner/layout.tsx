@@ -86,6 +86,9 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
 
     // Determine active tab
     const isAppUsersPage = pathname === "/owner/app-users" || pathname === "/owner";
+    const isRolesListPage = pathname === "/owner/roles";
+    // Detail pages (e.g. /owner/roles/[id]) manage their own header — layout should not interfere
+    const isTopLevelPage = isAppUsersPage || isRolesListPage;
     const userCount = users.length;
 
     // Stable ref for search
@@ -99,8 +102,10 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
         if (searchInputRef.current) searchInputRef.current.value = "";
     }, [pathname]);
 
-    // Inject header content
+    // Inject header content — only on top-level list pages, not detail pages
     useEffect(() => {
+        if (!isTopLevelPage) return; // Detail pages manage their own header
+
         if (isAppUsersPage) {
             setLeftContent(
                 <div className="flex items-center gap-2.5">
@@ -143,7 +148,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
             setRightContent(null);
             setLeftContent(null);
         };
-    }, [setRightContent, setLeftContent, isAppUsersPage, userCount, openAddUser, pathname]);
+    }, [setRightContent, setLeftContent, isAppUsersPage, isTopLevelPage, userCount, openAddUser, pathname]);
 
     // Determine active tab from pathname
     const activeTab = (() => {

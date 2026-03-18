@@ -20,28 +20,8 @@ export function SiteHeader() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // Safe consumption of context to avoid crashing if provider is missing
-  let headerCtx: {
-    actions: import("react").ReactNode;
-    leftContent: import("react").ReactNode;
-    rightContent: import("react").ReactNode;
-  } = {
-    actions: null,
-    leftContent: null,
-    rightContent: null,
-  };
-
-  try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const context = useHeaderActions();
-    headerCtx = {
-      actions: context.actions,
-      leftContent: context.leftContent,
-      rightContent: context.rightContent,
-    };
-  } catch (e) {
-    // Provider missing
-  }
+  // useHeaderActions already returns a safe fallback when the provider is missing
+  const headerCtx = useHeaderActions();
 
   const getTitle = (path: string) => {
     if (path === "/dashboard") return "Dashboard";

@@ -184,7 +184,7 @@ function computePlanningData(employees: EmployeeSchedule[]): PlanningRow[] {
       }
       if (typeVal === "stand by") standBy[d]++;
       if (typeVal === "route") routesAssigned[d]++;
-      if (empType === "ops" || empType === "operations") ops[d]++;
+      if ((empType === "ops" || empType === "operations") && ["open", "close", "fleet"].includes(typeVal)) ops[d]++;
       if (typeVal === "open") extraDAs[d]++;
     }
   });
