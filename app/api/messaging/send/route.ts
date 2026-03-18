@@ -67,8 +67,12 @@ export async function POST(req: NextRequest) {
         // ── Generate confirmation link if template uses {confirmationLink} ──
         let confirmationDoc: any = null;
         if (personalizedContent.includes("{confirmationLink}") && recipient.transporterId) {
+          // IMPORTANT: VERCEL_URL is a preview/ephemeral URL — DO NOT use it.
+          // It has Vercel authentication enabled which blocks public access.
+          // Use NEXT_PUBLIC_APP_URL (e.g. https://symx-systems.vercel.app) or
+          // VERCEL_PROJECT_PRODUCTION_URL (auto-set by Vercel on production deployments).
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-            || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+            || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null)
             || req.nextUrl.origin;
           confirmationDoc = await ScheduleConfirmation.create({
             transporterId: recipient.transporterId,
