@@ -184,6 +184,7 @@ const COLUMNS = [
     { key: "ov", label: "OV", minW: 36, sticky: false },
     { key: "serviceType", label: "Service", minW: 64, sticky: false },
     { key: "dashcam", label: "Dashcam", minW: 64, sticky: false },
+    { key: "type", label: "Type", minW: 72, sticky: false },
     { key: "routesCompleted", label: "Routes", minW: 50, sticky: false },
     { key: "routeSize", label: "Rt Size", minW: 56, sticky: false },
     { key: "stopCount", label: "Stops", minW: 46, sticky: false },
@@ -193,18 +194,10 @@ const COLUMNS = [
     { key: "pad", label: "PAD", minW: 42, sticky: false },
     { key: "wstDuration", label: "WST Dur", minW: 52, sticky: false },
     { key: "stagingLocation", label: "Staging", minW: 60, sticky: false },
-    { key: "actualDepartureTime", label: "Act Dep", minW: 56, sticky: false },
     { key: "departureDelay", label: "Dep Delay", minW: 60, sticky: false },
-    { key: "plannedOutboundStem", label: "Plan OB", minW: 54, sticky: false },
-    { key: "actualOutboundStem", label: "Act OB", minW: 54, sticky: false },
     { key: "outboundDelay", label: "OB Delay", minW: 56, sticky: false },
-    { key: "plannedFirstStop", label: "Plan 1st", minW: 56, sticky: false },
-    { key: "actualFirstStop", label: "Act 1st", minW: 54, sticky: false },
     { key: "firstStopDelay", label: "1st Delay", minW: 56, sticky: false },
-    { key: "plannedLastStop", label: "Plan Last", minW: 56, sticky: false },
-    { key: "actualLastStop", label: "Act Last", minW: 54, sticky: false },
     { key: "lastStopDelay", label: "Last Delay", minW: 58, sticky: false },
-    { key: "deliveryCompletionTime", label: "DCT", minW: 50, sticky: false },
     { key: "dctDelay", label: "DCT Delay", minW: 58, sticky: false },
     { key: "plannedRTSTime", label: "Plan RTS", minW: 56, sticky: false },
     { key: "plannedInboundStem", label: "Plan IB", minW: 52, sticky: false },
@@ -1146,6 +1139,57 @@ export default function RoutesPage() {
                                                             )}
                                                         </td>
 
+                                                        {/* Type (inline dropdown) */}
+                                                        <td className="px-2 py-1.5 align-middle" onClick={(e) => e.stopPropagation()}>
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <button className="cursor-pointer hover:bg-muted/50 rounded py-0.5 px-1 -ml-1 transition-colors focus:outline-none flex items-center gap-1 w-full text-left group">
+                                                                        {(() => {
+                                                                            const typeOpt = TYPE_MAP.get((row.type || "").trim().toLowerCase());
+                                                                            const style = getTypeStyle(row.type);
+                                                                            const Icon = typeOpt?.icon;
+                                                                            return (
+                                                                                <span className={cn(
+                                                                                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border",
+                                                                                    style.bg, style.text, style.border
+                                                                                )}>
+                                                                                    {Icon && <Icon className="h-2.5 w-2.5" />}
+                                                                                    {row.type || "—"}
+                                                                                </span>
+                                                                            );
+                                                                        })()}
+                                                                        <ChevronDown className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                                    </button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="start" className="min-w-[170px] max-h-[320px] overflow-y-auto">
+                                                                    <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider sticky top-0 bg-popover z-10 pt-2 pb-1">
+                                                                        Set Type
+                                                                    </DropdownMenuLabel>
+                                                                    <DropdownMenuSeparator />
+                                                                    {TYPE_OPTIONS.map(opt => {
+                                                                        const isActive = (row.type || "").trim().toLowerCase() === opt.label.toLowerCase();
+                                                                        return (
+                                                                            <DropdownMenuItem
+                                                                                key={opt.label}
+                                                                                onClick={() => handleTypeChange(row._id, opt.label, row.transporterId)}
+                                                                                className="gap-2 cursor-pointer"
+                                                                                disabled={isActive}
+                                                                            >
+                                                                                <div className={cn(
+                                                                                    "flex items-center justify-center w-5 h-5 rounded",
+                                                                                    opt.bg, opt.border, "border"
+                                                                                )}>
+                                                                                    <opt.icon className={cn("h-3 w-3", opt.text)} />
+                                                                                </div>
+                                                                                <span className="text-xs font-medium flex-1">{opt.label}</span>
+                                                                                {isActive && <Check className="h-3 w-3 ml-auto text-primary" />}
+                                                                            </DropdownMenuItem>
+                                                                        );
+                                                                    })}
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </td>
+
                                                         {/* 10. Routes Completed */}
                                                         <td className="px-2 py-1.5">
                                                             <Tooltip>
@@ -1209,10 +1253,7 @@ export default function RoutesPage() {
                                                         {/* 18. Staging */}
                                                         <td className="px-2 py-1.5">{renderCell(row, "stagingLocation", row.stagingLocation)}</td>
 
-                                                        {/* Act Departure */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "actualDepartureTime", row.actualDepartureTime)}</td>
-
-                                                        {/* Departure Delay */}
+                                                        {/* Departure Delay (computed) */}
                                                         <td className="px-2 py-1.5">
                                                             {row.departureDelay ? (
                                                                 <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.departureDelay) ? "text-red-400" : "text-emerald-500")}>
@@ -1221,11 +1262,7 @@ export default function RoutesPage() {
                                                             ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
                                                         </td>
 
-                                                        {/* Plan OB, Act OB */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "plannedOutboundStem", row.plannedOutboundStem)}</td>
-                                                        <td className="px-2 py-1.5">{renderCell(row, "actualOutboundStem", row.actualOutboundStem)}</td>
-
-                                                        {/* OB Delay */}
+                                                        {/* OB Delay (computed) */}
                                                         <td className="px-2 py-1.5">
                                                             {row.outboundDelay ? (
                                                                 <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.outboundDelay) ? "text-red-400" : "text-emerald-500")}>
@@ -1234,11 +1271,7 @@ export default function RoutesPage() {
                                                             ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
                                                         </td>
 
-                                                        {/* Plan 1st, Act 1st */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "plannedFirstStop", row.plannedFirstStop)}</td>
-                                                        <td className="px-2 py-1.5">{renderCell(row, "actualFirstStop", row.actualFirstStop)}</td>
-
-                                                        {/* 1st Stop Delay */}
+                                                        {/* 1st Stop Delay (computed) */}
                                                         <td className="px-2 py-1.5">
                                                             {row.firstStopDelay ? (
                                                                 <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.firstStopDelay) ? "text-red-400" : "text-emerald-500")}>
@@ -1247,11 +1280,7 @@ export default function RoutesPage() {
                                                             ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
                                                         </td>
 
-                                                        {/* Plan Last, Act Last */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "plannedLastStop", row.plannedLastStop)}</td>
-                                                        <td className="px-2 py-1.5">{renderCell(row, "actualLastStop", row.actualLastStop)}</td>
-
-                                                        {/* Last Stop Delay */}
+                                                        {/* Last Stop Delay (computed) */}
                                                         <td className="px-2 py-1.5">
                                                             {row.lastStopDelay ? (
                                                                 <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.lastStopDelay) ? "text-red-400" : "text-emerald-500")}>
@@ -1260,10 +1289,7 @@ export default function RoutesPage() {
                                                             ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
                                                         </td>
 
-                                                        {/* DCT */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "deliveryCompletionTime", row.deliveryCompletionTime)}</td>
-
-                                                        {/* DCT Delay */}
+                                                        {/* DCT Delay (computed) */}
                                                         <td className="px-2 py-1.5">
                                                             {row.dctDelay ? (
                                                                 <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.dctDelay) ? "text-red-400" : "text-emerald-500")}>
