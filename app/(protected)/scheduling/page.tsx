@@ -185,9 +185,13 @@ function computePlanningData(employees: EmployeeSchedule[]): PlanningRow[] {
       if (typeVal === "stand by") standBy[d]++;
       if (typeVal === "route") routesAssigned[d]++;
       if ((empType === "ops" || empType === "operations") && ["open", "close", "fleet"].includes(typeVal)) ops[d]++;
-      if (typeVal === "open") extraDAs[d]++;
     }
   });
+
+  // Extra DA's = DA's - Routes Assigned
+  for (let d = 0; d < 7; d++) {
+    extraDAs[d] = daStats[d] - routesAssigned[d];
+  }
 
   const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
 
