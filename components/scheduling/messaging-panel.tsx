@@ -27,6 +27,13 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Megaphone,
+  Paperclip,
+  Upload,
+  FileText,
+  Image as ImageIcon,
+  Trash2,
+  FileSpreadsheet,
+  File as FileIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -640,6 +647,74 @@ function MessagingSubTab({
   const [saving, setSaving] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Attachment State (Flyer tab only) ──
+  interface Attachment {
+    name: string;
+    url: string;
+    type: string;
+    size: number;
+    publicId: string;
+  }
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = useCallback(async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
+    if (attachments.length + fileArray.length > 5) {
+      toast.error("Maximum 5 attachments allowed");
+      return;
+    }
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      const formData = new FormData();
+      fileArray.forEach((f) => formData.append("files", f));
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress((p) => Math.min(p + 15, 90));
+      }, 200);
+      const res = await fetch("/api/messaging/upload", {
+        method: "POST",
+        body: formData,
+      });
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Upload failed");
+      }
+      const data = await res.json();
+      setAttachments((prev) => [...prev, ...data.files]);
+      toast.success(`${data.files.length} file(s) uploaded`);
+    } catch (err: any) {
+      toast.error(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  }, [attachments.length]);
+
+  const removeAttachment = (idx: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const getFileIcon = (type: string) => {
+    if (type.startsWith("image/")) return ImageIcon;
+    if (type === "application/pdf") return FileText;
+    if (type.includes("spreadsheet") || type.includes("excel")) return FileSpreadsheet;
+    return FileIcon;
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   // Route Types received from parent (fetched ONCE, shared across all tabs)
 
   // ── Live Status Polling ─────────────────────────────────────────────────
@@ -941,10 +1016,19 @@ function MessagingSubTab({
         targetScheduleDate = relevantSchedule?.date || undefined;
       }
 
+      // Build personalized message and append attachment links for flyer
+      let finalMessage = personalizeMessage(message.trim(), emp, tab.id, selectedWeek);
+      if (tab.id === "flyer" && attachments.length > 0) {
+        finalMessage += "\n\n📎 Attachments:";
+        attachments.forEach((att) => {
+          finalMessage += `\n${att.name}: ${att.url}`;
+        });
+      }
+
       return {
         phone: emp.phoneNumber.startsWith("+") ? emp.phoneNumber : `+1${emp.phoneNumber.replace(/\D/g, "")}`,
         name: emp.name,
-        message: personalizeMessage(message.trim(), emp, tab.id, selectedWeek),
+        message: finalMessage,
         transporterId: emp.transporterId,
         scheduleDate: targetScheduleDate,
         yearWeek: selectedWeek || undefined,
@@ -1333,6 +1417,30 @@ function MessagingSubTab({
                         <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">
                           {personalizeMessage(message, emp, tab.id, selectedWeek)}
                         </pre>
+                        {/* Preview attachments if any */}
+                        {tab.id === "flyer" && attachments.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-border/20">
+                            <span className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1">
+                              <Paperclip className="h-3 w-3" /> {attachments.length} Attachment{attachments.length > 1 ? "s" : ""}
+                            </span>
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              {attachments.map((att, ai) => {
+                                const Icon = getFileIcon(att.type);
+                                const isImage = att.type.startsWith("image/");
+                                return (
+                                  <div key={ai} className="flex items-center gap-1.5 rounded-md bg-muted/30 border border-border/30 px-2 py-1">
+                                    {isImage ? (
+                                      <img src={att.url} alt={att.name} className="h-5 w-5 rounded object-cover" />
+                                    ) : (
+                                      <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                                    )}
+                                    <span className="text-[9px] font-medium truncate max-w-[100px]">{att.name}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {remaining > 0 && (
@@ -1431,6 +1539,154 @@ function MessagingSubTab({
                     </span>
                   </div>
                 </div>
+
+                {/* ── Flyer Attachments Section ── */}
+                {tab.id === "flyer" && (
+                  <div className="mt-2 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                        Attachments
+                      </span>
+                      {attachments.length > 0 && (
+                        <Badge variant="secondary" className="text-[9px] h-4 px-1.5">
+                          {attachments.length}/5
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Drop Zone */}
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOver(false);
+                        if (e.dataTransfer.files.length > 0) {
+                          handleFileUpload(e.dataTransfer.files);
+                        }
+                      }}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={cn(
+                        "relative rounded-lg border-2 border-dashed p-4 cursor-pointer transition-all duration-300 group",
+                        dragOver
+                          ? "border-primary bg-primary/5 scale-[1.01]"
+                          : "border-border/50 hover:border-primary/40 hover:bg-muted/20",
+                        uploading && "pointer-events-none opacity-70"
+                      )}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files) handleFileUpload(e.target.files);
+                          e.target.value = "";
+                        }}
+                      />
+
+                      {uploading ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="relative h-10 w-10">
+                            <svg className="h-10 w-10 animate-spin" viewBox="0 0 36 36" style={{ animationDuration: "2s" }}>
+                              <circle cx="18" cy="18" r="14" fill="none" stroke="hsl(var(--primary))" strokeWidth="3" strokeOpacity="0.15" />
+                              <circle
+                                cx="18" cy="18" r="14" fill="none"
+                                stroke="hsl(var(--primary))" strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeDasharray={`${uploadProgress * 0.88} 88`}
+                                className="transition-all duration-300"
+                              />
+                            </svg>
+                            <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-primary">
+                              {uploadProgress}%
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-primary font-medium animate-pulse">
+                            Uploading...
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1.5">
+                          <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                            <Upload className="h-4 w-4 text-primary" />
+                          </div>
+                          <p className="text-[11px] text-muted-foreground text-center">
+                            <span className="font-semibold text-foreground">Click to browse</span>{" "}
+                            or drag & drop files here
+                          </p>
+                          <p className="text-[9px] text-muted-foreground/60">
+                            Images, PDFs, Documents • Max 10MB per file • Up to 5 files
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Uploaded Files Gallery */}
+                    {attachments.length > 0 && (
+                      <div className="space-y-1.5">
+                        {attachments.map((att, idx) => {
+                          const Icon = getFileIcon(att.type);
+                          const isImage = att.type.startsWith("image/");
+                          return (
+                            <div
+                              key={`${att.publicId}-${idx}`}
+                              className="group/file flex items-center gap-2.5 rounded-lg border border-border/40 bg-muted/20 px-3 py-2 hover:bg-muted/40 hover:border-border/60 transition-all duration-200"
+                            >
+                              {/* Thumbnail / Icon */}
+                              {isImage ? (
+                                <div className="h-10 w-10 rounded-md overflow-hidden border border-border/30 shrink-0 bg-muted">
+                                  <img
+                                    src={att.url}
+                                    alt={att.name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                </div>
+                              ) : (
+                                <div className={cn(
+                                  "h-10 w-10 rounded-md flex items-center justify-center shrink-0 border border-border/30",
+                                  att.type === "application/pdf" ? "bg-red-500/10" : "bg-blue-500/10"
+                                )}>
+                                  <Icon className={cn(
+                                    "h-5 w-5",
+                                    att.type === "application/pdf" ? "text-red-500" : "text-blue-500"
+                                  )} />
+                                </div>
+                              )}
+
+                              {/* File Info */}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[11px] font-semibold truncate">{att.name}</p>
+                                <p className="text-[9px] text-muted-foreground">
+                                  {formatFileSize(att.size)} • {att.type.split("/").pop()?.toUpperCase()}
+                                </p>
+                              </div>
+
+                              {/* Actions */}
+                              <a
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[9px] font-medium text-primary hover:underline shrink-0"
+                              >
+                                View
+                              </a>
+                              <button
+                                onClick={() => removeAttachment(idx)}
+                                className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0 opacity-0 group-hover/file:opacity-100"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -1469,6 +1725,9 @@ function MessagingSubTab({
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
                     Messages will be sent via Quo SMS
+                    {tab.id === "flyer" && attachments.length > 0 && (
+                      <span className="text-primary font-medium"> • {attachments.length} attachment{attachments.length > 1 ? "s" : ""}</span>
+                    )}
                   </p>
                 </div>
                 <Button
