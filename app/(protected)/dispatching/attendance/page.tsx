@@ -596,16 +596,20 @@ export default function AttendancePage() {
                         </span>
                     </div>
 
-                    {/* Table Header */}
-                    <div className="shrink-0 overflow-x-auto">
-                        <div className="grid items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/10 min-w-[800px]"
+                    {/* Table Header + Rows */}
+                    <div className="flex-1 overflow-auto">
+                        <div style={{ minWidth: 800 }}>
+                        <div className="grid items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted sticky top-0 z-20"
                             style={{ gridTemplateColumns: GRID_TEMPLATE }}
                         >
-                            {COLUMNS.map((col) => (
+                            {COLUMNS.map((col, i) => (
                                 <button
                                     key={col.key}
                                     onClick={() => handleSort(col.key)}
-                                    className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold hover:text-foreground transition-colors text-left"
+                                    className={cn(
+                                        "flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold hover:text-foreground transition-colors text-left",
+                                        i === 0 && "sticky left-0 z-20 bg-muted"
+                                    )}
                                 >
                                     {col.label}
                                     {sortKey === col.key && (
@@ -614,19 +618,17 @@ export default function AttendancePage() {
                                 </button>
                             ))}
                         </div>
-                    </div>
 
                     {/* Table Rows */}
-                    <div className="flex-1 overflow-x-auto">
-                        <div className="min-w-[800px]">
+                    <div>
                             {doneRows.map((row) => (
                                 <div
                                     key={row._id}
-                                    className="grid items-center gap-2 px-3 py-1.5 border-b border-border/20 hover:bg-muted/30 transition-colors"
+                                    className="grid items-center gap-2 px-3 py-1.5 border-b border-border/20 hover:bg-muted/30 transition-colors group/row"
                                     style={{ gridTemplateColumns: GRID_TEMPLATE }}
                                 >
-                                    {/* Employee */}
-                                    <div className="flex items-center gap-2 min-w-0">
+                                    {/* Employee (sticky) */}
+                                    <div className="flex items-center gap-2 min-w-0 sticky left-0 z-10 bg-card group-hover/row:bg-muted/30 transition-colors">
                                         {row.profileImage ? (
                                             <img src={row.profileImage} alt={row.employeeName} className="w-5 h-5 rounded-full object-cover shrink-0 ring-1 ring-border" />
                                         ) : (
@@ -680,6 +682,7 @@ export default function AttendancePage() {
                                     No completed attendance yet
                                 </div>
                             )}
+                        </div>
                         </div>
                     </div>
                 </div>

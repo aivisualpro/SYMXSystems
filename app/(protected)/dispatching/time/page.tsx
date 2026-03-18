@@ -756,12 +756,18 @@ export default function TimePage() {
         <TooltipProvider delayDuration={200}>
             <div className="flex flex-col h-full">
                 <div className="flex-1 min-h-0 rounded-xl border border-border/50 bg-card overflow-hidden flex flex-col">
+                    {/* Scrollable wrapper */}
+                    <div className="flex-1 overflow-auto">
+                        <div style={{ minWidth: 1200 }}>
                     {/* Header */}
-                    <div className="grid items-center gap-2 px-3 py-2.5 border-b border-border/50 bg-muted/30"
+                    <div className="grid items-center gap-2 px-3 py-2.5 border-b border-border/50 bg-muted sticky top-0 z-20"
                         style={{ gridTemplateColumns: GRID_TEMPLATE }}>
-                        {COLUMNS.map((col) => (
+                        {COLUMNS.map((col, i) => (
                             <button key={col.key} onClick={() => handleSort(col.key)}
-                                className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold hover:text-foreground transition-colors text-left">
+                                className={cn(
+                                    "flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold hover:text-foreground transition-colors text-left",
+                                    i === 0 && "sticky left-0 z-20 bg-muted"
+                                )}>
                                 {col.label}
                                 {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                             </button>
@@ -769,12 +775,12 @@ export default function TimePage() {
                     </div>
 
                     {/* Rows */}
-                    <div className="flex-1 overflow-auto">
+                    <div>
                         {displayRows.map((row) => (
-                            <div key={row._id} className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors"
+                            <div key={row._id} className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors group/row"
                                 style={{ gridTemplateColumns: GRID_TEMPLATE }}>
-                                {/* Employee */}
-                                <div className="flex items-center gap-2 min-w-0 pr-2">
+                                {/* Employee (sticky) */}
+                                <div className="flex items-center gap-2 min-w-0 pr-2 sticky left-0 z-10 bg-card group-hover/row:bg-muted/20 transition-colors">
                                     {row.profileImage ? (
                                         <img src={row.profileImage} alt={row.employeeName} className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-border" />
                                     ) : (
@@ -843,6 +849,8 @@ export default function TimePage() {
                                 No employees found for this date
                             </div>
                         )}
+                    </div>
+                    </div>
                     </div>
 
                     {/* Footer */}
