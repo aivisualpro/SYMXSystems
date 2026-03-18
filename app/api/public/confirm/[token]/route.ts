@@ -33,33 +33,70 @@ export async function GET(
         if (isWeekSchedule && confirmation.transporterId) {
             let schedules: any[] = [];
 
-            // Strategy 1: Find by yearWeek
+            // ── Strategy 1: Find by yearWeek (exact match + alternate formats) ──
             if (confirmation.yearWeek) {
                 schedules = await SymxEmployeeSchedule.find({
                     transporterId: confirmation.transporterId,
                     yearWeek: confirmation.yearWeek,
                 }).sort({ date: 1 }).lean();
-                console.log(`[Confirm] Strategy 1 (yearWeek=${confirmation.yearWeek}): found ${schedules.length} schedules`);
+                console.log(`[Confirm] Strategy 1a (yearWeek=${confirmation.yearWeek}): found ${schedules.length} schedules`);
+
+                // Try alternate format: "2026-W11" vs "2026-W1" (zero-pad vs no-pad)
+                if (schedules.length === 0) {
+                    const altWeek = confirmation.yearWeek.replace(/-W0?(\d+)$/, (_: string, n: string) =>
+                        `-W${n.padStart(2, "0")}`
+                    );
+                    const altWeek2 = confirmation.yearWeek.replace(/-W0?(\d+)$/, (_: string, n: string) =>
+                        `-W${parseInt(n)}`
+                    );
+                    const alts = Array.from(new Set([altWeek, altWeek2, confirmation.yearWeek]));
+                    schedules = await SymxEmployeeSchedule.find({
+                        transporterId: confirmation.transporterId,
+                        yearWeek: { $in: alts },
+                    }).sort({ date: 1 }).lean();
+                    console.log(`[Confirm] Strategy 1b (yearWeek alts ${alts.join(", ")}): found ${schedules.length} schedules`);
+                }
             }
 
-            // Strategy 2: If yearWeek didn't match, find by scheduleDate's week range
-            if (schedules.length === 0 && confirmation.scheduleDate) {
-                const baseDate = new Date(confirmation.scheduleDate);
-                // Get the Sunday of that week
-                const dayOfWeek = baseDate.getUTCDay();
-                const sunday = new Date(baseDate);
-                sunday.setUTCDate(baseDate.getUTCDate() - dayOfWeek);
-                sunday.setUTCHours(0, 0, 0, 0);
-                const saturday = new Date(sunday);
-                saturday.setUTCDate(sunday.getUTCDate() + 7);
-                schedules = await SymxEmployeeSchedule.find({
-                    transporterId: confirmation.transporterId,
-                    date: { $gte: sunday, $lt: saturday },
-                }).sort({ date: 1 }).lean();
-                console.log(`[Confirm] Strategy 2 (date range ${sunday.toISOString()} - ${saturday.toISOString()}): found ${schedules.length} schedules`);
+            // ── Strategy 2: Derive date range from yearWeek or scheduleDate ──
+            if (schedules.length === 0) {
+                let baseDate: Date | null = null;
+
+                if (confirmation.scheduleDate) {
+                    baseDate = new Date(confirmation.scheduleDate);
+                } else if (confirmation.yearWeek) {
+                    // Derive a representative date (Sunday) from yearWeek string
+                    const wm = confirmation.yearWeek.match(/(\d{4})-W?(\d{1,2})/);
+                    if (wm) {
+                        const yr = parseInt(wm[1]);
+                        const wk = parseInt(wm[2]);
+                        const jan1 = new Date(Date.UTC(yr, 0, 1));
+                        const jan1Day = jan1.getUTCDay(); // 0=Sun
+                        const firstSunday = new Date(jan1);
+                        firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
+                        const weekStart = new Date(firstSunday);
+                        weekStart.setUTCDate(firstSunday.getUTCDate() + (wk - 1) * 7);
+                        weekStart.setUTCHours(0, 0, 0, 0);
+                        baseDate = weekStart;
+                    }
+                }
+
+                if (baseDate) {
+                    const dayOfWeek = baseDate.getUTCDay();
+                    const sunday = new Date(baseDate);
+                    sunday.setUTCDate(baseDate.getUTCDate() - dayOfWeek);
+                    sunday.setUTCHours(0, 0, 0, 0);
+                    const nextSunday = new Date(sunday);
+                    nextSunday.setUTCDate(sunday.getUTCDate() + 7);
+                    schedules = await SymxEmployeeSchedule.find({
+                        transporterId: confirmation.transporterId,
+                        date: { $gte: sunday, $lt: nextSunday },
+                    }).sort({ date: 1 }).lean();
+                    console.log(`[Confirm] Strategy 2 (date range ${sunday.toISOString()} - ${nextSunday.toISOString()}): found ${schedules.length} schedules`);
+                }
             }
 
-            // Strategy 3: If still nothing, get most recent 7 schedules for this employee
+            // ── Strategy 3: Safe fallback → most recent 7 schedules ──
             if (schedules.length === 0) {
                 schedules = await SymxEmployeeSchedule.find({
                     transporterId: confirmation.transporterId,
