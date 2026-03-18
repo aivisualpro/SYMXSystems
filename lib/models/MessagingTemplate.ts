@@ -13,15 +13,17 @@ const MessagingTemplateSchema = new Schema<IMessagingTemplate>(
       type: String,
       required: true,
       unique: true,
-      enum: ["future-shift", "shift", "off-tomorrow", "week-schedule", "route-itinerary"],
+      enum: ["future-shift", "shift", "off-tomorrow", "week-schedule", "route-itinerary", "flyer"],
     },
     template: {
       type: String,
-      required: true,
+      default: "",
     },
   },
   { timestamps: true }
 );
+
+delete mongoose.models.MessagingTemplate;
 
 export default mongoose.models.MessagingTemplate ||
   mongoose.model<IMessagingTemplate>("MessagingTemplate", MessagingTemplateSchema);

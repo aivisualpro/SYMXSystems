@@ -247,6 +247,9 @@ export async function GET(req: NextRequest) {
           (s: any) => s.type && s.type.toLowerCase().trim() === "route"
         )
       );
+    } else if (filter === "flyer") {
+      // All active employees — no schedule filter, broadcast to everyone
+      filtered = enrichedEmployees;
     }
 
     return NextResponse.json({

@@ -38,12 +38,21 @@ export async function GET(req: NextRequest) {
 
 // PUT — upsert a template for a given type
 export async function PUT(req: NextRequest) {
+  return _upsertTemplate(req);
+}
+
+// POST — alias for PUT (needed for navigator.sendBeacon which only sends POST)
+export async function POST(req: NextRequest) {
+  return _upsertTemplate(req);
+}
+
+async function _upsertTemplate(req: NextRequest) {
   try {
     await connectToDatabase();
     const body = await req.json();
     const { type, template } = body;
 
-    if (!type || !template) {
+    if (!type || template === undefined || template === null) {
       return NextResponse.json(
         { error: "type and template are required" },
         { status: 400 }
@@ -58,6 +67,7 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ template: result });
   } catch (err: any) {
+    console.error("TEMPLATE SAVE ERROR:", err);
     return NextResponse.json(
       { error: err.message || "Failed to save template" },
       { status: 500 }

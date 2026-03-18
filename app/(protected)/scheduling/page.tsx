@@ -1204,7 +1204,7 @@ export default function SchedulingPage() {
                       />
                     </div>
                     <p className="text-[10px] text-muted-foreground/60 mt-1">
-                      <span className="text-yellow-400 font-medium">{loadingData ? "—" : totalCallOuts}</span> call-out{totalCallOuts !== 1 ? "s" : ""} · <span className="text-zinc-400">{loadingData ? "—" : totalOff}</span> off
+                      <span className="text-yellow-400 font-medium">{loadingData ? "—" : totalCallOuts}</span> call-out{totalCallOuts !== 1 ? "s" : ""}
                     </p>
                   </div>
                   <div className="p-2 rounded-lg bg-emerald-500/15 flex-shrink-0">

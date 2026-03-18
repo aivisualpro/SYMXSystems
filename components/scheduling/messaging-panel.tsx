@@ -26,6 +26,7 @@ import {
   Clock,
   ArrowUpRight,
   ArrowDownLeft,
+  Megaphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -314,6 +315,17 @@ const SUB_TABS: SubTab[] = [
     defaultMessage:
       "Hello {name}\n\n{dayOfWeek} {date}\n\nYour route itinerary has been updated. Please review your assigned route for today. Thank you!",
     variables: ["name", "dayOfWeek", "date", "confirmationLink"],
+  },
+  {
+    id: "flyer",
+    label: "Flyer",
+    icon: Megaphone,
+    description: "Send a custom broadcast message to all active employees",
+    gradient: "from-orange-500/15 to-amber-500/15",
+    iconColor: "text-orange-500",
+    borderColor: "border-orange-500/30",
+    defaultMessage: "",
+    variables: ["name"],
   },
 ];
 
@@ -744,38 +756,84 @@ function MessagingSubTab({
   useEffect(() => () => stopPolling(), [stopPolling]);
 
   // Sync template from parent prefetch when it arrives
+  const initialTemplateRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (templatesLoaded && prefetchedTemplate && !templateLoaded) {
+    if (templatesLoaded && prefetchedTemplate !== undefined && !templateLoaded) {
+      initialTemplateRef.current = prefetchedTemplate;
       setMessage(prefetchedTemplate);
       setTemplateLoaded(true);
     }
   }, [templatesLoaded, prefetchedTemplate, templateLoaded]);
 
   // Auto-save template to DB with debounce
+  const messageRef = useRef(message);
+  messageRef.current = message;
+  const lastSavedRef = useRef<string | null>(null);
+
+  const saveTemplate = useCallback(async (content: string) => {
+    if (lastSavedRef.current === content) return; // skip if unchanged
+    try {
+      setSaving(true);
+      const res = await fetch("/api/messaging/templates", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: tab.id, template: content }),
+      });
+      if (res.ok) lastSavedRef.current = content;
+    } catch {
+      // silently fail
+    } finally {
+      setSaving(false);
+    }
+  }, [tab.id]);
+
   useEffect(() => {
     if (!templateLoaded) return;
+    // Don't auto-save the initial empty load — only save when user actually changes something
+    if (message === initialTemplateRef.current && lastSavedRef.current === null) {
+      lastSavedRef.current = message; // mark initial value as "saved"
+      return;
+    }
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
-    saveTimeoutRef.current = setTimeout(async () => {
-      try {
-        setSaving(true);
-        await fetch("/api/messaging/templates", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: tab.id, template: message }),
-        });
-      } catch {
-        // silently fail
-      } finally {
-        setSaving(false);
-      }
-    }, 1500);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveTemplate(message);
+    }, 800);
 
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [message, tab.id, templateLoaded]);
+  }, [message, tab.id, templateLoaded, saveTemplate]);
+
+  // Save on unmount if there are unsaved changes
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      const current = messageRef.current;
+      if (lastSavedRef.current !== current && current !== undefined) {
+        // Fire-and-forget save using sendBeacon for reliability on unmount
+        try {
+          navigator.sendBeacon(
+            "/api/messaging/templates",
+            new Blob(
+              [JSON.stringify({ type: tab.id, template: current })],
+              { type: "application/json" }
+            )
+          );
+        } catch {
+          // fallback: fire-and-forget fetch
+          fetch("/api/messaging/templates", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: tab.id, template: current }),
+            keepalive: true,
+          }).catch(() => {});
+        }
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab.id]);
 
   // Refresh callback for manual refresh button
   const fetchEmployees = useCallback(async () => {
