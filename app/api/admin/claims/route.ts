@@ -47,6 +47,10 @@ export async function GET(req: NextRequest) {
             injuryCount: { $sum: { $cond: [{ $eq: ["$claimType", "Injury"] }, 1, 0] } },
             autoCount: { $sum: { $cond: [{ $eq: ["$claimType", "Auto"] }, 1, 0] } },
             propertyDamageCount: { $sum: { $cond: [{ $eq: ["$claimType", "Property Damage"] }, 1, 0] } },
+            // Open-only type counts for dashboard
+            openInjuryCount: { $sum: { $cond: [{ $and: [{ $eq: ["$claimType", "Injury"] }, { $ne: ["$claimStatus", "Close"] }] }, 1, 0] } },
+            openAutoCount: { $sum: { $cond: [{ $and: [{ $eq: ["$claimType", "Auto"] }, { $ne: ["$claimStatus", "Close"] }] }, 1, 0] } },
+            openPropertyDamageCount: { $sum: { $cond: [{ $and: [{ $eq: ["$claimType", "Property Damage"] }, { $ne: ["$claimStatus", "Close"] }] }, 1, 0] } },
           },
         },
       ]),
@@ -68,6 +72,7 @@ export async function GET(req: NextRequest) {
     const kpi = kpiAgg[0] || {
       totalRecords: 0, totalPaid: 0, totalReserved: 0,
       openCount: 0, closedCount: 0, injuryCount: 0, autoCount: 0, propertyDamageCount: 0,
+      openInjuryCount: 0, openAutoCount: 0, openPropertyDamageCount: 0,
     };
 
     return NextResponse.json({

@@ -322,6 +322,27 @@ export default function IncidentsPage() {
 
   if (loading && data.length === 0) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
 
+  // Pie chart data
+  const pieData = [
+    { label: "Injury", count: kpis.injuryCount, color: "#f43f5e" },
+    { label: "Auto", count: kpis.autoCount, color: "#3b82f6" },
+    { label: "Property Damage", count: kpis.propertyDamageCount, color: "#f59e0b" },
+  ];
+  const pieTotal = pieData.reduce((s, d) => s + d.count, 0);
+  let cumulative = 0;
+  const pieSegments = pieData.filter(d => d.count > 0).map(d => {
+    const start = cumulative;
+    cumulative += d.count;
+    return { ...d, start, end: cumulative };
+  });
+  const PIE_R = 32, PIE_CX = 40, PIE_CY = 40;
+  const toArc = (startFrac: number, endFrac: number) => {
+    const s = startFrac * 2 * Math.PI - Math.PI / 2;
+    const e = endFrac * 2 * Math.PI - Math.PI / 2;
+    const largeArc = endFrac - startFrac > 0.5 ? 1 : 0;
+    return `M ${PIE_CX + PIE_R * Math.cos(s)} ${PIE_CY + PIE_R * Math.sin(s)} A ${PIE_R} ${PIE_R} 0 ${largeArc} 1 ${PIE_CX + PIE_R * Math.cos(e)} ${PIE_CY + PIE_R * Math.sin(e)} L ${PIE_CX} ${PIE_CY} Z`;
+  };
+
   return (
     <div className="flex flex-col gap-4 h-full">
       {/* KPIs */}
@@ -341,56 +362,31 @@ export default function IncidentsPage() {
           <p className="text-2xl font-bold tabular-nums text-amber-600">{fmtCurrency(kpis.totalReserved)}</p>
           <p className="text-xs text-muted-foreground">pending reserves</p>
         </div>
-        {(() => {
-          const pieData = [
-            { label: "Injury", count: kpis.injuryCount, color: "#f43f5e" },
-            { label: "Auto", count: kpis.autoCount, color: "#3b82f6" },
-            { label: "Property Damage", count: kpis.propertyDamageCount, color: "#f59e0b" },
-          ];
-          const total = pieData.reduce((s, d) => s + d.count, 0);
-          let cumulative = 0;
-          const segments = pieData.filter(d => d.count > 0).map(d => {
-            const start = cumulative;
-            cumulative += d.count;
-            return { ...d, start, end: cumulative };
-          });
-          const r = 32;
-          const cx = 40;
-          const cy = 40;
-          const toArc = (startFrac: number, endFrac: number) => {
-            const s = startFrac * 2 * Math.PI - Math.PI / 2;
-            const e = endFrac * 2 * Math.PI - Math.PI / 2;
-            const largeArc = endFrac - startFrac > 0.5 ? 1 : 0;
-            return `M ${cx + r * Math.cos(s)} ${cy + r * Math.sin(s)} A ${r} ${r} 0 ${largeArc} 1 ${cx + r * Math.cos(e)} ${cy + r * Math.sin(e)} L ${cx} ${cy} Z`;
-          };
-          return (
-            <div className="rounded-xl border bg-card p-4 space-y-2">
-              <div className="flex items-center gap-2 text-blue-500"><CheckCircle2 className="h-4 w-4" /><span className="text-xs font-medium">By Type</span></div>
-              <div className="flex items-center gap-4">
-                <svg viewBox="0 0 80 80" className="w-16 h-16 shrink-0">
-                  {total === 0 ? (
-                    <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth="2" className="text-muted-foreground/20" />
-                  ) : segments.length === 1 ? (
-                    <circle cx={cx} cy={cy} r={r} fill={segments[0].color} />
-                  ) : (
-                    segments.map((seg, i) => (
-                      <path key={i} d={toArc(seg.start / total, seg.end / total)} fill={seg.color} />
-                    ))
-                  )}
-                </svg>
-                <div className="flex flex-col gap-1 min-w-0">
-                  {pieData.map(d => (
-                    <div key={d.label} className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                      <span className="text-[11px] text-muted-foreground truncate">{d.label}</span>
-                      <span className="text-[11px] font-bold ml-auto tabular-nums">{d.count}</span>
-                    </div>
-                  ))}
+        <div className="rounded-xl border bg-card p-4 space-y-2">
+          <div className="flex items-center gap-2 text-blue-500"><CheckCircle2 className="h-4 w-4" /><span className="text-xs font-medium">By Type</span></div>
+          <div className="flex items-center gap-4">
+            <svg viewBox="0 0 80 80" className="w-16 h-16 shrink-0">
+              {pieTotal === 0 ? (
+                <circle cx={PIE_CX} cy={PIE_CY} r={PIE_R} fill="none" stroke="currentColor" strokeWidth="2" className="text-muted-foreground/20" />
+              ) : pieSegments.length === 1 ? (
+                <circle cx={PIE_CX} cy={PIE_CY} r={PIE_R} fill={pieSegments[0].color} />
+              ) : (
+                pieSegments.map((seg, i) => (
+                  <path key={i} d={toArc(seg.start / pieTotal, seg.end / pieTotal)} fill={seg.color} />
+                ))
+              )}
+            </svg>
+            <div className="flex flex-col gap-1 min-w-0">
+              {pieData.map(d => (
+                <div key={d.label} className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                  <span className="text-[11px] text-muted-foreground truncate">{d.label}</span>
+                  <span className="text-[11px] font-bold ml-auto tabular-nums">{d.count}</span>
                 </div>
-              </div>
+              ))}
             </div>
-          );
-        })()}
+          </div>
+        </div>
       </div>
 
       {/* Table */}

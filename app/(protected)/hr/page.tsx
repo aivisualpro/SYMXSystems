@@ -27,6 +27,10 @@ import {
   Calendar,
   Heart,
   Star,
+  Shield,
+  DollarSign,
+  Receipt,
+  CheckCircle2,
 } from "lucide-react";
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
 
@@ -151,18 +155,32 @@ function AvailabilityDay({ day, available, total }: { day: string; available: nu
 export default function EmployeesDashboardPage() {
   const [employees, setEmployees] = useState<ISymxEmployee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [incidentKpi, setIncidentKpi] = useState<any>(null);
+  const [reimbursementKpi, setReimbursementKpi] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch("/api/admin/employees?terminated=true");
-        if (res.ok) {
-          const data = await res.json();
+        const [empRes, incRes, reimbRes] = await Promise.all([
+          fetch("/api/admin/employees?terminated=true"),
+          fetch("/api/admin/claims?skip=0&limit=1"),
+          fetch("/api/admin/reimbursements?skip=0&limit=1"),
+        ]);
+        if (empRes.ok) {
+          const data = await empRes.json();
           setEmployees(data);
         }
+        if (incRes.ok) {
+          const data = await incRes.json();
+          setIncidentKpi(data.kpi || null);
+        }
+        if (reimbRes.ok) {
+          const data = await reimbRes.json();
+          setReimbursementKpi(data.kpi || null);
+        }
       } catch (err) {
-        console.error("Failed to fetch employees:", err);
+        console.error("Failed to fetch:", err);
       } finally {
         setLoading(false);
       }
@@ -456,6 +474,226 @@ export default function EmployeesDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ══════════════ ROW 1.5 — Reimbursements ══════════════ */}
+      {reimbursementKpi && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Reimbursement Donut */}
+          <div className="lg:col-span-5 rounded-2xl border border-border/50 bg-card p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20">
+                  <Receipt className="h-4 w-4 text-emerald-400" />
+                </div>
+                <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Reimbursements</h3>
+              </div>
+              <button onClick={() => router.push("/hr/reimbursement")} className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 transition-colors">
+                View All <ArrowUpRight className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="relative flex-shrink-0">
+                <DonutChart
+                  segments={[
+                    { value: reimbursementKpi.paidCount || 0, color: "#10b981", label: "Paid" },
+                    { value: reimbursementKpi.unpaidCount || 0, color: "#f59e0b", label: "Unpaid" },
+                  ]}
+                  size={130}
+                  strokeWidth={16}
+                />
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-black text-foreground"><AnimatedNumber value={reimbursementKpi.totalRecords || 0} /></span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Total</span>
+                </div>
+              </div>
+              <div className="flex-1 space-y-2.5">
+                {[
+                  { label: "Paid", count: reimbursementKpi.paidCount || 0, dot: "#10b981" },
+                  { label: "Unpaid", count: reimbursementKpi.unpaidCount || 0, dot: "#f59e0b" },
+                ].map(s => {
+                  const total = (reimbursementKpi.paidCount || 0) + (reimbursementKpi.unpaidCount || 0);
+                  const pct = total > 0 ? ((s.count / total) * 100).toFixed(0) : "0";
+                  return (
+                    <div key={s.label} className="flex items-center justify-between p-1.5 -mx-1.5 rounded-lg hover:bg-muted/40 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: s.dot }} />
+                        <span className="text-xs font-semibold text-foreground">{s.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-foreground">{s.count}</span>
+                        <span className="text-[10px] text-muted-foreground">({pct}%)</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Reimbursement Quick Stats */}
+          <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* Total Requests */}
+            <div onClick={() => router.push("/hr/reimbursement")}
+              className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-teal-500/30 active:scale-[0.98]">
+              <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-teal-400 to-teal-600" />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Total</p>
+                <div className="p-1.5 rounded-lg bg-teal-500/10"><Receipt className="h-3.5 w-3.5 text-teal-500" /></div>
+              </div>
+              <p className="text-2xl font-black text-foreground"><AnimatedNumber value={reimbursementKpi.totalRecords || 0} /></p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-1.5">All requests</p>
+            </div>
+
+            {/* Unpaid */}
+            <div onClick={() => router.push("/hr/reimbursement")}
+              className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-amber-500/30 active:scale-[0.98]">
+              <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-amber-400 to-amber-600" />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Unpaid</p>
+                <div className="p-1.5 rounded-lg bg-amber-500/10"><AlertTriangle className="h-3.5 w-3.5 text-amber-500" /></div>
+              </div>
+              <p className="text-2xl font-black text-foreground"><AnimatedNumber value={reimbursementKpi.unpaidCount || 0} /></p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-1.5">Pending approval</p>
+            </div>
+
+            {/* Total Paid */}
+            <div onClick={() => router.push("/hr/reimbursement")}
+              className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-emerald-500/30 active:scale-[0.98]">
+              <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-emerald-400 to-emerald-600" />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Paid</p>
+                <div className="p-1.5 rounded-lg bg-emerald-500/10"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /></div>
+              </div>
+              <p className="text-lg font-black text-emerald-500">${((reimbursementKpi.paidAmount || 0) / 1000).toFixed(1)}K</p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-1.5">Total paid out</p>
+            </div>
+
+            {/* Pending Amount */}
+            <div onClick={() => router.push("/hr/reimbursement")}
+              className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-orange-500/30 active:scale-[0.98]">
+              <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-orange-400 to-orange-600" />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Pending</p>
+                <div className="p-1.5 rounded-lg bg-orange-500/10"><DollarSign className="h-3.5 w-3.5 text-orange-500" /></div>
+              </div>
+              <p className="text-lg font-black text-amber-500">${((reimbursementKpi.unpaidAmount || 0) / 1000).toFixed(1)}K</p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-1.5">Awaiting payment</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════ ROW 2 — Open Incidents Chart ══════════════ */}
+      {incidentKpi && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Open Incidents Donut */}
+          <div className="lg:col-span-5 rounded-2xl border border-border/50 bg-card p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500/20 to-amber-500/20">
+                  <Shield className="h-4 w-4 text-rose-400" />
+                </div>
+                <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Open Incidents</h3>
+              </div>
+              <button onClick={() => router.push("/hr/incidents")} className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 transition-colors">
+                View All <ArrowUpRight className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="relative flex-shrink-0">
+                <DonutChart
+                  segments={[
+                    { value: incidentKpi.openInjuryCount || 0, color: "#f43f5e", label: "Injury" },
+                    { value: incidentKpi.openAutoCount || 0, color: "#3b82f6", label: "Auto" },
+                    { value: incidentKpi.openPropertyDamageCount || 0, color: "#f59e0b", label: "Property Damage" },
+                  ]}
+                  size={130}
+                  strokeWidth={16}
+                />
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-black text-foreground"><AnimatedNumber value={incidentKpi.openCount || 0} /></span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Open</span>
+                </div>
+              </div>
+              <div className="flex-1 space-y-2.5">
+                {[
+                  { label: "Injury", count: incidentKpi.openInjuryCount || 0, dot: "#f43f5e" },
+                  { label: "Auto", count: incidentKpi.openAutoCount || 0, dot: "#3b82f6" },
+                  { label: "Property Damage", count: incidentKpi.openPropertyDamageCount || 0, dot: "#f59e0b" },
+                ].map(s => {
+                  const total = (incidentKpi.openInjuryCount || 0) + (incidentKpi.openAutoCount || 0) + (incidentKpi.openPropertyDamageCount || 0);
+                  const pct = total > 0 ? ((s.count / total) * 100).toFixed(0) : "0";
+                  return (
+                    <div key={s.label} className="flex items-center justify-between p-1.5 -mx-1.5 rounded-lg hover:bg-muted/40 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: s.dot }} />
+                        <span className="text-xs font-semibold text-foreground">{s.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-foreground">{s.count}</span>
+                        <span className="text-[10px] text-muted-foreground">({pct}%)</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Incident Quick Stats */}
+          <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* Total Incidents */}
+            <div onClick={() => router.push("/hr/incidents")}
+              className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-rose-500/30 active:scale-[0.98]">
+              <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-rose-400 to-rose-600" />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Total</p>
+                <div className="p-1.5 rounded-lg bg-rose-500/10"><Shield className="h-3.5 w-3.5 text-rose-500" /></div>
+              </div>
+              <p className="text-2xl font-black text-foreground"><AnimatedNumber value={incidentKpi.totalRecords || 0} /></p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-1.5">All incidents</p>
+            </div>
+
+            {/* Open */}
+            <div onClick={() => router.push("/hr/incidents")}
+              className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-amber-500/30 active:scale-[0.98]">
+              <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-amber-400 to-amber-600" />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Open</p>
+                <div className="p-1.5 rounded-lg bg-amber-500/10"><AlertTriangle className="h-3.5 w-3.5 text-amber-500" /></div>
+              </div>
+              <p className="text-2xl font-black text-foreground"><AnimatedNumber value={incidentKpi.openCount || 0} /></p>
+              <div className="flex items-center gap-1 mt-1.5">
+                <span className="text-[10px] font-bold text-emerald-500">{incidentKpi.closedCount || 0} closed</span>
+              </div>
+            </div>
+
+            {/* Total Paid */}
+            <div onClick={() => router.push("/hr/incidents")}
+              className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-red-500/30 active:scale-[0.98]">
+              <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-red-400 to-red-600" />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Paid</p>
+                <div className="p-1.5 rounded-lg bg-red-500/10"><DollarSign className="h-3.5 w-3.5 text-red-500" /></div>
+              </div>
+              <p className="text-lg font-black text-red-500">${((incidentKpi.totalPaid || 0) / 1000).toFixed(0)}K</p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-1.5">Total payouts</p>
+            </div>
+
+            {/* Reserved */}
+            <div onClick={() => router.push("/hr/incidents")}
+              className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-blue-500/30 active:scale-[0.98]">
+              <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-blue-400 to-blue-600" />
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Reserved</p>
+                <div className="p-1.5 rounded-lg bg-blue-500/10"><DollarSign className="h-3.5 w-3.5 text-blue-500" /></div>
+              </div>
+              <p className="text-lg font-black text-amber-500">${((incidentKpi.totalReserved || 0) / 1000).toFixed(0)}K</p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-1.5">Pending reserves</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ══════════════ ROW 2 — Status, Types, Compliance ══════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
