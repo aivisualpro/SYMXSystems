@@ -5,13 +5,14 @@ import * as React from "react";
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { SimpleDataTable } from "@/components/admin/simple-data-table";
-import { formatPhoneNumber } from "@/lib/utils";
+import { formatPhoneNumber, cn } from "@/lib/utils";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
-import { Search, User } from "lucide-react";
+import { Search, User, CheckCircle2, Minus, Coffee } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -24,7 +25,35 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { useSearchParams } from "next/navigation";
+
+// ── Schedule Type Option from dropdowns ──
+interface ScheduleTypeOption {
+  _id: string;
+  description: string;
+  type: string;
+  color: string;
+  icon: string;
+  isActive: boolean;
+}
+
+// Determine if color is light or dark to choose text color
+function isLightColor(hex: string): boolean {
+  if (!hex || hex.length < 7) return false;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6;
+}
 
 export default function EmployeesPage() {
   const [data, setData] = useState<ISymxEmployee[]>([]);
@@ -43,8 +72,12 @@ export default function EmployeesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [vehicleNames, setVehicleNames] = useState<string[]>([]);
-
-  const DAY_OPTIONS = ["Assign Schedule", "Scheduled", "OFF"];
+  const [scheduleTypes, setScheduleTypes] = useState<ScheduleTypeOption[]>([]);
+  const scheduleTypeMap = useMemo(() => {
+    const map = new Map<string, ScheduleTypeOption>();
+    scheduleTypes.forEach(st => map.set(st.description.toLowerCase(), st));
+    return map;
+  }, [scheduleTypes]);
 
   // Fetch vehicle names for van dropdowns
   useEffect(() => {
@@ -57,6 +90,18 @@ export default function EmployeesPage() {
           .filter(Boolean)
           .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
         setVehicleNames(names);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch schedule type options from dropdowns
+  useEffect(() => {
+    fetch("/api/admin/settings/dropdowns?type=schedule type")
+      .then(r => r.json())
+      .then((data: any[]) => {
+        if (Array.isArray(data)) {
+          setScheduleTypes(data.filter((d: any) => d.isActive !== false));
+        }
       })
       .catch(() => {});
   }, []);
@@ -259,30 +304,110 @@ export default function EmployeesPage() {
       cell: ({ row }) => formatPhoneNumber(row.original.phoneNumber || "")
     },
     { accessorKey: "type", header: "Type" },
-    // Availability — inline dropdowns
+    // Availability — colored chip dropdowns from schedule type dropdown options
     ...(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const).map(day => ({
       accessorKey: day,
       header: day.charAt(0).toUpperCase() + day.slice(1, 3),
       cell: ({ row }: any) => {
         const val = row.original[day] || "OFF";
+        const matched = scheduleTypeMap.get(val.toLowerCase());
+        const chipColor = matched?.color || "";
+        const chipIconName = matched?.icon || "";
+        const ChipIcon = chipIconName ? (LucideIcons as any)[chipIconName] : null;
+
+        // OFF special styling
+        const isOff = val.toLowerCase() === "off" || val.trim() === "";
+        const bgStyle = isOff
+          ? {}
+          : chipColor
+            ? { backgroundColor: chipColor }
+            : { backgroundColor: "#6B7280" };
+        const textStyle = isOff
+          ? {}
+          : chipColor && isLightColor(chipColor)
+            ? { color: "#1a1a1a" }
+            : { color: "#fff" };
+        const borderStyle = isOff
+          ? {}
+          : chipColor
+            ? { borderColor: chipColor }
+            : { borderColor: "#6B7280" };
+
         return (
-          <Select
-            value={val}
-            onValueChange={(v) => updateEmployeeField(String(row.original._id), day, v)}
-          >
-            <SelectTrigger
-              className="h-7 w-[90px] text-[10px] font-medium px-2"
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className={cn(
+                  "relative flex items-center justify-center gap-0.5 h-7 rounded-md text-[10px] font-semibold transition-all border cursor-pointer select-none px-1.5 min-w-[80px]",
+                  isOff
+                    ? "bg-zinc-100 dark:bg-zinc-700 text-zinc-400 dark:text-zinc-400 border-zinc-200 dark:border-zinc-600"
+                    : "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                )}
+                style={isOff ? {} : { ...bgStyle, ...borderStyle }}
+              >
+                {isOff ? (
+                  <Coffee className="h-3 w-3 shrink-0 mr-0.5" />
+                ) : ChipIcon ? (
+                  <ChipIcon className="h-3 w-3 shrink-0 mr-0.5" style={textStyle} />
+                ) : null}
+                <span className="truncate" style={isOff ? {} : textStyle}>{val || "OFF"}</span>
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              side="bottom"
+              className="w-48 max-h-[320px] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
-              suppressHydrationWarning
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent onClick={(e) => e.stopPropagation()}>
-              {DAY_OPTIONS.map(t => (
-                <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Change Schedule
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {/* OFF option */}
+              <DropdownMenuItem
+                className={cn(
+                  "flex items-center gap-2 cursor-pointer text-xs",
+                  val.toLowerCase() === "off" && "bg-accent"
+                )}
+                onClick={() => updateEmployeeField(String(row.original._id), day, "OFF")}
+              >
+                <div className="h-5 w-5 rounded flex items-center justify-center shrink-0 bg-zinc-200 dark:bg-zinc-600">
+                  <Coffee className="h-3 w-3 text-zinc-500 dark:text-zinc-300" />
+                </div>
+                <span className="font-medium">OFF</span>
+                {val.toLowerCase() === "off" && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
+              </DropdownMenuItem>
+              {/* Dynamic schedule type options */}
+              {scheduleTypes.map(opt => {
+                const OptIcon = opt.icon ? (LucideIcons as any)[opt.icon] : null;
+                const isActive = val.toLowerCase() === opt.description.toLowerCase();
+                return (
+                  <DropdownMenuItem
+                    key={opt._id}
+                    className={cn(
+                      "flex items-center gap-2 cursor-pointer text-xs",
+                      isActive && "bg-accent"
+                    )}
+                    onClick={() => updateEmployeeField(String(row.original._id), day, opt.description)}
+                  >
+                    <div
+                      className="h-5 w-5 rounded flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: opt.color || "#6B7280" }}
+                    >
+                      {OptIcon ? (
+                        <OptIcon className="h-3 w-3" style={{ color: opt.color && isLightColor(opt.color) ? "#1a1a1a" : "#fff" }} />
+                      ) : (
+                        <Minus className="h-3 w-3 text-white" />
+                      )}
+                    </div>
+                    <span className="font-medium">{opt.description}</span>
+                    {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         );
       },
     })),
