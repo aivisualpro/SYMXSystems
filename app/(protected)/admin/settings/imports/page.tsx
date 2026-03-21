@@ -12,6 +12,7 @@ import {
   Users,
   ListFilter,
   MapPin,
+  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 import Papa from "papaparse";
@@ -74,8 +75,26 @@ const importTypes = [
     borderColor: "border-emerald-500/20",
     iconColor: "text-emerald-500",
     fields: [
-      "_id", "transporterId", "date", "amount", "reason",
+      "transporterId", "date", "amount", "reason",
       "attachment", "status", "createdBy", "createdAt",
+    ],
+  },
+  {
+    id: "claims",
+    name: "Incidents",
+    description: "Import employee incident records from CSV.",
+    icon: Shield,
+    color: "from-rose-500 to-pink-500",
+    bgColor: "bg-rose-500/10",
+    borderColor: "border-rose-500/20",
+    iconColor: "text-rose-500",
+    fields: [
+      "ReportedDate", "IncidentDate", "Transporter ID", "ClaimType", "Van",
+      "ClaimantName", "ShortDescription", "ClaimNumber", "ClaimantLawyer",
+      "ClaimStatus", "StatusDetail", "CoverageDescription", "ClaimIncurred",
+      "Employee Notes", "Supervisor Notes", "Third Party Name", "Third Party Phone",
+      "Third Party Email", "With Insurance", "Insurance Policy", "Paid", "Reserved",
+      "createdBy", "createdAt", "IncidentUploadFile",
     ],
   },
   {

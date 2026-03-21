@@ -154,7 +154,7 @@ const data = {
       subModules: [
         { name: "Employees", url: "/hr/employees" },
         { name: "Reimbursement", url: "/hr/reimbursement" },
-        { name: "Claims", url: "/hr/claims" },
+        { name: "Incidents", url: "/hr/incidents" },
         { name: "Employee Audit", url: "/hr/audit" },
         { name: "HR Tickets", url: "/hr/tickets" },
         { name: "Timesheet", url: "/hr/timesheet" },

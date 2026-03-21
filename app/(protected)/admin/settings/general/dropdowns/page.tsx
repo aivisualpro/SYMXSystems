@@ -44,21 +44,125 @@ const COLOR_OPTIONS = [
     "#D2B48C", "#DEB887", "#F5DEB3", "#FFFBF1",
 ];
 
-const LUCIDE_ICONS = [
-    "Activity", "AlertCircle", "AlertTriangle", "ArrowDown", "ArrowRight", "ArrowUp", "Award", "Ban",
-    "Bell", "Box", "Briefcase", "Calendar", "Camera", "Check", "CheckCircle", "CheckCircle2", "CheckSquare",
-    "ChevronDown", "ChevronRight", "ChevronUp", "Circle", "Clipboard", "ClipboardList", "Clock", "Cloud",
-    "Compass", "Copy", "CreditCard", "Database", "Download", "Edit", "Edit2", "Edit3", "Eye", "EyeOff",
-    "File", "FileText", "Flag", "Folder", "Globe", "Heart", "Home", "Image", "Info", "Key", "Layers",
-    "Layout", "Link", "List", "Lock", "LogOut", "Mail", "Map", "MapPin", "MessageCircle", "MessageSquare",
-    "Mic", "Minus", "MoreHorizontal", "MoreVertical", "Package", "Paperclip", "Pause", "Phone", "Play",
-    "Plus", "PlusCircle", "Power", "Printer", "RefreshCcw", "RefreshCw", "Repeat", "Save", "Search",
-    "Send", "Settings", "Share", "Share2", "Shield", "ShieldAlert", "ShieldCheck", "ShoppingCart", "Slash",
-    "Sliders", "Smartphone", "Smile", "Star", "Sun", "Tag", "Terminal", "Thermostat", "ThumbsDown",
-    "ThumbsUp", "Timer", "Tool", "Trash", "Trash2", "TrendingDown", "TrendingUp", "Truck", "Umbrella",
-    "Unlock", "Upload", "User", "UserCheck", "UserMinus", "UserPlus", "Users", "Video", "VideoOff",
-    "Volume", "Volume2", "VolumeX", "Wifi", "WifiOff", "X", "XCircle", "XSquare", "Zap"
-];
+const LUCIDE_ICONS = [...new Set([
+    // General & Status
+    "Activity", "AlertCircle", "AlertTriangle", "Award", "Ban", "Bell", "BellDot", "BellOff",
+    "BellRing", "Bookmark", "BookmarkCheck", "Box", "Boxes", "Briefcase", "Bug", "Calculator",
+    "Check", "CheckCircle", "CheckCircle2", "CheckSquare", "Circle", "CircleDot", "CircleSlash",
+    "Clipboard", "ClipboardCheck", "ClipboardList", "ClipboardCopy", "Crown", "Diamond",
+    "Fingerprint", "Flag", "FlagTriangleRight", "Hash", "Infinity", "Info", "Lightbulb",
+    "ListChecks", "ListTodo", "Megaphone", "Percent", "QrCode", "Rocket", "Scroll", "ScrollText",
+    "Sigma", "Signal", "Sparkles", "Star", "StarHalf", "Tags", "Target", "Trophy", "Verified",
+    "Wand2", "Zap", "ZapOff",
+
+    // Arrows & Navigation
+    "ArrowDown", "ArrowDownCircle", "ArrowLeft", "ArrowLeftCircle", "ArrowRight",
+    "ArrowRightCircle", "ArrowUp", "ArrowUpCircle", "ArrowUpDown", "ArrowLeftRight",
+    "ChevronDown", "ChevronLeft", "ChevronRight", "ChevronUp", "ChevronsDown", "ChevronsUp",
+    "Compass", "CornerDownRight", "CornerUpLeft", "ExternalLink", "Home", "LogIn", "LogOut",
+    "MoveDown", "MoveUp", "Navigation", "Redo", "Undo", "Route", "Milestone", "Signpost",
+    "ArrowBigDown", "ArrowBigUp", "ArrowBigLeft", "ArrowBigRight",
+
+    // Status & Alerts
+    "CircleAlert", "OctagonAlert", "TriangleAlert", "ShieldAlert", "ShieldCheck", "ShieldOff",
+    "ShieldX", "Shield", "ShieldQuestion", "BadgeAlert", "BadgeCheck", "BadgeInfo", "BadgeX",
+    "Siren", "AlarmClock", "AlarmClockCheck", "AlarmClockOff",
+
+    // Communication
+    "Mail", "MailOpen", "MailCheck", "MailX", "MessageCircle", "MessageSquare",
+    "MessagesSquare", "Phone", "PhoneCall", "PhoneForwarded", "PhoneIncoming", "PhoneMissed",
+    "PhoneOff", "PhoneOutgoing", "Send", "SendHorizontal", "AtSign", "Contact", "Contact2",
+    "Voicemail", "Radio", "Podcast", "Rss",
+
+    // Media & Content
+    "Camera", "CameraOff", "Film", "Image", "ImagePlus", "Images", "Mic", "MicOff",
+    "Music", "Music2", "Music4", "Palette", "Pause", "PauseCircle", "Play", "PlayCircle",
+    "SkipBack", "SkipForward", "Speaker", "Video", "VideoOff", "Volume", "Volume1",
+    "Volume2", "VolumeX", "Headphones", "Monitor", "MonitorSmartphone", "Tv", "Youtube",
+    "Aperture", "ScanLine", "Scan", "Focus",
+
+    // Files & Documents
+    "File", "FileArchive", "FileAudio", "FileCheck", "FileCode", "FileCog", "FileDown",
+    "FileEdit", "FileImage", "FileJson", "FileLock", "FilePlus", "FileSearch", "FileSpreadsheet",
+    "FileText", "FileUp", "FileVideo", "FileWarning", "FileX", "Files", "Folder", "FolderArchive",
+    "FolderCheck", "FolderClosed", "FolderDown", "FolderOpen", "FolderPlus", "FolderSearch",
+    "Newspaper", "NotepadText", "BookOpen", "BookOpenCheck", "Book", "Library",
+
+    // UI & Layout
+    "Copy", "Scissors", "ClipboardPaste", "Download", "Upload", "Edit", "Edit2", "Edit3",
+    "Eye", "EyeOff", "Filter", "Grip", "GripVertical", "Key", "KeyRound", "Layers", "Layout",
+    "LayoutDashboard", "LayoutGrid", "LayoutList", "Link", "Link2", "LinkOff", "List",
+    "ListFilter", "Lock", "LockOpen", "Maximize", "Minimize", "Menu", "Minus",
+    "MoreHorizontal", "MoreVertical", "Move", "Pencil", "Pin", "PinOff", "Plus", "PlusCircle",
+    "Search", "Settings", "Settings2", "Share", "Share2", "SlidersHorizontal", "Sliders",
+    "Trash", "Trash2", "Type", "X", "XCircle", "XSquare",
+
+    // Time & Calendar
+    "Calendar", "CalendarCheck", "CalendarClock", "CalendarDays", "CalendarRange",
+    "CalendarSearch", "CalendarX", "Clock", "Clock1", "Clock2", "Clock3", "Clock4",
+    "History", "Hourglass", "Timer", "TimerOff", "TimerReset", "Watch", "Sunrise", "Sunset",
+    "Moon", "Sun", "CloudSun",
+
+    // Finance & Commerce
+    "Banknote", "CircleDollarSign", "Coins", "CreditCard", "DollarSign", "Euro", "HandCoins",
+    "PiggyBank", "Receipt", "ReceiptText", "ShoppingBag", "ShoppingCart", "Store", "Wallet",
+    "Wallet2", "BadgeDollarSign", "TrendingDown", "TrendingUp", "BarChart", "BarChart2",
+    "BarChart3", "BarChart4", "LineChart", "PieChart", "ArrowDownUp",
+
+    // People & Users
+    "User", "UserCheck", "UserCog", "UserMinus", "UserPlus", "UserRound", "UserRoundCheck",
+    "UserRoundMinus", "UserRoundPlus", "UserRoundX", "UserX", "Users", "UsersRound",
+    "Baby", "PersonStanding", "Accessibility", "HandMetal", "Hand", "ThumbsDown", "ThumbsUp",
+    "Smile", "SmilePlus", "Frown", "Meh", "Laugh", "Angry",
+    "Footprints", "HeartHandshake", "Handshake", "GraduationCap",
+
+    // Vehicle & Transport
+    "Car", "CarFront", "CarTaxiFront", "Truck", "Bus", "Bike", "Ship",
+    "Plane", "PlaneLanding", "PlaneTakeoff", "TrainFront",
+    "Fuel", "Gauge", "Construction", "TrafficCone", "CircleParking",
+    "ParkingMeter", "Wrench", "Cog", "MapPin", "MapPinned", "MapPinOff", "Map",
+    "LocateFixed", "Locate",
+
+    // Injury & Medical
+    "Bone", "HeartPulse", "Heart", "HeartOff", "HeartCrack",
+    "Stethoscope", "Syringe", "Pill", "Cross", "Ambulance",
+    "Hospital", "BriefcaseMedical", "Thermometer", "ThermometerSun",
+    "Brain", "Ear", "ScanEye", "Skull",
+    "ShieldPlus", "CirclePlus", "BadgePlus", "Dna", "Microscope",
+    "TestTube", "TestTubes", "FlaskConical", "FlaskRound",
+
+    // Property & Building
+    "Building", "Building2", "Factory", "Warehouse", "Landmark", "LandmarkDome",
+    "Hotel", "School", "Church", "Castle",
+    "DoorOpen", "DoorClosed", "Fence",
+    "BrickWall", "PaintBucket", "Paintbrush", "Ruler",
+    "Hammer", "HardHat", "Shovel",
+    "Plug", "PlugZap", "Power", "PowerOff", "Lightbulb", "LightbulbOff",
+    "Lamp", "LampDesk", "Fan",
+
+    // Nature & Weather
+    "Flame", "FlameKindling", "Droplets", "Droplet",
+    "CloudLightning", "CloudRain", "CloudSnow", "CloudDrizzle", "CloudFog",
+    "Cloud", "CloudOff", "Wind", "Tornado", "Snowflake", "Rainbow",
+    "TreePine", "Trees", "TreeDeciduous", "Flower", "Flower2", "Leaf", "Sprout",
+    "Mountain", "MountainSnow", "Waves",
+    "Bug", "Bird", "Cat", "Dog", "Fish", "Rat", "Rabbit", "Squirrel", "Turtle",
+
+    // Tools & Hardware
+    "Screwdriver", "Nut",
+    "Database", "HardDrive", "Cpu", "MemoryStick", "Server",
+    "Wifi", "WifiOff", "Bluetooth", "BluetoothOff",
+    "Battery", "BatteryCharging", "BatteryFull", "BatteryLow", "BatteryWarning",
+    "Smartphone", "Tablet", "Laptop", "Monitor", "Printer",
+    "Cable", "Usb", "Nfc",
+    "Globe", "Globe2", "Earth",
+    "Package", "PackageCheck", "PackageOpen", "PackagePlus", "PackageSearch", "PackageX",
+    "Container", "Archive", "ArchiveRestore",
+    "Refrigerator", "WashingMachine", "Microwave",
+    "Armchair", "BedDouble", "BedSingle", "Bath", "ShowerHead",
+    "Utensils", "UtensilsCrossed", "CookingPot", "Beef", "Coffee", "CupSoda",
+    "Wine", "Beer", "Apple", "Banana", "Cherry", "Grape", "Pizza", "Salad", "Sandwich", "Soup",
+])];
 
 function ColorPicker({ value, onChange, disabled }: { value: string, onChange: (v: string) => void, disabled: boolean }) {
     const [search, setSearch] = useState("");

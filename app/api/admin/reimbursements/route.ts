@@ -3,6 +3,13 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import SymxEmployee from "@/lib/models/SymxEmployee";
+import { v2 as cloudinary } from "cloudinary";
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 export async function GET(req: NextRequest) {
   try {
@@ -89,7 +96,43 @@ export async function POST(req: NextRequest) {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await connectToDatabase();
-    const body = await req.json();
+
+    const contentType = req.headers.get("content-type") || "";
+    let body: any = {};
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      // Extract text fields
+      for (const [key, value] of formData.entries()) {
+        if (key !== "file") {
+          body[key] = value as string;
+        }
+      }
+      // Parse amount
+      if (body.amount) body.amount = parseFloat(body.amount);
+      // Parse date
+      if (body.date) body.date = new Date(body.date);
+
+      // Handle file upload
+      const file = formData.get("file") as File | null;
+      if (file && file.size > 0) {
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const result: any = await new Promise((resolve, reject) => {
+          cloudinary.uploader.upload_stream(
+            { folder: "symx-systems/reimbursements", resource_type: "auto" },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          ).end(buffer);
+        });
+        body.attachment = result.secure_url;
+      }
+    } else {
+      body = await req.json();
+    }
+
     const record = await SymxReimbursement.create(body);
     return NextResponse.json(record, { status: 201 });
   } catch (error: any) {

@@ -1,4 +1,5 @@
 
+import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -14,6 +15,7 @@ import ScoreCardRTS from "@/lib/models/ScoreCardRTS";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
+import SymxIncident from "@/lib/models/SymxIncident";
 import Vehicle from "@/lib/models/Vehicle";
 import VehicleRepair from "@/lib/models/VehicleRepair";
 import DailyInspection from "@/lib/models/DailyInspection";
@@ -23,7 +25,6 @@ import { getISOWeek, getISOWeekYear, parseISO } from "date-fns";
 
 const reimbursementHeaderMap: Record<string, string> = {
     // Current CSV headers (camelCase)
-    "_id": "legacyId",
     "transporterId": "transporterId",
     "date": "date",
     "amount": "amount",
@@ -46,6 +47,34 @@ const reimbursementHeaderMap: Record<string, string> = {
     "Receipt Number": "receiptNumber",
     "Approved By": "approvedBy",
     "Notes": "notes",
+};
+
+const claimsHeaderMap: Record<string, string> = {
+    "ReportedDate": "reportedDate",
+    "IncidentDate": "incidentDate",
+    "Transporter ID": "transporterId",
+    "ClaimType": "claimType",
+    "Van": "van",
+    "ClaimantName": "claimantName",
+    "ShortDescription": "shortDescription",
+    "ClaimNumber": "claimNumber",
+    "ClaimantLawyer": "claimantLawyer",
+    "ClaimStatus": "claimStatus",
+    "StatusDetail": "statusDetail",
+    "CoverageDescription": "coverageDescription",
+    "ClaimIncurred": "claimIncurred",
+    "Employee Notes": "employeeNotes",
+    "Supervisor Notes": "supervisorNotes",
+    "Third Party Name": "thirdPartyName",
+    "Third Party Phone": "thirdPartyPhone",
+    "Third Party Email": "thirdPartyEmail",
+    "With Insurance": "withInsurance",
+    "Insurance Policy": "insurancePolicy",
+    "Paid": "paid",
+    "Reserved": "reserved",
+    "createdBy": "createdBy",
+    "createdAt": "createdAt",
+    "IncidentUploadFile": "incidentUploadFile",
 };
 
 // Helper to sanitize keys (remove whitespace, special chars if needed) - not strictly needed if we map manually
@@ -1166,9 +1195,7 @@ export async function POST(req: NextRequest) {
                     const normalizedHeader = header.trim();
                     const schemaKey = reimbursementHeaderMap[normalizedHeader];
                     if (schemaKey && value !== undefined && value !== null && value !== "") {
-                        if (schemaKey === 'legacyId') {
-                            processedData.legacyId = value.toString().trim();
-                        } else if (schemaKey === 'amount') {
+                        if (schemaKey === 'amount') {
                             const num = parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
                             if (!isNaN(num)) processedData[schemaKey] = num;
                         } else if (schemaKey === 'date' || schemaKey === 'createdAt') {
@@ -1199,18 +1226,7 @@ export async function POST(req: NextRequest) {
                     processedData.employeeId = employeeMap.get(transporterId);
                 }
 
-                // Use legacyId for upsert deduplication
-                if (processedData.legacyId) {
-                    return {
-                        updateOne: {
-                            filter: { legacyId: processedData.legacyId },
-                            update: { $set: processedData },
-                            upsert: true
-                        }
-                    };
-                }
-
-                // Fallback: use transporterId + date
+                // Use transporterId + date for upsert deduplication
                 const filter: any = { transporterId: processedData.transporterId };
                 if (processedData.date) filter.date = processedData.date;
 
@@ -1231,6 +1247,68 @@ export async function POST(req: NextRequest) {
                     inserted: result.upsertedCount || 0,
                     updated: result.modifiedCount || 0,
                     matched: result.matchedCount
+                });
+            }
+
+            return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+        }
+
+        // ── Claims Import ──
+        else if (type === "claims") {
+            const transporterIds = data
+                .map((row: any) => (row["Transporter ID"] || row["transporterId"] || "").toString().trim())
+                .filter((id: string) => id);
+
+            const employees = await SymxEmployee.find(
+                { transporterId: { $in: transporterIds } },
+                { _id: 1, transporterId: 1 }
+            ).lean();
+            const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
+
+            // Build case-insensitive header lookup
+            const ciHeaderMap: Record<string, string> = {};
+            Object.entries(claimsHeaderMap).forEach(([k, v]) => { ciHeaderMap[k.toLowerCase()] = v; });
+
+            const documents = data.map((row: any) => {
+                const processedData: any = {};
+
+                Object.entries(row).forEach(([header, value]) => {
+                    const normalizedHeader = header.trim();
+                    const schemaKey = ciHeaderMap[normalizedHeader.toLowerCase()] || claimsHeaderMap[normalizedHeader];
+                    if (schemaKey && value !== undefined && value !== null && value !== "") {
+                        if (schemaKey === 'paid' || schemaKey === 'reserved') {
+                            const num = parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
+                            if (!isNaN(num)) processedData[schemaKey] = num;
+                        } else if (schemaKey === 'reportedDate' || schemaKey === 'incidentDate' || schemaKey === 'createdAt') {
+                            const parsed = new Date(value.toString());
+                            if (!isNaN(parsed.getTime())) processedData[schemaKey] = parsed;
+                        } else if (schemaKey === 'withInsurance') {
+                            const val = value.toString().trim().toUpperCase();
+                            processedData[schemaKey] = val === 'TRUE' || val === 'YES' || val === '1';
+                        } else {
+                            processedData[schemaKey] = value.toString().trim();
+                        }
+                    }
+                });
+
+                const transporterId = processedData.transporterId;
+
+                // Link employee if transporterId is present
+                if (transporterId && employeeMap.has(transporterId)) {
+                    processedData.employeeId = employeeMap.get(transporterId);
+                }
+
+                return processedData;
+            }).filter((doc: any): doc is NonNullable<typeof doc> => doc !== null);
+
+            if (documents.length > 0) {
+                const result = await SymxIncident.insertMany(documents, { ordered: false });
+                return NextResponse.json({
+                    success: true,
+                    count: result.length,
+                    inserted: result.length,
+                    updated: 0,
+                    matched: 0
                 });
             }
 

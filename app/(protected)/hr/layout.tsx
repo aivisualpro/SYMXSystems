@@ -25,7 +25,7 @@ const tabs = [
   { id: "dashboard", label: "Dashboard", icon: IconLayoutDashboard, href: "/hr" },
   { id: "employees", label: "Employees", icon: IconUsers, href: "/hr/employees" },
   { id: "reimbursement", label: "Reimbursement", icon: IconReceipt2, href: "/hr/reimbursement" },
-  { id: "claims", label: "Claims Dashboard", icon: IconReportAnalytics, href: "/hr/claims" },
+  { id: "incidents", label: "Incidents", icon: IconReportAnalytics, href: "/hr/incidents" },
   { id: "audit", label: "Employee Audit", icon: IconFileSearch, href: "/hr/audit" },
   { id: "tickets", label: "HR Tickets", icon: IconTicket, href: "/hr/tickets" },
   { id: "timesheet", label: "Timesheet", icon: IconClock, href: "/hr/timesheet" },
@@ -59,13 +59,14 @@ export default function HRLayout({ children }: { children: ReactNode }) {
     };
   }, [pathname, setLeftContent, setRightContent]);
 
-  // Determine active tab from pathname
-  const activeTab = (() => {
-    if (pathname.match(/^\/hr\/[a-f0-9]{24}/i)) return "employees";
-    if (pathname === "/hr") return "dashboard";
+  // Determine active tab from pathname (deferred to avoid hydration mismatch)
+  const [activeTab, setActiveTab] = React.useState<string>("");
+  useEffect(() => {
+    if (pathname.match(/^\/hr\/[a-f0-9]{24}/i)) { setActiveTab("employees"); return; }
+    if (pathname === "/hr") { setActiveTab("dashboard"); return; }
     const seg = pathname.replace("/hr/", "").split("/")[0];
-    return seg || "dashboard";
-  })();
+    setActiveTab(seg || "dashboard");
+  }, [pathname]);
 
   // Don't show tabs on detail pages
   const isDetailPage = pathname.match(/^\/hr\/[a-f0-9]{24}/i);

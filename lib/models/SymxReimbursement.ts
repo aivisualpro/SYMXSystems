@@ -2,7 +2,6 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface ISymxReimbursement extends Document {
   transporterId: string;
-  legacyId?: string;
   employeeName?: string;
   employeeId?: mongoose.Types.ObjectId;
   date?: Date;
@@ -25,7 +24,6 @@ export interface ISymxReimbursement extends Document {
 const SymxReimbursementSchema = new Schema<ISymxReimbursement>(
   {
     transporterId: { type: String, required: true, index: true },
-    legacyId: { type: String, sparse: true, unique: true },
     employeeName: { type: String },
     employeeId: { type: Schema.Types.ObjectId, ref: "SymxEmployee" },
     date: { type: Date },
