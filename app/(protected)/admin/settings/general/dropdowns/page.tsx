@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader2, Save, Pencil, X, Trash2, ListFilter, Tag, Search, ChevronDown } from "lucide-react";
+import { Loader2, Save, Pencil, X, Trash2, ListFilter, Tag, Search, ChevronDown, Plus, Sparkles, Eye } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -324,6 +325,187 @@ function IconPicker({ value, onChange, disabled }: { value: string, onChange: (v
     );
 }
 
+// ── Add Option Modal ──
+function AddOptionModal({
+    open, onClose, onSave, defaultType, saving
+}: {
+    open: boolean;
+    onClose: () => void;
+    onSave: (data: Omit<DropdownRow, '_id' | 'isNew' | 'isEditing'>) => void;
+    defaultType: string;
+    saving: boolean;
+}) {
+    const [description, setDescription] = useState("");
+    const [type, setType] = useState(defaultType);
+    const [color, setColor] = useState("");
+    const [icon, setIcon] = useState("");
+    const [image, setImage] = useState("");
+    const [isActive, setIsActive] = useState(true);
+
+    // Reset when opening
+    useEffect(() => {
+        if (open) {
+            setDescription("");
+            setType(defaultType);
+            setColor("");
+            setIcon("");
+            setImage("");
+            setIsActive(true);
+        }
+    }, [open, defaultType]);
+
+    const PreviewIcon = icon ? (LucideIcons as any)[icon] : null;
+    const canSave = description.trim() && type.trim();
+
+    return (
+        <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+            <DialogContent className="sm:max-w-[520px] p-0 gap-0 overflow-hidden border-border/50 bg-card">
+                {/* Header with gradient */}
+                <div className="relative px-6 pt-6 pb-4">
+                    <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-purple-500/5" />
+                    <DialogHeader className="relative">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-purple-500/20 shadow-sm">
+                                <Plus className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-lg font-bold">Add Dropdown Option</DialogTitle>
+                                <p className="text-xs text-muted-foreground mt-0.5">Configure a new option with icon, color and type</p>
+                            </div>
+                        </div>
+                    </DialogHeader>
+                </div>
+
+                {/* Live Preview */}
+                <div className="mx-6 mb-4 rounded-xl border border-border/50 bg-muted/20 p-4">
+                    <div className="flex items-center gap-2 mb-2.5">
+                        <Eye className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Live Preview</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border/50 shadow-sm">
+                        {PreviewIcon ? (
+                            <div className="p-2 rounded-lg shadow-sm" style={{ backgroundColor: color ? `${color}20` : 'hsl(var(--muted))' }}>
+                                <PreviewIcon className="h-5 w-5" style={{ color: color || 'hsl(var(--muted-foreground))' }} />
+                            </div>
+                        ) : color ? (
+                            <div className="w-9 h-9 rounded-lg shadow-sm flex items-center justify-center" style={{ backgroundColor: `${color}20` }}>
+                                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: color }} />
+                            </div>
+                        ) : (
+                            <div className="w-9 h-9 rounded-lg bg-muted/50 border border-dashed border-border flex items-center justify-center">
+                                <Sparkles className="h-4 w-4 text-muted-foreground/30" />
+                            </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                            <p className={cn("text-sm font-semibold truncate", !description && "text-muted-foreground/40 italic")}>
+                                {description || "Option name..."}
+                            </p>
+                            <p className={cn("text-[10px] truncate", type ? "text-muted-foreground" : "text-muted-foreground/30 italic")}>
+                                {type || "type"}
+                            </p>
+                        </div>
+                        <div className={cn(
+                            "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
+                            isActive ? "bg-emerald-500/15 text-emerald-500" : "bg-muted text-muted-foreground"
+                        )}>
+                            {isActive ? "Active" : "Inactive"}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Form Fields */}
+                <div className="px-6 pb-2 space-y-4">
+                    {/* Description & Type */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                Description <span className="text-red-400">*</span>
+                            </label>
+                            <Input
+                                value={description}
+                                onChange={e => setDescription(e.target.value)}
+                                placeholder="e.g. Pre-Trip, Injury..."
+                                className="h-9 text-sm bg-background/50"
+                                autoFocus
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                Type <span className="text-red-400">*</span>
+                            </label>
+                            <Input
+                                value={type}
+                                onChange={e => setType(e.target.value)}
+                                placeholder="e.g. inspection, claim type"
+                                className="h-9 text-sm font-mono bg-background/50"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Color & Icon */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Color</label>
+                            <ColorPicker value={color} onChange={setColor} disabled={false} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Icon</label>
+                            <IconPicker value={icon} onChange={setIcon} disabled={false} />
+                        </div>
+                    </div>
+
+                    {/* Image URL */}
+                    <div className="space-y-1.5">
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Image URL</label>
+                        <Input
+                            value={image}
+                            onChange={e => setImage(e.target.value)}
+                            placeholder="https://..."
+                            className="h-9 text-[11px] bg-background/50"
+                        />
+                    </div>
+
+                    {/* Active toggle */}
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-muted/20">
+                        <div>
+                            <p className="text-sm font-medium">Active</p>
+                            <p className="text-[10px] text-muted-foreground">Option will be visible in dropdowns</p>
+                        </div>
+                        <button
+                            onClick={() => setIsActive(!isActive)}
+                            className={cn(
+                                "relative w-10 h-5 rounded-full transition-colors duration-200",
+                                isActive ? "bg-emerald-500" : "bg-muted-foreground/30"
+                            )}
+                        >
+                            <div className={cn(
+                                "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200",
+                                isActive ? "translate-x-5" : "translate-x-0.5"
+                            )} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-4 mt-2 border-t border-border/50 bg-muted/10 flex items-center justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={onClose} disabled={saving} className="text-muted-foreground">
+                        Cancel
+                    </Button>
+                    <Button
+                        size="sm"
+                        disabled={!canSave || saving}
+                        onClick={() => onSave({ description, type, isActive, sortOrder: 0, image, color, icon })}
+                        className="gap-1.5 min-w-[100px] bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-white shadow-sm"
+                    >
+                        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                        Add Option
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function DropdownsPage() {
     const { addRef } = useAddRef();
     const [rows, setRows] = useState<DropdownRow[]>([]);
@@ -331,6 +513,7 @@ export default function DropdownsPage() {
     const [saving, setSaving] = useState<string | null>(null);
     const [selectedType, setSelectedType] = useState<string>("all");
     const [searchQuery, setSearchQuery] = useState("");
+    const [addModalOpen, setAddModalOpen] = useState(false);
 
     const fetchRows = useCallback(async () => {
         try {
@@ -346,21 +529,40 @@ export default function DropdownsPage() {
 
     useEffect(() => { fetchRows(); }, [fetchRows]);
 
-    const addRow = useCallback(() => {
-        setRows(prev => [...prev, {
-            description: "",
-            type: selectedType !== "all" ? selectedType : "",
-            isActive: true,
-            sortOrder: prev.length,
-            image: "",
-            color: "",
-            icon: "",
-            isNew: true,
-            isEditing: true,
-        }]);
-    }, [selectedType]);
+    // Open modal instead of adding empty row
+    const openAddModal = useCallback(() => {
+        setAddModalOpen(true);
+    }, []);
 
-    useEffect(() => { addRef.current = addRow; return () => { addRef.current = null; }; }, [addRow, addRef]);
+    useEffect(() => { addRef.current = openAddModal; return () => { addRef.current = null; }; }, [openAddModal, addRef]);
+
+    const handleAddSave = async (data: Omit<DropdownRow, '_id' | 'isNew' | 'isEditing'>) => {
+        setSaving("new-modal");
+        try {
+            const res = await fetch("/api/admin/settings/dropdowns", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    description: data.description,
+                    type: data.type,
+                    isActive: data.isActive,
+                    sortOrder: rows.length,
+                    image: data.image,
+                    color: data.color,
+                    icon: data.icon,
+                }),
+            });
+            if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+            const saved = await res.json();
+            setRows(prev => [...prev, { ...saved, isEditing: false, isNew: false }]);
+            setAddModalOpen(false);
+            toast.success("Option added successfully");
+        } catch (err: any) {
+            toast.error(err.message || "Failed to save");
+        } finally {
+            setSaving(null);
+        }
+    };
 
     const updateField = (idx: number, field: string, value: any) => {
         setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value, isEditing: true } : r));
@@ -449,6 +651,15 @@ export default function DropdownsPage() {
 
     return (
         <div className="flex gap-4 min-h-[400px]">
+            {/* Add Option Modal */}
+            <AddOptionModal
+                open={addModalOpen}
+                onClose={() => setAddModalOpen(false)}
+                onSave={handleAddSave}
+                defaultType={selectedType !== "all" ? selectedType : ""}
+                saving={saving === "new-modal"}
+            />
+
             {/* ── Sub-sidebar: Type filter ── */}
             <div className="w-[180px] shrink-0 border border-border/50 rounded-lg bg-card/50 overflow-hidden flex flex-col">
                 <div className="px-3 py-2.5 border-b border-border/50 bg-muted/30">
@@ -569,7 +780,7 @@ export default function DropdownsPage() {
                         </thead>
                         <tbody>
                             {filteredRows.length === 0 && (
-                                <tr><td colSpan={5} className="text-center text-sm text-muted-foreground py-8">
+                                <tr><td colSpan={8} className="text-center text-sm text-muted-foreground py-8">
                                     {selectedType === "all"
                                         ? 'No dropdown options configured. Click "Add Option" to get started.'
                                         : `No options for type "${selectedType}".`

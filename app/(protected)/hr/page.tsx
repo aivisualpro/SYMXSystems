@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -153,7 +153,7 @@ function AvailabilityDay({ day, available, total }: { day: string; available: nu
 }
 
 export default function EmployeesDashboardPage() {
-  const [employees, setEmployees] = useState<ISymxEmployee[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [incidentKpi, setIncidentKpi] = useState<any>(null);
   const [reimbursementKpi, setReimbursementKpi] = useState<any>(null);
@@ -162,14 +162,14 @@ export default function EmployeesDashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [empRes, incRes, reimbRes] = await Promise.all([
-          fetch("/api/admin/employees?terminated=true"),
+        const [dashRes, incRes, reimbRes] = await Promise.all([
+          fetch("/api/admin/employees/dashboard"),
           fetch("/api/admin/claims?skip=0&limit=1"),
           fetch("/api/admin/reimbursements?skip=0&limit=1"),
         ]);
-        if (empRes.ok) {
-          const data = await empRes.json();
-          setEmployees(data);
+        if (dashRes.ok) {
+          const data = await dashRes.json();
+          setStats(data);
         }
         if (incRes.ok) {
           const data = await incRes.json();
@@ -188,166 +188,12 @@ export default function EmployeesDashboardPage() {
     fetchData();
   }, []);
 
-  // ── Computed Stats ──
-  const stats = useMemo(() => {
-    const total = employees.length;
-    const active = employees.filter(e => e.status === "Active" || !e.status || (!["Terminated", "Resigned", "Inactive"].includes(e.status))).length;
-    const terminated = employees.filter(e => e.status === "Terminated" && !e.resignationDate).length;
-    const resigned = employees.filter(e => e.status === "Resigned" || (e.resignationDate && e.status !== "Terminated")).length;
-    const inactive = employees.filter(e => e.status === "Inactive").length;
-
-    // Type breakdown
-    const typeMap: Record<string, number> = {};
-    employees.forEach(e => {
-      const t = e.type || "Unassigned";
-      typeMap[t] = (typeMap[t] || 0) + 1;
-    });
-
-    // Recent hires (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const recentHires = employees.filter(e => {
-      if (!e.hiredDate) return false;
-      return new Date(e.hiredDate) >= thirtyDaysAgo;
-    }).length;
-
-    // Expiring documents (DL within 30 days)
-    const expiringDL = employees.filter(e => {
-      if (!e.dlExpiration || e.status !== "Active") return false;
-      const exp = new Date(e.dlExpiration);
-      const now = new Date();
-      const thirtyDays = new Date();
-      thirtyDays.setDate(thirtyDays.getDate() + 30);
-      return exp >= now && exp <= thirtyDays;
-    }).length;
-
-    // Expired DL
-    const expiredDL = employees.filter(e => {
-      if (!e.dlExpiration || e.status !== "Active") return false;
-      return new Date(e.dlExpiration) < new Date();
-    }).length;
-
-    // Missing documents
-    const missingDocs = employees.filter(e => {
-      if (e.status !== "Active") return false;
-      return !e.offerLetterFile || !e.driversLicenseFile || !e.i9File;
-    }).length;
-
-    // Document completeness
-    const activeEmployees = employees.filter(e => e.status === "Active" || !e.status || (!["Terminated", "Resigned", "Inactive"].includes(e.status)));
-    const docChecks = activeEmployees.map(e => {
-      let score = 0;
-      let total = 5;
-      if (e.offerLetterFile) score++;
-      if (e.driversLicenseFile) score++;
-      if (e.i9File) score++;
-      if (e.drugTestFile) score++;
-      if (e.handbookFile) score++;
-      return { score, total };
-    });
-    const totalDocScore = docChecks.reduce((s, d) => s + d.score, 0);
-    const totalDocPossible = docChecks.reduce((s, d) => s + d.total, 0);
-    const docCompliancePct = totalDocPossible > 0 ? Math.round((totalDocScore / totalDocPossible) * 100) : 0;
-
-    // Individual doc counts
-    const hasOfferLetter = activeEmployees.filter(e => e.offerLetterFile).length;
-    const hasDL = activeEmployees.filter(e => e.driversLicenseFile).length;
-    const hasI9 = activeEmployees.filter(e => e.i9File).length;
-    const hasDrugTest = activeEmployees.filter(e => e.drugTestFile).length;
-    const hasHandbook = activeEmployees.filter(e => e.handbookFile).length;
-
-    // Hourly status breakdown
-    const hourlyMap: Record<string, number> = {};
-    activeEmployees.forEach(e => {
-      const h = e.hourlyStatus || "Unspecified";
-      hourlyMap[h] = (hourlyMap[h] || 0) + 1;
-    });
-
-    // Tenure analysis
-    const now = new Date();
-    const tenureBuckets = { '<3mo': 0, '3-6mo': 0, '6-12mo': 0, '1-2yr': 0, '2yr+': 0 };
-    let totalTenureDays = 0;
-    let tenureCount = 0;
-    activeEmployees.forEach(e => {
-      if (!e.hiredDate) return;
-      const hd = new Date(e.hiredDate);
-      const days = Math.floor((now.getTime() - hd.getTime()) / (1000 * 60 * 60 * 24));
-      totalTenureDays += days;
-      tenureCount++;
-      if (days < 90) tenureBuckets['<3mo']++;
-      else if (days < 180) tenureBuckets['3-6mo']++;
-      else if (days < 365) tenureBuckets['6-12mo']++;
-      else if (days < 730) tenureBuckets['1-2yr']++;
-      else tenureBuckets['2yr+']++;
-    });
-    const avgTenureDays = tenureCount > 0 ? Math.round(totalTenureDays / tenureCount) : 0;
-    const avgTenureMonths = Math.round(avgTenureDays / 30);
-
-    // Availability heatmap
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
-    const availability = days.map(day => {
-      const avail = activeEmployees.filter(e => {
-        const val = e[day];
-        return val && val !== 'OFF';
-      }).length;
-      return { day: day.substring(0, 3).toUpperCase(), available: avail, total: activeEmployees.length };
-    });
-
-    // Gender distribution
-    const genderMap: Record<string, number> = {};
-    activeEmployees.forEach(e => {
-      const g = e.gender || "Not Specified";
-      genderMap[g] = (genderMap[g] || 0) + 1;
-    });
-
-    // City distribution (top 5)
-    const cityMap: Record<string, number> = {};
-    activeEmployees.forEach(e => {
-      const c = e.city || "Unknown";
-      cityMap[c] = (cityMap[c] || 0) + 1;
-    });
-    const topCities = Object.entries(cityMap)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-
-    // Offboarding pipeline
-    const recentTerminations = employees.filter(e => {
-      if (e.status !== "Terminated" && e.status !== "Resigned") return false;
-      const td = e.terminationDate || e.resignationDate;
-      if (!td) return false;
-      const sixtyDaysAgo = new Date();
-      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-      return new Date(td) >= sixtyDaysAgo;
-    });
-    const pendingPaycom = recentTerminations.filter(e => !e.paycomOffboarded).length;
-    const pendingAmazon = recentTerminations.filter(e => !e.amazonOffboarded).length;
-    const pendingFinalCheck = recentTerminations.filter(e => !e.finalCheckIssued).length;
-
-    // Retention rate (how many active vs total ever)
-    const retentionRate = total > 0 ? Math.round((active / total) * 100) : 0;
-
-    // Turnover (terminated + resigned / total * 100)
-    const turnoverRate = total > 0 ? Math.round(((terminated + resigned) / total) * 100) : 0;
-
-    return {
-      total, active, terminated, resigned, inactive,
-      typeMap, recentHires, expiringDL, expiredDL, missingDocs,
-      hourlyMap, tenureBuckets, avgTenureMonths,
-      availability, genderMap, topCities,
-      pendingPaycom, pendingAmazon, pendingFinalCheck,
-      recentTerminations: recentTerminations.length,
-      retentionRate, turnoverRate,
-      docCompliancePct, hasOfferLetter, hasDL, hasI9, hasDrugTest, hasHandbook,
-      activeCount: activeEmployees.length,
-    };
-  }, [employees]);
-
   const typeColors = [
     "bg-blue-500", "bg-emerald-500", "bg-purple-500", "bg-amber-500",
     "bg-rose-500", "bg-cyan-500", "bg-indigo-500", "bg-teal-500",
   ];
 
-  if (loading) {
+  if (loading || !stats) {
     return (
       <div className="flex items-center justify-center py-32">
         <div className="flex flex-col items-center gap-3">
@@ -724,7 +570,7 @@ export default function EmployeesDashboardPage() {
             <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">By Type</h3>
           </div>
           <div className="space-y-2">
-            {Object.entries(stats.typeMap)
+            {(Object.entries(stats.typeMap) as [string, number][])
               .sort((a, b) => b[1] - a[1])
               .map(([type, count], idx) => (
                 <TypeChip key={type} label={type} count={count} color={typeColors[idx % typeColors.length]} onClick={() => router.push(`/hr/employees?type=${encodeURIComponent(type)}`)} />
@@ -785,7 +631,7 @@ export default function EmployeesDashboardPage() {
             <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Tenure Distribution</h3>
           </div>
           <div className="space-y-2.5">
-            {Object.entries(stats.tenureBuckets).map(([bucket, count]) => {
+            {(Object.entries(stats.tenureBuckets) as [string, number][]).map(([bucket, count]) => {
               const activeTotal = stats.active;
               const pct = activeTotal > 0 ? (count / activeTotal) * 100 : 0;
               const colorMap: Record<string, string> = {
@@ -821,7 +667,7 @@ export default function EmployeesDashboardPage() {
             <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Weekly Availability</h3>
           </div>
           <div className="flex items-end justify-between gap-2 px-1">
-            {stats.availability.map(a => (
+            {stats.availability.map((a: { day: string; available: number; total: number }) => (
               <AvailabilityDay key={a.day} day={a.day} available={a.available} total={a.total} />
             ))}
           </div>
@@ -913,7 +759,7 @@ export default function EmployeesDashboardPage() {
             {stats.topCities.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-4">No location data</p>
             ) : (
-              stats.topCities.map(([city, count], idx) => {
+              (stats.topCities as [string, number][]).map(([city, count]: [string, number], idx: number) => {
                 const pct = stats.activeCount > 0 ? (count / stats.activeCount) * 100 : 0;
                 const rankColors = ["text-amber-400", "text-zinc-400", "text-orange-600", "text-muted-foreground", "text-muted-foreground"];
                 return (
@@ -975,8 +821,8 @@ export default function EmployeesDashboardPage() {
             <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Demographics</h3>
           </div>
           <div className="space-y-3">
-            {Object.entries(stats.genderMap)
-              .sort((a, b) => b[1] - a[1])
+            {(Object.entries(stats.genderMap) as [string, number][])
+              .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
               .map(([gender, count]) => {
                 const pct = stats.activeCount > 0 ? (count / stats.activeCount) * 100 : 0;
                 const genderColorMap: Record<string, string> = {
@@ -1007,9 +853,9 @@ export default function EmployeesDashboardPage() {
             <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Hourly Status Distribution</h3>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {Object.entries(stats.hourlyMap)
-              .sort((a, b) => b[1] - a[1])
-              .map(([status, count]) => (
+            {(Object.entries(stats.hourlyMap) as [string, number][])
+              .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
+              .map(([status, count]: [string, number]) => (
                 <div
                   key={status}
                   onClick={() => router.push(`/hr/employees?hourlyStatus=${encodeURIComponent(status)}`)}
