@@ -31,6 +31,10 @@ import {
   ExternalLink,
   FileText,
   MapPin,
+  Circle,
+  ImagePlus,
+  Eye,
+  type LucideIcon,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -98,30 +102,51 @@ interface Interview {
   createdAt?: string;
 }
 
-type StatusFilter = "all" | "New" | "Interviewed" | "Hired" | "Rejected";
-
-const STATUS_FILTERS: { key: StatusFilter; label: string; icon: any; color: string; activeColor: string }[] = [
-  { key: "New", label: "New", icon: Clock, color: "text-blue-500", activeColor: "bg-blue-500 text-white shadow-blue-500/25" },
-  { key: "Interviewed", label: "Interviewed", icon: MessageSquare, color: "text-amber-500", activeColor: "bg-amber-500 text-white shadow-amber-500/25" },
-  { key: "Hired", label: "Hired", icon: CheckCircle2, color: "text-emerald-500", activeColor: "bg-emerald-500 text-white shadow-emerald-500/25" },
-  { key: "Rejected", label: "Rejected", icon: XCircle, color: "text-red-500", activeColor: "bg-red-500 text-white shadow-red-500/25" },
-  { key: "all", label: "All", icon: Filter, color: "text-muted-foreground", activeColor: "bg-primary text-primary-foreground shadow-primary/25" },
-];
-
-function getStatusConfig(status: string) {
-  const s = (status || "").toLowerCase();
-  if (s.includes("hired")) return { label: "Hired", color: "text-emerald-500", bg: "bg-emerald-500/10", ring: "ring-emerald-500/20", icon: CheckCircle2 };
-  if (s.includes("reject")) return { label: "Rejected", color: "text-red-500", bg: "bg-red-500/10", ring: "ring-red-500/20", icon: XCircle };
-  if (s.includes("interview")) return { label: "Interviewed", color: "text-amber-500", bg: "bg-amber-500/10", ring: "ring-amber-500/20", icon: MessageSquare };
-  return { label: status || "New", color: "text-blue-500", bg: "bg-blue-500/10", ring: "ring-blue-500/20", icon: Clock };
+interface DropdownStatus {
+  _id: string;
+  description: string;
+  color?: string;
+  icon?: string;
+  isActive: boolean;
 }
 
-function normalizeStatus(s: string): string {
-  const v = (s || "").toLowerCase();
-  if (v.includes("hired")) return "Hired";
-  if (v.includes("reject")) return "Rejected";
-  if (v.includes("interview")) return "Interviewed";
-  return "New";
+// ── Dynamic color palette based on status name ──
+const STATUS_COLOR_MAP: Record<string, { text: string; bg: string; ring: string; active: string; gradient: string }> = {
+  undecided:                    { text: "text-blue-500",    bg: "bg-blue-500/10",    ring: "ring-blue-500/20",    active: "bg-blue-500 text-white shadow-blue-500/25",      gradient: "from-blue-500 to-cyan-500" },
+  "move to next step":          { text: "text-teal-500",    bg: "bg-teal-500/10",    ring: "ring-teal-500/20",    active: "bg-teal-500 text-white shadow-teal-500/25",      gradient: "from-teal-500 to-cyan-500" },
+  hired:                        { text: "text-emerald-500", bg: "bg-emerald-500/10", ring: "ring-emerald-500/20", active: "bg-emerald-500 text-white shadow-emerald-500/25", gradient: "from-emerald-500 to-green-500" },
+  reject:                       { text: "text-red-500",     bg: "bg-red-500/10",     ring: "ring-red-500/20",     active: "bg-red-500 text-white shadow-red-500/25",        gradient: "from-red-500 to-rose-500" },
+  "background check complete":  { text: "text-violet-500",  bg: "bg-violet-500/10",  ring: "ring-violet-500/20",  active: "bg-violet-500 text-white shadow-violet-500/25",  gradient: "from-violet-500 to-purple-500" },
+  "waiting on background check":{ text: "text-amber-500",   bg: "bg-amber-500/10",   ring: "ring-amber-500/20",   active: "bg-amber-500 text-white shadow-amber-500/25",    gradient: "from-amber-500 to-orange-500" },
+  "waiting on hire":            { text: "text-sky-500",     bg: "bg-sky-500/10",     ring: "ring-sky-500/20",     active: "bg-sky-500 text-white shadow-sky-500/25",        gradient: "from-sky-500 to-blue-500" },
+};
+
+const FALLBACK_PALETTE = [
+  { text: "text-pink-500",   bg: "bg-pink-500/10",   ring: "ring-pink-500/20",   active: "bg-pink-500 text-white shadow-pink-500/25",   gradient: "from-pink-500 to-rose-500" },
+  { text: "text-indigo-500", bg: "bg-indigo-500/10", ring: "ring-indigo-500/20", active: "bg-indigo-500 text-white shadow-indigo-500/25", gradient: "from-indigo-500 to-blue-500" },
+  { text: "text-lime-500",   bg: "bg-lime-500/10",   ring: "ring-lime-500/20",   active: "bg-lime-500 text-white shadow-lime-500/25",   gradient: "from-lime-500 to-green-500" },
+  { text: "text-orange-500", bg: "bg-orange-500/10", ring: "ring-orange-500/20", active: "bg-orange-500 text-white shadow-orange-500/25", gradient: "from-orange-500 to-amber-500" },
+  { text: "text-cyan-500",   bg: "bg-cyan-500/10",   ring: "ring-cyan-500/20",   active: "bg-cyan-500 text-white shadow-cyan-500/25",   gradient: "from-cyan-500 to-teal-500" },
+];
+
+const STATUS_ICON_MAP: Record<string, LucideIcon> = {
+  undecided: Clock,
+  "move to next step": ChevronDown,
+  hired: CheckCircle2,
+  reject: XCircle,
+  "background check complete": CheckCircle2,
+  "waiting on background check": Clock,
+  "waiting on hire": Clock,
+};
+
+function getStatusColors(name: string, index = 0) {
+  const key = name.toLowerCase().trim();
+  return STATUS_COLOR_MAP[key] || FALLBACK_PALETTE[index % FALLBACK_PALETTE.length];
+}
+
+function getStatusIcon(name: string): LucideIcon {
+  const key = name.toLowerCase().trim();
+  return STATUS_ICON_MAP[key] || Circle;
 }
 
 function getRatingStars(r: string) {
@@ -231,11 +256,13 @@ function InterviewDialog({
   onClose,
   interview,
   onSaved,
+  statusOptions,
 }: {
   open: boolean;
   onClose: () => void;
   interview: Interview | null;
   onSaved: () => void;
+  statusOptions: DropdownStatus[];
 }) {
   const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -251,7 +278,7 @@ function InterviewDialog({
         workDays: interview?.workDays || "",
         lastEmployerInfo: interview?.lastEmployerInfo || "",
         howDidYouHear: interview?.howDidYouHear || "",
-        status: interview?.status || "New",
+        status: interview?.status || "Undecided",
         interviewNotes: interview?.interviewNotes || "",
         rating: interview?.rating || "",
         interviewedBy: interview?.interviewedBy || "",
@@ -378,19 +405,25 @@ function InterviewDialog({
               {fieldRow("How did you hear?", "howDidYouHear", { placeholder: "Indeed, Referral..." })}
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1.5">Status</label>
-                <div className="flex gap-1.5">
-                  {["New", "Interviewed", "Hired", "Rejected"].map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => set("status", s)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                        form.status === s ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted/50 border border-border/50 text-muted-foreground hover:bg-muted"
-                      )}
-                    >
-                      {s}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap gap-1.5">
+                  {statusOptions.map((opt, i) => {
+                    const colors = getStatusColors(opt.description, i);
+                    const Icon = getStatusIcon(opt.description);
+                    const isActive = form.status === opt.description;
+                    return (
+                      <button
+                        key={opt._id}
+                        onClick={() => set("status", opt.description)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5",
+                          isActive ? `${colors.active} shadow-sm` : "bg-muted/50 border border-border/50 text-muted-foreground hover:bg-muted"
+                        )}
+                      >
+                        <Icon className="h-3 w-3" />
+                        {opt.description}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </>
@@ -445,6 +478,161 @@ function InterviewDialog({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ *  INTERVIEW NOTES RENDERER
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+function parseInterviewNotes(text: string) {
+  if (!text?.trim()) return [];
+  const lines = text.split("\n");
+  const blocks: { type: "qa" | "section" | "text"; question?: string; answer?: string; content?: string }[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+
+    // Skip empty lines
+    if (!line) { i++; continue; }
+
+    // Section header like "Others:"
+    if (/^(others|additional|notes|comments)\s*:/i.test(line)) {
+      const sectionContent: string[] = [];
+      i++;
+      while (i < lines.length) {
+        const sLine = lines[i].trim();
+        if (sLine) sectionContent.push(sLine);
+        i++;
+      }
+      blocks.push({ type: "section", question: line.replace(/:$/, ""), content: sectionContent.join("\n") });
+      continue;
+    }
+
+    // Line ending with "?" or multi-word line not starting with "A:" = question
+    if (line.endsWith("?") || (line.length > 20 && !line.startsWith("A:"))) {
+      const question = line;
+      let answer = "";
+      i++;
+      // Collect answer lines (starting with A: or continuation lines)
+      while (i < lines.length) {
+        const aLine = lines[i].trim();
+        if (!aLine) { i++; continue; }
+        if (aLine.startsWith("A:")) {
+          answer = aLine.replace(/^A:\s*/, "").trim();
+          i++;
+          break;
+        }
+        // If it looks like the next question, stop
+        if (aLine.endsWith("?") || (aLine.length > 20 && !aLine.startsWith("A:"))) break;
+        answer += (answer ? " " : "") + aLine;
+        i++;
+      }
+      blocks.push({ type: "qa", question, answer: answer || "\u2014" });
+      continue;
+    }
+
+    // Standalone A: line (orphan answer)
+    if (line.startsWith("A:")) {
+      blocks.push({ type: "text", content: line.replace(/^A:\s*/, "").trim() || "\u2014" });
+      i++;
+      continue;
+    }
+
+    // Plain text
+    blocks.push({ type: "text", content: line });
+    i++;
+  }
+
+  return blocks;
+}
+
+function InterviewNotesRenderer({
+  notes,
+  isEditing,
+  onToggleEdit,
+  onSave,
+}: {
+  notes: string;
+  isEditing: boolean;
+  onToggleEdit: () => void;
+  onSave: (val: string) => void;
+}) {
+  const blocks = parseInterviewNotes(notes || "");
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Interview Notes</p>
+        <button
+          onClick={onToggleEdit}
+          className={cn(
+            "flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold transition-all",
+            isEditing ? "bg-primary text-primary-foreground" : "text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50"
+          )}
+        >
+          {isEditing ? <><Eye className="h-2.5 w-2.5" /> View</> : <><Pencil className="h-2.5 w-2.5" /> Edit</>}
+        </button>
+      </div>
+
+      {isEditing ? (
+        <textarea
+          defaultValue={notes || ""}
+          placeholder={"Add interview notes...\n\nFormat:\nQuestion?\nA: Answer\n\nOthers:\nAdditional info"}
+          rows={8}
+          onBlur={(e) => {
+            const val = e.target.value.trim();
+            if (val !== (notes || "").trim()) onSave(val);
+          }}
+          className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 text-xs text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 resize-y min-h-[120px] transition-all font-mono leading-relaxed"
+        />
+      ) : blocks.length > 0 ? (
+        <div className="space-y-2">
+          {blocks.map((block, bi) => {
+            if (block.type === "qa") {
+              return (
+                <div key={bi} className="rounded-xl bg-muted/20 border border-border/30 overflow-hidden">
+                  <div className="flex gap-2 px-3 py-2 bg-gradient-to-r from-rose-500/5 to-transparent">
+                    <span className="shrink-0 mt-0.5 h-4 w-4 rounded flex items-center justify-center bg-rose-500/15 text-rose-500 text-[8px] font-black">Q</span>
+                    <p className="text-[11px] text-foreground/80 font-medium leading-relaxed">{block.question}</p>
+                  </div>
+                  <div className="flex gap-2 px-3 py-2 border-t border-border/20">
+                    <span className="shrink-0 mt-0.5 h-4 w-4 rounded flex items-center justify-center bg-emerald-500/15 text-emerald-500 text-[8px] font-black">A</span>
+                    <p className={cn(
+                      "text-[11px] leading-relaxed",
+                      block.answer === "\u2014" ? "text-muted-foreground/30 italic" : "text-foreground font-medium"
+                    )}>
+                      {block.answer}
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+
+            if (block.type === "section") {
+              return (
+                <div key={bi} className="rounded-xl bg-amber-500/5 border border-amber-500/15 px-3 py-2">
+                  <p className="text-[9px] font-black text-amber-500/70 uppercase tracking-wider mb-1">{block.question}</p>
+                  <p className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-line">{block.content || "\u2014"}</p>
+                </div>
+              );
+            }
+
+            return (
+              <p key={bi} className="text-[11px] text-muted-foreground leading-relaxed px-1">{block.content}</p>
+            );
+          })}
+        </div>
+      ) : (
+        <button
+          onClick={onToggleEdit}
+          className="w-full py-4 rounded-xl border border-dashed border-border/40 bg-muted/10 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/60 hover:border-border/60 transition-all"
+        >
+          Click to add interview notes...
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
  *  MAIN PAGE
  * ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -452,7 +640,7 @@ export default function HRInterviewsPage() {
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("New");
+  const [statusFilter, setStatusFilter] = useState("Undecided");
   const [importing, setImporting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -462,6 +650,20 @@ export default function HRInterviewsPage() {
   const [showShare, setShowShare] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [editingItem, setEditingItem] = useState<Interview | null>(null);
+  const [statusOptions, setStatusOptions] = useState<DropdownStatus[]>([]);
+  const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
+
+  // ── Fetch interview status dropdown options ──
+  useEffect(() => {
+    fetch("/api/admin/settings/dropdowns?type=interview status")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setStatusOptions(data.filter((d: any) => d.isActive));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Header actions ──
   useEffect(() => {
@@ -568,25 +770,53 @@ export default function HRInterviewsPage() {
     }
   }, []);
 
-  // ── KPIs ──
-  const kpi = useMemo(() => {
-    const total = interviews.length;
-    return {
-      total,
-      New: interviews.filter((i) => normalizeStatus(i.status || "") === "New").length,
-      Interviewed: interviews.filter((i) => normalizeStatus(i.status || "") === "Interviewed").length,
-      Hired: interviews.filter((i) => normalizeStatus(i.status || "") === "Hired").length,
-      Rejected: interviews.filter((i) => normalizeStatus(i.status || "") === "Rejected").length,
-    };
-  }, [interviews]);
+  // ── Generic inline field update ──
+  const handleFieldUpdate = useCallback(async (id: string, field: string, value: string) => {
+    try {
+      const res = await fetch(`/api/admin/interviews/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (!res.ok) throw new Error();
+      setInterviews((p) => p.map((x) => x._id === id ? { ...x, [field]: value } : x));
+    } catch {
+      toast.error("Failed to save");
+    }
+  }, []);
 
-  const kpiForFilter = (key: StatusFilter) => key === "all" ? kpi.total : kpi[key] || 0;
+  // ── DL Photo upload ──
+  const handleDlPhotoUpload = useCallback(async (id: string, file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const upRes = await fetch("/api/admin/upload?folder=symx-systems/interviews", {
+        method: "POST",
+        body: formData,
+      });
+      if (!upRes.ok) throw new Error();
+      const { url } = await upRes.json();
+      await handleFieldUpdate(id, "dlPhoto", url);
+      toast.success("DL Photo uploaded");
+    } catch {
+      toast.error("Upload failed");
+    }
+  }, [handleFieldUpdate]);
+
+  // ── KPIs (dynamic from dropdown statuses) ──
+  const kpiMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    statusOptions.forEach((opt) => {
+      map[opt.description] = interviews.filter((i) => (i.status || "").toLowerCase().trim() === opt.description.toLowerCase().trim()).length;
+    });
+    return map;
+  }, [interviews, statusOptions]);
 
   // ── Filter + Search ──
   const filtered = useMemo(() => {
     let result = interviews;
     if (statusFilter !== "all") {
-      result = result.filter((i) => normalizeStatus(i.status || "") === statusFilter);
+      result = result.filter((i) => (i.status || "").toLowerCase().trim() === statusFilter.toLowerCase().trim());
     }
     if (search) {
       const q = search.toLowerCase();
@@ -629,24 +859,39 @@ export default function HRInterviewsPage() {
       )}
 
       <ShareDialog open={showShare} onClose={() => setShowShare(false)} />
-      <InterviewDialog open={showDialog} onClose={() => { setShowDialog(false); setEditingItem(null); }} interview={editingItem} onSaved={fetchInterviews} />
+      <InterviewDialog open={showDialog} onClose={() => { setShowDialog(false); setEditingItem(null); }} interview={editingItem} onSaved={fetchInterviews} statusOptions={statusOptions} />
 
-      {/* ═══ STATUS FILTER PILLS ═══ */}
+      {/* ═══ STATUS FILTER PILLS (dynamic) ═══ */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        {STATUS_FILTERS.map((f) => {
-          const isActive = statusFilter === f.key;
-          const count = kpiForFilter(f.key);
+        {/* "All" pill */}
+        <button
+          key="all"
+          onClick={() => setStatusFilter("all")}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 shrink-0",
+            statusFilter === "all" ? "bg-primary text-primary-foreground shadow-primary/25 shadow-lg scale-[1.02]" : "bg-card border border-border/50 text-muted-foreground hover:bg-muted/50"
+          )}
+        >
+          All
+          <span className={cn("ml-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-black", statusFilter === "all" ? "bg-white/20" : "bg-muted")}>{interviews.length}</span>
+        </button>
+
+        {statusOptions.map((opt, i) => {
+          const isActive = statusFilter === opt.description;
+          const count = kpiMap[opt.description] || 0;
+          const colors = getStatusColors(opt.description, i);
+          const Icon = getStatusIcon(opt.description);
           return (
             <button
-              key={f.key}
-              onClick={() => setStatusFilter(f.key)}
+              key={opt._id}
+              onClick={() => setStatusFilter(opt.description)}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 shrink-0",
-                isActive ? `${f.activeColor} shadow-lg scale-[1.02]` : "bg-card border border-border/50 text-muted-foreground hover:bg-muted/50"
+                isActive ? `${colors.active} shadow-lg scale-[1.02]` : "bg-card border border-border/50 text-muted-foreground hover:bg-muted/50"
               )}
             >
-              <f.icon className={cn("h-3.5 w-3.5", isActive ? "" : f.color)} />
-              {f.label}
+              <Icon className={cn("h-3.5 w-3.5", isActive ? "" : colors.text)} />
+              {opt.description}
               <span className={cn("ml-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-black", isActive ? "bg-white/20" : "bg-muted")}>{count}</span>
             </button>
           );
@@ -674,9 +919,12 @@ export default function HRInterviewsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((item) => {
-            const status = normalizeStatus(item.status || "");
-            const config = getStatusConfig(item.status || "");
+          {filtered.map((item, itemIdx) => {
+            const status = (item.status || "").trim();
+            const statusLower = status.toLowerCase();
+            const statusColorIdx = statusOptions.findIndex((o) => o.description.toLowerCase() === statusLower);
+            const colors = getStatusColors(status, statusColorIdx >= 0 ? statusColorIdx : itemIdx);
+            const StatusIcon = getStatusIcon(status);
             const isDeleting = deletingId === item._id;
             const isExpanded = expandedId === item._id;
             const date = item.createdAt
@@ -689,64 +937,47 @@ export default function HRInterviewsPage() {
                 key={item._id}
                 className={cn(
                   "group rounded-2xl border bg-card overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-black/5",
-                  status === "New" ? "border-blue-500/20 hover:border-blue-500/40" :
-                  status === "Hired" ? "border-emerald-500/20 hover:border-emerald-500/40" :
                   "border-border/50 hover:border-border"
                 )}
               >
                 {/* Accent bar */}
-                <div className={cn("h-1 w-full", {
-                  "bg-gradient-to-r from-blue-500 to-cyan-500": status === "New",
-                  "bg-gradient-to-r from-amber-500 to-orange-500": status === "Interviewed",
-                  "bg-gradient-to-r from-emerald-500 to-green-500": status === "Hired",
-                  "bg-gradient-to-r from-red-500 to-rose-500": status === "Rejected",
-                })} />
+                <div className={cn("h-1 w-full bg-gradient-to-r", colors.gradient)} />
 
-                {/* Header */}
-                <div className="px-4 pt-4 pb-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {item.image ? (
-                        <img src={item.image} alt="" className="h-10 w-10 rounded-xl object-cover ring-2 ring-border/30 shrink-0" />
-                      ) : (
-                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 flex items-center justify-center ring-2 ring-border/20 shrink-0">
-                          <User className="h-5 w-5 text-rose-500/40" />
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-foreground truncate">{item.fullName || "Unknown"}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {item.phoneNumber && (
-                            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                              <Phone className="h-2.5 w-2.5" /> {item.phoneNumber}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                {/* ── 1. Name + createdAt inline + actions ── */}
+                <div className="px-4 pt-3 pb-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <p className="text-sm font-bold text-foreground truncate">{item.fullName || "Unknown"}</p>
+                      {date && <span className="text-[10px] text-muted-foreground/60 shrink-0">{date}</span>}
                     </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <div className={cn("flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black ring-1", config.bg, config.color, config.ring)}>
-                        <config.icon className="h-3 w-3" />
-                        {config.label}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black ring-1", colors.bg, colors.text, colors.ring)}>
+                        <StatusIcon className="h-2.5 w-2.5" />
+                        {status || "Undecided"}
                       </div>
                       <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => { setEditingItem(item); setShowDialog(true); }} className="h-7 w-7 rounded-md flex items-center justify-center hover:bg-muted/50" title="Edit">
+                        <button onClick={() => { setEditingItem(item); setShowDialog(true); }} className="h-6 w-6 rounded flex items-center justify-center hover:bg-muted/50" title="Edit">
                           <Pencil className="h-3 w-3 text-muted-foreground" />
                         </button>
-                        <button onClick={() => handleDelete(item._id)} disabled={isDeleting} className="h-7 w-7 rounded-md flex items-center justify-center hover:bg-red-500/10" title="Delete">
+                        <button onClick={() => handleDelete(item._id)} disabled={isDeleting} className="h-6 w-6 rounded flex items-center justify-center hover:bg-red-500/10" title="Delete">
                           {isDeleting ? <Loader2 className="h-3 w-3 animate-spin text-red-500" /> : <Trash2 className="h-3 w-3 text-red-500/70" />}
                         </button>
                       </div>
                     </div>
                   </div>
+                  {/* Phone below name */}
+                  {item.phoneNumber && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                      <Phone className="h-2.5 w-2.5" /> {item.phoneNumber}
+                    </p>
+                  )}
                 </div>
 
-                {/* Info rows */}
-                <div className="px-4 pb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {date && (
+                {/* ── 2-4. Info row: Work Start, Type, Source ── */}
+                <div className="px-4 pb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {item.workStartDate && (
                     <div className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
-                      <Calendar className="h-3 w-3" /> {date}
+                      <Calendar className="h-3 w-3" /> Start: {item.workStartDate}
                     </div>
                   )}
                   {item.typeOfWork && (
@@ -759,92 +990,111 @@ export default function HRInterviewsPage() {
                       <MapPin className="h-3 w-3" /> {item.howDidYouHear}
                     </div>
                   )}
-                  {stars && (
-                    <div className="flex items-center gap-0.5">
-                      {Array.from({ length: stars }).map((_, i) => (
-                        <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
-                      ))}
-                      {Array.from({ length: 5 - stars }).map((_, i) => (
-                        <Star key={i} className="h-3 w-3 text-muted-foreground/20" />
-                      ))}
-                    </div>
-                  )}
                 </div>
 
-                {/* Work Days */}
+                {/* ── 5. Work Days chips ── */}
                 {item.workDays && (
-                  <div className="px-4 pb-3">
+                  <div className="px-4 pb-2">
                     <div className="flex flex-wrap gap-1">
-                      {item.workDays.split(",").map((d, i) => (
-                        <span key={i} className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{d.trim().slice(0, 3)}</span>
-                      ))}
+                      {item.workDays.split(",").map((d, i) => {
+                        const day = d.trim();
+                        if (!day) return null;
+                        return (
+                          <span key={i} className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 ring-1 ring-emerald-500/20">
+                            {day.length > 3 ? day.slice(0, 3) : day}
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
-                {/* Experience */}
+                {/* ── 6. Last Employer Info ── */}
                 {item.lastEmployerInfo && (
-                  <div className="px-4 pb-3">
+                  <div className="px-4 pb-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-0.5">Past Experience</p>
                     <p className={cn("text-xs text-muted-foreground leading-relaxed", isExpanded ? "" : "line-clamp-2")}>
                       {item.lastEmployerInfo}
                     </p>
-                    {item.lastEmployerInfo.length > 120 && (
-                      <button onClick={() => setExpandedId(isExpanded ? null : item._id)} className="text-[10px] font-bold text-primary mt-1 hover:underline">
+                    {item.lastEmployerInfo.length > 100 && (
+                      <button onClick={() => setExpandedId(isExpanded ? null : item._id)} className="text-[10px] font-bold text-primary mt-0.5 hover:underline">
                         {isExpanded ? "Show less" : "Read more"}
                       </button>
                     )}
                   </div>
                 )}
 
-                {/* Notes */}
-                {item.interviewNotes && (
-                  <div className="px-4 pb-3">
-                    <div className="flex items-start gap-1.5">
-                      <MessageSquare className="h-3 w-3 text-muted-foreground/40 mt-0.5 shrink-0" />
-                      <p className="text-[11px] text-muted-foreground line-clamp-2">{item.interviewNotes}</p>
+                {/* ── 7. Interview Notes (premium Q&A renderer) ── */}
+                <div className="px-4 pb-2">
+                  <InterviewNotesRenderer
+                    notes={item.interviewNotes || ""}
+                    isEditing={editingNotesId === item._id}
+                    onToggleEdit={() => setEditingNotesId(editingNotesId === item._id ? null : item._id)}
+                    onSave={(val) => {
+                      handleFieldUpdate(item._id, "interviewNotes", val);
+                      setEditingNotesId(null);
+                    }}
+                  />
+                </div>
+
+                {/* ── 8+9. Rating + DL Photo (inline) ── */}
+                <div className="px-4 pb-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Rating</p>
+                    <div className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          onClick={() => handleFieldUpdate(item._id, "rating", String(n))}
+                          className="transition-transform hover:scale-125"
+                        >
+                          <Star className={cn("h-3.5 w-3.5", stars && n <= stars ? "fill-amber-400 text-amber-400" : "text-muted-foreground/20 hover:text-amber-400/50")} />
+                        </button>
+                      ))}
                     </div>
                   </div>
-                )}
-
-                {/* Quick status footer */}
-                {status === "New" && (
-                  <div className="border-t border-border/30 bg-muted/20 px-4 py-2.5 flex items-center gap-2">
-                    <Button size="sm" className="flex-1 h-8 text-xs font-bold gap-1.5 bg-amber-500 hover:bg-amber-600 text-white" onClick={() => handleStatusChange(item._id, "Interviewed")}>
-                      <MessageSquare className="h-3.5 w-3.5" /> Interviewed
-                    </Button>
-                    <Button size="sm" className="flex-1 h-8 text-xs font-bold gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => handleStatusChange(item._id, "Hired")}>
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Hire
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-8 text-xs font-bold gap-1 border-red-500/30 text-red-500 hover:bg-red-500/10" onClick={() => handleStatusChange(item._id, "Rejected")}>
-                      <XCircle className="h-3.5 w-3.5" />
-                    </Button>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">DL</p>
+                    {item.dlPhoto ? (
+                      <a href={item.dlPhoto} target="_blank" rel="noopener noreferrer">
+                        <img src={item.dlPhoto} alt="DL" className="h-8 w-12 object-cover rounded border border-border/40 hover:border-primary/40 transition-all hover:shadow-md" />
+                      </a>
+                    ) : (
+                      <label className="flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-border/50 bg-muted/20 text-[10px] font-semibold text-muted-foreground hover:border-primary/40 hover:text-primary cursor-pointer transition-all">
+                        <ImagePlus className="h-3 w-3" />
+                        Upload
+                        <input type="file" className="hidden" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleDlPhotoUpload(item._id, f); e.target.value = ""; }} />
+                      </label>
+                    )}
                   </div>
-                )}
+                </div>
 
-                {status === "Interviewed" && (
-                  <div className="border-t border-border/30 bg-muted/20 px-4 py-2.5 flex items-center gap-2">
-                    <Button size="sm" className="flex-1 h-8 text-xs font-bold gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white" onClick={() => handleStatusChange(item._id, "Hired")}>
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Hire
-                    </Button>
-                    <Button size="sm" variant="outline" className="flex-1 h-8 text-xs font-bold gap-1 border-red-500/30 text-red-500 hover:bg-red-500/10" onClick={() => handleStatusChange(item._id, "Rejected")}>
-                      <XCircle className="h-3.5 w-3.5" /> Reject
-                    </Button>
+                {/* ── 10. Dynamic status footer ── */}
+                <div className="border-t border-border/30 bg-muted/15 px-3 py-2">
+                  <div className="flex flex-wrap gap-1">
+                    {statusOptions.map((opt, si) => {
+                      const isCurrent = statusLower === opt.description.toLowerCase();
+                      const optColors = getStatusColors(opt.description, si);
+                      const OptIcon = getStatusIcon(opt.description);
+                      return (
+                        <button
+                          key={opt._id}
+                          onClick={() => !isCurrent && handleStatusChange(item._id, opt.description)}
+                          disabled={isCurrent}
+                          className={cn(
+                            "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all",
+                            isCurrent
+                              ? `${optColors.active} cursor-default`
+                              : "bg-muted/50 border border-border/40 text-muted-foreground hover:border-border hover:bg-muted"
+                          )}
+                        >
+                          <OptIcon className="h-2.5 w-2.5" />
+                          {opt.description}
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
-
-                {(status === "Hired" || status === "Rejected") && (
-                  <div className="border-t border-border/30 bg-muted/10 px-4 py-2 flex items-center justify-between">
-                    <p className="text-[10px] text-muted-foreground/50 font-medium">
-                      {status === "Hired" ? "✓ Applicant hired" : "✗ Applicant rejected"}
-                    </p>
-                    <button
-                      onClick={() => handleStatusChange(item._id, "New")}
-                      className="text-[10px] text-muted-foreground/40 hover:text-muted-foreground font-medium transition-colors"
-                    >
-                      Reset to New
-                    </button>
-                  </div>
-                )}
+                </div>
               </div>
             );
           })}
