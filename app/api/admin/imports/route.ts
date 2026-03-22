@@ -16,6 +16,7 @@ import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import SymxIncident from "@/lib/models/SymxIncident";
+import SymxHrTicket from "@/lib/models/SymxHrTicket";
 import Vehicle from "@/lib/models/Vehicle";
 import VehicleRepair from "@/lib/models/VehicleRepair";
 import DailyInspection from "@/lib/models/DailyInspection";
@@ -75,6 +76,37 @@ const claimsHeaderMap: Record<string, string> = {
     "createdBy": "createdBy",
     "createdAt": "createdAt",
     "IncidentUploadFile": "incidentUploadFile",
+};
+
+const hrTicketsHeaderMap: Record<string, string> = {
+    "createdAt": "createdAt",
+    "Ticket #": "ticketNumber",
+    "Transporter ID": "transporterId",
+    "Category": "category",
+    "Issue": "issue",
+    "Attachment": "attachment",
+    "Managers Email": "managersEmail",
+    "Notes": "notes",
+    "Approve / Deny": "approveDeny",
+    "Resolution": "resolution",
+    "Hold Reason": "holdReason",
+    "Closed DateTime": "closedDateTime",
+    "Closed By": "closedBy",
+    "Closed Ticket Sent": "closedTicketSent",
+    // camelCase alternatives
+    "ticketNumber": "ticketNumber",
+    "transporterId": "transporterId",
+    "category": "category",
+    "issue": "issue",
+    "attachment": "attachment",
+    "managersEmail": "managersEmail",
+    "notes": "notes",
+    "approveDeny": "approveDeny",
+    "resolution": "resolution",
+    "holdReason": "holdReason",
+    "closedDateTime": "closedDateTime",
+    "closedBy": "closedBy",
+    "closedTicketSent": "closedTicketSent",
 };
 
 // Helper to sanitize keys (remove whitespace, special chars if needed) - not strictly needed if we map manually
@@ -1721,6 +1753,60 @@ export async function POST(req: NextRequest) {
                     count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
                     inserted: result.upsertedCount || 0,
                     updated: result.modifiedCount || 0,
+                });
+            }
+
+            return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+        }
+
+        // ── HR Tickets Import ──
+        else if (type === "hr-tickets") {
+            const transporterIds = data
+                .map((row: any) => (row["Transporter ID"] || row["transporterId"] || "").toString().trim())
+                .filter((id: string) => id);
+
+            const employees = await SymxEmployee.find(
+                { transporterId: { $in: transporterIds } },
+                { _id: 1, transporterId: 1 }
+            ).lean();
+            const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
+
+            // Build case-insensitive header lookup
+            const ciMap: Record<string, string> = {};
+            Object.entries(hrTicketsHeaderMap).forEach(([k, v]) => { ciMap[k.toLowerCase()] = v; });
+
+            const documents = data.map((row: any) => {
+                const processedData: any = {};
+
+                Object.entries(row).forEach(([header, value]) => {
+                    const normalizedHeader = header.trim();
+                    const schemaKey = ciMap[normalizedHeader.toLowerCase()] || hrTicketsHeaderMap[normalizedHeader];
+                    if (schemaKey && value !== undefined && value !== null && value !== "") {
+                        if (schemaKey === 'closedDateTime' || schemaKey === 'createdAt') {
+                            const parsed = new Date(value.toString());
+                            if (!isNaN(parsed.getTime())) processedData[schemaKey] = parsed;
+                        } else {
+                            processedData[schemaKey] = value.toString().trim();
+                        }
+                    }
+                });
+
+                const transporterId = processedData.transporterId;
+                if (transporterId && employeeMap.has(transporterId)) {
+                    processedData.employeeId = employeeMap.get(transporterId);
+                }
+
+                return processedData;
+            }).filter((doc: any): doc is NonNullable<typeof doc> => doc !== null);
+
+            if (documents.length > 0) {
+                const result = await SymxHrTicket.insertMany(documents, { ordered: false });
+                return NextResponse.json({
+                    success: true,
+                    count: result.length,
+                    inserted: result.length,
+                    updated: 0,
+                    matched: 0
                 });
             }
 

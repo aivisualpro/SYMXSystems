@@ -115,6 +115,31 @@ export async function GET(req: Request) {
         query.$or = missingCondition;
       }
       query.status = "Active";
+    } else if (filterSpecial === 'audit') {
+      // Employee Audit: Active + (DL expired OR missing transporterId OR missing any required doc)
+      const now = new Date();
+      const auditConditions = [
+        { dlExpiration: { $lte: now } },
+        { transporterId: { $in: ["", null] } },
+        { transporterId: { $exists: false } },
+        { offerLetterFile: { $in: ["", null] } },
+        { offerLetterFile: { $exists: false } },
+        { handbookFile: { $in: ["", null] } },
+        { handbookFile: { $exists: false } },
+        { driversLicenseFile: { $in: ["", null] } },
+        { driversLicenseFile: { $exists: false } },
+        { i9File: { $in: ["", null] } },
+        { i9File: { $exists: false } },
+        { drugTestFile: { $in: ["", null] } },
+        { drugTestFile: { $exists: false } },
+      ];
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, { $or: auditConditions }];
+        delete query.$or;
+      } else {
+        query.$or = auditConditions;
+      }
+      query.status = "Active";
     }
 
     if (limit > 0) {

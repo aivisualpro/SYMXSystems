@@ -35,12 +35,22 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // Determine folder from query param or default
+    const { searchParams } = new URL(req.url);
+    const folder = searchParams.get("folder") || "symx-systems/products";
+
+    // Determine resource_type based on file extension
+    // PDFs, docs, etc. must use "raw" to be accessible via direct URL
+    const fileName = file.name.toLowerCase();
+    const isRawFile = /\.(pdf|doc|docx|xls|xlsx|csv|txt|rtf|ppt|pptx)$/.test(fileName);
+    const resourceType = isRawFile ? "raw" : "auto";
+
     // 4. Upload to Cloudinary
     const result = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         {
-          folder: "symx-systems/products",
-          resource_type: "auto",
+          folder,
+          resource_type: resourceType as any,
         },
         (error, result) => {
           if (error) {

@@ -571,6 +571,49 @@ export default function EmployeesDashboardPage() {
         </div>
       )}
 
+      {/* ══════════════ Employee Audit Card ══════════════ */}
+      {stats.employeeAuditCount > 0 && (
+        <div
+          onClick={() => router.push("/hr/audit")}
+          className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-5 cursor-pointer transition-all hover:shadow-lg hover:border-orange-500/30 active:scale-[0.99]"
+        >
+          <div className="absolute top-0 left-0 w-1.5 h-full rounded-r-full bg-gradient-to-b from-orange-400 to-red-500" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-orange-500/20 to-red-500/20">
+                <FileWarning className="h-5 w-5 text-orange-500" />
+              </div>
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Employee Audit</h3>
+                <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                  Active employees with compliance issues
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-3xl font-black text-orange-500"><AnimatedNumber value={stats.employeeAuditCount} /></p>
+                <p className="text-[10px] font-bold text-muted-foreground">need attention</p>
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-orange-500 transition-colors" />
+            </div>
+          </div>
+          {/* Mini breakdown */}
+          <div className="flex items-center gap-3 mt-4 pt-3 border-t border-border/40">
+            {[
+              { label: "DL Expired", count: stats.expiredDL || 0, color: "text-red-500" },
+              { label: "Missing Docs", count: stats.missingDocs || 0, color: "text-amber-500" },
+              { label: "DL Expiring", count: stats.expiringDL || 0, color: "text-orange-400" },
+            ].map(item => (
+              <div key={item.label} className="flex items-center gap-1.5">
+                <span className={cn("text-sm font-black", item.color)}>{item.count}</span>
+                <span className="text-[10px] text-muted-foreground font-medium">{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ══════════════ ROW 2 — Status, Types, Compliance ══════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 

@@ -13,6 +13,7 @@ import {
   ListFilter,
   MapPin,
   Shield,
+  Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
 import Papa from "papaparse";
@@ -95,6 +96,22 @@ const importTypes = [
       "Employee Notes", "Supervisor Notes", "Third Party Name", "Third Party Phone",
       "Third Party Email", "With Insurance", "Insurance Policy", "Paid", "Reserved",
       "createdBy", "createdAt", "IncidentUploadFile",
+    ],
+  },
+  {
+    id: "hr-tickets",
+    name: "HR Tickets",
+    description: "Import HR ticket records from CSV. No fields are required — all are optional.",
+    icon: Ticket,
+    color: "from-purple-500 to-violet-500",
+    bgColor: "bg-purple-500/10",
+    borderColor: "border-purple-500/20",
+    iconColor: "text-purple-500",
+    fields: [
+      "createdAt", "Ticket #", "Transporter ID", "Category", "Issue",
+      "Attachment", "Managers Email", "Notes", "Approve / Deny",
+      "Resolution", "Hold Reason", "Closed DateTime", "Closed By",
+      "Closed Ticket Sent",
     ],
   },
   {

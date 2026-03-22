@@ -118,6 +118,23 @@ export async function GET() {
                     ],
                   },
                 },
+                // Employee Audit: Active + (DL expired OR missing transporterId OR missing any required doc)
+                employeeAuditCount: {
+                  $sum: {
+                    $cond: [
+                      { $or: [
+                        { $and: [{ $ne: [{ $ifNull: ["$dlExpiration", null] }, null] }, { $lte: ["$dlExpiration", now] }] },
+                        { $in: [{ $ifNull: ["$transporterId", ""] }, ["", null]] },
+                        { $in: [{ $ifNull: ["$offerLetterFile", ""] }, ["", null]] },
+                        { $in: [{ $ifNull: ["$handbookFile", ""] }, ["", null]] },
+                        { $in: [{ $ifNull: ["$driversLicenseFile", ""] }, ["", null]] },
+                        { $in: [{ $ifNull: ["$i9File", ""] }, ["", null]] },
+                        { $in: [{ $ifNull: ["$drugTestFile", ""] }, ["", null]] },
+                      ]},
+                      1, 0,
+                    ],
+                  },
+                },
                 // Tenure
                 totalTenureDays: {
                   $sum: {
@@ -233,7 +250,7 @@ export async function GET() {
     const sc = result.statusCounts[0] || { total: 0, active: 0, terminated: 0, resigned: 0, inactive: 0, recentHires: 0 };
     const ac = result.activeStats[0] || {
       activeCount: 0, hasOfferLetter: 0, hasDL: 0, hasI9: 0, hasDrugTest: 0, hasHandbook: 0,
-      missingDocs: 0, expiringDL: 0, expiredDL: 0,
+      missingDocs: 0, expiringDL: 0, expiredDL: 0, employeeAuditCount: 0,
       totalTenureDays: 0, tenureCount: 0,
       tenureLt3mo: 0, tenure3to6mo: 0, tenure6to12mo: 0, tenure1to2yr: 0, tenure2yrPlus: 0,
       sunAvail: 0, monAvail: 0, tueAvail: 0, wedAvail: 0, thuAvail: 0, friAvail: 0, satAvail: 0,
@@ -283,6 +300,7 @@ export async function GET() {
         { day: "SAT", available: ac.satAvail, total: ac.activeCount },
       ],
       expiringDL: ac.expiringDL, expiredDL: ac.expiredDL, missingDocs: ac.missingDocs,
+      employeeAuditCount: ac.employeeAuditCount,
       docCompliancePct,
       hasOfferLetter: ac.hasOfferLetter, hasDL: ac.hasDL, hasI9: ac.hasI9,
       hasDrugTest: ac.hasDrugTest, hasHandbook: ac.hasHandbook,
