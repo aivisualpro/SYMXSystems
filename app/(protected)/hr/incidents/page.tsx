@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Loader2, Plus, Shield, AlertTriangle, CheckCircle2, DollarSign, Trash2, Search, FileSpreadsheet, ArrowRight, CheckCircle, AlertCircle, RotateCw, FileUp, Table2, Upload, X, ExternalLink } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { useDataStore } from "@/hooks/use-data-store";
 import Papa from "papaparse";
 
 interface ClaimRow {
@@ -88,8 +89,9 @@ interface EmployeeOption {
 }
 
 export default function IncidentsPage() {
+  const store = useDataStore();
   const [data, setData] = useState<ClaimRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
@@ -172,6 +174,17 @@ export default function IncidentsPage() {
   }, [debouncedSearch, data.length]);
 
   useEffect(() => { fetchData(true); }, [debouncedSearch]);
+
+  // ── Seed from store for instant load ──
+  const storeClaims = store.hrClaims as any;
+  useEffect(() => {
+    if (!debouncedSearch && storeClaims?.records?.length > 0 && data.length === 0) {
+      setData(storeClaims.records);
+      setTotalCount(storeClaims.totalCount || storeClaims.records.length);
+      setHasMore(storeClaims.hasMore || false);
+      if (storeClaims.kpi) setKpis(storeClaims.kpi);
+    }
+  }, [storeClaims]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;

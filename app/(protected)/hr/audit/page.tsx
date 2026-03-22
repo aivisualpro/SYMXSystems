@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { useDataStore } from "@/hooks/use-data-store";
 import {
   Search,
   FileWarning,
@@ -61,8 +62,9 @@ type SortField = "name" | "dlExpiration" | "issues";
 type SortDir = "asc" | "desc";
 
 export default function EmployeeAuditPage() {
+  const store = useDataStore();
   const [employees, setEmployees] = useState<AuditEmployee[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("issues");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -109,6 +111,14 @@ export default function EmployeeAuditPage() {
     };
     fetchAudit();
   }, []);
+
+  // ── Seed from store for instant load ──
+  const storeAudit = store.hrAudit as any;
+  useEffect(() => {
+    if (Array.isArray(storeAudit) && storeAudit.length > 0 && employees.length === 0) {
+      setEmployees(storeAudit);
+    }
+  }, [storeAudit]);
 
   const now = new Date();
 

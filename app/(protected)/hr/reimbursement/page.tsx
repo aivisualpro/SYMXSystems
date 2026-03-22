@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { Loader2, Plus, DollarSign, TrendingUp, Clock, CheckCircle2, Trash2, Search, Paperclip, X, Upload, FileSpreadsheet, ArrowRight, CheckCircle, AlertCircle, RotateCw, FileUp, Table2 } from "lucide-react";
 import { ISymxReimbursement } from "@/lib/models/SymxReimbursement";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { useDataStore } from "@/hooks/use-data-store";
 import Papa from "papaparse";
 
 interface ReimbursementRow extends Omit<ISymxReimbursement, '_id'> {
@@ -64,8 +65,9 @@ const EXPECTED_CSV_FIELDS = [
 ];
 
 export default function ReimbursementPage() {
+  const store = useDataStore();
   const [data, setData] = useState<ReimbursementRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
@@ -185,6 +187,17 @@ export default function ReimbursementPage() {
       setLoadingMore(false);
     }
   }, [debouncedSearch, data.length]);
+
+  // ── Seed from store for instant load ──
+  const storeReimbursements = store.hrReimbursements as any;
+  useEffect(() => {
+    if (!debouncedSearch && storeReimbursements?.records?.length > 0 && data.length === 0) {
+      setData(storeReimbursements.records);
+      setTotalCount(storeReimbursements.totalCount || storeReimbursements.records.length);
+      setHasMore(storeReimbursements.hasMore || false);
+      if (storeReimbursements.kpi) setKpis(storeReimbursements.kpi);
+    }
+  }, [storeReimbursements]);
 
   // Initial load + search changes trigger reset
   useEffect(() => {

@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { useDataStore } from "@/hooks/use-data-store";
 import {
   Search,
   Ticket,
@@ -81,8 +82,9 @@ function getStatusConfig(status: string) {
 const CHUNK_SIZE = 500;
 
 export default function HRTicketsPage() {
+  const store = useDataStore();
   const [tickets, setTickets] = useState<HrTicket[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
   const [importing, setImporting] = useState(false);
@@ -99,6 +101,7 @@ export default function HRTicketsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search tickets..."
+            value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-8 text-sm"
           />
@@ -115,7 +118,7 @@ export default function HRTicketsPage() {
       </div>
     );
     return () => setRightContent(null);
-  }, [setRightContent]);
+  }, [setRightContent, search]);
 
   // ── Fetch tickets ──
   useEffect(() => {
@@ -132,6 +135,14 @@ export default function HRTicketsPage() {
       }
     })();
   }, []);
+
+  // ── Seed from store for instant load ──
+  const storeTickets = store.hrTickets as any;
+  useEffect(() => {
+    if (Array.isArray(storeTickets) && storeTickets.length > 0 && tickets.length === 0) {
+      setTickets(storeTickets);
+    }
+  }, [storeTickets]);
 
   // ── Import handler ──
   const handleImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
