@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../layout";
+import { useDataStore } from "@/hooks/use-data-store";
 import { cn } from "@/lib/utils";
 import {
     Users,
@@ -193,61 +194,55 @@ export default function EfficiencyPage() {
         return val;
     };
 
-    // ── Fetch routes ──
+    // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
+    const { rawRouteData, rawRouteDataLoading } = useDispatching();
+
     useEffect(() => {
-        if (!selectedWeek) return;
-        let cancelled = false;
-        setLoading(true);
-
-        fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
-            .then(r => r.json())
-            .then(data => {
-                if (cancelled) return;
-                if (!data.routes || data.routes.length === 0) { setAllRoutes([]); return; }
-
-                const rows: RouteRow[] = data.routes.map((rec: any) => {
-                    const emp = data.employees?.[rec.transporterId];
-                    return {
-                        _id: rec._id,
-                        transporterId: rec.transporterId,
-                        date: rec.date,
-                        weekDay: rec.weekDay || "",
-                        employeeName: emp?.name || rec.transporterId,
-                        type: rec.type || "",
-                        routeNumber: rec.routeNumber || "",
-                        stopCount: rec.stopCount || 0,
-                        routeDuration: rec.routeDuration || "",
-                        waveTime: rec.waveTime || "",
-                        actualDepartureTime: rec.actualDepartureTime || "",
-                        departureDelay: rec.departureDelay || "",
-                        plannedOutboundStem: rec.plannedOutboundStem || "",
-                        actualOutboundStem: rec.actualOutboundStem || "",
-                        outboundDelay: rec.outboundDelay || "",
-                        plannedFirstStop: rec.plannedFirstStop || "",
-                        actualFirstStop: rec.actualFirstStop || "",
-                        firstStopDelay: rec.firstStopDelay || "",
-                        plannedLastStop: rec.plannedLastStop || "",
-                        actualLastStop: rec.actualLastStop || "",
-                        lastStopDelay: rec.lastStopDelay || "",
-                        plannedRTSTime: rec.plannedRTSTime || "",
-                        estimatedRTSTime: rec.estimatedRTSTime || "",
-                        plannedInboundStem: rec.plannedInboundStem || "",
-                        plannedDuration1stToLast: rec.plannedDuration1stToLast || "",
-                        actualDuration1stToLast: rec.actualDuration1stToLast || "",
-                        stopsPerHour: rec.stopsPerHour || 0,
-                        deliveryCompletionTime: rec.deliveryCompletionTime || "",
-                        dctDelay: rec.dctDelay || "",
-                        stopsRescued: rec.stopsRescued || 0,
-                        driverEfficiency: rec.driverEfficiency || 0,
-                    };
-                });
-                setAllRoutes(rows);
-            })
-            .catch(() => setAllRoutes([]))
-            .finally(() => { if (!cancelled) setLoading(false); });
-
-        return () => { cancelled = true; };
-    }, [selectedWeek, routesGenerated]);
+        if (rawRouteDataLoading) { setLoading(true); return; }
+        if (!rawRouteData || !rawRouteData.routes || rawRouteData.routes.length === 0) {
+            setAllRoutes([]);
+            setLoading(false);
+            return;
+        }
+        const rows: RouteRow[] = rawRouteData.routes.map((rec: any) => {
+            const emp = rawRouteData.employees?.[rec.transporterId];
+            return {
+                _id: rec._id,
+                transporterId: rec.transporterId,
+                date: rec.date,
+                weekDay: rec.weekDay || "",
+                employeeName: emp?.name || rec.transporterId,
+                type: rec.type || "",
+                routeNumber: rec.routeNumber || "",
+                stopCount: rec.stopCount || 0,
+                routeDuration: rec.routeDuration || "",
+                waveTime: rec.waveTime || "",
+                actualDepartureTime: rec.actualDepartureTime || "",
+                departureDelay: rec.departureDelay || "",
+                plannedOutboundStem: rec.plannedOutboundStem || "",
+                actualOutboundStem: rec.actualOutboundStem || "",
+                outboundDelay: rec.outboundDelay || "",
+                plannedFirstStop: rec.plannedFirstStop || "",
+                actualFirstStop: rec.actualFirstStop || "",
+                firstStopDelay: rec.firstStopDelay || "",
+                plannedLastStop: rec.plannedLastStop || "",
+                actualLastStop: rec.actualLastStop || "",
+                lastStopDelay: rec.lastStopDelay || "",
+                plannedRTSTime: rec.plannedRTSTime || "",
+                estimatedRTSTime: rec.estimatedRTSTime || "",
+                plannedInboundStem: rec.plannedInboundStem || "",
+                plannedDuration1stToLast: rec.plannedDuration1stToLast || "",
+                actualDuration1stToLast: rec.actualDuration1stToLast || "",
+                stopsPerHour: rec.stopsPerHour || 0,
+                deliveryCompletionTime: rec.deliveryCompletionTime || "",
+                dctDelay: rec.dctDelay || "",
+                stopsRescued: rec.stopsRescued || 0,
+                driverEfficiency: rec.driverEfficiency || 0,
+            };
+        });
+        setAllRoutes(rows);
+        setLoading(false);
+    }, [rawRouteData, rawRouteDataLoading]);
 
     // ── Save ──
     const handleSave = useCallback(async (routeId: string, field: string, value: string) => {

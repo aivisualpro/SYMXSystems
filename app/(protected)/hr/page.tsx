@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useDataStore } from "@/hooks/use-data-store";
 import { cn } from "@/lib/utils";
 import {
   Users,
@@ -153,40 +154,60 @@ function AvailabilityDay({ day, available, total }: { day: string; available: nu
 }
 
 export default function EmployeesDashboardPage() {
+  const store = useDataStore();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [incidentKpi, setIncidentKpi] = useState<any>(null);
   const [reimbursementKpi, setReimbursementKpi] = useState<any>(null);
+  const hasSyncedFromStore = useRef(false);
   const router = useRouter();
 
+  // ── Read from store instantly ──
+  const storeStats = store.hrStats;
+  const storeClaimsKpi = store.hrClaimsKpi;
+  const storeReimbursementsKpi = store.hrReimbursementsKpi;
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [dashRes, incRes, reimbRes] = await Promise.all([
-          fetch("/api/admin/employees/dashboard"),
-          fetch("/api/admin/claims?skip=0&limit=1"),
-          fetch("/api/admin/reimbursements?skip=0&limit=1"),
-        ]);
-        if (dashRes.ok) {
-          const data = await dashRes.json();
-          setStats(data);
-        }
-        if (incRes.ok) {
-          const data = await incRes.json();
-          setIncidentKpi(data.kpi || null);
-        }
-        if (reimbRes.ok) {
-          const data = await reimbRes.json();
-          setReimbursementKpi(data.kpi || null);
-        }
-      } catch (err) {
-        console.error("Failed to fetch:", err);
-      } finally {
-        setLoading(false);
+    if (storeStats && !hasSyncedFromStore.current) {
+      setStats(storeStats);
+      setIncidentKpi(storeClaimsKpi);
+      setReimbursementKpi(storeReimbursementsKpi);
+      hasSyncedFromStore.current = true;
+      setLoading(false);
+    }
+  }, [storeStats, storeClaimsKpi, storeReimbursementsKpi]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [dashRes, incRes, reimbRes] = await Promise.all([
+        fetch("/api/admin/employees/dashboard"),
+        fetch("/api/admin/claims?skip=0&limit=1"),
+        fetch("/api/admin/reimbursements?skip=0&limit=1"),
+      ]);
+      if (dashRes.ok) {
+        const data = await dashRes.json();
+        setStats(data);
       }
-    };
-    fetchData();
-  }, []);
+      if (incRes.ok) {
+        const data = await incRes.json();
+        setIncidentKpi(data.kpi || null);
+      }
+      if (reimbRes.ok) {
+        const data = await reimbRes.json();
+        setReimbursementKpi(data.kpi || null);
+      }
+    } catch (err) {
+      console.error("Failed to fetch:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!storeStats && !store.initialized) return;
+    if (!storeStats) fetchData();
+  }, [store.initialized]);
 
   const typeColors = [
     "bg-blue-500", "bg-emerald-500", "bg-purple-500", "bg-amber-500",
@@ -195,10 +216,19 @@ export default function EmployeesDashboardPage() {
 
   if (loading || !stats) {
     return (
-      <div className="flex items-center justify-center py-32">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground animate-pulse">Loading dashboard...</p>
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          <div className="lg:col-span-5 h-[280px] rounded-2xl bg-muted/40 animate-pulse border border-border/50" />
+          <div className="lg:col-span-7 grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="h-[132px] rounded-2xl bg-muted/40 animate-pulse border border-border/50" />
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-24 rounded-2xl bg-muted/40 animate-pulse border border-border/50" />
+          ))}
         </div>
       </div>
     );

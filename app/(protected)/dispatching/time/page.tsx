@@ -421,81 +421,55 @@ export default function TimePage() {
     const [quickEditForm, setQuickEditForm] = useState<Partial<RouteRow>>({});
     const [punchStatusOptions, setPunchStatusOptions] = useState<any[]>([]);
 
-    // ── Fetch Punch Status Options ──
-    useEffect(() => {
-        let mounted = true;
-        fetch("/api/admin/settings/dropdowns?type=punch%20status")
-            .then(res => res.ok ? res.json() : [])
-            .then(data => {
-                if (mounted && Array.isArray(data)) setPunchStatusOptions(data);
-            })
-            .catch(() => { });
-        return () => { mounted = false; };
-    }, []);
-
     const store = useDataStore();
-    const hydratedRoutesRef = useRef(false);
 
-    // ── Fetch routes ──
+    // ── Hydrate Punch Status Options from DataStore ──
     useEffect(() => {
-        if (!selectedWeek) return;
-        let cancelled = false;
+        const dropdowns = store.admin?.dropdowns;
+        if (dropdowns && Array.isArray(dropdowns) && dropdowns.length > 0) {
+            const punches = dropdowns.filter((d: any) => d.type?.toLowerCase() === "punch status" && d.isActive !== false);
+            setPunchStatusOptions(punches);
+        }
+    }, [store.admin?.dropdowns]);
 
-        const transformRoutes = (data: any) => {
-            if (!data.routes || data.routes.length === 0) { setAllRoutes([]); return; }
-            const rows: RouteRow[] = data.routes.map((rec: any) => {
-                const emp = data.employees?.[rec.transporterId];
-                return {
-                    _id: rec._id,
-                    transporterId: rec.transporterId,
-                    date: rec.date,
-                    weekDay: rec.weekDay || "",
-                    employeeName: emp?.name || rec.transporterId,
-                    attendance: rec.attendance || "",
-                    type: rec.type || "",
-                    routeNumber: rec.routeNumber || "",
-                    paycomInDay: rec.paycomInDay || "",
-                    paycomOutLunch: rec.paycomOutLunch || "",
-                    paycomInLunch: rec.paycomInLunch || "",
-                    paycomOutDay: rec.paycomOutDay || "",
-                    punchStatus: rec.punchStatus || "",
-                    attendanceTime: rec.attendanceTime || "",
-                    amazonOutLunch: rec.amazonOutLunch || "",
-                    amazonInLunch: rec.amazonInLunch || "",
-                    amazonAppLogout: rec.amazonAppLogout || "",
-                    inspectionTime: rec.inspectionTime || "",
-                    totalHours: rec.totalHours || "",
-                    profileImage: emp?.profileImage || "",
-                };
-            });
-            setAllRoutes(rows);
-        };
+    // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
+    const { rawRouteData, rawRouteDataLoading } = useDispatching();
 
-        // Try hydrating from global store for the first/default week
-        if (
-            !hydratedRoutesRef.current &&
-            store.initialized &&
-            store.dispatchingRoutes &&
-            store.dispatchingWeeks?.[0] === selectedWeek
-        ) {
-            hydratedRoutesRef.current = true;
-            transformRoutes(store.dispatchingRoutes);
+    useEffect(() => {
+        if (rawRouteDataLoading) { setLoading(true); return; }
+        if (!rawRouteData || !rawRouteData.routes || rawRouteData.routes.length === 0) {
+            setAllRoutes([]);
             setLoading(false);
             return;
         }
-
-        setLoading(true);
-        fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
-            .then((r) => r.json())
-            .then((data) => {
-                if (cancelled) return;
-                transformRoutes(data);
-            })
-            .catch(() => setAllRoutes([]))
-            .finally(() => { if (!cancelled) setLoading(false); });
-
-        return () => { cancelled = true; };
-    }, [selectedWeek, routesGenerated]);
+        const rows: RouteRow[] = rawRouteData.routes.map((rec: any) => {
+            const emp = rawRouteData.employees?.[rec.transporterId];
+            return {
+                _id: rec._id,
+                transporterId: rec.transporterId,
+                date: rec.date,
+                weekDay: rec.weekDay || "",
+                employeeName: emp?.name || rec.transporterId,
+                attendance: rec.attendance || "",
+                type: rec.type || "",
+                routeNumber: rec.routeNumber || "",
+                paycomInDay: rec.paycomInDay || "",
+                paycomOutLunch: rec.paycomOutLunch || "",
+                paycomInLunch: rec.paycomInLunch || "",
+                paycomOutDay: rec.paycomOutDay || "",
+                punchStatus: rec.punchStatus || "",
+                attendanceTime: rec.attendanceTime || "",
+                amazonOutLunch: rec.amazonOutLunch || "",
+                amazonInLunch: rec.amazonInLunch || "",
+                amazonAppLogout: rec.amazonAppLogout || "",
+                inspectionTime: rec.inspectionTime || "",
+                totalHours: rec.totalHours || "",
+                profileImage: emp?.profileImage || "",
+            };
+        });
+        setAllRoutes(rows);
+        setLoading(false);
+    }, [rawRouteData, rawRouteDataLoading]);
 
     // ── Save handler ──
     const handleSave = useCallback(async (routeId: string, field: string, value: string) => {

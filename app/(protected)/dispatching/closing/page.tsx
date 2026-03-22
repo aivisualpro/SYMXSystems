@@ -102,7 +102,7 @@ interface RouteRow {
 type SortKey = typeof COLUMNS[number]["key"];
 
 export default function ClosingPage() {
-    const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats } = useDispatching();
+    const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats, refreshRoutes } = useDispatching();
     const searchParams = useSearchParams();
     const router = useRouter();
 
@@ -131,130 +131,59 @@ export default function ClosingPage() {
         }
     }, [searchParams, router]);
 
-    // ── Fetch routes for the week ──
-    const fetchRoutes = useCallback(() => {
-        if (!selectedWeek) return;
-        setLoading(true);
-
-        fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&_t=${Date.now()}`)
-            .then((r) => r.json())
-            .then((data) => {
-                if (!data.routes || data.routes.length === 0) {
-                    setAllRoutes([]);
-                    return;
-                }
-
-                const rows: RouteRow[] = data.routes.map((rec: any) => {
-                    const emp = data.employees?.[rec.transporterId];
-                    return {
-                        _id: rec._id,
-                        transporterId: rec.transporterId,
-                        date: rec.date,
-                        weekDay: rec.weekDay || "",
-                        employeeName: emp?.name || rec.transporterId,
-                        type: rec.type || "",
-                        routeNumber: rec.routeNumber || "",
-                        van: rec.van || "",
-                        routeDuration: rec.routeDuration || "",
-                        waveTime: rec.waveTime || "",
-                        inspectionTime: rec.inspectionTime || "",
-                        inspectionId: rec.inspectionId || "",
-                        actualDepartureTime: rec.actualDepartureTime || "",
-                        deliveryCompletionTime: rec.deliveryCompletionTime || "",
-                        profileImage: emp?.profileImage || "",
-                    };
-                });
-
-                setAllRoutes(rows);
-            })
-            .catch(() => setAllRoutes([]))
-            .finally(() => {
-                setLoading(false);
-            });
-
-        // Also fetch vehicles slightly quietly to map Van # => VIN
-        fetch("/api/fleet?section=vehicles")
-            .then(r => r.json())
-            .then(d => {
-                if (d.vehicles) {
-                    const dict: Record<string, string> = {};
-                    const nameDict: Record<string, string> = {};
-                    d.vehicles.forEach((v: any) => {
-                        if (v.unitNumber) {
-                            dict[v.unitNumber] = v.vin;
-                            if (v.vehicleName) nameDict[v.unitNumber] = v.vehicleName;
-                        }
-                        if (v.vehicleName) {
-                            dict[v.vehicleName] = v.vin;
-                            nameDict[v.vehicleName] = v.vehicleName;
-                        }
-                    });
-                    setVehiclesMap(dict);
-                    setVehicleNamesMap(nameDict);
-                }
-            })
-            .catch(() => { });
-    }, [selectedWeek]);
-
     const store = useDataStore();
-    const hydratedRoutesRef = useRef(false);
+
+    // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
+    const { rawRouteData, rawRouteDataLoading } = useDispatching();
 
     useEffect(() => {
-        // Try hydrating from global store for the first/default week
-        if (
-            !hydratedRoutesRef.current &&
-            store.initialized &&
-            store.dispatchingRoutes &&
-            store.dispatchingWeeks?.[0] === selectedWeek &&
-            selectedWeek
-        ) {
-            hydratedRoutesRef.current = true;
-            const data = store.dispatchingRoutes;
-            if (data.routes && data.routes.length > 0) {
-                const rows: RouteRow[] = data.routes.map((rec: any) => {
-                    const emp = data.employees?.[rec.transporterId];
-                    return {
-                        _id: rec._id,
-                        transporterId: rec.transporterId,
-                        date: rec.date,
-                        weekDay: rec.weekDay || "",
-                        employeeName: emp?.name || rec.transporterId,
-                        type: rec.type || "",
-                        routeNumber: rec.routeNumber || "",
-                        van: rec.van || "",
-                        routeDuration: rec.routeDuration || "",
-                        waveTime: rec.waveTime || "",
-                        inspectionTime: rec.inspectionTime || "",
-                        inspectionId: rec.inspectionId || "",
-                        actualDepartureTime: rec.actualDepartureTime || "",
-                        deliveryCompletionTime: rec.deliveryCompletionTime || "",
-                        profileImage: emp?.profileImage || "",
-                    };
-                });
-                setAllRoutes(rows);
-            }
-            // Also hydrate vehicles from store
-            if (store.fleet.vehicles && Array.isArray(store.fleet.vehicles)) {
-                const dict: Record<string, string> = {};
-                const nameDict: Record<string, string> = {};
-                store.fleet.vehicles.forEach((v: any) => {
-                    if (v.unitNumber) {
-                        dict[v.unitNumber] = v.vin;
-                        if (v.vehicleName) nameDict[v.unitNumber] = v.vehicleName;
-                    }
-                    if (v.vehicleName) {
-                        dict[v.vehicleName] = v.vin;
-                        nameDict[v.vehicleName] = v.vehicleName;
-                    }
-                });
-                setVehiclesMap(dict);
-                setVehicleNamesMap(nameDict);
-            }
+        if (rawRouteDataLoading) { setLoading(true); return; }
+        if (!rawRouteData || !rawRouteData.routes || rawRouteData.routes.length === 0) {
+            setAllRoutes([]);
             setLoading(false);
             return;
         }
-        fetchRoutes();
-    }, [fetchRoutes, routesGenerated]);
+        const rows: RouteRow[] = rawRouteData.routes.map((rec: any) => {
+            const emp = rawRouteData.employees?.[rec.transporterId];
+            return {
+                _id: rec._id,
+                transporterId: rec.transporterId,
+                date: rec.date,
+                weekDay: rec.weekDay || "",
+                employeeName: emp?.name || rec.transporterId,
+                type: rec.type || "",
+                routeNumber: rec.routeNumber || "",
+                van: rec.van || "",
+                routeDuration: rec.routeDuration || "",
+                waveTime: rec.waveTime || "",
+                inspectionTime: rec.inspectionTime || "",
+                inspectionId: rec.inspectionId || "",
+                actualDepartureTime: rec.actualDepartureTime || "",
+                deliveryCompletionTime: rec.deliveryCompletionTime || "",
+                profileImage: emp?.profileImage || "",
+            };
+        });
+        setAllRoutes(rows);
+
+        // Hydrate vehicles from store
+        if (store.fleet.vehicles && Array.isArray(store.fleet.vehicles)) {
+            const dict: Record<string, string> = {};
+            const nameDict: Record<string, string> = {};
+            store.fleet.vehicles.forEach((v: any) => {
+                if (v.unitNumber) {
+                    dict[v.unitNumber] = v.vin;
+                    if (v.vehicleName) nameDict[v.unitNumber] = v.vehicleName;
+                }
+                if (v.vehicleName) {
+                    dict[v.vehicleName] = v.vin;
+                    nameDict[v.vehicleName] = v.vehicleName;
+                }
+            });
+            setVehiclesMap(dict);
+            setVehicleNamesMap(nameDict);
+        }
+        setLoading(false);
+    }, [rawRouteData, rawRouteDataLoading, store.fleet.vehicles]);
 
     // ── Sort handler ──
     const handleSort = (key: SortKey) => {
@@ -572,7 +501,7 @@ export default function ClosingPage() {
                 route={inspectingRoute}
                 onSaved={(routeId) => {
                     toast.success("Inspection saved successfully!");
-                    fetchRoutes(); // refresh to show under "Inspected"
+                    refreshRoutes(); // refresh to show under "Inspected"
                 }}
             />
         </div>

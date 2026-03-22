@@ -63,6 +63,9 @@ const DEFAULT_MODULES = [
 let modulesCache: { data: any[]; timestamp: number; version: number } | null = null;
 const MODULES_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 
+// Mutex to prevent concurrent reseed race conditions
+let _reseedInFlight: Promise<any[]> | null = null;
+
 // GET: Fetch all modules (ordered) — auto-seeds/reseeds when version changes
 export async function GET() {
   try {
@@ -79,15 +82,25 @@ export async function GET() {
 
     await connectToDatabase();
 
-    // Force reseed: wipe and rebuild from DEFAULT_MODULES every time version changes
-    // This ensures the DB is always in sync with the code
-    await SymxAppModule.deleteMany({});
-    await SymxAppModule.insertMany(DEFAULT_MODULES);
-    const modules = await SymxAppModule.find({}).sort({ order: 1 }).lean();
+    // Use a mutex so concurrent requests don't race on deleteMany+insertMany
+    if (_reseedInFlight) {
+      const modules = await _reseedInFlight;
+      return NextResponse.json({ modules });
+    }
 
-    // Update cache
-    modulesCache = { data: modules, timestamp: Date.now(), version: MODULES_VERSION };
+    _reseedInFlight = (async () => {
+      try {
+        await SymxAppModule.deleteMany({});
+        await SymxAppModule.insertMany(DEFAULT_MODULES, { ordered: false });
+        const modules = await SymxAppModule.find({}).sort({ order: 1 }).lean();
+        modulesCache = { data: modules, timestamp: Date.now(), version: MODULES_VERSION };
+        return modules;
+      } finally {
+        _reseedInFlight = null;
+      }
+    })();
 
+    const modules = await _reseedInFlight;
     return NextResponse.json({ modules });
   } catch (error) {
     console.error("Error fetching modules:", error);

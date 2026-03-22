@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useDataStore } from "@/hooks/use-data-store";
 import { SimpleDataTable } from "@/components/admin/simple-data-table";
 import { UserForm } from "@/components/admin/user-form";
 import { Button } from "@/components/ui/button";
@@ -49,13 +50,42 @@ interface User {
   location?: string;
 }
 
+function sortUsers(users: User[]): User[] {
+  return [...users].sort((a, b) => {
+    const serialA = a.serialNo ? String(a.serialNo).trim() : "";
+    const serialB = b.serialNo ? String(b.serialNo).trim() : "";
+    if (serialA && serialB) {
+      const numA = Number(serialA);
+      const numB = Number(serialB);
+      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
+      if (serialA !== serialB) return serialA.localeCompare(serialB, undefined, { numeric: true });
+    }
+    if (serialA && !serialB) return -1;
+    if (!serialA && serialB) return 1;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+}
+
 export default function UsersPage() {
+  const store = useDataStore();
   const [data, setData] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<User | null>(null);
+  const hasSyncedFromStore = useRef(false);
 
   const router = useRouter();
+
+  // ── Read from store instantly ──
+  const storeUsers = store.admin?.users as User[] ?? [];
+
+  useEffect(() => {
+    if (storeUsers.length > 0 && !hasSyncedFromStore.current) {
+      setData(sortUsers(storeUsers));
+      hasSyncedFromStore.current = true;
+      setLoading(false);
+    }
+  }, [storeUsers]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -63,32 +93,7 @@ export default function UsersPage() {
       const response = await fetch("/api/admin/users");
       const users = await response.json();
       if (Array.isArray(users)) {
-        const sortedUsers = users.sort((a: User, b: User) => {
-             // 1. Primary Sort: Serial No
-             const serialA = a.serialNo ? String(a.serialNo).trim() : "";
-             const serialB = b.serialNo ? String(b.serialNo).trim() : "";
-
-             if (serialA && serialB) {
-                 // Try numeric sort first if both look like numbers
-                 const numA = Number(serialA);
-                 const numB = Number(serialB);
-                 if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
-                     return numA - numB;
-                 }
-                 // Alpha-numeric sort strings (e.g. A1 vs A2)
-                 if (serialA !== serialB) {
-                    return serialA.localeCompare(serialB, undefined, { numeric: true });
-                 }
-             }
-             
-             // Put items WITH serialNo before items WITHOUT
-             if (serialA && !serialB) return -1;
-             if (!serialA && serialB) return 1;
-
-             // 2. Secondary Sort: Name
-             return (a.name || "").localeCompare(b.name || "");
-        });
-        setData(sortedUsers);
+        setData(sortUsers(users));
       }
     } catch (error) {
       toast.error("Failed to fetch users");
@@ -97,9 +102,11 @@ export default function UsersPage() {
     }
   };
 
+  // Only fetch from API if store has nothing
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (storeUsers.length === 0 && !store.initialized) return; // still loading
+    if (storeUsers.length === 0) fetchUsers(); // store loaded but empty — try API
+  }, [store.initialized]);
 
   const handleSubmit = async (formData: Partial<User>) => {
     try {

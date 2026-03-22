@@ -314,24 +314,17 @@ export default function RoutesPage() {
     );
 
     const store = useDataStore();
-    const hydratedRoutesRef = useRef(false);
 
-    // ── Fetch active vehicles ──
+    // ── Hydrate active vehicles from DataStore ──
     const [vehicles, setVehicles] = useState<any[]>([]);
     useEffect(() => {
-        let mounted = true;
-        fetch("/api/fleet?section=vehicles")
-            .then(r => r.json())
-            .then(data => {
-                if (mounted && data.vehicles) {
-                    const activeVans = data.vehicles.filter((v: any) => v.status === "Active" || v.status === "active");
-                    activeVans.sort((a: any, b: any) => String(a.vehicleName).localeCompare(String(b.vehicleName), undefined, { numeric: true, sensitivity: 'base' }));
-                    setVehicles(activeVans);
-                }
-            })
-            .catch(() => {});
-        return () => { mounted = false; };
-    }, []);
+        const storeVehicles = store.fleet?.vehicles;
+        if (storeVehicles && Array.isArray(storeVehicles) && storeVehicles.length > 0) {
+            const activeVans = storeVehicles.filter((v: any) => v.status === "Active" || v.status === "active");
+            activeVans.sort((a: any, b: any) => String(a.vehicleName).localeCompare(String(b.vehicleName), undefined, { numeric: true, sensitivity: 'base' }));
+            setVehicles(activeVans);
+        }
+    }, [store.fleet?.vehicles]);
 
     // ── Get available vans for a date ──
     const getAvailableVans = useCallback((dateStr: string, currentVan: string) => {
@@ -379,141 +372,106 @@ export default function RoutesPage() {
         }
     }, [vehicles, refreshRoutes]);
 
-    // ── Fetch WST settings for revenue lookup ──
+    // ── Hydrate WST revenue from DataStore ──
     useEffect(() => {
-        fetch("/api/admin/settings/wst")
-            .then(r => r.json())
-            .then((data: any[]) => {
-                const map: Record<string, number> = {};
-                data.forEach((w: any) => {
-                    if (w.wst && w.isActive !== false) {
-                        map[w.wst.toLowerCase()] = w.revenue || 0;
-                    }
-                });
-                setWstRevenueMap(map);
-            })
-            .catch(() => { });
-    }, []);
-
-    // ── Fetch ALL routes for the week ──
-    useEffect(() => {
-        if (!selectedWeek) return;
-        let cancelled = false;
-
-        const transformRoutes = (data: any) => {
-            if (!data.routes || data.routes.length === 0) {
-                setAllRoutes([]);
-                setAuditCounts({});
-                return;
-            }
-
-            setAuditCounts(data.auditCounts || {});
-            setRouteCountsByDate(data.routeCountsByDate || {});
-            setInitialRoutesComp(data.initialRoutesComp || {});
-
-            const rows: RouteRow[] = data.routes.map((rec: any) => {
-                const emp = data.employees?.[rec.transporterId];
-                return {
-                    _id: rec._id,
-                    transporterId: rec.transporterId,
-                    date: rec.date,
-                    weekDay: rec.weekDay || "",
-                    type: rec.type || "",
-                    subType: rec.subType || "",
-                    van: (rec.van && data.vehicleNames?.[rec.van]) || rec.van || "",
-                    serviceType: rec.serviceType || "",
-                    dashcam: rec.dashcam || "",
-                    routeSize: rec.routeSize || "",
-                    driverEfficiency: rec.driverEfficiency || 0,
-                    employeeName: emp?.name || rec.transporterId,
-                    confirmationStatus: null, // populated below
-                    phone: emp?.phoneNumber || "",
-                    rate: emp?.rate || 0,
-                    routesCompleted: data.routeCounts?.[rec.transporterId] || 0,
-                    routeNumber: rec.routeNumber || "",
-                    stopCount: rec.stopCount || 0,
-                    packageCount: rec.packageCount || 0,
-                    routeDuration: rec.routeDuration || "",
-                    waveTime: rec.waveTime || "",
-                    pad: rec.pad || "",
-                    wst: rec.wst || "",
-                    wstRevenue: 0,
-                    wstDuration: rec.wstDuration || 0,
-                    bags: rec.bags || "",
-                    ov: rec.ov || "",
-                    stagingLocation: rec.stagingLocation || "",
-                    attendance: rec.attendance || "",
-                    profileImage: emp?.profileImage || "",
-                    // Raw fields
-                    actualDepartureTime: rec.actualDepartureTime || "",
-                    plannedOutboundStem: rec.plannedOutboundStem || "",
-                    actualOutboundStem: rec.actualOutboundStem || "",
-                    plannedFirstStop: rec.plannedFirstStop || "",
-                    actualFirstStop: rec.actualFirstStop || "",
-                    plannedLastStop: rec.plannedLastStop || "",
-                    actualLastStop: rec.actualLastStop || "",
-                    deliveryCompletionTime: rec.deliveryCompletionTime || "",
-                    totalHours: rec.totalHours || "",
-                    stopsRescued: rec.stopsRescued || 0,
-                    // Computed fields (will be filled in useMemo)
-                    departureDelay: "", outboundDelay: "", firstStopDelay: "", lastStopDelay: "",
-                    plannedRTSTime: "", plannedInboundStem: "", estimatedRTSTime: "",
-                    plannedDuration1stToLast: "", actualDuration1stToLast: "",
-                    stopsPerHour: 0, dctDelay: "",
-                    regHrs: 0, otHrs: 0, totalCost: 0, regPay: 0, otPay: 0,
-                    hoursWorkedLast7Days: 0,
-                    routesCompletedPrev: 0,
-                };
+        const wstData = store.admin?.wst;
+        if (wstData && Array.isArray(wstData) && wstData.length > 0) {
+            const map: Record<string, number> = {};
+            wstData.forEach((w: any) => {
+                if (w.wst && w.isActive !== false) {
+                    map[w.wst.toLowerCase()] = w.revenue || 0;
+                }
             });
+            setWstRevenueMap(map);
+        }
+    }, [store.admin?.wst]);
 
-            // Populate confirmation status map (handling the complex date part)
-            if (data.confirmations) {
-                rows.forEach(r => {
-                    const dateStr = r.date && typeof r.date === 'string' ? r.date.split('T')[0] : "";
-                    const key = `${r.transporterId}_${dateStr}`;
-                    const weeklyKey = `${r.transporterId}_`; // Fallback if confirmation is weekly (no specific date)
-                    
-                    if (data.confirmations[key]) {
-                        r.confirmationStatus = data.confirmations[key];
-                    } else if (data.confirmations[weeklyKey]) {
-                        r.confirmationStatus = data.confirmations[weeklyKey];
-                    }
-                });
-            }
+    // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
+    const { rawRouteData, rawRouteDataLoading } = useDispatching();
 
-            setAllRoutes(rows);
-        };
-
-        // Try hydrating from global store for the first/default week
-        if (
-            !hydratedRoutesRef.current &&
-            store.initialized &&
-            store.dispatchingRoutes &&
-            store.dispatchingWeeks?.[0] === selectedWeek
-        ) {
-            hydratedRoutesRef.current = true;
-            transformRoutes(store.dispatchingRoutes);
+    useEffect(() => {
+        if (rawRouteDataLoading) { setLoading(true); return; }
+        if (!rawRouteData || !rawRouteData.routes || rawRouteData.routes.length === 0) {
+            setAllRoutes([]);
+            setAuditCounts({});
             setLoading(false);
             return;
         }
 
-        setLoading(true);
-        fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
-            .then((r) => r.json())
-            .then((data) => {
-                if (cancelled) return;
-                transformRoutes(data);
-            })
-            .catch(() => {
-                setAllRoutes([]);
-                setAuditCounts({});
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
+        setAuditCounts(rawRouteData.auditCounts || {});
+        setRouteCountsByDate(rawRouteData.routeCountsByDate || {});
+        setInitialRoutesComp(rawRouteData.initialRoutesComp || {});
 
-        return () => { cancelled = true; };
-    }, [selectedWeek, refreshKey]);
+        const rows: RouteRow[] = rawRouteData.routes.map((rec: any) => {
+            const emp = rawRouteData.employees?.[rec.transporterId];
+            return {
+                _id: rec._id,
+                transporterId: rec.transporterId,
+                date: rec.date,
+                weekDay: rec.weekDay || "",
+                type: rec.type || "",
+                subType: rec.subType || "",
+                van: (rec.van && rawRouteData.vehicleNames?.[rec.van]) || rec.van || "",
+                serviceType: rec.serviceType || "",
+                dashcam: rec.dashcam || "",
+                routeSize: rec.routeSize || "",
+                driverEfficiency: rec.driverEfficiency || 0,
+                employeeName: emp?.name || rec.transporterId,
+                confirmationStatus: null,
+                phone: emp?.phoneNumber || "",
+                rate: emp?.rate || 0,
+                routesCompleted: rawRouteData.routeCounts?.[rec.transporterId] || 0,
+                routeNumber: rec.routeNumber || "",
+                stopCount: rec.stopCount || 0,
+                packageCount: rec.packageCount || 0,
+                routeDuration: rec.routeDuration || "",
+                waveTime: rec.waveTime || "",
+                pad: rec.pad || "",
+                wst: rec.wst || "",
+                wstRevenue: 0,
+                wstDuration: rec.wstDuration || 0,
+                bags: rec.bags || "",
+                ov: rec.ov || "",
+                stagingLocation: rec.stagingLocation || "",
+                attendance: rec.attendance || "",
+                profileImage: emp?.profileImage || "",
+                actualDepartureTime: rec.actualDepartureTime || "",
+                plannedOutboundStem: rec.plannedOutboundStem || "",
+                actualOutboundStem: rec.actualOutboundStem || "",
+                plannedFirstStop: rec.plannedFirstStop || "",
+                actualFirstStop: rec.actualFirstStop || "",
+                plannedLastStop: rec.plannedLastStop || "",
+                actualLastStop: rec.actualLastStop || "",
+                deliveryCompletionTime: rec.deliveryCompletionTime || "",
+                totalHours: rec.totalHours || "",
+                stopsRescued: rec.stopsRescued || 0,
+                departureDelay: "", outboundDelay: "", firstStopDelay: "", lastStopDelay: "",
+                plannedRTSTime: "", plannedInboundStem: "", estimatedRTSTime: "",
+                plannedDuration1stToLast: "", actualDuration1stToLast: "",
+                stopsPerHour: 0, dctDelay: "",
+                regHrs: 0, otHrs: 0, totalCost: 0, regPay: 0, otPay: 0,
+                hoursWorkedLast7Days: 0,
+                routesCompletedPrev: 0,
+            };
+        });
+
+        // Populate confirmation status
+        if (rawRouteData.confirmations) {
+            rows.forEach(r => {
+                const dateStr = r.date && typeof r.date === 'string' ? r.date.split('T')[0] : "";
+                const key = `${r.transporterId}_${dateStr}`;
+                const weeklyKey = `${r.transporterId}_`;
+                if (rawRouteData.confirmations[key]) {
+                    r.confirmationStatus = rawRouteData.confirmations[key];
+                } else if (rawRouteData.confirmations[weeklyKey]) {
+                    r.confirmationStatus = rawRouteData.confirmations[weeklyKey];
+                }
+            });
+        }
+
+        setAllRoutes(rows);
+        setLoading(false);
+    }, [rawRouteData, rawRouteDataLoading]);
 
     // ── Handle type change ──
     const handleTypeChange = useCallback(async (routeId: string, newType: string, transporterId: string) => {

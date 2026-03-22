@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../layout";
+import { useDataStore } from "@/hooks/use-data-store";
 import RoutesInfoPanel from "../_components/RoutesInfoPanel";
 import { cn } from "@/lib/utils";
 import {
@@ -165,60 +166,46 @@ export default function RosterPage() {
     // Routes Info panel state
     const [showRoutesInfo, setShowRoutesInfo] = useState(false);
 
-    // ── Fetch ALL routes for the week ──
+    const store = useDataStore();
+
+    // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
+    const { rawRouteData, rawRouteDataLoading } = useDispatching();
+
     useEffect(() => {
-        if (!selectedWeek) return;
-        let cancelled = false;
-        setLoading(true);
+        if (rawRouteDataLoading) { setLoading(true); return; }
+        if (!rawRouteData || !rawRouteData.routes || rawRouteData.routes.length === 0) {
+            setAllRoutes([]);
+            setAuditCounts({});
+            setLoading(false);
+            return;
+        }
+        setAuditCounts(rawRouteData.auditCounts || {});
+        setRouteCountsByDate(rawRouteData.routeCountsByDate || {});
+        setInitialRoutesComp(rawRouteData.initialRoutesComp || {});
 
-        fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
-            .then((r) => r.json())
-            .then((data) => {
-                if (cancelled) return;
-                if (!data.routes || data.routes.length === 0) {
-                    setAllRoutes([]);
-                    setAuditCounts({});
-                    return;
-                }
-
-                setAuditCounts(data.auditCounts || {});
-                setRouteCountsByDate(data.routeCountsByDate || {});
-                setInitialRoutesComp(data.initialRoutesComp || {});
-
-                // Build flat list of ALL route records
-                const rows: RouteRow[] = data.routes.map((rec: any) => {
-                    const emp = data.employees?.[rec.transporterId];
-                    return {
-                        _id: rec._id,
-                        transporterId: rec.transporterId,
-                        date: rec.date,
-                        weekDay: rec.weekDay || "",
-                        type: rec.type || "",
-                        subType: rec.subType || "",
-                        van: rec.van || "",
-                        serviceType: rec.serviceType || "",
-                        dashcam: rec.dashcam || "",
-                        routeSize: rec.routeSize || "",
-                        driverEfficiency: rec.driverEfficiency || 0,
-                        employeeName: emp?.name || rec.transporterId,
-                        phone: emp?.phoneNumber || "",
-                        routesCompleted: data.routeCounts?.[rec.transporterId] || 0,
-                        routesCompletedPrev: 0,
-                    };
-                });
-
-                setAllRoutes(rows);
-            })
-            .catch(() => {
-                setAllRoutes([]);
-                setAuditCounts({});
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-
-        return () => { cancelled = true; };
-    }, [selectedWeek, refreshKey]);
+        const rows: RouteRow[] = rawRouteData.routes.map((rec: any) => {
+            const emp = rawRouteData.employees?.[rec.transporterId];
+            return {
+                _id: rec._id,
+                transporterId: rec.transporterId,
+                date: rec.date,
+                weekDay: rec.weekDay || "",
+                type: rec.type || "",
+                subType: rec.subType || "",
+                van: rec.van || "",
+                serviceType: rec.serviceType || "",
+                dashcam: rec.dashcam || "",
+                routeSize: rec.routeSize || "",
+                driverEfficiency: rec.driverEfficiency || 0,
+                employeeName: emp?.name || rec.transporterId,
+                phone: emp?.phoneNumber || "",
+                routesCompleted: rawRouteData.routeCounts?.[rec.transporterId] || 0,
+                routesCompletedPrev: 0,
+            };
+        });
+        setAllRoutes(rows);
+        setLoading(false);
+    }, [rawRouteData, rawRouteDataLoading]);
 
     // ── Handle type change ──
     const handleTypeChange = useCallback(async (routeId: string, newType: string, transporterId: string) => {

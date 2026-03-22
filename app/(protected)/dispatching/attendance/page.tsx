@@ -159,70 +159,40 @@ export default function AttendancePage() {
     const [editingCell, setEditingCell] = useState<{ rowId: string; field: string } | null>(null);
     const [editValue, setEditValue] = useState("");
 
-    const store = useDataStore();
-    const hydratedRoutesRef = useRef(false);
+    // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
+    const { rawRouteData, rawRouteDataLoading } = useDispatching();
 
-    // ── Fetch routes for the week ──
     useEffect(() => {
-        if (!selectedWeek) return;
-        let cancelled = false;
-
-        const transformRoutes = (data: any) => {
-            if (!data.routes || data.routes.length === 0) {
-                setAllRoutes([]);
-                return;
-            }
-            const rows: RouteRow[] = data.routes.map((rec: any) => {
-                const emp = data.employees?.[rec.transporterId];
-                return {
-                    _id: rec._id,
-                    transporterId: rec.transporterId,
-                    date: rec.date,
-                    weekDay: rec.weekDay || "",
-                    employeeName: emp?.name || rec.transporterId,
-                    attendance: rec.attendance || "",
-                    type: rec.type || "",
-                    routeNumber: rec.routeNumber || "",
-                    van: rec.van || "",
-                    routeDuration: rec.routeDuration || "",
-                    waveTime: rec.waveTime || "",
-                    pad: rec.pad || "",
-                    stagingLocation: rec.stagingLocation || "",
-                    attendanceTime: rec.attendanceTime || "",
-                    dashcam: rec.dashcam || "",
-                    profileImage: emp?.profileImage || "",
-                };
-            });
-            setAllRoutes(rows);
-        };
-
-        // Try hydrating from global store for the first/default week
-        if (
-            !hydratedRoutesRef.current &&
-            store.initialized &&
-            store.dispatchingRoutes &&
-            store.dispatchingWeeks?.[0] === selectedWeek
-        ) {
-            hydratedRoutesRef.current = true;
-            transformRoutes(store.dispatchingRoutes);
+        if (rawRouteDataLoading) { setLoading(true); return; }
+        if (!rawRouteData || !rawRouteData.routes || rawRouteData.routes.length === 0) {
+            setAllRoutes([]);
             setLoading(false);
             return;
         }
-
-        setLoading(true);
-        fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
-            .then((r) => r.json())
-            .then((data) => {
-                if (cancelled) return;
-                transformRoutes(data);
-            })
-            .catch(() => setAllRoutes([]))
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-
-        return () => { cancelled = true; };
-    }, [selectedWeek, routesGenerated]);
+        const rows: RouteRow[] = rawRouteData.routes.map((rec: any) => {
+            const emp = rawRouteData.employees?.[rec.transporterId];
+            return {
+                _id: rec._id,
+                transporterId: rec.transporterId,
+                date: rec.date,
+                weekDay: rec.weekDay || "",
+                employeeName: emp?.name || rec.transporterId,
+                attendance: rec.attendance || "",
+                type: rec.type || "",
+                routeNumber: rec.routeNumber || "",
+                van: rec.van || "",
+                routeDuration: rec.routeDuration || "",
+                waveTime: rec.waveTime || "",
+                pad: rec.pad || "",
+                stagingLocation: rec.stagingLocation || "",
+                attendanceTime: rec.attendanceTime || "",
+                dashcam: rec.dashcam || "",
+                profileImage: emp?.profileImage || "",
+            };
+        });
+        setAllRoutes(rows);
+        setLoading(false);
+    }, [rawRouteData, rawRouteDataLoading]);
 
     // ── Handle inline edit save ──
     const handleSave = useCallback(async (routeId: string, field: string, value: string) => {

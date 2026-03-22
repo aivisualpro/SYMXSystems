@@ -1,7 +1,8 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useDataStore } from "@/hooks/use-data-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -44,14 +45,27 @@ interface Role {
 }
 
 export default function RolesSettingsPage() {
+  const store = useDataStore();
   const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
   const [newRoleDesc, setNewRoleDesc] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { setRightContent } = useHeaderActions();
   const router = useRouter();
+  const hasSyncedFromStore = useRef(false);
+
+  // ── Read from store instantly ──
+  const storeRoles = store.admin?.roles as Role[] ?? [];
+
+  useEffect(() => {
+    if (storeRoles.length > 0 && !hasSyncedFromStore.current) {
+      setRoles(storeRoles);
+      hasSyncedFromStore.current = true;
+      setLoading(false);
+    }
+  }, [storeRoles]);
 
   const fetchRoles = async () => {
     try {
@@ -69,8 +83,9 @@ export default function RolesSettingsPage() {
   };
 
   useEffect(() => {
-    fetchRoles();
-  }, []);
+    if (storeRoles.length === 0 && !store.initialized) return;
+    if (storeRoles.length === 0) fetchRoles();
+  }, [store.initialized]);
 
   useEffect(() => {
     setRightContent(

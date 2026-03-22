@@ -74,6 +74,9 @@ interface DispatchingContextType {
     setGlobalEditMode: (mode: boolean) => void;
     confirmationFilter: string;
     setConfirmationFilter: (filter: string) => void;
+    /** Shared raw route data for the selected week — fetched once by layout, consumed by all tabs */
+    rawRouteData: any;
+    rawRouteDataLoading: boolean;
 }
 
 const DispatchingContext = createContext<DispatchingContextType>({
@@ -93,6 +96,8 @@ const DispatchingContext = createContext<DispatchingContextType>({
     setGlobalEditMode: () => { },
     confirmationFilter: "all",
     setConfirmationFilter: () => { },
+    rawRouteData: null,
+    rawRouteDataLoading: false,
 });
 
 export function useDispatching() {
@@ -274,26 +279,68 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // ── Check if routes exist for selected week (lightweight) ──
+    // ── Shared raw route data for all child tabs ──
+    const [rawRouteData, setRawRouteData] = useState<any>(null);
+    const [rawRouteDataLoading, setRawRouteDataLoading] = useState(false);
+    const rawRouteWeekRef = React.useRef("");
+
+    // ── Fetch full route data once for layout (shared across all tabs) ──
     useEffect(() => {
         if (!selectedWeek) return;
         let cancelled = false;
-        setRoutesLoading(true);
 
-        // Use a lightweight HEAD-style check instead of fetching ALL route data
-        fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&checkOnly=true`)
-            .then((r) => r.json())
-            .then((data) => {
-                if (cancelled) return;
-                setRoutesGenerated(data.routesGenerated ?? false);
-            })
-            .catch(() => { })
-            .finally(() => {
-                if (!cancelled) setRoutesLoading(false);
-            });
+        // Try DataStore first for the default week
+        if (
+            store.initialized &&
+            store.dispatchingRoutes &&
+            store.dispatchingWeeks?.[0] === selectedWeek
+        ) {
+            setRawRouteData(store.dispatchingRoutes);
+            setRawRouteDataLoading(false);
+            setRoutesGenerated(!!(store.dispatchingRoutes?.routes?.length));
+            setRoutesLoading(false);
+            rawRouteWeekRef.current = selectedWeek;
+            return;
+        }
+
+        // Already cached this week locally? Skip.
+        if (rawRouteWeekRef.current === selectedWeek && rawRouteData) {
+            return;
+        }
+
+        // Fetch from API
+        if (store.initialized) {
+            setRawRouteDataLoading(true);
+            setRoutesLoading(true);
+            rawRouteWeekRef.current = selectedWeek;
+
+            fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
+                .then((r) => r.json())
+                .then((data) => {
+                    if (cancelled) return;
+                    setRawRouteData(data);
+                    setRoutesGenerated(!!(data?.routes?.length));
+                })
+                .catch(() => {
+                    if (!cancelled) setRawRouteData(null);
+                })
+                .finally(() => {
+                    if (!cancelled) {
+                        setRawRouteDataLoading(false);
+                        setRoutesLoading(false);
+                    }
+                });
+        }
 
         return () => { cancelled = true; };
-    }, [selectedWeek, refreshKey]);
+    }, [selectedWeek, refreshKey, store.initialized, store.dispatchingRoutes]);
+
+    // Force re-fetch when routes are regenerated
+    useEffect(() => {
+        if (refreshKey > 0) {
+            rawRouteWeekRef.current = ""; // invalidate cache
+        }
+    }, [refreshKey]);
 
     // ── Generate routes for selected week ──
     const handleGenerateRoutes = useCallback(async () => {
@@ -438,6 +485,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                 showRoutesInfo, setShowRoutesInfo,
                 globalEditMode, setGlobalEditMode,
                 confirmationFilter, setConfirmationFilter,
+                rawRouteData, rawRouteDataLoading,
             }}
         >
             <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-3">
