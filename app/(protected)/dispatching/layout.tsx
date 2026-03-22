@@ -283,13 +283,16 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [rawRouteData, setRawRouteData] = useState<any>(null);
     const [rawRouteDataLoading, setRawRouteDataLoading] = useState(false);
     const rawRouteWeekRef = React.useRef("");
+    const fullWeekLoadedRef = React.useRef("");
 
-    // ── Fetch full route data once for layout (shared across all tabs) ──
+    // ── Two-Phase Progressive Loading ──
+    // Phase 1: Fetch ONLY the selected date's routes (small, fast ~200ms)
+    // Phase 2: Fetch the FULL week in background, merge seamlessly
     useEffect(() => {
         if (!selectedWeek) return;
         let cancelled = false;
 
-        // Try DataStore first for the default week
+        // Try DataStore first for the default week (instant if available)
         if (
             store.initialized &&
             store.dispatchingRoutes &&
@@ -300,45 +303,70 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
             setRoutesGenerated(!!(store.dispatchingRoutes?.routes?.length));
             setRoutesLoading(false);
             rawRouteWeekRef.current = selectedWeek;
+            fullWeekLoadedRef.current = selectedWeek;
             return;
         }
 
-        // Already cached this week locally? Skip.
-        if (rawRouteWeekRef.current === selectedWeek && rawRouteData) {
+        // Already have full week cached? Skip.
+        if (fullWeekLoadedRef.current === selectedWeek && rawRouteData) {
             return;
         }
 
-        // Fetch from API
-        if (store.initialized) {
-            setRawRouteDataLoading(true);
-            setRoutesLoading(true);
-            rawRouteWeekRef.current = selectedWeek;
+        if (!store.initialized) return;
 
-            fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
-                .then((r) => r.json())
-                .then((data) => {
-                    if (cancelled) return;
-                    setRawRouteData(data);
-                    setRoutesGenerated(!!(data?.routes?.length));
-                })
-                .catch(() => {
-                    if (!cancelled) setRawRouteData(null);
-                })
-                .finally(() => {
-                    if (!cancelled) {
-                        setRawRouteDataLoading(false);
-                        setRoutesLoading(false);
-                    }
-                });
-        }
+        // ── PHASE 1: Fetch only the selected date ──
+        const targetDate = selectedDate || weekDates[0] || "";
+        rawRouteWeekRef.current = selectedWeek;
+        setRawRouteDataLoading(true);
+        setRoutesLoading(true);
+
+        const phase1Url = targetDate
+            ? `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&date=${encodeURIComponent(targetDate)}`
+            : `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`;
+
+        // Phase 1: Quick load (just 1 day)
+        fetch(phase1Url)
+            .then((r) => r.json())
+            .then((dayData) => {
+                if (cancelled) return;
+                // Show the single day's data immediately
+                setRawRouteData(dayData);
+                setRoutesGenerated(!!(dayData?.routes?.length));
+                setRawRouteDataLoading(false);
+                setRoutesLoading(false);
+
+                // ── PHASE 2: Full week in background ──
+                if (targetDate) {
+                    fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
+                        .then((r) => r.json())
+                        .then((fullData) => {
+                            if (cancelled) return;
+                            setRawRouteData(fullData);
+                            setRoutesGenerated(!!(fullData?.routes?.length));
+                            fullWeekLoadedRef.current = selectedWeek;
+                        })
+                        .catch(() => { /* silently fail — partial data already shown */ });
+                } else {
+                    fullWeekLoadedRef.current = selectedWeek;
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setRawRouteData(null);
+                    setRawRouteDataLoading(false);
+                    setRoutesLoading(false);
+                }
+            });
 
         return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedWeek, refreshKey, store.initialized, store.dispatchingRoutes]);
 
     // Force re-fetch when routes are regenerated
     useEffect(() => {
         if (refreshKey > 0) {
             rawRouteWeekRef.current = ""; // invalidate cache
+            fullWeekLoadedRef.current = "";
         }
     }, [refreshKey]);
 
