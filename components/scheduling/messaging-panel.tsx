@@ -34,6 +34,8 @@ import {
   Trash2,
   FileSpreadsheet,
   File as FileIcon,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -589,6 +591,7 @@ function MessagingSubTab({
   routeTypeMap,
   prefetchedTemplate,
   templatesLoaded,
+  showOffToday,
   onSelectionReport,
 }: {
   tab: SubTab;
@@ -608,6 +611,7 @@ function MessagingSubTab({
   routeTypeMap: Record<string, string>;
   prefetchedTemplate?: string;
   templatesLoaded: boolean;
+  showOffToday?: boolean;
   onSelectionReport?: (count: number) => void;
 }) {
   // Use prefetched data from parent — stable reference to avoid infinite re-renders
@@ -615,8 +619,7 @@ function MessagingSubTab({
   const employees = prefetchedEmployees ?? EMPTY;
   const loading = employeesLoading;
 
-  // ── "Off Today" toggle for the future-shift tab ──
-  const [showOffToday, setShowOffToday] = useState(false);
+  // ── "Off Today" data for the future-shift tab (toggle state from parent) ──
   const [offTodayEmployees, setOffTodayEmployees] = useState<EmployeeRecipient[]>([]);
   const [offTodayLoading, setOffTodayLoading] = useState(false);
 
@@ -1840,6 +1843,7 @@ export default function MessagingPanel({
   }, [selectedWeek]);
 
   const [selectedDate, setSelectedDate] = useState("");
+  const [showOffToday, setShowOffToday] = useState(false);
 
   // Auto-select today when week changes
   useEffect(() => {
@@ -2085,6 +2089,28 @@ export default function MessagingPanel({
               })}
             </>
           )}
+
+          {/* ── "Off Today" Toggle — only on future-shift tab ── */}
+          {resolvedTab === "future-shift" && (
+            <>
+              <div className="w-px h-6 bg-border/60 mx-1 shrink-0" />
+              <button
+                onClick={() => setShowOffToday(prev => !prev)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold whitespace-nowrap select-none shrink-0 transition-all duration-200",
+                  showOffToday
+                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/30"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                {showOffToday
+                  ? <ToggleRight className="h-4 w-4 text-amber-500" />
+                  : <ToggleLeft className="h-4 w-4" />
+                }
+                Off Today
+              </button>
+            </>
+          )}
         </div>
 
         {/* ── Only render active sub-tab (no hidden mounts) ── */}
@@ -2111,6 +2137,7 @@ export default function MessagingPanel({
                   employeesLoading={loadingTabs.has(tab.id)}
                   prefetchedTemplate={templatesByTab[tab.id]}
                   templatesLoaded={templatesLoaded}
+                  showOffToday={showOffToday}
                   onSelectionReport={setActiveSelectedCount}
                 />
               </div>
