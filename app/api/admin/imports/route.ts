@@ -17,6 +17,7 @@ import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import SymxIncident from "@/lib/models/SymxIncident";
 import SymxHrTicket from "@/lib/models/SymxHrTicket";
+import SymxInterview from "@/lib/models/SymxInterview";
 import Vehicle from "@/lib/models/Vehicle";
 import VehicleRepair from "@/lib/models/VehicleRepair";
 import DailyInspection from "@/lib/models/DailyInspection";
@@ -107,6 +108,78 @@ const hrTicketsHeaderMap: Record<string, string> = {
     "closedDateTime": "closedDateTime",
     "closedBy": "closedBy",
     "closedTicketSent": "closedTicketSent",
+};
+
+const interviewsHeaderMap: Record<string, string> = {
+    "createdAt": "createdAt",
+    "Full Name": "fullName",
+    "Phone Number": "phoneNumber",
+    "Work Start Date": "workStartDate",
+    "Type of Work": "typeOfWork",
+    "Work Days": "workDays",
+    "Last Employer Info": "lastEmployerInfo",
+    "How did you hear": "howDidYouHear",
+    "Disclaimer": "disclaimer",
+    "Status": "status",
+    "Amazon Onboarding Status": "amazonOnboardingStatus",
+    "Interview Notes": "interviewNotes",
+    "Rating": "rating",
+    "Image": "image",
+    "DL Photo": "dlPhoto",
+    "Updated By": "updatedBy",
+    "Updated TimeStamp": "updatedTimestamp",
+    "Interviewed by": "interviewedBy",
+    "Interview TimeStamp": "interviewTimestamp",
+    "OnBoarding Page": "onboardingPage",
+    "EECode": "eeCode",
+    "Transporter ID": "transporterId",
+    "Badge Number": "badgeNumber",
+    "First Name": "firstName",
+    "Last Name": "lastName",
+    "Gender": "gender",
+    "Email": "email",
+    "Street Address": "streetAddress",
+    "City": "city",
+    "State": "state",
+    "Zip Code": "zipCode",
+    "Hired Date": "hiredDate",
+    "DOB": "dob",
+    "Hourly Status": "hourlyStatus",
+    "Rate": "rate",
+    "Gas Card PIN": "gasCardPin",
+    "DL Expiration": "dlExpiration",
+    "Onboarding Notes": "onboardingNotes",
+    "Background Check Status": "backgroundCheckStatus",
+    "Background Check File": "backgroundCheckFile",
+    "Drug Test Status": "drugTestStatus",
+    "Drug Test File": "drugTestFile",
+    "Offer Letter Status": "offerLetterStatus",
+    "Offer Letter File": "offerLetterFile",
+    "Handbook Status": "handbookStatus",
+    "Handbook File": "handbookFile",
+    "Paycom Status": "paycomStatus",
+    "I9 Status": "i9Status",
+    "I9 File": "i9File",
+    "Classroom Training Date": "classroomTrainingDate",
+    "Sexual Harrasment File": "sexualHarassmentFile",
+    "Work Opportunity Tax Credit": "workOpportunityTaxCredit",
+    "Final Interview Date": "finalInterviewDate",
+    "Final Interview Time": "finalInterviewTime",
+    "Final Interview By": "finalInterviewBy",
+    "Final Interview Status": "finalInterviewStatus",
+    // camelCase alternatives
+    "fullName": "fullName",
+    "phoneNumber": "phoneNumber",
+    "workStartDate": "workStartDate",
+    "typeOfWork": "typeOfWork",
+    "workDays": "workDays",
+    "lastEmployerInfo": "lastEmployerInfo",
+    "howDidYouHear": "howDidYouHear",
+    "disclaimer": "disclaimer",
+    "status": "status",
+    "interviewNotes": "interviewNotes",
+    "rating": "rating",
+    "transporterId": "transporterId",
 };
 
 // Helper to sanitize keys (remove whitespace, special chars if needed) - not strictly needed if we map manually
@@ -1801,6 +1874,50 @@ export async function POST(req: NextRequest) {
 
             if (documents.length > 0) {
                 const result = await SymxHrTicket.insertMany(documents, { ordered: false });
+                return NextResponse.json({
+                    success: true,
+                    count: result.length,
+                    inserted: result.length,
+                    updated: 0,
+                    matched: 0
+                });
+            }
+
+            return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+        }
+
+        // ── Interviews Import ──
+        else if (type === "interviews") {
+            const ciMap: Record<string, string> = {};
+            Object.entries(interviewsHeaderMap).forEach(([k, v]) => { ciMap[k.toLowerCase()] = v; });
+
+            const dateFields = new Set([
+                'createdAt', 'updatedTimestamp', 'interviewTimestamp', 'hiredDate',
+                'dob', 'dlExpiration', 'classroomTrainingDate', 'finalInterviewDate'
+            ]);
+
+            const documents = data.map((row: any) => {
+                const processedData: any = {};
+
+                Object.entries(row).forEach(([header, value]) => {
+                    const normalizedHeader = header.trim();
+                    const schemaKey = ciMap[normalizedHeader.toLowerCase()] || interviewsHeaderMap[normalizedHeader];
+                    if (schemaKey && value !== undefined && value !== null && value !== "") {
+                        if (dateFields.has(schemaKey)) {
+                            const parsed = new Date(value.toString());
+                            if (!isNaN(parsed.getTime())) processedData[schemaKey] = parsed;
+                        } else {
+                            processedData[schemaKey] = value.toString().trim();
+                        }
+                    }
+                });
+
+                if (!processedData.status) processedData.status = 'New';
+                return processedData;
+            }).filter((doc: any): doc is NonNullable<typeof doc> => doc !== null);
+
+            if (documents.length > 0) {
+                const result = await SymxInterview.insertMany(documents, { ordered: false });
                 return NextResponse.json({
                     success: true,
                     count: result.length,

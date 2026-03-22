@@ -624,40 +624,6 @@ export default function TimesheetPage() {
           </div>
         </div>
       </div>
-
-      {/* ═══ Employee List Preview ═══ */}
-      {employees.length > 0 && (
-        <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
-          <div className="px-5 py-3 border-b border-border/30 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-blue-500" />
-              <p className="text-sm font-bold">Employees in Timesheet</p>
-            </div>
-            <span className="text-xs text-muted-foreground font-bold">{employees.length} total</span>
-          </div>
-          <div className="max-h-[300px] overflow-y-auto">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-0">
-              {employees.map((emp: any, i: number) => (
-                <div key={emp._id || i} className="flex items-center gap-2 px-4 py-2.5 border-b border-r border-border/20 hover:bg-muted/20 transition-colors">
-                  <span className="text-[10px] font-bold text-muted-foreground/40 w-5 text-right shrink-0">{i + 1}</span>
-                  {emp.profileImage ? (
-                    <img src={emp.profileImage} alt="" className="h-6 w-6 rounded-full object-cover ring-1 ring-border/30 shrink-0" />
-                  ) : (
-                    <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center shrink-0">
-                      <span className="text-[8px] font-bold text-muted-foreground">
-                        {(emp.firstName?.[0] || "")}{(emp.lastName?.[0] || "")}
-                      </span>
-                    </div>
-                  )}
-                  <span className="text-xs font-medium text-foreground truncate">
-                    {`${emp.firstName || ""} ${emp.lastName || ""}`.trim()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

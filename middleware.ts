@@ -16,6 +16,7 @@ const publicPaths = [
   "/c/",
   "/confirm/",
   "/submit-ticket",
+  "/apply",
 ];
 
 function isPublicPath(path: string) {
