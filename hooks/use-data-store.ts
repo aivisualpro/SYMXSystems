@@ -204,6 +204,24 @@ const DATASETS: DatasetConfig[] = [
     ttl: DEFAULT_TTL,
   },
   {
+    key: "hr.interviews",
+    url: "/api/admin/interviews",
+    priority: "deferred",
+    transform: (raw: any) => (Array.isArray(raw) ? raw : raw?.records ?? []),
+    ttl: DEFAULT_TTL,
+  },
+  {
+    key: "hr.terminations",
+    url: "/api/admin/employees?skip=0&limit=50&terminated=true&status=Terminated",
+    priority: "deferred",
+    transform: (raw: any) => ({
+      records: raw?.records ?? raw ?? [],
+      totalCount: raw?.totalCount ?? 0,
+      hasMore: raw?.hasMore ?? false,
+    }),
+    ttl: DEFAULT_TTL,
+  },
+  {
     key: "employees",
     url: "/api/admin/employees?skip=0&limit=50&terminated=false",
     priority: "deferred",
@@ -576,6 +594,8 @@ export function useDataStore() {
     hrClaims: state.datasets["hr.claims"]?.data ?? null,
     hrAudit: state.datasets["hr.audit"]?.data ?? null,
     hrTickets: state.datasets["hr.tickets"]?.data ?? null,
+    hrInterviews: state.datasets["hr.interviews"]?.data ?? null,
+    hrTerminations: state.datasets["hr.terminations"]?.data ?? null,
     schedulingWeeks: state.datasets["scheduling.weeks"]?.data ?? [],
     schedulingWeekData: state.datasets["scheduling.weekData"]?.data ?? null,
     dispatchingWeeks: state.datasets["scheduling.weeks"]?.data ?? [],

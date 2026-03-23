@@ -494,7 +494,7 @@ export default function HRTicketsPage() {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
+    if (tickets.length === 0) setLoading(true);
     fetchTickets().finally(() => setLoading(false));
   }, [fetchTickets]);
 
@@ -627,7 +627,7 @@ export default function HRTicketsPage() {
     return result.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   }, [tickets, statusFilter, search]);
 
-  if (loading) {
+  if (loading && tickets.length === 0) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="flex flex-col items-center gap-3">

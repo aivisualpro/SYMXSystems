@@ -14,8 +14,6 @@ import {
   IconTicket,
   IconClock,
   IconUserSearch,
-  IconUserPlus,
-  IconUserCheck,
   IconShirt,
   IconUserOff,
 } from "@tabler/icons-react";
@@ -30,8 +28,6 @@ const tabs = [
   { id: "tickets", label: "HR Tickets", icon: IconTicket, href: "/hr/tickets" },
   { id: "timesheet", label: "Timesheet", icon: IconClock, href: "/hr/timesheet" },
   { id: "interviews", label: "Interviews", icon: IconUserSearch, href: "/hr/interviews" },
-  { id: "onboarding", label: "Onboarding", icon: IconUserPlus, href: "/hr/onboarding" },
-  { id: "hired", label: "Hired", icon: IconUserCheck, href: "/hr/hired" },
   { id: "uniforms", label: "Uniforms", icon: IconShirt, href: "/hr/uniforms" },
   { id: "terminations", label: "Terminations", icon: IconUserOff, href: "/hr/terminations" },
 ];

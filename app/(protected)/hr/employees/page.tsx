@@ -15,8 +15,8 @@ import { Search, User, CheckCircle2, Minus, Coffee } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
+
+
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
 import {
   Select,
@@ -63,7 +63,7 @@ export default function EmployeesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [showTerminated, setShowTerminated] = useState(false);
+
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
@@ -105,7 +105,7 @@ export default function EmployeesPage() {
 
   // Check if any filters/search are active (requires API call)
   const hasUrlFilters = searchParams.get('status') || searchParams.get('type') || searchParams.get('filter') || searchParams.get('hourlyStatus');
-  const needsApiCall = !!debouncedSearch || !!hasUrlFilters || showTerminated;
+  const needsApiCall = !!debouncedSearch || !!hasUrlFilters;
 
   // ── Sync from store when no filters are active ──
   useEffect(() => {
@@ -158,7 +158,6 @@ export default function EmployeesPage() {
       const params = new URLSearchParams({
         skip: skip.toString(),
         limit: PAGE_SIZE.toString(),
-        terminated: showTerminated.toString()
       });
       if (debouncedSearch) params.set("search", debouncedSearch);
 
@@ -211,7 +210,7 @@ export default function EmployeesPage() {
       setFetchedFromApi(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, showTerminated, searchParams]);
+  }, [debouncedSearch, searchParams]);
 
   const handleSubmit = async (formData: any) => {
     setIsSubmitting(true);
@@ -782,16 +781,7 @@ export default function EmployeesPage() {
               <Badge variant="secondary" className="h-8 px-3 text-xs shrink-0 font-normal">
                 {data.length} of {totalCount > 0 ? totalCount : data.length} records
               </Badge>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="show-terminated"
-                  checked={showTerminated}
-                  onCheckedChange={setShowTerminated}
-                />
-                <Label htmlFor="show-terminated" className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap">
-                  Include Terminated
-                </Label>
-              </div>
+
             </div>
           }
         />
@@ -828,17 +818,7 @@ export default function EmployeesPage() {
                 className="pl-8 h-9 text-sm"
               />
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Switch
-                id="show-terminated-m"
-                checked={showTerminated}
-                onCheckedChange={setShowTerminated}
-                className="scale-90"
-              />
-              <Label htmlFor="show-terminated-m" className="text-[10px] text-muted-foreground cursor-pointer">
-                Terminated
-              </Label>
-            </div>
+
           </div>
         </div>
 

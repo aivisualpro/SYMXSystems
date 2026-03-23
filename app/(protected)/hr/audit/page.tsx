@@ -97,7 +97,7 @@ export default function EmployeeAuditPage() {
   useEffect(() => {
     const fetchAudit = async () => {
       try {
-        setLoading(true);
+        if (employees.length === 0) setLoading(true);
         const res = await fetch("/api/admin/employees?filter=audit&limit=9999&terminated=false");
         if (res.ok) {
           const data = await res.json();
@@ -361,7 +361,7 @@ export default function EmployeeAuditPage() {
 
   const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i.test(url) || /\/image\/upload\/.*(?!\.(pdf|doc|docx))/i.test(url) && !/\.(pdf|doc|docx)/i.test(url);
 
-  if (loading) {
+  if (loading && employees.length === 0) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="flex flex-col items-center gap-3">

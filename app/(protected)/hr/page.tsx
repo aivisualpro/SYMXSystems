@@ -315,7 +315,7 @@ export default function EmployeesDashboardPage() {
           </div>
 
           {/* Recent Hires */}
-          <div onClick={() => router.push("/hr/hired")}
+          <div onClick={() => router.push("/hr/interviews")}
             className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-purple-500/30 active:scale-[0.98]">
             <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-purple-400 to-purple-600" />
             <div className="flex items-center justify-between mb-2">

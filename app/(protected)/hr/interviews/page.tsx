@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { useDataStore } from "@/hooks/use-data-store";
 import {
   Search,
   Loader2,
@@ -544,6 +545,17 @@ function parseInterviewNotes(text: string) {
   return blocks;
 }
 
+function rebuildNotes(blocks: { type: "qa" | "section" | "text"; question?: string; answer?: string; content?: string }[]): string {
+  return blocks.map((b) => {
+    if (b.type === "qa") {
+      const ans = b.answer === "\u2014" || !b.answer ? "" : b.answer;
+      return `${b.question}\nA: ${ans}`;
+    }
+    if (b.type === "section") return `${b.question}:\n${b.content || ""}`;
+    return b.content || "";
+  }).join("\n\n");
+}
+
 function InterviewNotesRenderer({
   notes,
   isEditing,
@@ -556,6 +568,19 @@ function InterviewNotesRenderer({
   onSave: (val: string) => void;
 }) {
   const blocks = parseInterviewNotes(notes || "");
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+
+  const handleInlineSave = (idx: number, newAnswer: string) => {
+    const updated = blocks.map((b, i) => {
+      if (i === idx) {
+        if (b.type === "qa") return { ...b, answer: newAnswer.trim() || "\u2014" };
+        if (b.type === "section") return { ...b, content: newAnswer.trim() };
+      }
+      return b;
+    });
+    setEditingIdx(null);
+    onSave(rebuildNotes(updated));
+  };
 
   return (
     <div>
@@ -587,30 +612,66 @@ function InterviewNotesRenderer({
         <div className="space-y-2">
           {blocks.map((block, bi) => {
             if (block.type === "qa") {
+              const isEditingThis = editingIdx === bi;
               return (
                 <div key={bi} className="rounded-xl bg-muted/20 border border-border/30 overflow-hidden">
                   <div className="flex gap-2 px-3 py-2 bg-gradient-to-r from-rose-500/5 to-transparent">
                     <span className="shrink-0 mt-0.5 h-4 w-4 rounded flex items-center justify-center bg-rose-500/15 text-rose-500 text-[8px] font-black">Q</span>
                     <p className="text-[11px] text-foreground/80 font-medium leading-relaxed">{block.question}</p>
                   </div>
-                  <div className="flex gap-2 px-3 py-2 border-t border-border/20">
+                  <div
+                    className={cn(
+                      "flex gap-2 px-3 py-2 border-t border-border/20 cursor-text transition-colors",
+                      !isEditingThis && "hover:bg-emerald-500/5"
+                    )}
+                    onDoubleClick={() => setEditingIdx(bi)}
+                  >
                     <span className="shrink-0 mt-0.5 h-4 w-4 rounded flex items-center justify-center bg-emerald-500/15 text-emerald-500 text-[8px] font-black">A</span>
-                    <p className={cn(
-                      "text-[11px] leading-relaxed",
-                      block.answer === "\u2014" ? "text-muted-foreground/30 italic" : "text-foreground font-medium"
-                    )}>
-                      {block.answer}
-                    </p>
+                    {isEditingThis ? (
+                      <input
+                        autoFocus
+                        defaultValue={block.answer === "\u2014" ? "" : block.answer}
+                        placeholder="Type answer..."
+                        onBlur={(e) => handleInlineSave(bi, e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleInlineSave(bi, (e.target as HTMLInputElement).value); } }}
+                        className="flex-1 bg-transparent text-[11px] text-foreground font-medium leading-relaxed outline-none border-b border-emerald-500/30 pb-0.5 placeholder:text-muted-foreground/30"
+                      />
+                    ) : (
+                      <p className={cn(
+                        "text-[11px] leading-relaxed flex-1",
+                        block.answer === "\u2014" ? "text-muted-foreground/30 italic" : "text-foreground font-medium"
+                      )}>
+                        {block.answer}
+                        {block.answer === "\u2014" && <span className="ml-2 text-[9px] text-muted-foreground/20 not-italic">double-click to answer</span>}
+                      </p>
+                    )}
                   </div>
                 </div>
               );
             }
 
             if (block.type === "section") {
+              const isEditingThis = editingIdx === bi;
               return (
                 <div key={bi} className="rounded-xl bg-amber-500/5 border border-amber-500/15 px-3 py-2">
                   <p className="text-[9px] font-black text-amber-500/70 uppercase tracking-wider mb-1">{block.question}</p>
-                  <p className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-line">{block.content || "\u2014"}</p>
+                  {isEditingThis ? (
+                    <textarea
+                      autoFocus
+                      defaultValue={block.content || ""}
+                      rows={3}
+                      placeholder="Add details..."
+                      onBlur={(e) => handleInlineSave(bi, e.target.value)}
+                      className="w-full bg-transparent text-[11px] text-foreground/80 leading-relaxed outline-none border border-amber-500/20 rounded-lg px-2 py-1 resize-none placeholder:text-muted-foreground/30"
+                    />
+                  ) : (
+                    <p
+                      className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-line cursor-text hover:bg-amber-500/5 rounded px-1 -mx-1 transition-colors"
+                      onDoubleClick={() => setEditingIdx(bi)}
+                    >
+                      {block.content || <span className="text-muted-foreground/30 italic">double-click to edit</span>}
+                    </p>
+                  )}
                 </div>
               );
             }
@@ -637,6 +698,7 @@ function InterviewNotesRenderer({
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function HRInterviewsPage() {
+  const store = useDataStore();
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -652,6 +714,23 @@ export default function HRInterviewsPage() {
   const [editingItem, setEditingItem] = useState<Interview | null>(null);
   const [statusOptions, setStatusOptions] = useState<DropdownStatus[]>([]);
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
+
+  // ── Seed from store for instant load ──
+  const storeInterviews = store.hrInterviews as any;
+  useEffect(() => {
+    if (Array.isArray(storeInterviews) && storeInterviews.length > 0 && interviews.length === 0) {
+      setInterviews(storeInterviews);
+    }
+  }, [storeInterviews]);
+
+  // ── Seed status options from store ──
+  const storeDropdowns = store.admin?.dropdowns as any[] ?? [];
+  useEffect(() => {
+    if (Array.isArray(storeDropdowns) && storeDropdowns.length > 0 && statusOptions.length === 0) {
+      const opts = storeDropdowns.filter((d: any) => d.type === "interview status" && d.isActive);
+      if (opts.length > 0) setStatusOptions(opts);
+    }
+  }, [storeDropdowns]);
 
   // ── Fetch interview status dropdown options ──
   useEffect(() => {
@@ -699,7 +778,7 @@ export default function HRInterviewsPage() {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
+    if (interviews.length === 0) setLoading(true);
     fetchInterviews().finally(() => setLoading(false));
   }, [fetchInterviews]);
 
@@ -832,7 +911,7 @@ export default function HRInterviewsPage() {
     return result.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   }, [interviews, statusFilter, search]);
 
-  if (loading) {
+  if (loading && interviews.length === 0) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="flex flex-col items-center gap-3">
@@ -876,26 +955,41 @@ export default function HRInterviewsPage() {
           <span className={cn("ml-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-black", statusFilter === "all" ? "bg-white/20" : "bg-muted")}>{interviews.length}</span>
         </button>
 
-        {statusOptions.map((opt, i) => {
-          const isActive = statusFilter === opt.description;
-          const count = kpiMap[opt.description] || 0;
-          const colors = getStatusColors(opt.description, i);
-          const Icon = getStatusIcon(opt.description);
-          return (
-            <button
-              key={opt._id}
-              onClick={() => setStatusFilter(opt.description)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 shrink-0",
-                isActive ? `${colors.active} shadow-lg scale-[1.02]` : "bg-card border border-border/50 text-muted-foreground hover:bg-muted/50"
-              )}
-            >
-              <Icon className={cn("h-3.5 w-3.5", isActive ? "" : colors.text)} />
-              {opt.description}
-              <span className={cn("ml-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-black", isActive ? "bg-white/20" : "bg-muted")}>{count}</span>
-            </button>
-          );
-        })}
+        {/* Hardcoded tab order: Undecided, Amazon Onboarding (Move to Next Step), Waiting on background check, Waiting on Hire, Hired, Rejected */}
+        {(() => {
+          const TAB_ORDER = [
+            "Undecided",
+            "Move to Next Step",
+            "Waiting on background check",
+            "Waiting on Hire",
+            "Hired",
+            "Rejected",
+          ];
+          const orderedOptions = TAB_ORDER
+            .map(name => statusOptions.find(opt => opt.description === name))
+            .filter(Boolean) as DropdownStatus[];
+          return orderedOptions.map((opt, i) => {
+            const isActive = statusFilter === opt.description;
+            const count = kpiMap[opt.description] || 0;
+            const colors = getStatusColors(opt.description, i);
+            const Icon = getStatusIcon(opt.description);
+            const displayLabel = opt.description === "Move to Next Step" ? "Amazon Onboarding" : opt.description;
+            return (
+              <button
+                key={opt._id}
+                onClick={() => setStatusFilter(opt.description)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 shrink-0",
+                  isActive ? `${colors.active} shadow-lg scale-[1.02]` : "bg-card border border-border/50 text-muted-foreground hover:bg-muted/50"
+                )}
+              >
+                <Icon className={cn("h-3.5 w-3.5", isActive ? "" : colors.text)} />
+                {displayLabel}
+                <span className={cn("ml-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-black", isActive ? "bg-white/20" : "bg-muted")}>{count}</span>
+              </button>
+            );
+          });
+        })()}
       </div>
 
       {/* ═══ CARDS ═══ */}
@@ -953,7 +1047,7 @@ export default function HRInterviewsPage() {
                     <div className="flex items-center gap-1 shrink-0">
                       <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black ring-1", colors.bg, colors.text, colors.ring)}>
                         <StatusIcon className="h-2.5 w-2.5" />
-                        {status || "Undecided"}
+                        {status === "Move to Next Step" ? "Amazon Onboarding" : (status || "Undecided")}
                       </div>
                       <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => { setEditingItem(item); setShowDialog(true); }} className="h-6 w-6 rounded flex items-center justify-center hover:bg-muted/50" title="Edit">
@@ -1089,7 +1183,7 @@ export default function HRInterviewsPage() {
                           )}
                         >
                           <OptIcon className="h-2.5 w-2.5" />
-                          {opt.description}
+                          {opt.description === "Move to Next Step" ? "Amazon Onboarding" : opt.description}
                         </button>
                       );
                     })}
