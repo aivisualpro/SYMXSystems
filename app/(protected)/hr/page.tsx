@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useDataStore } from "@/hooks/use-data-store";
 import { cn } from "@/lib/utils";
@@ -12,26 +12,25 @@ import {
   TrendingUp,
   TrendingDown,
   Clock,
-  CalendarDays,
   AlertTriangle,
   ShieldCheck,
-  Activity,
-  Briefcase,
   Loader2,
   FileWarning,
-  MapPin,
   Award,
   ArrowUpRight,
   Zap,
-  BarChart3,
-  Target,
-  Calendar,
   Heart,
-  Star,
   Shield,
   DollarSign,
   Receipt,
   CheckCircle2,
+  Ticket,
+  ClipboardList,
+  UserSearch,
+  XCircle,
+  HelpCircle,
+  ArrowRightCircle,
+  Hourglass,
 } from "lucide-react";
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
 
@@ -138,20 +137,7 @@ function TypeChip({ label, count, color, onClick }: { label: string; count: numb
   );
 }
 
-// ── Availability Day ──
-function AvailabilityDay({ day, available, total }: { day: string; available: number; total: number }) {
-  const pct = total > 0 ? (available / total) * 100 : 0;
-  const intensity = pct > 75 ? "bg-emerald-500" : pct > 50 ? "bg-emerald-400/70" : pct > 25 ? "bg-amber-400/70" : "bg-red-400/60";
-  return (
-    <div className="flex flex-col items-center gap-1.5">
-      <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">{day}</span>
-      <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center text-xs font-black text-white transition-all", intensity)}>
-        {available}
-      </div>
-      <span className="text-[9px] text-muted-foreground font-medium">{pct.toFixed(0)}%</span>
-    </div>
-  );
-}
+
 
 export default function EmployeesDashboardPage() {
   const store = useDataStore();
@@ -166,6 +152,8 @@ export default function EmployeesDashboardPage() {
   const storeStats = store.hrStats;
   const storeClaimsKpi = store.hrClaimsKpi;
   const storeReimbursementsKpi = store.hrReimbursementsKpi;
+  const storeInterviews = store.hrInterviews;
+  const storeTickets = store.hrTickets;
 
   useEffect(() => {
     if (storeStats && !hasSyncedFromStore.current) {
@@ -614,42 +602,126 @@ export default function EmployeesDashboardPage() {
         </div>
       )}
 
-      {/* ══════════════ ROW 2 — Status, Types, Compliance ══════════════ */}
+      {/* ══════════════ ROW 2 — Interview Pipeline + Compliance ══════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-        {/* ── Employee Status Breakdown ── */}
-        <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Status Breakdown</h3>
-          </div>
-          <SparkBar
-            values={[stats.active, stats.terminated, stats.resigned, stats.inactive]}
-            colors={["bg-emerald-500", "bg-red-500", "bg-amber-500", "bg-zinc-400"]}
-            height={8}
-          />
-          <div className="space-y-2">
-            <StatusRow label="Active" count={stats.active} total={stats.total} color="bg-emerald-500" onClick={() => router.push("/hr/employees?status=Active")} />
-            <StatusRow label="Terminated" count={stats.terminated} total={stats.total} color="bg-red-500" onClick={() => router.push("/hr/terminations")} />
-            <StatusRow label="Resigned" count={stats.resigned} total={stats.total} color="bg-amber-500" onClick={() => router.push("/hr/employees?status=Resigned")} />
-            <StatusRow label="Inactive" count={stats.inactive} total={stats.total} color="bg-zinc-400" onClick={() => router.push("/hr/employees?status=Inactive")} />
-          </div>
-        </div>
+        {/* ── Interview Pipeline ── */}
+        {(() => {
+          const interviews = (Array.isArray(storeInterviews) ? storeInterviews : []) as any[];
+          const statusMap: Record<string, number> = {};
+          interviews.forEach((i: any) => {
+            const s = i.status || "Undecided";
+            statusMap[s] = (statusMap[s] || 0) + 1;
+          });
+          const pipelineItems = [
+            { label: "Undecided", key: "Undecided", color: "#f59e0b" },
+            { label: "Amazon Onboarding", key: "Move to Next Step", color: "#8b5cf6" },
+            { label: "Waiting on BG Check", key: "Waiting on background check", color: "#3b82f6" },
+            { label: "Waiting on Hire", key: "Waiting on Hire", color: "#06b6d4" },
+            { label: "Hired", key: "Hired", color: "#10b981" },
+            { label: "Rejected", key: "Rejected", color: "#ef4444" },
+          ];
+          return (
+            <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500/20 to-pink-500/20">
+                    <UserSearch className="h-4 w-4 text-rose-400" />
+                  </div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Interview Pipeline</h3>
+                </div>
+                <button onClick={() => router.push("/hr/interviews")} className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 transition-colors">
+                  View All <ArrowUpRight className="h-3 w-3" />
+                </button>
+              </div>
+              <div className="flex items-center gap-6">
+                <div className="relative flex-shrink-0">
+                  <DonutChart
+                    segments={pipelineItems.map(p => ({ value: statusMap[p.key] || 0, color: p.color, label: p.label }))}
+                    size={130}
+                    strokeWidth={16}
+                  />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-3xl font-black text-foreground"><AnimatedNumber value={interviews.length} /></span>
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Total</span>
+                  </div>
+                </div>
+                <div className="flex-1 space-y-2">
+                  {pipelineItems.map(p => (
+                    <div key={p.key} className="flex items-center justify-between p-1 -mx-1 rounded-lg hover:bg-muted/40 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: p.color }} />
+                        <span className="text-[11px] font-semibold text-foreground">{p.label}</span>
+                      </div>
+                      <span className="text-xs font-black text-foreground">{statusMap[p.key] || 0}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
-        {/* ── Employee Types ── */}
-        <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <Briefcase className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">By Type</h3>
-          </div>
-          <div className="space-y-2">
-            {(Object.entries(stats.typeMap) as [string, number][])
-              .sort((a, b) => b[1] - a[1])
-              .map(([type, count], idx) => (
-                <TypeChip key={type} label={type} count={count} color={typeColors[idx % typeColors.length]} onClick={() => router.push(`/hr/employees?type=${encodeURIComponent(type)}`)} />
-              ))}
-          </div>
-        </div>
+        {/* ── HR Tickets Overview ── */}
+        {(() => {
+          const tickets = (Array.isArray(storeTickets) ? storeTickets : []) as any[];
+          const pending = tickets.filter((t: any) => { const v = (t.approveDeny || "").toLowerCase(); return !v.includes("approv") && !v.includes("den"); }).length;
+          const approved = tickets.filter((t: any) => (t.approveDeny || "").toLowerCase().includes("approv")).length;
+          const denied = tickets.filter((t: any) => (t.approveDeny || "").toLowerCase().includes("den")).length;
+          return (
+            <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-purple-500/20 to-violet-500/20">
+                    <Ticket className="h-4 w-4 text-purple-400" />
+                  </div>
+                  <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">HR Tickets</h3>
+                </div>
+                <button onClick={() => router.push("/hr/tickets")} className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 transition-colors">
+                  View All <ArrowUpRight className="h-3 w-3" />
+                </button>
+              </div>
+              <div className="flex items-center gap-6">
+                <div className="relative flex-shrink-0">
+                  <DonutChart
+                    segments={[
+                      { value: pending, color: "#3b82f6", label: "Pending" },
+                      { value: approved, color: "#10b981", label: "Approved" },
+                      { value: denied, color: "#ef4444", label: "Denied" },
+                    ]}
+                    size={130}
+                    strokeWidth={16}
+                  />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-3xl font-black text-foreground"><AnimatedNumber value={tickets.length} /></span>
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Total</span>
+                  </div>
+                </div>
+                <div className="flex-1 space-y-2.5">
+                  {[
+                    { label: "Pending", count: pending, dot: "#3b82f6" },
+                    { label: "Approved", count: approved, dot: "#10b981" },
+                    { label: "Denied", count: denied, dot: "#ef4444" },
+                  ].map(s => {
+                    const pct = tickets.length > 0 ? ((s.count / tickets.length) * 100).toFixed(0) : "0";
+                    return (
+                      <div key={s.label} className="flex items-center justify-between p-1.5 -mx-1.5 rounded-lg hover:bg-muted/40 transition-colors">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: s.dot }} />
+                          <span className="text-xs font-semibold text-foreground">{s.label}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-foreground">{s.count}</span>
+                          <span className="text-[10px] text-muted-foreground">({pct}%)</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Document Compliance Score ── */}
         <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
@@ -694,7 +766,58 @@ export default function EmployeesDashboardPage() {
         </div>
       </div>
 
-      {/* ══════════════ ROW 3 — Tenure + Availability + Alerts ══════════════ */}
+      {/* ══════════════ ROW 3 — Interview Quick Stats + Ticket Quick Stats ══════════════ */}
+      {(() => {
+        const interviews = (Array.isArray(storeInterviews) ? storeInterviews : []) as any[];
+        const iStatusMap: Record<string, number> = {};
+        interviews.forEach((i: any) => { const s = i.status || "Undecided"; iStatusMap[s] = (iStatusMap[s] || 0) + 1; });
+        const tickets = (Array.isArray(storeTickets) ? storeTickets : []) as any[];
+        const tPending = tickets.filter((t: any) => { const v = (t.approveDeny || "").toLowerCase(); return !v.includes("approv") && !v.includes("den"); }).length;
+        const tApproved = tickets.filter((t: any) => (t.approveDeny || "").toLowerCase().includes("approv")).length;
+        const tDenied = tickets.filter((t: any) => (t.approveDeny || "").toLowerCase().includes("den")).length;
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+            {/* Interview stats */}
+            {[
+              { label: "Undecided", value: iStatusMap["Undecided"] || 0, icon: HelpCircle, color: "amber", href: "/hr/interviews" },
+              { label: "Onboarding", value: iStatusMap["Move to Next Step"] || 0, icon: ArrowRightCircle, color: "purple", href: "/hr/interviews" },
+              { label: "Hired", value: iStatusMap["Hired"] || 0, icon: CheckCircle2, color: "emerald", href: "/hr/interviews" },
+              { label: "Rejected", value: iStatusMap["Rejected"] || 0, icon: XCircle, color: "red", href: "/hr/interviews" },
+            ].map(card => (
+              <div key={card.label} onClick={() => router.push(card.href)}
+                className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg active:scale-[0.98]">
+                <div className={`absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-${card.color}-400 to-${card.color}-600`} />
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">{card.label}</p>
+                  <div className={`p-1.5 rounded-lg bg-${card.color}-500/10`}><card.icon className={`h-3.5 w-3.5 text-${card.color}-500`} /></div>
+                </div>
+                <p className="text-2xl font-black text-foreground"><AnimatedNumber value={card.value} /></p>
+                <p className="text-[10px] text-muted-foreground font-medium mt-1">Interviews</p>
+              </div>
+            ))}
+            {/* Ticket stats */}
+            {[
+              { label: "Pending", value: tPending, icon: Hourglass, color: "blue", href: "/hr/tickets" },
+              { label: "Approved", value: tApproved, icon: CheckCircle2, color: "emerald", href: "/hr/tickets" },
+              { label: "Denied", value: tDenied, icon: XCircle, color: "red", href: "/hr/tickets" },
+              { label: "All Tickets", value: tickets.length, icon: Ticket, color: "purple", href: "/hr/tickets" },
+            ].map(card => (
+              <div key={card.label} onClick={() => router.push(card.href)}
+                className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg active:scale-[0.98]">
+                <div className={`absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-${card.color}-400 to-${card.color}-600`} />
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">{card.label}</p>
+                  <div className={`p-1.5 rounded-lg bg-${card.color}-500/10`}><card.icon className={`h-3.5 w-3.5 text-${card.color}-500`} /></div>
+                </div>
+                <p className="text-2xl font-black text-foreground"><AnimatedNumber value={card.value} /></p>
+                <p className="text-[10px] text-muted-foreground font-medium mt-1">Tickets</p>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* ══════════════ ROW 4 — Tenure + Demographics + Alerts ══════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         {/* ── Tenure Distribution ── */}
@@ -729,26 +852,6 @@ export default function EmployeesDashboardPage() {
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Average</span>
               <span className="text-sm font-black text-foreground">{stats.avgTenureMonths} months</span>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Weekly Availability Heatmap ── */}
-        <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Weekly Availability</h3>
-          </div>
-          <div className="flex items-end justify-between gap-2 px-1">
-            {stats.availability.map((a: { day: string; available: number; total: number }) => (
-              <AvailabilityDay key={a.day} day={a.day} available={a.available} total={a.total} />
-            ))}
-          </div>
-          <div className="pt-2 border-t border-border/50 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-emerald-500" /><span className="text-[9px] text-muted-foreground">&gt;75%</span></div>
-              <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-amber-400/70" /><span className="text-[9px] text-muted-foreground">25-75%</span></div>
-              <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-red-400/60" /><span className="text-[9px] text-muted-foreground">&lt;25%</span></div>
             </div>
           </div>
         </div>
@@ -819,128 +922,8 @@ export default function EmployeesDashboardPage() {
         </div>
       </div>
 
-      {/* ══════════════ ROW 4 — Location, Offboarding, Hourly ══════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-        {/* ── Top Locations ── */}
-        <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Top Locations</h3>
-          </div>
-          <div className="space-y-2.5">
-            {stats.topCities.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">No location data</p>
-            ) : (
-              (stats.topCities as [string, number][]).map(([city, count]: [string, number], idx: number) => {
-                const pct = stats.activeCount > 0 ? (count / stats.activeCount) * 100 : 0;
-                const rankColors = ["text-amber-400", "text-zinc-400", "text-orange-600", "text-muted-foreground", "text-muted-foreground"];
-                return (
-                  <div key={city} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors">
-                    <span className={cn("text-sm font-black w-5 text-center", rankColors[idx])}>{idx + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-semibold text-foreground truncate">{city}</span>
-                        <span className="text-[10px] font-bold text-muted-foreground ml-2">{count}</span>
-                      </div>
-                      <div className="h-1 w-full bg-muted/50 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-700"
-                          style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
 
-        {/* ── Offboarding Pipeline ── */}
-        <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <UserX className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Offboarding</h3>
-            </div>
-            <span className="text-[10px] font-medium text-muted-foreground px-2 py-0.5 rounded-full bg-muted/40">Last 60 days</span>
-          </div>
-          <div className="text-center py-2">
-            <span className="text-3xl font-black text-foreground"><AnimatedNumber value={stats.recentTerminations} /></span>
-            <p className="text-[10px] text-muted-foreground font-medium mt-1">Separations</p>
-          </div>
-          <div className="space-y-2">
-            {[
-              { label: "Paycom Offboarding", pending: stats.pendingPaycom, total: stats.recentTerminations, color: stats.pendingPaycom > 0 ? "bg-amber-500" : "bg-emerald-500" },
-              { label: "Amazon Offboarding", pending: stats.pendingAmazon, total: stats.recentTerminations, color: stats.pendingAmazon > 0 ? "bg-amber-500" : "bg-emerald-500" },
-              { label: "Final Check Issued", pending: stats.pendingFinalCheck, total: stats.recentTerminations, color: stats.pendingFinalCheck > 0 ? "bg-red-500" : "bg-emerald-500" },
-            ].map(item => (
-              <div key={item.label} className="flex items-center justify-between p-2.5 rounded-xl bg-muted/20 border border-border/30">
-                <span className="text-[11px] font-semibold text-foreground">{item.label}</span>
-                <div className="flex items-center gap-2">
-                  <div className={cn("h-2 w-2 rounded-full", item.color)} />
-                  <span className="text-[11px] font-bold text-muted-foreground">
-                    {item.pending > 0 ? `${item.pending} pending` : "Complete"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Gender & Demographics ── */}
-        <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <Heart className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Demographics</h3>
-          </div>
-          <div className="space-y-3">
-            {(Object.entries(stats.genderMap) as [string, number][])
-              .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
-              .map(([gender, count]) => {
-                const pct = stats.activeCount > 0 ? (count / stats.activeCount) * 100 : 0;
-                const genderColorMap: Record<string, string> = {
-                  'Male': 'bg-blue-500', 'Female': 'bg-pink-500', 'Non-binary': 'bg-purple-500',
-                };
-                return (
-                  <div key={gender} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-foreground">{gender}</span>
-                      <span className="text-[10px] font-bold text-muted-foreground">{count} ({pct.toFixed(0)}%)</span>
-                    </div>
-                    <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden">
-                      <div className={cn("h-full rounded-full transition-all duration-700 ease-out", genderColorMap[gender] || 'bg-zinc-400')}
-                        style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      </div>
-
-      {/* ══════════════ ROW 5 — Hourly Status ══════════════ */}
-      {Object.keys(stats.hourlyMap).length > 0 && (
-        <div className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Hourly Status Distribution</h3>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {(Object.entries(stats.hourlyMap) as [string, number][])
-              .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
-              .map(([status, count]: [string, number]) => (
-                <div
-                  key={status}
-                  onClick={() => router.push(`/hr/employees?hourlyStatus=${encodeURIComponent(status)}`)}
-                  className="flex items-center justify-between px-4 py-3 rounded-xl bg-muted/30 border border-border/50 cursor-pointer transition-all hover:bg-muted/60 hover:border-primary/30 hover:shadow-sm active:scale-[0.98]"
-                >
-                  <span className="text-xs font-semibold text-foreground truncate">{status}</span>
-                  <span className="text-sm font-black text-foreground ml-2">{count}</span>
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
