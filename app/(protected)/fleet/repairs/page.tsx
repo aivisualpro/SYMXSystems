@@ -380,7 +380,7 @@ export default function FleetRepairsPage() {
                                   method: "PUT",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({
-                                    section: "repair",
+                                    type: "repair",
                                     id: r._id,
                                     data: { currentStatus: newStatus, lastEditOn: new Date() },
                                   }),

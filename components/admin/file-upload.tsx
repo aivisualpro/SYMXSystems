@@ -5,6 +5,7 @@ import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { FileText, X, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface FileUploadProps {
   value: string | string[];
@@ -13,6 +14,7 @@ interface FileUploadProps {
   multiple?: boolean;
   accept?: string;
   label?: string;
+  compact?: boolean;
 }
 
 export function FileUpload({
@@ -21,7 +23,8 @@ export function FileUpload({
   disabled,
   multiple = false,
   accept = "*",
-  label = "Upload File"
+  label = "Upload File",
+  compact = false
 }: FileUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
@@ -91,57 +94,61 @@ export function FileUpload({
 
   return (
     <div className="space-y-4 w-full">
-      <div className="flex flex-wrap gap-4">
+      <div className={cn("flex flex-wrap gap-4", compact ? "gap-1" : "")}>
         {urls.length > 0 && urls.map((url, index) => (
-            <div key={index} className="relative flex items-center p-2 border rounded-md bg-muted/20 w-full max-w-sm">
-              <FileText className="h-4 w-4 mr-2 text-primary" />
+            <div key={index} className={cn("relative flex items-center p-2 border rounded-md bg-muted/20 w-full max-w-sm", compact ? "px-1 w-auto max-w-[150px] bg-transparent border-0" : "")}>
+              <FileText className={cn("text-primary", compact ? "h-3 w-3 mr-1" : "h-4 w-4 mr-2")} />
               <a 
                 href={url} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-sm truncate flex-1 hover:underline text-blue-600"
+                className={cn("text-sm truncate flex-1 hover:underline text-blue-600", compact ? "text-xs" : "")}
+                title={url.split('/').pop()}
               >
-                {url.split('/').pop()}
+                {compact ? "View" : url.split('/').pop()}
               </a>
               <Button
                 type="button"
                 onClick={() => handleRemove(url)}
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 ml-2 text-destructive hover:bg-destructive/10"
+                className={cn("text-destructive hover:bg-destructive/10", compact ? "h-4 w-4 ml-1" : "h-6 w-6 ml-2")}
                 disabled={disabled}
               >
-                <X className="h-4 w-4" />
+                <X className={cn("h-4 w-4", compact ? "h-3 w-3" : "")} />
               </Button>
             </div>
           ))
         }
       </div>
-      <div>
-        <input
-          type="file"
-          disabled={loading || disabled}
-          ref={fileInputRef}
-          onChange={handleUpload}
-          className="hidden"
-          accept={accept}
-          multiple={multiple}
-        />
-        <Button
-            type="button"
+      {(!compact || urls.length === 0 || multiple) && (
+        <div className={compact ? "mt-0 flex" : ""}>
+          <input
+            type="file"
             disabled={loading || disabled}
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full sm:w-auto"
-          >
-            {loading ? (
-               <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Upload className="h-4 w-4 mr-2" />
-            )}
-            {label}
-          </Button>
-      </div>
+            ref={fileInputRef}
+            onChange={handleUpload}
+            className="hidden"
+            accept={accept}
+            multiple={multiple}
+          />
+          <Button
+              type="button"
+              disabled={loading || disabled}
+              variant={compact ? "ghost" : "outline"}
+              size={compact ? "sm" : "default"}
+              onClick={() => fileInputRef.current?.click()}
+              className={cn("w-full sm:w-auto", compact ? "h-6 px-2 text-[10px]" : "")}
+            >
+              {loading ? (
+                 <Loader2 className={cn("animate-spin", compact ? "h-3 w-3 mr-1" : "h-4 w-4 mr-2")} />
+              ) : (
+                <Upload className={cn(compact ? "h-3 w-3 mr-1" : "h-4 w-4 mr-2")} />
+              )}
+              {compact ? "Upload" : label}
+            </Button>
+        </div>
+      )}
     </div>
   );
 }

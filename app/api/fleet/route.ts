@@ -46,6 +46,8 @@ export async function GET(req: NextRequest) {
         expiredRentals,
         expiringSoonCount,
         rentalAmountAgg,
+        fleetNotWorkingDocs,
+        registrationExpiringDocs,
         expiringSoonDocs,
       ] = await Promise.all([
         Vehicle.countDocuments(notReturned),
@@ -60,7 +62,6 @@ export async function GET(req: NextRequest) {
           .sort({ creationDate: -1 }).limit(6)
           .select("description unitNumber estimatedDate currentStatus vin").lean(),
         VehicleRepair.aggregate([
-          { $match: { currentStatus: { $ne: "Completed" } } },
           { $group: { _id: "$currentStatus", count: { $sum: 1 } } },
         ]),
         DailyInspection.find({}).sort({ routeDate: -1 }).limit(6)
@@ -72,6 +73,10 @@ export async function GET(req: NextRequest) {
         VehicleRentalAgreement.aggregate([
           { $group: { _id: null, total: { $sum: "$amount" } } },
         ]),
+        Vehicle.find({ status: { $in: ["Grounded", "Maintenance", "Inactive"] } })
+          .select("unitNumber vehicleName status mileage updatedAt notes fleetCommunications").lean(),
+        Vehicle.find({ registrationExpiration: { $gte: new Date(new Date().getTime() - 1000 * 60 * 60 * 24 * 30), $lte: new Date(new Date().getTime() + 1000 * 60 * 60 * 24 * 60) } })
+          .select("unitNumber vehicleName registrationExpiration").sort({ registrationExpiration: 1 }).limit(10).lean(),
         VehicleRentalAgreement.find({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow } })
           .sort({ registrationEndDate: 1 }).limit(6)
           .select("agreementNumber vin registrationEndDate amount").lean(),
@@ -108,11 +113,9 @@ export async function GET(req: NextRequest) {
       const maintenanceVehicles = vehicleStatusMap["Maintenance"] || 0;
       const groundedVehicles = vehicleStatusMap["Grounded"] || 0;
       const inactiveVehicles = vehicleStatusMap["Inactive"] || 0;
-
-      // Build repair status breakdown from aggregation
       const repairStatusMap: Record<string, number> = {};
-      (repairStatusAgg as any[]).forEach((r: any) => { repairStatusMap[r._id] = r.count; });
-      const totalOpenRepairs = Object.values(repairStatusMap).reduce((a, b) => a + b, 0);
+      (repairStatusAgg as any[]).forEach((r: any) => { repairStatusMap[r._id || "Unknown"] = r.count; });
+      const totalRepairs = Object.values(repairStatusMap).reduce((a, b) => a + b, 0);
 
       const repairStatusBreakdown = [
         { name: "Not Started", value: repairStatusMap["Not Started"] || 0 },
@@ -138,8 +141,10 @@ export async function GET(req: NextRequest) {
           { name: "Rented", value: rentedCount, color: "#ec4899" },
         ],
         repairStatusBreakdown,
+        repairStatusMap,
+        totalRepairs,
+        totalOpenRepairs: totalRepairs,
         openRepairs: repairsOpen,
-        totalOpenRepairs,
         recentInspections,
         rentalStats: {
           total: totalRentals,
@@ -149,6 +154,8 @@ export async function GET(req: NextRequest) {
           totalAmount: totalRentalAmount,
         },
         expiringSoonRentals: expiringSoonDocs,
+        fleetNotWorking: fleetNotWorkingDocs,
+        registrationExpiring: registrationExpiringDocs,
       });
     }
 

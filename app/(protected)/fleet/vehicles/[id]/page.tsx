@@ -13,6 +13,8 @@ import {
 } from "@tabler/icons-react";
 import { StatusBadge, GlassCard } from "../../components/fleet-ui";
 import { DropdownOptionSelect } from "../../components/fleet-form-modal";
+import { ImageUpload } from "@/components/admin/image-upload";
+import { FileUpload } from "@/components/admin/file-upload";
 import * as LucideIcons from "lucide-react";
 
 /* ─── helpers ─────────────────────────────────────── */
@@ -197,7 +199,7 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
             {activeTab === "repairs" && <RepairsTab repairs={data.repairs} />}
             {activeTab === "inspections" && <InspectionsTab inspections={data.dailyInspections || []} />}
             {activeTab === "activity" && <ActivityTab logs={data.activityLogs} />}
-            {activeTab === "rentals" && <RentalsTab rentals={data.rentalAgreements} />}
+            {activeTab === "rentals" && <RentalsTab vehicleId={id} rentals={data.rentalAgreements} onUpdate={(r) => setData({...data, rentalAgreements: r})} />}
             {activeTab === "communications" && <CommunicationsTab vehicleId={id} communications={v.fleetCommunications || []} onUpdate={(updated) => setData({ ...data, vehicle: { ...v, fleetCommunications: updated } })} />}
         </div>
     );
@@ -477,16 +479,117 @@ function ActivityTab({ logs }: { logs: any[] }) {
 /* ────────────────────────────────────────────────────
    TAB: Rental Agreements
    ──────────────────────────────────────────────────── */
-function RentalsTab({ rentals }: { rentals: any[] }) {
-    if (!rentals?.length) return <NoData label="rental agreement" />;
+function RentalsTab({ vehicleId, rentals, onUpdate }: { vehicleId: string; rentals: any[]; onUpdate: (data: any[]) => void }) {
+    const [modalOpen, setModalOpen] = useState(false);
+    const [editMode, setEditMode] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [formData, setFormData] = useState({
+        _id: "", invoiceNumber: "", agreementNumber: "",
+        registrationStartDate: "", registrationEndDate: "", dueDate: "", amount: "", file: "", image: ""
+    });
+
+    const openModal = (r?: any) => {
+        if (r) {
+            setEditMode(true);
+            setFormData({
+                _id: r._id,
+                invoiceNumber: r.invoiceNumber || "",
+                agreementNumber: r.agreementNumber || "",
+                registrationStartDate: r.registrationStartDate ? new Date(r.registrationStartDate).toISOString().split('T')[0] : "",
+                registrationEndDate: r.registrationEndDate ? new Date(r.registrationEndDate).toISOString().split('T')[0] : "",
+                dueDate: r.dueDate ? new Date(r.dueDate).toISOString().split('T')[0] : "",
+                amount: r.amount?.toString() || "",
+                file: r.rentalAgreementFilesImages?.[0] || r.file || "",
+                image: r.rentalAgreementFilesImages?.[1] || r.image || ""
+            });
+        } else {
+            setEditMode(false);
+            setFormData({
+                _id: "", invoiceNumber: "", agreementNumber: "",
+                registrationStartDate: "", registrationEndDate: "", dueDate: "",
+                amount: "", file: "", image: ""
+            });
+        }
+        setModalOpen(true);
+    };
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+            const method = editMode ? "PUT" : "POST";
+            const payload = { rentalId: formData._id, ...formData };
+            const res = await fetch(`/api/fleet/vehicles/${vehicleId}/rentals`, {
+                method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error("Failed to save rental agreement");
+            const savedItem = await res.json();
+            
+            let updatedList = [...rentals];
+            if (editMode) {
+                updatedList = updatedList.map(item => item._id === savedItem._id ? savedItem : item);
+            } else {
+                updatedList.unshift(savedItem);
+            }
+            onUpdate(updatedList);
+            setModalOpen(false);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async (rentalId: string) => {
+        if (!confirm("Are you sure you want to delete this agreement?")) return;
+        setDeletingId(rentalId);
+        try {
+            const res = await fetch(`/api/fleet/vehicles/${vehicleId}/rentals?rentalId=${rentalId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed to delete");
+            onUpdate(rentals.filter(r => r._id !== rentalId));
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
+    const updateRentalDoc = async (rentalId: string, payload: any) => {
+        try {
+            const res = await fetch(`/api/fleet/vehicles/${vehicleId}/rentals?rentalId=${rentalId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ type: "rental", id: rentalId, data: payload })
+            });
+            if (!res.ok) throw new Error("Failed to update");
+            const { rental } = await res.json();
+            onUpdate(rentals.map((r: any) => r._id === rentalId ? rental : r));
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     return (
         <GlassCard className="p-4">
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <IconFileInvoice size={16} className="text-primary" /> Rental Agreements
+                </h3>
+                <button onClick={() => openModal()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors">
+                    <IconPlus size={14} /> Add Agreement
+                </button>
+            </div>
+
+            {!rentals?.length ? (
+                <NoData label="rental agreement" />
+            ) : (
             <div className="overflow-x-auto">
                 <table className="w-full">
                     <thead className="sticky top-0 bg-card z-10">
                         <tr className="border-b border-border">
-                            {["Invoice #", "Agreement #", "Start Date", "End Date", "Due Date", "Amount", "File", "Image"].map((h) => (
-                                <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">{h}</th>
+                            {["Invoice #", "Agreement #", "Start Date", "End Date", "Due Date", "Amount", "File", "Image", "Actions"].map((h) => (
+                                <th key={h} className={`px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap ${h === 'Actions' ? 'text-right' : 'text-left'}`}>{h}</th>
                             ))}
                         </tr>
                     </thead>
@@ -496,26 +599,41 @@ function RentalsTab({ rentals }: { rentals: any[] }) {
                             const imageProp = r.rentalAgreementFilesImages?.[1] || r.image;
 
                             return (
-                                <tr key={r._id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                                <tr key={r._id} className="group border-b border-border/50 hover:bg-muted/50 transition-colors">
                                     <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{r.invoiceNumber || "—"}</td>
                                     <td className="px-3 py-2.5 text-xs text-foreground font-medium whitespace-nowrap">{r.agreementNumber || "—"}</td>
                                     <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.registrationStartDate)}</td>
                                     <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.registrationEndDate)}</td>
                                     <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.dueDate)}</td>
                                     <td className="px-3 py-2.5 text-xs text-foreground font-medium whitespace-nowrap">{r.amount ? `$${r.amount.toLocaleString()}` : "—"}</td>
-                                    <td className="px-3 py-2.5 text-xs">
-                                        {fileProp ? (
-                                            <a href={fileProp} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80 hover:underline transition-colors flex items-center gap-1 w-max" title={fileProp}>
-                                                View File <IconArrowUpRight size={12} className="opacity-70" />
-                                            </a>
-                                        ) : "—"}
+                                    <td className="px-3 py-2.5 text-xs w-[120px]">
+                                        <div className="w-full">
+                                            <FileUpload
+                                                value={fileProp ? [fileProp] : []}
+                                                onChange={(url: any) => updateRentalDoc(r._id, { file: Array.isArray(url) ? url[0] || "" : url })}
+                                                compact={true}
+                                                label="Upload"
+                                            />
+                                        </div>
                                     </td>
-                                    <td className="px-3 py-2.5 text-xs">
-                                        {imageProp ? (
-                                            <a href={imageProp} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80 hover:underline transition-colors flex items-center gap-1 w-max" title={imageProp}>
-                                                View Image <IconArrowUpRight size={12} className="opacity-70" />
-                                            </a>
-                                        ) : "—"}
+                                    <td className="px-3 py-2.5 text-xs w-[60px]">
+                                        <div className="w-12 h-12">
+                                            <ImageUpload
+                                                value={imageProp ? [imageProp] : []}
+                                                onChange={(url: any) => updateRentalDoc(r._id, { image: Array.isArray(url) ? url[0] || "" : url })}
+                                                compact={true}
+                                            />
+                                        </div>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-xs text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex items-center justify-end gap-1">
+                                            <button onClick={() => openModal(r)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit">
+                                                <IconEdit size={14} />
+                                            </button>
+                                            <button onClick={() => handleDelete(r._id)} disabled={deletingId === r._id} className="p-1.5 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors" title="Delete">
+                                                {deletingId === r._id ? <IconLoader2 size={14} className="animate-spin" /> : <IconTrash size={14} />}
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             );
@@ -523,6 +641,72 @@ function RentalsTab({ rentals }: { rentals: any[] }) {
                     </tbody>
                 </table>
             </div>
+            )}
+
+            {modalOpen && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 dark:bg-black/60 backdrop-blur-sm" onClick={() => setModalOpen(false)}>
+                    <div className="w-full max-w-lg mx-4 rounded-xl border border-border bg-card shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                            <h3 className="text-sm font-semibold text-foreground">{editMode ? "Edit" : "Add"} Rental Agreement</h3>
+                            <button onClick={() => setModalOpen(false)} className="p-1 rounded-md hover:bg-muted text-muted-foreground transition-colors"><IconX size={16} /></button>
+                        </div>
+                        <form onSubmit={handleSave} className="p-5 flex flex-col gap-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">Invoice #</label>
+                                    <input type="text" value={formData.invoiceNumber} onChange={e => setFormData({ ...formData, invoiceNumber: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20" />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">Agreement #</label>
+                                    <input type="text" value={formData.agreementNumber} onChange={e => setFormData({ ...formData, agreementNumber: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">Start Date</label>
+                                    <input type="date" value={formData.registrationStartDate} onChange={e => setFormData({ ...formData, registrationStartDate: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20" />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">End Date</label>
+                                    <input type="date" value={formData.registrationEndDate} onChange={e => setFormData({ ...formData, registrationEndDate: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20" />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">Due Date</label>
+                                    <input type="date" value={formData.dueDate} onChange={e => setFormData({ ...formData, dueDate: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">Amount ($)</label>
+                                    <input type="number" step="0.01" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 border-t border-border/50 pt-4 mt-1">
+                                <div>
+                                    <label className="block text-[11px] font-medium text-muted-foreground mb-3">Attached Document</label>
+                                    <FileUpload
+                                        value={formData.file ? [formData.file] : []}
+                                        onChange={(url: any) => setFormData({ ...formData, file: typeof url === "string" ? url : url[0] || "" })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-medium text-muted-foreground mb-3">Attached Image</label>
+                                    <ImageUpload
+                                        value={formData.image ? [formData.image] : []}
+                                        onChange={(url: any) => setFormData({ ...formData, image: typeof url === "string" ? url : url[0] || "" })}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button type="button" onClick={() => setModalOpen(false)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button>
+                                <button type="submit" disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium transition-colors disabled:opacity-50">
+                                    {saving && <IconLoader2 size={14} className="animate-spin" />} Save
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </GlassCard>
     );
 }

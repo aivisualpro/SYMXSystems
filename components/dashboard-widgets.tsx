@@ -7,8 +7,10 @@ import { cn } from "@/lib/utils";
 import {
   Truck, Package, Clock, Users, AlertTriangle, Wrench,
   ChevronRight, CalendarClock, Gauge, TrendingDown,
-  CircleDot, Timer, MapPin, FileWarning, Shield,
+  CircleDot, Timer, MapPin, FileWarning, Shield, Loader2
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 // ── Dummy Data ────────────────────────────────────────────────────────────
 
@@ -77,6 +79,64 @@ function StatRow({ icon: Icon, label, value, className, valueClassName }: {
 // ── Main Export ────────────────────────────────────────────────────────────
 
 export function DashboardWidgets() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any>(null);
+
+  useEffect(() => {
+    fetch("/api/fleet?section=dashboard")
+      .then(res => res.json())
+      .then(d => {
+        setData(d);
+        setLoading(false);
+      })
+      .catch(e => {
+        console.error("Dashboard fetch error:", e);
+        setLoading(false);
+      });
+  }, []);
+
+  const repairsData = data ? [
+    { status: "All", count: data.totalRepairs || 0 },
+    { status: "Completed", count: data.repairStatusMap?.["Completed"] || 0, color: "bg-emerald-500" },
+    { status: "Not started", count: data.repairStatusMap?.["Not Started"] || 0, color: "bg-slate-500" },
+    { status: "Repair in progress", count: data.repairStatusMap?.["In Progress"] || 0, color: "bg-blue-500" },
+    { status: "Sent to repair shop", count: data.repairStatusMap?.["Sent to Repair Shop"] || 0, color: "bg-amber-500" },
+    { status: "Waiting for parts", count: data.repairStatusMap?.["Waiting for Parts"] || 0, color: "bg-red-500" },
+  ] : REPAIRS_DATA;
+
+  const fleetNotWorking = data?.fleetNotWorking ? data.fleetNotWorking.map((v: any) => {
+    const days = Math.floor((new Date().getTime() - new Date(v.updatedAt || Date.now()).getTime()) / (1000 * 60 * 60 * 24));
+    const latestComm = v.fleetCommunications?.length ? v.fleetCommunications[v.fleetCommunications.length - 1].comments : "";
+    return {
+      id: v._id,
+      vehicle: v.vehicleName || v.unitNumber || "Unknown",
+      days,
+      mileage: v.mileage || 0,
+      notes: latestComm || v.notes || "",
+      alert: days >= 14,
+    };
+  }) : FLEET_NOT_WORKING;
+
+  const registrationExpiry = data?.registrationExpiring ? data.registrationExpiring.map((v: any) => {
+    const exp = new Date(v.registrationExpiration);
+    const daysLeft = Math.ceil((exp.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    return {
+      id: v._id,
+      vehicle: v.vehicleName || v.unitNumber || "Unknown",
+      expiry: exp.toLocaleDateString(),
+      daysLeft,
+    };
+  }) : REGISTRATION_EXPIRY;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 
@@ -211,32 +271,32 @@ export function DashboardWidgets() {
               </div>
               Fleet Not Working
             </CardTitle>
-            <Badge variant="destructive" className="text-[10px] h-5">{FLEET_NOT_WORKING.length} vehicles</Badge>
+            <Badge variant="destructive" className="text-[10px] h-5">{fleetNotWorking.length} vehicles</Badge>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          {/* Table header */}
-          <div className="grid grid-cols-12 gap-2 py-2 px-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border/50">
-            <div className="col-span-3">Vehicle</div>
-            <div className="col-span-3 text-right">Days Out</div>
-            <div className="col-span-3 text-right">Mileage</div>
-            <div className="col-span-3">Notes</div>
+          <div className="grid grid-cols-[100px_80px_80px_1fr] gap-2 py-2 px-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border/50">
+            <div>Vehicle</div>
+            <div className="text-center">Days Out</div>
+            <div className="text-right">Mileage</div>
+            <div>Notes</div>
           </div>
           {/* Rows */}
           <div className="divide-y divide-border/30">
-            {FLEET_NOT_WORKING.map((v, i) => (
+            {fleetNotWorking.map((v: any, i: number) => (
               <div
                 key={i}
+                onClick={v.id ? () => router.push(`/fleet/vehicles/${v.id}`) : undefined}
                 className={cn(
-                  "grid grid-cols-12 gap-2 py-2.5 px-1 hover:bg-muted/30 rounded transition-colors items-center",
+                  "grid grid-cols-[100px_80px_80px_1fr] gap-2 py-2.5 px-1 hover:bg-muted/30 rounded transition-colors items-center cursor-pointer",
                   v.alert && "bg-amber-500/5"
                 )}
               >
-                <div className="col-span-3 flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 truncate">
                   {v.alert && <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />}
-                  <span className="text-sm font-semibold font-mono">{v.vehicle}</span>
+                  <span className="text-sm font-semibold font-mono truncate">{v.vehicle}</span>
                 </div>
-                <div className="col-span-3 text-right">
+                <div className="text-center">
                   <span className={cn(
                     "text-sm font-mono font-semibold",
                     v.days >= 14 ? "text-red-500" : v.days >= 7 ? "text-amber-500" : ""
@@ -244,8 +304,8 @@ export function DashboardWidgets() {
                     {v.days}
                   </span>
                 </div>
-                <div className="col-span-3 text-right text-sm font-mono">{v.mileage.toLocaleString()}</div>
-                <div className="col-span-3 text-xs text-muted-foreground truncate">{v.notes || "—"}</div>
+                <div className="text-right text-sm font-mono truncate">{v.mileage.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground truncate" title={v.notes || "—"}>{v.notes || "—"}</div>
               </div>
             ))}
           </div>
@@ -265,9 +325,10 @@ export function DashboardWidgets() {
         <CardContent className="pt-0">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-2">Current Status</div>
           <div className="divide-y divide-border/50">
-            {REPAIRS_DATA.map((item, i) => (
+            {repairsData.map((item: any, i: number) => (
               <div
                 key={i}
+                onClick={() => router.push(`/fleet/repairs${item.status !== "All" ? `?status=${item.status}` : ""}`)}
                 className="flex items-center justify-between py-2.5 px-1 hover:bg-muted/30 rounded transition-colors cursor-pointer group"
               >
                 <div className="flex items-center gap-2.5">
@@ -297,7 +358,7 @@ export function DashboardWidgets() {
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          {REGISTRATION_EXPIRY.length === 0 ? (
+          {registrationExpiry.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <div className="p-3 rounded-full bg-muted/50 mb-3">
                 <FileWarning className="h-6 w-6 text-muted-foreground/50" />
@@ -307,8 +368,12 @@ export function DashboardWidgets() {
             </div>
           ) : (
             <div className="divide-y divide-border/50">
-              {REGISTRATION_EXPIRY.map((item, i) => (
-                <div key={i} className="flex items-center justify-between py-2.5">
+              {registrationExpiry.map((item: any, i: number) => (
+                <div 
+                  key={i} 
+                  onClick={item.id ? () => router.push(`/fleet/vehicles/${item.id}`) : undefined}
+                  className="flex items-center justify-between py-2.5 px-1 rounded hover:bg-muted/30 cursor-pointer transition-colors"
+                >
                   <div className="flex items-center gap-2">
                     <Truck className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="text-sm font-medium">Vehicle {item.vehicle}</span>

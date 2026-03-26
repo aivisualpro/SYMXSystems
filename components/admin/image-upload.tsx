@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ImagePlus, X, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface ImageUploadProps {
   value: string | string[];
@@ -91,8 +92,8 @@ export function ImageUpload({
   };
 
   return (
-    <div className="space-y-4 w-full h-full">
-      <div className="flex flex-wrap gap-4 w-full h-full">
+    <div className="space-y-4 w-full">
+      <div className={cn("flex flex-wrap gap-4", compact ? "w-full h-full" : "")}>
         {urls.length > 0 ? (
           urls.map((url, index) => (
             <div key={index} className={`relative ${compact ? "w-full h-full" : "w-[200px] h-[200px]"} rounded-md overflow-hidden border`}>
@@ -108,12 +109,14 @@ export function ImageUpload({
                   <X className={compact ? "h-3 w-3" : "h-4 w-4"} />
                 </Button>
               </div>
-              <Image
-                fill
-                className="object-contain bg-white"
-                alt="Image"
-                src={url}
-              />
+              <a href={url} target="_blank" rel="noopener noreferrer" className={compact ? "block w-full h-full cursor-pointer hover:opacity-80 transition-opacity" : ""}>
+                <Image
+                  fill
+                  className={compact ? "object-contain bg-white" : "object-contain bg-white"}
+                  alt="Image"
+                  src={url}
+                />
+              </a>
             </div>
           ))
         ) : (
@@ -149,7 +152,8 @@ export function ImageUpload({
           <Button
             type="button"
             disabled={loading || disabled}
-            variant="secondary"
+            variant="outline"
+            className="w-full sm:w-auto"
             onClick={() => fileInputRef.current?.click()}
           >
             {loading ? (
