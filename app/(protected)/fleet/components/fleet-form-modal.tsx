@@ -168,6 +168,9 @@ export default function FleetFormModal() {
   const [inspectionTypes, setInspectionTypes] = useState<any[]>([]);
   const [repairStatuses, setRepairStatuses] = useState<{description: string; color?: string; icon?: string}[]>([]);
   const [sessionEmail, setSessionEmail] = useState<string>("");
+  const [fleetStatuses, setFleetStatuses] = useState<any[]>([]);
+  const [fleetOwnerships, setFleetOwnerships] = useState<any[]>([]);
+  const [vehicleProviders, setVehicleProviders] = useState<any[]>([]);
 
   // Route Inspection: auto-fetch routes by date
   const [routeEntries, setRouteEntries] = useState<any[]>([]);
@@ -224,6 +227,32 @@ export default function FleetFormModal() {
         if (statuses.length > 0) setRepairStatuses(statuses);
       })
       .catch(() => { });
+  }, [modalOpen, modalType]);
+
+  // Fetch dropdowns for Vehicle form
+  useEffect(() => {
+    if (!modalOpen || modalType !== "vehicle") return;
+    
+    fetch("/api/admin/settings/dropdowns?type=fleet status")
+      .then(r => r.json())
+      .then((data: any[]) => {
+        const active = data.filter((d: any) => d.isActive !== false);
+        if (active.length > 0) setFleetStatuses(active);
+      }).catch(() => {});
+
+    fetch("/api/admin/settings/dropdowns?type=fleet ownership")
+      .then(r => r.json())
+      .then((data: any[]) => {
+        const active = data.filter((d: any) => d.isActive !== false);
+        if (active.length > 0) setFleetOwnerships(active);
+      }).catch(() => {});
+
+    fetch("/api/admin/settings/dropdowns?type=vehicle provider")
+      .then(r => r.json())
+      .then((data: any[]) => {
+        const active = data.filter((d: any) => d.isActive !== false);
+        if (active.length > 0) setVehicleProviders(active);
+      }).catch(() => {});
   }, [modalOpen, modalType]);
 
   // Fetch vehicles for repair + rental form dropdowns
@@ -307,18 +336,29 @@ export default function FleetFormModal() {
                 <FormField label="Make"><input className={inputClass} value={formData.make || ""} onChange={e => updateForm("make", e.target.value)} placeholder="Ford" /></FormField>
                 <FormField label="Model"><input className={inputClass} value={formData.vehicleModel || ""} onChange={e => updateForm("vehicleModel", e.target.value)} placeholder="Transit" /></FormField>
                 <FormField label="License Plate"><input className={inputClass} value={formData.licensePlate || ""} onChange={e => updateForm("licensePlate", e.target.value)} /></FormField>
-                <FormField label="Status"><select className={inputClass} value={formData.status || "Active"} onChange={e => updateForm("status", e.target.value)}>
-                  {["Active", "Inactive", "Maintenance", "Grounded", "Decommissioned"].map(s => <option key={s} value={s}>{s}</option>)}
+                <FormField label="Status"><select className={inputClass} value={formData.status || ""} onChange={e => updateForm("status", e.target.value)}>
+                  <option value="">Select status…</option>
+                  {(fleetStatuses.length > 0 
+                    ? fleetStatuses.map(s => <option key={s.description} value={s.description}>{s.description}</option>)
+                    : ["Active", "Inactive", "Maintenance", "Grounded", "Decommissioned"].map(s => <option key={s} value={s}>{s}</option>)
+                  )}
                 </select></FormField>
-                <FormField label="Ownership"><select className={inputClass} value={formData.ownership || "Owned"} onChange={e => updateForm("ownership", e.target.value)}>
-                  {["Owned", "Leased", "Rented"].map(s => <option key={s} value={s}>{s}</option>)}
+                <FormField label="Ownership"><select className={inputClass} value={formData.ownership || ""} onChange={e => updateForm("ownership", e.target.value)}>
+                  <option value="">Select ownership…</option>
+                  {(fleetOwnerships.length > 0
+                    ? fleetOwnerships.map(s => <option key={s.description} value={s.description}>{s.description}</option>)
+                    : ["Owned", "Leased", "Rented"].map(s => <option key={s} value={s}>{s}</option>)
+                  )}
                 </select></FormField>
                 <FormField label="Service Type"><input className={inputClass} value={formData.serviceType || ""} onChange={e => updateForm("serviceType", e.target.value)} /></FormField>
                 <FormField label="Mileage"><input type="number" className={inputClass} value={formData.mileage || ""} onChange={e => updateForm("mileage", parseInt(e.target.value) || 0)} /></FormField>
                 <FormField label="State"><input className={inputClass} value={formData.state || ""} onChange={e => updateForm("state", e.target.value)} /></FormField>
                 <FormField label="Location"><input className={inputClass} value={formData.location || ""} onChange={e => updateForm("location", e.target.value)} /></FormField>
                 <FormField label="Dashcam"><input className={inputClass} value={formData.dashcam || ""} onChange={e => updateForm("dashcam", e.target.value)} /></FormField>
-                <FormField label="Provider"><input className={inputClass} value={formData.vehicleProvider || ""} onChange={e => updateForm("vehicleProvider", e.target.value)} /></FormField>
+                <FormField label="Provider"><select className={inputClass} value={formData.vehicleProvider || ""} onChange={e => updateForm("vehicleProvider", e.target.value)}>
+                  <option value="">Select provider…</option>
+                  {vehicleProviders.map(s => <option key={s.description} value={s.description}>{s.description}</option>)}
+                </select></FormField>
                 <FormField label="Start Date"><input type="date" className={inputClass} value={formData.startDate ? formData.startDate.split("T")[0] : ""} onChange={e => updateForm("startDate", e.target.value)} /></FormField>
                 <FormField label="End Date"><input type="date" className={inputClass} value={formData.endDate ? formData.endDate.split("T")[0] : ""} onChange={e => updateForm("endDate", e.target.value)} /></FormField>
                 <FormField label="Reg. Expiration"><input type="date" className={inputClass} value={formData.registrationExpiration ? formData.registrationExpiration.split("T")[0] : ""} onChange={e => updateForm("registrationExpiration", e.target.value)} /></FormField>
