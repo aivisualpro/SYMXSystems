@@ -32,63 +32,6 @@ import {
 
 export const description = "DSP Efficiency & CPR Dashboard"
 
-// ── Dummy data generator ──────────────────────────────────────────────────
-function generateDailyData(): DailyData[] {
-  const data: DailyData[] = []
-  const now = new Date()
-  // Generate 365 days of data
-  for (let i = 365; i >= 0; i--) {
-    const d = new Date(now)
-    d.setDate(d.getDate() - i)
-    const dateStr = d.toISOString().split("T")[0] // YYYY-MM-DD
-
-    // Simulate seasonal patterns + weekday variance
-    const dayOfWeek = d.getDay()
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
-    const monthIdx = d.getMonth()
-
-    // Base routes planned (higher in peak season Oct-Dec)
-    const seasonalMultiplier = [0.85, 0.82, 0.88, 0.92, 0.95, 1.0, 0.98, 0.96, 1.02, 1.1, 1.15, 1.12][monthIdx]
-    const baseRoutes = isWeekend
-      ? Math.floor(18 + Math.random() * 6)
-      : Math.floor(28 + Math.random() * 8)
-    const routesPlanned = Math.round(baseRoutes * seasonalMultiplier)
-
-    // Packages: 180-280 per route on average
-    const avgPkgPerRoute = 180 + Math.random() * 100
-    const totalPackages = Math.round(routesPlanned * avgPkgPerRoute)
-
-    // Delivery success: 96-99.9%
-    const baseEfficiency = 96 + Math.random() * 3.9
-    // Add some variance — occasional dips
-    const efficiencyDip = Math.random() > 0.92 ? -(Math.random() * 3) : 0
-    const efficiency = Math.min(100, Math.max(92, baseEfficiency + efficiencyDip))
-
-    const delivered = Math.round(totalPackages * (efficiency / 100))
-    const notDelivered = totalPackages - delivered
-
-    // CPR: Cost Per Route — ranges $180-$260 with some variance
-    const baseCPR = 195 + Math.random() * 45
-    const cprVariance = Math.random() > 0.9 ? (Math.random() * 25) : 0
-    const cpr = Math.round((baseCPR + cprVariance) * 100) / 100
-
-    // DNR (Did Not Return) rate
-    const dnrRate = Math.round((Math.random() * 2.5) * 100) / 100
-
-    data.push({
-      date: dateStr,
-      routesPlanned,
-      delivered,
-      notDelivered,
-      totalPackages,
-      efficiency: Math.round(efficiency * 100) / 100,
-      cpr,
-      dnrRate,
-    })
-  }
-  return data
-}
-
 interface DailyData {
   date: string
   routesPlanned: number
@@ -97,7 +40,6 @@ interface DailyData {
   totalPackages: number
   efficiency: number
   cpr: number
-  dnrRate: number
 }
 
 const chartConfig = {
@@ -124,9 +66,22 @@ export function ChartAreaInteractive({ data: _externalData }: { data: any[] }) {
   const [timeRange, setTimeRange] = React.useState("3m")
   const [chartView, setChartView] = React.useState<"efficiency" | "cpr" | "volume">("efficiency")
   const [isMounted, setIsMounted] = React.useState(false)
+  const [dailyData, setDailyData] = React.useState<DailyData[]>([])
+  const [dataLoading, setDataLoading] = React.useState(true)
 
-  // Use dummy data
-  const dailyData = React.useMemo(() => generateDailyData(), [])
+  // Fetch live efficiency data from API
+  React.useEffect(() => {
+    setDataLoading(true)
+    fetch("/api/fleet?section=efficiency-history&days=365")
+      .then(res => res.json())
+      .then(json => {
+        if (json.data && Array.isArray(json.data)) {
+          setDailyData(json.data)
+        }
+      })
+      .catch(() => { /* silent */ })
+      .finally(() => setDataLoading(false))
+  }, [])
 
   React.useEffect(() => {
     setIsMounted(true)
@@ -158,12 +113,19 @@ export function ChartAreaInteractive({ data: _externalData }: { data: any[] }) {
   // Aggregated stats
   const stats = React.useMemo(() => {
     if (filteredData.length === 0) return { avgEfficiency: 0, avgCPR: 0, totalDelivered: 0, totalPackages: 0, totalRoutes: 0, totalNotDelivered: 0 }
-    const totalDelivered = filteredData.reduce((a, c) => a + c.delivered, 0)
-    const totalPackages = filteredData.reduce((a, c) => a + c.totalPackages, 0)
-    const totalRoutes = filteredData.reduce((a, c) => a + c.routesPlanned, 0)
-    const totalNotDelivered = filteredData.reduce((a, c) => a + c.notDelivered, 0)
-    const avgEfficiency = totalPackages > 0 ? (totalDelivered / totalPackages) * 100 : 0
-    const avgCPR = filteredData.reduce((a, c) => a + c.cpr, 0) / filteredData.length
+    const totalDelivered = filteredData.reduce((a, c) => a + (c.delivered || 0), 0)
+    const totalPackages = filteredData.reduce((a, c) => a + (c.totalPackages || 0), 0)
+    const totalRoutes = filteredData.reduce((a, c) => a + (c.routesPlanned || 0), 0)
+    const totalNotDelivered = filteredData.reduce((a, c) => a + (c.notDelivered || 0), 0)
+    // Use actual efficiency averages (filter out zero days)
+    const daysWithEff = filteredData.filter(d => d.efficiency > 0)
+    const avgEfficiency = daysWithEff.length > 0
+      ? daysWithEff.reduce((a, c) => a + c.efficiency, 0) / daysWithEff.length
+      : 0
+    const daysWithCpr = filteredData.filter(d => d.cpr > 0)
+    const avgCPR = daysWithCpr.length > 0
+      ? daysWithCpr.reduce((a, c) => a + c.cpr, 0) / daysWithCpr.length
+      : 0
     return {
       avgEfficiency: Math.round(avgEfficiency * 100) / 100,
       avgCPR: Math.round(avgCPR * 100) / 100,
@@ -174,7 +136,7 @@ export function ChartAreaInteractive({ data: _externalData }: { data: any[] }) {
     }
   }, [filteredData])
 
-  if (!isMounted) {
+  if (!isMounted || dataLoading) {
     return (
       <Card className="@container/card">
         <CardHeader>
@@ -306,7 +268,10 @@ export function ChartAreaInteractive({ data: _externalData }: { data: any[] }) {
                 }}
               />
               <YAxis
-                domain={[90, 100]}
+                domain={[
+                  (dataMin: number) => Math.max(0, Math.floor(Math.min(dataMin, 90) / 5) * 5),
+                  100
+                ]}
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}

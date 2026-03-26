@@ -6,10 +6,10 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   Truck, Package, Clock, Users, AlertTriangle, Wrench,
-  ChevronRight, CalendarClock, Gauge, TrendingDown,
+  ChevronRight, ChevronLeft, CalendarClock, Gauge, TrendingDown,
   CircleDot, Timer, MapPin, FileWarning, Shield, Loader2
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 // ── Dummy Data ────────────────────────────────────────────────────────────
@@ -73,6 +73,180 @@ function StatRow({ icon: Icon, label, value, className, valueClassName }: {
       </div>
       <span className={cn("text-sm font-semibold font-mono tabular-nums", valueClassName)}>{value}</span>
     </div>
+  );
+}
+
+// ── Week helpers (Sun-based, Pacific Time) ──
+function getCurrentYearWeek(): string {
+  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+  const date = new Date(todayStr + "T00:00:00.000Z");
+  const dayOfWeek = date.getUTCDay();
+  const sundayOfThisWeek = new Date(date);
+  sundayOfThisWeek.setUTCDate(date.getUTCDate() - dayOfWeek);
+  const year = sundayOfThisWeek.getUTCFullYear();
+  const jan1 = new Date(Date.UTC(year, 0, 1));
+  const jan1Day = jan1.getUTCDay();
+  const firstSunday = new Date(jan1);
+  firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
+  const diffMs = sundayOfThisWeek.getTime() - firstSunday.getTime();
+  const diffDays = Math.round(diffMs / 86400000);
+  const weekNum = Math.floor(diffDays / 7) + 1;
+  return `${year}-W${weekNum.toString().padStart(2, "0")}`;
+}
+
+function shiftWeek(yearWeek: string, delta: number): string {
+  const match = yearWeek.match(/(\d{4})-W(\d{2})/);
+  if (!match) return yearWeek;
+  const year = parseInt(match[1]);
+  const week = parseInt(match[2]);
+  const jan1 = new Date(Date.UTC(year, 0, 1));
+  const jan1Day = jan1.getUTCDay();
+  const firstSunday = new Date(jan1);
+  firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
+  const target = new Date(firstSunday);
+  target.setUTCDate(firstSunday.getUTCDate() + (week - 1 + delta) * 7);
+  const tYear = target.getUTCFullYear();
+  const tJan1 = new Date(Date.UTC(tYear, 0, 1));
+  const tJan1Day = tJan1.getUTCDay();
+  const tFirstSunday = new Date(tJan1);
+  tFirstSunday.setUTCDate(tJan1.getUTCDate() - tJan1Day);
+  const tDiffMs = target.getTime() - tFirstSunday.getTime();
+  const tDiffDays = Math.round(tDiffMs / 86400000);
+  const tWeekNum = Math.floor(tDiffDays / 7) + 1;
+  return `${tYear}-W${tWeekNum.toString().padStart(2, "0")}`;
+}
+
+function formatWeekShort(yearWeek: string): string {
+  const match = yearWeek.match(/(\d{4})-W(\d{2})/);
+  if (!match) return yearWeek;
+  return `Week ${parseInt(match[2])}, ${match[1]}`;
+}
+
+const SHORT_DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function EfficiencyCard() {
+  const router = useRouter();
+  const [yearWeek, setYearWeek] = useState(getCurrentYearWeek);
+  const [days, setDays] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchEfficiency = useCallback(async (w: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/fleet?section=efficiency&yearWeek=${encodeURIComponent(w)}`);
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setDays(json.days || []);
+    } catch {
+      setDays([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchEfficiency(yearWeek); }, [yearWeek, fetchEfficiency]);
+
+  const currentWeek = getCurrentYearWeek();
+  const avgEfficiency = days.filter(d => d.efficiency > 0);
+  const weekAvg = avgEfficiency.length > 0
+    ? Math.round(avgEfficiency.reduce((s, d) => s + d.efficiency, 0) / avgEfficiency.length * 100) / 100
+    : 0;
+
+  return (
+    <Card className="overflow-hidden group/card hover:shadow-lg transition-shadow">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <div className="p-1.5 rounded-md bg-emerald-500/10">
+              <Gauge className="h-4 w-4 text-emerald-500" />
+            </div>
+            Efficiency
+          </CardTitle>
+          {weekAvg > 0 && (
+            <Badge variant="secondary" className={cn(
+              "text-[10px] h-5 font-mono font-bold",
+              weekAvg >= 98 ? "text-emerald-500" : weekAvg >= 96 ? "text-green-500" : "text-amber-500"
+            )}>
+              Avg {weekAvg}%
+            </Badge>
+          )}
+        </div>
+        {/* Week Navigator */}
+        <div className="flex items-center justify-between mt-2">
+          <button
+            onClick={() => setYearWeek(w => shiftWeek(w, -1))}
+            className="p-1 rounded-md hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className={cn(
+            "text-[11px] font-semibold",
+            yearWeek === currentWeek ? "text-primary" : "text-muted-foreground"
+          )}>
+            {formatWeekShort(yearWeek)}
+            {yearWeek === currentWeek && <span className="ml-1.5 text-[9px] opacity-60">(current)</span>}
+          </span>
+          <button
+            onClick={() => setYearWeek(w => shiftWeek(w, 1))}
+            disabled={yearWeek >= currentWeek}
+            className="p-1 rounded-md hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {days.map((entry, i) => {
+              const d = new Date(entry.date + "T00:00:00Z");
+              const dayLabel = SHORT_DAY_NAMES[d.getUTCDay()];
+              const dateDisplay = `${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCDate()).padStart(2, "0")}/${d.getUTCFullYear()}`;
+              const hasData = entry.efficiency > 0;
+              const isAlert = hasData && entry.efficiency < 95;
+              return (
+                <div
+                  key={i}
+                  onClick={() => router.push(`/dispatching/efficiency?week=${yearWeek}&date=${entry.date}`)}
+                  className={cn(
+                    "flex items-center justify-between py-3 px-1 hover:bg-muted/30 rounded transition-colors cursor-pointer",
+                    isAlert && "bg-red-500/5"
+                  )}
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      <span className="text-muted-foreground text-[11px] mr-1.5">{dayLabel}</span>
+                      {dateDisplay}
+                    </p>
+                    <p className={cn(
+                      "text-xs mt-0.5 font-semibold",
+                      !hasData ? "text-muted-foreground/40"
+                        : isAlert ? "text-amber-500"
+                          : entry.efficiency >= 98 ? "text-emerald-500"
+                            : "text-green-500"
+                    )}>
+                      {isAlert && <AlertTriangle className="h-3 w-3 inline mr-1" />}
+                      Efficiency {hasData ? `${entry.efficiency.toFixed(2)}%` : "—"}
+                      {" "}CPR {hasData ? `$${entry.cpr.toFixed(2)}` : "—"}
+                    </p>
+                  </div>
+                  <CalendarClock className="h-4 w-4 text-muted-foreground/30" />
+                </div>
+              );
+            })}
+            {days.length === 0 && (
+              <div className="text-center py-8 text-sm text-muted-foreground/50">
+                No efficiency data for this week
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -140,6 +314,14 @@ export function DashboardWidgets() {
     };
   }) : REGISTRATION_EXPIRY;
 
+  // Dispatching data (Loadout + Roster)
+  const dispatching = data?.dispatching;
+  const loadout = dispatching?.loadout ? {
+    ...dispatching.loadout,
+    date: dispatching.date || "",
+  } : { ...LOADOUT_DATA };
+  const roster = dispatching?.roster || ROSTER_DATA;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -152,7 +334,7 @@ export function DashboardWidgets() {
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 
       {/* ═══ 1. LOADOUT SUMMARY ═══ */}
-      <Card className="overflow-hidden group/card hover:shadow-lg transition-shadow">
+      <Card className="overflow-hidden group/card hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push("/dispatching")}>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-bold flex items-center gap-2">
@@ -161,28 +343,28 @@ export function DashboardWidgets() {
               </div>
               Loadout Summary
             </CardTitle>
-            <span className="text-[11px] text-muted-foreground font-mono">{LOADOUT_DATA.date}</span>
+            <span className="text-[11px] text-muted-foreground font-mono">{loadout.date}</span>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="divide-y divide-border/50">
-            <StatRow icon={MapPin} label="Routes" value={LOADOUT_DATA.routes} />
-            <StatRow icon={Users} label="Operations" value={LOADOUT_DATA.operations} />
-            <StatRow icon={AlertTriangle} label="Call Out" value={LOADOUT_DATA.callOut} valueClassName={LOADOUT_DATA.callOut > 0 ? "text-amber-500" : ""} />
-            <StatRow icon={TrendingDown} label="Reduction" value={LOADOUT_DATA.reduction} valueClassName={LOADOUT_DATA.reduction > 0 ? "text-red-400" : ""} />
-            <StatRow icon={Timer} label="Avg Route Duration" value={`${LOADOUT_DATA.avgRouteDuration} hrs`} />
-            <StatRow icon={Package} label="Avg Package Count" value={LOADOUT_DATA.avgPackageCount.toLocaleString()} />
+            <StatRow icon={MapPin} label="Routes" value={loadout.routes} />
+            <StatRow icon={Users} label="Operations" value={loadout.operations} />
+            <StatRow icon={AlertTriangle} label="Call Out" value={loadout.callOut} valueClassName={loadout.callOut > 0 ? "text-amber-500" : ""} />
+            <StatRow icon={TrendingDown} label="Reduction" value={loadout.reduction} valueClassName={loadout.reduction > 0 ? "text-red-400" : ""} />
+            <StatRow icon={Timer} label="Avg Route Duration" value={loadout.avgRouteDuration > 0 ? `${loadout.avgRouteDuration} hrs` : "—"} />
+            <StatRow icon={Package} label="Avg Package Count" value={loadout.avgPackageCount > 0 ? loadout.avgPackageCount.toLocaleString() : "—"} />
           </div>
           <Separator className="my-2" />
           <div className="flex items-center justify-between py-2">
             <span className="text-sm font-bold">Total Package Count</span>
-            <span className="text-lg font-black font-mono tabular-nums text-primary">{LOADOUT_DATA.totalPackageCount.toLocaleString()}</span>
+            <span className="text-lg font-black font-mono tabular-nums text-primary">{loadout.totalPackageCount.toLocaleString()}</span>
           </div>
         </CardContent>
       </Card>
 
       {/* ═══ 2. ROSTER SUMMARY ═══ */}
-      <Card className="overflow-hidden group/card hover:shadow-lg transition-shadow">
+      <Card className="overflow-hidden group/card hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push("/dispatching/roster")}>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-bold flex items-center gap-2">
             <div className="p-1.5 rounded-md bg-green-500/10">
@@ -195,7 +377,7 @@ export function DashboardWidgets() {
           {/* Assigned Routes - hero number */}
           <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/10">
             <span className="text-sm font-medium">Assigned Routes</span>
-            <span className="text-2xl font-black font-mono text-primary">{ROSTER_DATA.assignedRoutes}</span>
+            <span className="text-2xl font-black font-mono text-primary">{roster.assignedRoutes}</span>
           </div>
 
           <div className="divide-y divide-border/50">
@@ -203,14 +385,14 @@ export function DashboardWidgets() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-foreground/80 flex items-center gap-2">
                   <Truck className="h-3.5 w-3.5 text-muted-foreground" />
-                  Working Vans <span className="text-[10px] text-muted-foreground">({ROSTER_DATA.workingVans.date})</span>
+                  Working Vans
                 </span>
-                <span className="text-sm font-semibold">Total: {ROSTER_DATA.workingVans.total}</span>
+                <span className="text-sm font-semibold">Total: {roster.workingVans.total}</span>
               </div>
               <div className="flex gap-3 mt-1 ml-6">
-                <span className="text-[11px] text-muted-foreground">XL: <span className="font-bold text-foreground">{ROSTER_DATA.workingVans.xl}</span></span>
-                <span className="text-[11px] text-muted-foreground">LG: <span className="font-bold text-foreground">{ROSTER_DATA.workingVans.lg}</span></span>
-                <span className="text-[11px] text-muted-foreground">SM: <span className="font-bold text-foreground">{ROSTER_DATA.workingVans.sm}</span></span>
+                <span className="text-[11px] text-muted-foreground">XL: <span className="font-bold text-foreground">{roster.workingVans.xl}</span></span>
+                <span className="text-[11px] text-muted-foreground">LG: <span className="font-bold text-foreground">{roster.workingVans.lg}</span></span>
+                <span className="text-[11px] text-muted-foreground">SM: <span className="font-bold text-foreground">{roster.workingVans.sm}</span></span>
               </div>
             </div>
 
@@ -220,57 +402,23 @@ export function DashboardWidgets() {
                   <Gauge className="h-3.5 w-3.5 text-muted-foreground" />
                   Routes Rostered
                 </span>
-                <span className="text-sm font-semibold">Total: {ROSTER_DATA.routesRostered.total}</span>
+                <span className="text-sm font-semibold">Total: {roster.routesRostered.total}</span>
               </div>
               <div className="flex gap-3 mt-1 ml-6">
-                <span className="text-[11px] text-muted-foreground">XL: <span className="font-bold text-foreground">{ROSTER_DATA.routesRostered.xl}</span></span>
-                <span className="text-[11px] text-muted-foreground">LG: <span className="font-bold text-foreground">{ROSTER_DATA.routesRostered.lg}</span></span>
-                <span className="text-[11px] text-muted-foreground">SM: <span className="font-bold text-foreground">{ROSTER_DATA.routesRostered.sm}</span></span>
+                <span className="text-[11px] text-muted-foreground">XL: <span className="font-bold text-foreground">{roster.routesRostered.xl}</span></span>
+                <span className="text-[11px] text-muted-foreground">LG: <span className="font-bold text-foreground">{roster.routesRostered.lg}</span></span>
+                <span className="text-[11px] text-muted-foreground">SM: <span className="font-bold text-foreground">{roster.routesRostered.sm}</span></span>
               </div>
             </div>
 
-            <StatRow label="Extras" value={`Stand by: ${ROSTER_DATA.extras.standby}, Open: ${ROSTER_DATA.extras.open}, Close: ${ROSTER_DATA.extras.close}`} />
-            <StatRow label="Other" value={`AMZ: ${ROSTER_DATA.other.amzTraining}, OTR: ${ROSTER_DATA.other.trainingOTR}, Trainer: ${ROSTER_DATA.other.trainer}`} />
+            <StatRow label="Extras" value={`Stand by: ${roster.extras.standby}, Open: ${roster.extras.open}, Close: ${roster.extras.close}`} />
+            <StatRow label="Other" value={`AMZ: ${roster.other.amzTraining}, OTR: ${roster.other.trainingOTR}, Trainer: ${roster.other.trainer}`} />
           </div>
         </CardContent>
       </Card>
 
       {/* ═══ 3. EFFICIENCY LOG ═══ */}
-      <Card className="overflow-hidden group/card hover:shadow-lg transition-shadow">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <div className="p-1.5 rounded-md bg-emerald-500/10">
-              <Gauge className="h-4 w-4 text-emerald-500" />
-            </div>
-            Efficiency
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="divide-y divide-border/50 max-h-[320px] overflow-y-auto">
-            {EFFICIENCY_LOG.map((entry, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "flex items-center justify-between py-3 px-1 hover:bg-muted/30 rounded transition-colors",
-                  entry.alert && "bg-red-500/5"
-                )}
-              >
-                <div>
-                  <p className="text-sm font-medium">{entry.date}</p>
-                  <p className={cn(
-                    "text-xs mt-0.5 font-semibold",
-                    entry.alert ? "text-amber-500" : entry.efficiency >= 98 ? "text-emerald-500" : entry.efficiency >= 96 ? "text-green-500" : "text-amber-500"
-                  )}>
-                    {entry.alert && <AlertTriangle className="h-3 w-3 inline mr-1" />}
-                    Efficiency {entry.efficiency.toFixed(2)}% CPR ${entry.cpr.toFixed(2)}
-                  </p>
-                </div>
-                <CalendarClock className="h-4 w-4 text-muted-foreground/50" />
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <EfficiencyCard />
 
       {/* ═══ 4. FLEET NOT WORKING ═══ */}
       <Card className="overflow-hidden group/card hover:shadow-lg transition-shadow">

@@ -10,6 +10,7 @@ import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxUser from "@/lib/models/SymxUser";
 import DropdownOption from "@/lib/models/DropdownOption";
+import SYMXRoute from "@/lib/models/SYMXRoute";
 
 // GET: Fleet dashboard summary + all data
 export async function GET(req: NextRequest) {
@@ -133,6 +134,73 @@ export async function GET(req: NextRequest) {
 
       const totalRentalAmount = (rentalAmountAgg as any[])[0]?.total || 0;
 
+      // ── Dispatching data for today (Loadout + Roster) ──
+      const BUSINESS_TZ = "America/Los_Angeles";
+      const todayPT = new Date(new Date().toLocaleString("en-US", { timeZone: BUSINESS_TZ }));
+      const todayStart = new Date(todayPT.getFullYear(), todayPT.getMonth(), todayPT.getDate());
+      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+      const todayDateStr = todayStart.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+
+      const todayRoutes = await SYMXRoute.find(
+        { date: { $gte: todayStart, $lt: todayEnd }, type: { $not: { $regex: /^off$/i } } },
+        { type: 1, subType: 1, packageCount: 1, stopCount: 1, routeDuration: 1, van: 1, serviceType: 1, attendance: 1 }
+      ).lean() as any[];
+
+      // Parse route duration "H:MM" to hours
+      const parseDuration = (d: string) => {
+        if (!d) return 0;
+        const parts = d.split(":");
+        if (parts.length === 2) return parseInt(parts[0]) + parseInt(parts[1]) / 60;
+        return parseFloat(d) || 0;
+      };
+
+      // Classify route types
+      const routeTypes = todayRoutes.map(r => (r.type || "").toLowerCase().trim());
+      const routeCount = routeTypes.filter(t => t === "route").length;
+      const operationsCount = routeTypes.filter(t => ["operations", "operation"].includes(t)).length;
+      const callOutCount = routeTypes.filter(t => ["call out", "callout", "call-out"].includes(t)).length;
+      const reductionCount = routeTypes.filter(t => t === "reduction").length;
+      const standbyCount = routeTypes.filter(t => ["standby", "stand by"].includes(t)).length;
+      const openCount = routeTypes.filter(t => t === "open").length;
+      const closeCount = routeTypes.filter(t => t === "close").length;
+      const amzTrainingCount = routeTypes.filter(t => ["amz training", "amazon training"].includes(t)).length;
+      const trainingOTRCount = routeTypes.filter(t => ["training otr", "otr"].includes(t)).length;
+      const trainerCount = routeTypes.filter(t => t === "trainer").length;
+
+      // Package + duration averages
+      const routesWithPkgs = todayRoutes.filter(r => r.packageCount > 0);
+      const totalPackages = todayRoutes.reduce((s, r) => s + (r.packageCount || 0), 0);
+      const avgPackageCount = routesWithPkgs.length > 0 ? Math.round(totalPackages / routesWithPkgs.length) : 0;
+      const routesWithDur = todayRoutes.filter(r => r.routeDuration);
+      const totalDurHrs = routesWithDur.reduce((s, r) => s + parseDuration(r.routeDuration), 0);
+      const avgRouteDuration = routesWithDur.length > 0 ? Math.round((totalDurHrs / routesWithDur.length) * 100) / 100 : 0;
+
+      // Van size breakdown
+      const vansUsed = todayRoutes.filter(r => r.van);
+      const xlVans = vansUsed.filter(r => (r.serviceType || "").toUpperCase().includes("XL")).length;
+      const lgVans = vansUsed.filter(r => (r.serviceType || "").toUpperCase().includes("L") && !(r.serviceType || "").toUpperCase().includes("XL")).length;
+      const smVans = vansUsed.filter(r => (r.serviceType || "").toUpperCase().includes("S") || ((r.serviceType || "") && !((r.serviceType || "").toUpperCase().includes("XL")) && !((r.serviceType || "").toUpperCase().includes("L")))).length;
+
+      const dispatching = {
+        date: todayDateStr,
+        loadout: {
+          routes: routeCount,
+          operations: operationsCount,
+          callOut: callOutCount,
+          reduction: reductionCount,
+          avgRouteDuration,
+          avgPackageCount,
+          totalPackageCount: totalPackages,
+        },
+        roster: {
+          assignedRoutes: todayRoutes.length,
+          workingVans: { total: vansUsed.length, xl: xlVans, lg: lgVans, sm: smVans > 0 ? smVans : vansUsed.length - xlVans - lgVans },
+          routesRostered: { total: routeCount, xl: xlVans, lg: lgVans, sm: smVans > 0 ? smVans : Math.max(0, routeCount - xlVans - lgVans) },
+          extras: { standby: standbyCount, open: openCount, close: closeCount },
+          other: { amzTraining: amzTrainingCount, trainingOTR: trainingOTRCount, trainer: trainerCount },
+        },
+      };
+
       return NextResponse.json({
         kpis: {
           totalVehicles,
@@ -163,7 +231,102 @@ export async function GET(req: NextRequest) {
         expiringSoonRentals: expiringSoonDocs,
         fleetNotWorking: fleetNotWorkingDocs,
         registrationExpiring: registrationExpiringDocs,
+        dispatching,
       });
+    }
+
+    // ── Efficiency summary per day for a yearWeek ──
+    if (section === "efficiency") {
+      const yearWeek = searchParams.get("yearWeek");
+      if (!yearWeek) return NextResponse.json({ error: "yearWeek is required" }, { status: 400 });
+
+      const effAgg = await SYMXRoute.aggregate([
+        { $match: { yearWeek, type: { $not: { $regex: /^off$/i } }, driverEfficiency: { $gt: 0 } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: "America/Los_Angeles" } },
+            avgEfficiency: { $avg: "$driverEfficiency" },
+            totalCost: { $sum: "$totalCost" },
+            routeCount: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]);
+
+      // Also get all 7 day dates for this week (even if no data)
+      const match = yearWeek.match(/(\d{4})-W(\d{2})/);
+      let weekDates: string[] = [];
+      if (match) {
+        const year = parseInt(match[1]);
+        const week = parseInt(match[2]);
+        const jan1 = new Date(Date.UTC(year, 0, 1));
+        const jan1Day = jan1.getUTCDay();
+        const firstSunday = new Date(jan1);
+        firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
+        const weekSunday = new Date(firstSunday);
+        weekSunday.setUTCDate(firstSunday.getUTCDate() + (week - 1) * 7);
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(weekSunday);
+          d.setUTCDate(weekSunday.getUTCDate() + i);
+          weekDates.push(d.toISOString().split("T")[0]);
+        }
+      }
+
+      // Build map from agg results
+      const aggMap: Record<string, any> = {};
+      effAgg.forEach((r: any) => { aggMap[r._id] = r; });
+
+      const days = weekDates.map(dateStr => {
+        const agg = aggMap[dateStr];
+        return {
+          date: dateStr,
+          efficiency: agg ? Math.round(agg.avgEfficiency * 100) / 100 : 0,
+          cpr: agg ? Math.round(agg.totalCost * 100) / 100 : 0,
+          routeCount: agg?.routeCount || 0,
+        };
+      });
+
+      return NextResponse.json({ yearWeek, days });
+    }
+
+    // ── Historical efficiency data for dashboard chart ──
+    if (section === "efficiency-history") {
+      const daysBack = parseInt(searchParams.get("days") || "365");
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - daysBack);
+      startDate.setHours(0, 0, 0, 0);
+
+      const histAgg = await SYMXRoute.aggregate([
+        {
+          $match: {
+            date: { $gte: startDate },
+            type: { $not: { $regex: /^off$/i } },
+          },
+        },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: "America/Los_Angeles" } },
+            avgEfficiency: { $avg: { $cond: [{ $gt: ["$driverEfficiency", 0] }, "$driverEfficiency", null] } },
+            totalCost: { $sum: "$totalCost" },
+            routesPlanned: { $sum: 1 },
+            totalPackages: { $sum: "$packageCount" },
+            totalStops: { $sum: "$stopCount" },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]);
+
+      const chartData = histAgg.map((r: any) => ({
+        date: r._id,
+        efficiency: r.avgEfficiency ? Math.round(r.avgEfficiency * 100) / 100 : 0,
+        cpr: r.routesPlanned > 0 ? Math.round((r.totalCost / r.routesPlanned) * 100) / 100 : 0,
+        routesPlanned: r.routesPlanned,
+        totalPackages: r.totalPackages,
+        delivered: r.totalStops, // use stops as delivered approximation
+        notDelivered: 0,
+      }));
+
+      return NextResponse.json({ data: chartData });
     }
 
     if (section === "vehicles") {
