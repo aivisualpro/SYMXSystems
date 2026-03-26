@@ -23,6 +23,14 @@ export interface IVehicle extends Document {
   info: string;
   image: string;
   locationFrom: string;
+  fleetCommunications: {
+    _id?: mongoose.Types.ObjectId;
+    date: Date;
+    status: string;
+    comments: string;
+    createdBy: string;
+    createdAt: Date;
+  }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,6 +67,13 @@ const VehicleSchema: Schema = new Schema({
   info: { type: String, default: '' },
   image: { type: String, default: '' },
   locationFrom: { type: String, default: '' },
+  fleetCommunications: [{
+    date: { type: Date, required: true },
+    status: { type: String, default: '' },
+    comments: { type: String, default: '' },
+    createdBy: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now }
+  }]
 }, {
   timestamps: true,
   collection: 'vehicles'

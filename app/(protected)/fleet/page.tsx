@@ -68,8 +68,8 @@ export default function FleetOverviewPage() {
                 View All <IconArrowUpRight size={10} />
               </button>
             </div>
-            <div className="h-44">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-44 w-full">
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <PieChart>
                   <Pie data={data.statusBreakdown} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={3} dataKey="value" stroke="none">
                     {data.statusBreakdown.map((entry: any, i: number) => (
@@ -97,8 +97,8 @@ export default function FleetOverviewPage() {
                 <IconSteeringWheel size={16} className="text-purple-500" /> Ownership
               </h3>
             </div>
-            <div className="h-44">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-44 w-full">
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <PieChart>
                   <Pie data={data.ownershipBreakdown} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={3} dataKey="value" stroke="none">
                     {data.ownershipBreakdown.map((entry: any, i: number) => (

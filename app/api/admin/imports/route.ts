@@ -1711,6 +1711,65 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
         }
 
+        // ── Fleet Communications ───────────────────────────────────────────────────
+        else if (type === "fleet-communications") {
+            const dateFields = new Set(["date", "createdAt"]);
+
+            const operations = data.map((row: any) => {
+                const processedData: any = {};
+
+                Object.entries(row).forEach(([header, value]) => {
+                    const normalizedHeader = header.trim();
+                    if (value !== undefined && value !== null && value !== "") {
+                        if (dateFields.has(normalizedHeader)) {
+                            // Convert to proper Date formats, parse local or timezone-safe as appropriate
+                            if (normalizedHeader === 'date') {
+                                const utcDate = parseToUTCMidnight(value);
+                                if (utcDate) processedData[normalizedHeader] = utcDate;
+                            } else {
+                                const parsed = new Date(value.toString());
+                                if (!isNaN(parsed.getTime())) processedData[normalizedHeader] = parsed;
+                            }
+                        } else {
+                            processedData[normalizedHeader] = value.toString().trim();
+                        }
+                    }
+                });
+
+                const vin = processedData.vin;
+                if (!vin) return null;
+
+                const newComm = {
+                    _id: new mongoose.Types.ObjectId(),
+                    date: processedData.date || new Date(),
+                    status: processedData.status || "",
+                    comments: processedData.comments || "",
+                    createdBy: processedData.createdBy || session?.user?.name || "System Import",
+                    createdAt: processedData.createdAt || new Date()
+                };
+
+                return {
+                    updateOne: {
+                        filter: { vin },
+                        update: { $push: { fleetCommunications: newComm } }
+                    }
+                };
+            }).filter((op: any): op is NonNullable<typeof op> => op !== null);
+
+            if (operations.length > 0) {
+                const result = await Vehicle.bulkWrite(operations, { ordered: false });
+                return NextResponse.json({
+                    success: true,
+                    count: (result.modifiedCount || 0) + (result.upsertedCount || 0),
+                    inserted: result.modifiedCount || 0,
+                    updated: 0,
+                    matched: result.matchedCount
+                });
+            }
+
+            return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+        }
+
         else if (type === "rental-agreements") {
             const headerMap: Record<string, string> = {
                 "Unit #": "unitNumber",

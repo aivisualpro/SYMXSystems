@@ -178,6 +178,19 @@ const importTypes = [
     ],
   },
   {
+    id: "fleet-communications",
+    name: "Fleet Communications",
+    description: "Import fleet communications from CSV. Requires vin to link to vehicles.",
+    icon: FileText,
+    color: "from-blue-500 to-indigo-500",
+    bgColor: "bg-blue-500/10",
+    borderColor: "border-blue-500/20",
+    iconColor: "text-blue-500",
+    fields: [
+      "vin", "date", "status", "comments", "createdBy", "createdAt"
+    ],
+  },
+  {
     id: "dropdowns",
     name: "Dropdowns",
     description: "Import dropdown options from CSV. Upserts on Description + Type. Fields: description, type.",

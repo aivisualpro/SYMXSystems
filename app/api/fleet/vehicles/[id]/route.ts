@@ -34,6 +34,32 @@ export async function GET(
             return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
         }
 
+        // Map fleetCommunication createdBy emails to AppUser names
+        const communications = (vehicle as any).fleetCommunications || [];
+        if (communications.length > 0) {
+            const emailSet = new Set<string>();
+            for (const c of communications) {
+                if (c.createdBy && typeof c.createdBy === 'string' && c.createdBy.includes('@')) {
+                    emailSet.add(c.createdBy.trim().toLowerCase());
+                }
+            }
+            if (emailSet.size > 0) {
+                const users = await SymxUser.find({ email: { $in: Array.from(emailSet) } }, { email: 1, name: 1 }).lean();
+                const userMap: Record<string, string> = {};
+                for (const u of users as any[]) {
+                    if (u.email && u.name) userMap[u.email.toLowerCase()] = u.name;
+                }
+                for (const c of communications) {
+                    if (c.createdBy && typeof c.createdBy === 'string' && c.createdBy.includes('@')) {
+                        const emailLower = c.createdBy.trim().toLowerCase();
+                        if (userMap[emailLower]) {
+                            c.createdBy = userMap[emailLower];
+                        }
+                    }
+                }
+            }
+        }
+
         // Fetch all related records using both vehicleId, vin, and unitNumber
         const vin = (vehicle as any).vin || "";
         const unitNumber = (vehicle as any).unitNumber || "";

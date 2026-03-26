@@ -9,8 +9,11 @@ import {
     IconCalendar, IconMapPin, IconGauge, IconId, IconCreditCard,
     IconCheck, IconX, IconAlertTriangle, IconClock, IconHash,
     IconEngine, IconSteeringWheel, IconLicense, IconCamera,
+    IconMessageCircle, IconPlus, IconLoader2, IconArrowUpRight,
 } from "@tabler/icons-react";
 import { StatusBadge, GlassCard } from "../../components/fleet-ui";
+import { DropdownOptionSelect } from "../../components/fleet-form-modal";
+import * as LucideIcons from "lucide-react";
 
 /* ─── helpers ─────────────────────────────────────── */
 const fmtDate = (d: any) => {
@@ -136,6 +139,7 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
         { id: "inspections", label: "Inspections", icon: IconClipboardCheck, count: data.dailyInspections?.length || 0 },
         { id: "activity", label: "Activity Logs", icon: IconActivity, count: data.activityLogs?.length || 0 },
         { id: "rentals", label: "Rental Agreements", icon: IconFileInvoice, count: data.rentalAgreements?.length || 0 },
+        { id: "communications", label: "Communications", icon: IconMessageCircle, count: v.fleetCommunications?.length || 0 },
     ];
 
     return (
@@ -194,6 +198,7 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
             {activeTab === "inspections" && <InspectionsTab inspections={data.dailyInspections || []} />}
             {activeTab === "activity" && <ActivityTab logs={data.activityLogs} />}
             {activeTab === "rentals" && <RentalsTab rentals={data.rentalAgreements} />}
+            {activeTab === "communications" && <CommunicationsTab vehicleId={id} communications={v.fleetCommunications || []} onUpdate={(updated) => setData({ ...data, vehicle: { ...v, fleetCommunications: updated } })} />}
         </div>
     );
 }
@@ -480,26 +485,229 @@ function RentalsTab({ rentals }: { rentals: any[] }) {
                 <table className="w-full">
                     <thead className="sticky top-0 bg-card z-10">
                         <tr className="border-b border-border">
-                            {["Agreement #", "Invoice #", "Amount", "Start Date", "End Date", "Due Date", "Created"].map((h) => (
+                            {["Invoice #", "Agreement #", "Start Date", "End Date", "Due Date", "Amount", "File", "Image"].map((h) => (
                                 <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">{h}</th>
                             ))}
                         </tr>
                     </thead>
                     <tbody>
-                        {rentals.map((r: any) => (
-                            <tr key={r._id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                                <td className="px-3 py-2.5 text-xs text-foreground font-medium">{r.agreementNumber || "—"}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground">{r.invoiceNumber || "—"}</td>
-                                <td className="px-3 py-2.5 text-xs text-foreground font-medium">{r.amount ? `$${r.amount.toLocaleString()}` : "—"}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.registrationStartDate)}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.registrationEndDate)}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.dueDate)}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDateTime(r.createdAt)}</td>
-                            </tr>
-                        ))}
+                        {rentals.map((r: any) => {
+                            const fileProp = r.rentalAgreementFilesImages?.[0] || r.file;
+                            const imageProp = r.rentalAgreementFilesImages?.[1] || r.image;
+
+                            return (
+                                <tr key={r._id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                                    <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{r.invoiceNumber || "—"}</td>
+                                    <td className="px-3 py-2.5 text-xs text-foreground font-medium whitespace-nowrap">{r.agreementNumber || "—"}</td>
+                                    <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.registrationStartDate)}</td>
+                                    <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.registrationEndDate)}</td>
+                                    <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.dueDate)}</td>
+                                    <td className="px-3 py-2.5 text-xs text-foreground font-medium whitespace-nowrap">{r.amount ? `$${r.amount.toLocaleString()}` : "—"}</td>
+                                    <td className="px-3 py-2.5 text-xs">
+                                        {fileProp ? (
+                                            <a href={fileProp} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80 hover:underline transition-colors flex items-center gap-1 w-max" title={fileProp}>
+                                                View File <IconArrowUpRight size={12} className="opacity-70" />
+                                            </a>
+                                        ) : "—"}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-xs">
+                                        {imageProp ? (
+                                            <a href={imageProp} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80 hover:underline transition-colors flex items-center gap-1 w-max" title={imageProp}>
+                                                View Image <IconArrowUpRight size={12} className="opacity-70" />
+                                            </a>
+                                        ) : "—"}
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
+        </GlassCard>
+    );
+}
+
+/* ────────────────────────────────────────────────────
+   TAB: Communications
+   ──────────────────────────────────────────────────── */
+function CommunicationsTab({ vehicleId, communications, onUpdate }: { vehicleId: string; communications: any[]; onUpdate: (data: any[]) => void }) {
+    const [modalOpen, setModalOpen] = useState(false);
+    const [editMode, setEditMode] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [formData, setFormData] = useState({ _id: "", date: "", status: "", comments: "" });
+    const [statusOptions, setStatusOptions] = useState<any[]>([]);
+
+    useEffect(() => {
+        fetch("/api/admin/settings/dropdowns")
+            .then(res => res.json())
+            .then((data: any[]) => {
+                if (Array.isArray(data)) {
+                    setStatusOptions(data.filter((o: any) => {
+                        if (o.isActive === false) return false;
+                        const t = (o.type || "").toLowerCase().trim();
+                        return t === "fleet communication status";
+                    }));
+                }
+            })
+            .catch(() => { });
+    }, []);
+
+    const openModal = (comm?: any) => {
+        if (comm) {
+            setEditMode(true);
+            setFormData({
+                _id: comm._id,
+                date: comm.date ? new Date(comm.date).toISOString().split('T')[0] : "",
+                status: comm.status || "",
+                comments: comm.comments || ""
+            });
+        } else {
+            setEditMode(false);
+            setFormData({ _id: "", date: new Date().toISOString().split('T')[0], status: "", comments: "" });
+        }
+        setModalOpen(true);
+    };
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+            const method = editMode ? "PUT" : "POST";
+            const payload = editMode
+                ? { commId: formData._id, date: formData.date, status: formData.status, comments: formData.comments }
+                : { date: formData.date, status: formData.status, comments: formData.comments };
+            const res = await fetch(`/api/fleet/vehicles/${vehicleId}/communications`, {
+                method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error("Failed to save");
+            const savedItem = await res.json();
+
+            let updatedList = [...communications];
+            if (editMode) {
+                updatedList = updatedList.map(c => c._id === savedItem._id ? savedItem : c);
+            } else {
+                updatedList.push(savedItem);
+            }
+            onUpdate(updatedList);
+            setModalOpen(false);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async (commId: string) => {
+        if (!confirm("Are you sure you want to delete this communication?")) return;
+        setDeletingId(commId);
+        try {
+            const res = await fetch(`/api/fleet/vehicles/${vehicleId}/communications?commId=${commId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed to delete");
+            onUpdate(communications.filter(c => c._id !== commId));
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
+    return (
+        <GlassCard className="p-4">
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <IconMessageCircle size={16} className="text-primary" /> Communications
+                </h3>
+                <button onClick={() => openModal()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors">
+                    <IconPlus size={14} /> Add Note
+                </button>
+            </div>
+
+            {communications.length === 0 ? (
+                <NoData label="communication" />
+            ) : (
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead className="sticky top-0 bg-card z-10">
+                            <tr className="border-b border-border">
+                                {["Date", "Status", "Comments", "Added By", "Added On", "Actions"].map((h) => (
+                                    <th key={h} className={`px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap ${h === 'Actions' ? 'text-right' : 'text-left'}`}>{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {communications.map((c: any) => {
+                                const statusOpt = statusOptions.find(o => o.description === c.status);
+                                const IconComp = statusOpt?.icon ? (LucideIcons as any)[statusOpt.icon] : null;
+
+                                return (
+                                    <tr key={c._id} className="border-b border-border/50 hover:bg-muted/50 transition-colors group">
+                                        <td className="px-3 py-2.5 text-xs text-foreground font-medium whitespace-nowrap">{fmtDate(c.date)}</td>
+                                        <td className="px-3 py-2.5 text-xs">
+                                            {c.status ? (
+                                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted text-muted-foreground font-medium">
+                                                    {IconComp && <IconComp size={12} className="opacity-70" />}
+                                                    {statusOpt?.color && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusOpt.color }} />}
+                                                    {c.status}
+                                                </span>
+                                            ) : "—"}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-xs text-muted-foreground max-w-[300px] truncate" title={c.comments}>{c.comments || "—"}</td>
+                                        <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{c.createdBy || "—"}</td>
+                                        <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDateTime(c.createdAt)}</td>
+                                        <td className="px-3 py-2.5 text-xs text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex items-center justify-end gap-1">
+                                                <button onClick={() => openModal(c)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit">
+                                                    <IconEdit size={14} />
+                                                </button>
+                                                <button onClick={() => handleDelete(c._id)} disabled={deletingId === c._id} className="p-1.5 rounded-md hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors" title="Delete">
+                                                    {deletingId === c._id ? <IconLoader2 size={14} className="animate-spin" /> : <IconTrash size={14} />}
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {modalOpen && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 dark:bg-black/60 backdrop-blur-sm" onClick={() => setModalOpen(false)}>
+                    <div className="w-full max-w-md mx-4 rounded-xl border border-border bg-card shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                            <h3 className="text-sm font-semibold text-foreground">{editMode ? "Edit" : "Add"} Communication</h3>
+                            <button onClick={() => setModalOpen(false)} className="p-1 rounded-md hover:bg-muted text-muted-foreground transition-colors"><IconX size={16} /></button>
+                        </div>
+                        <form onSubmit={handleSave} className="p-5 flex flex-col gap-4">
+                            <div>
+                                <label className="block text-[11px] font-medium text-muted-foreground mb-1">Date <span className="text-red-500">*</span></label>
+                                <input type="date" required value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20" />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-medium text-muted-foreground mb-1">Status</label>
+                                <DropdownOptionSelect
+                                    value={formData.status}
+                                    onChange={(val) => setFormData({ ...formData, status: val })}
+                                    options={statusOptions}
+                                    placeholder="Select Status..."
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-medium text-muted-foreground mb-1">Comments</label>
+                                <textarea rows={4} value={formData.comments} onChange={e => setFormData({ ...formData, comments: e.target.value })} placeholder="Enter notes..." className="w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 resize-none" />
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button type="button" onClick={() => setModalOpen(false)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button>
+                                <button type="submit" disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium transition-colors disabled:opacity-50">
+                                    {saving && <IconLoader2 size={14} className="animate-spin" />} Save
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </GlassCard>
     );
 }

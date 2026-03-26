@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import * as LucideIcons from "lucide-react";
 import { IconX, IconLoader2, IconUpload, IconPhoto, IconCheck, IconSearch, IconChevronDown } from "@tabler/icons-react";
 import { useFleet } from "../layout";
 
@@ -106,6 +107,79 @@ function SearchableSelect({
   );
 }
 
+/* ── Custom Dropdown with Colors and Icons ─────────────────────── */
+export function DropdownOptionSelect({
+  value, onChange, options, placeholder = "Select…"
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: any[]; // The raw dropdown options objects
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selectedOpt = useMemo(() => options.find(o => o.description === value), [options, value]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const renderIcon = (iconName?: string) => {
+    if (!iconName) return null;
+    const IconComp = (LucideIcons as any)[iconName];
+    return IconComp ? <IconComp className="h-3.5 w-3.5 mr-1.5 opacity-70" /> : null;
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`${inputClass} flex items-center justify-between gap-1 text-left cursor-pointer`}
+      >
+        <span className={value ? "text-foreground truncate flex items-center" : "text-muted-foreground/50 truncate flex items-center"}>
+          {selectedOpt ? (
+            <>
+              {renderIcon(selectedOpt.icon)}
+              {selectedOpt.color && <div className="w-2.5 h-2.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: selectedOpt.color }} />}
+              <span className="truncate">{selectedOpt.description}</span>
+            </>
+          ) : placeholder}
+        </span>
+        <IconChevronDown size={14} className="text-muted-foreground/40 flex-shrink-0" />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 left-0 right-0 mt-1 rounded-lg border border-border bg-card shadow-xl max-h-[180px] overflow-y-auto mix-blend-normal">
+          {options.length === 0 ? (
+            <div className="px-3 py-4 text-center text-xs text-muted-foreground/50">No options</div>
+          ) : (
+            options.map((opt, i) => (
+              <button
+                key={opt._id || `${opt.description}-${i}`}
+                type="button"
+                onClick={() => { onChange(opt.description); setOpen(false); }}
+                className={`w-full flex items-center px-3 py-2 text-left text-xs transition-colors hover:bg-primary/5 ${opt.description === value ? "bg-primary/10 text-primary font-medium" : "text-foreground"}`}
+              >
+                {renderIcon(opt.icon)}
+                {opt.color && <div className="w-2.5 h-2.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: opt.color }} />}
+                <span className="truncate flex-1">{opt.description}</span>
+                {opt.description === value && <IconCheck size={12} className="text-primary flex-shrink-0 ml-2" />}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Photo upload field ──────────────────────────────────────────── */
 function PhotoUploadField({
   label, value, onChange,
@@ -171,6 +245,8 @@ export default function FleetFormModal() {
   const [fleetStatuses, setFleetStatuses] = useState<any[]>([]);
   const [fleetOwnerships, setFleetOwnerships] = useState<any[]>([]);
   const [vehicleProviders, setVehicleProviders] = useState<any[]>([]);
+  const [dashcams, setDashcams] = useState<any[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<any[]>([]);
 
   // Route Inspection: auto-fetch routes by date
   const [routeEntries, setRouteEntries] = useState<any[]>([]);
@@ -252,6 +328,20 @@ export default function FleetFormModal() {
       .then((data: any[]) => {
         const active = data.filter((d: any) => d.isActive !== false);
         if (active.length > 0) setVehicleProviders(active);
+      }).catch(() => {});
+
+    fetch("/api/admin/settings/dropdowns?type=dashcam")
+      .then(r => r.json())
+      .then((data: any[]) => {
+        const active = data.filter((d: any) => d.isActive !== false);
+        if (active.length > 0) setDashcams(active);
+      }).catch(() => {});
+
+    fetch("/api/admin/settings/dropdowns?type=service type")
+      .then(r => r.json())
+      .then((data: any[]) => {
+        const active = data.filter((d: any) => d.isActive !== false);
+        if (active.length > 0) setServiceTypes(active);
       }).catch(() => {});
   }, [modalOpen, modalType]);
 
@@ -336,29 +426,49 @@ export default function FleetFormModal() {
                 <FormField label="Make"><input className={inputClass} value={formData.make || ""} onChange={e => updateForm("make", e.target.value)} placeholder="Ford" /></FormField>
                 <FormField label="Model"><input className={inputClass} value={formData.vehicleModel || ""} onChange={e => updateForm("vehicleModel", e.target.value)} placeholder="Transit" /></FormField>
                 <FormField label="License Plate"><input className={inputClass} value={formData.licensePlate || ""} onChange={e => updateForm("licensePlate", e.target.value)} /></FormField>
-                <FormField label="Status"><select className={inputClass} value={formData.status || ""} onChange={e => updateForm("status", e.target.value)}>
-                  <option value="">Select status…</option>
-                  {(fleetStatuses.length > 0 
-                    ? fleetStatuses.map(s => <option key={s.description} value={s.description}>{s.description}</option>)
-                    : ["Active", "Inactive", "Maintenance", "Grounded", "Decommissioned"].map(s => <option key={s} value={s}>{s}</option>)
-                  )}
-                </select></FormField>
-                <FormField label="Ownership"><select className={inputClass} value={formData.ownership || ""} onChange={e => updateForm("ownership", e.target.value)}>
-                  <option value="">Select ownership…</option>
-                  {(fleetOwnerships.length > 0
-                    ? fleetOwnerships.map(s => <option key={s.description} value={s.description}>{s.description}</option>)
-                    : ["Owned", "Leased", "Rented"].map(s => <option key={s} value={s}>{s}</option>)
-                  )}
-                </select></FormField>
-                <FormField label="Service Type"><input className={inputClass} value={formData.serviceType || ""} onChange={e => updateForm("serviceType", e.target.value)} /></FormField>
+                <FormField label="Status">
+                  <DropdownOptionSelect
+                    value={formData.status || ""}
+                    onChange={v => updateForm("status", v)}
+                    placeholder="Select status…"
+                    options={fleetStatuses.length > 0 ? fleetStatuses : ["Active", "Inactive", "Maintenance", "Grounded", "Decommissioned"].map(s => ({ description: s }))}
+                  />
+                </FormField>
+                <FormField label="Ownership">
+                  <DropdownOptionSelect
+                    value={formData.ownership || ""}
+                    onChange={v => updateForm("ownership", v)}
+                    placeholder="Select ownership…"
+                    options={fleetOwnerships.length > 0 ? fleetOwnerships : ["Owned", "Leased", "Rented"].map(s => ({ description: s }))}
+                  />
+                </FormField>
+                <FormField label="Service Type">
+                  <DropdownOptionSelect
+                    value={formData.serviceType || ""}
+                    onChange={v => updateForm("serviceType", v)}
+                    placeholder="Select service type…"
+                    options={serviceTypes}
+                  />
+                </FormField>
                 <FormField label="Mileage"><input type="number" className={inputClass} value={formData.mileage || ""} onChange={e => updateForm("mileage", parseInt(e.target.value) || 0)} /></FormField>
                 <FormField label="State"><input className={inputClass} value={formData.state || ""} onChange={e => updateForm("state", e.target.value)} /></FormField>
                 <FormField label="Location"><input className={inputClass} value={formData.location || ""} onChange={e => updateForm("location", e.target.value)} /></FormField>
-                <FormField label="Dashcam"><input className={inputClass} value={formData.dashcam || ""} onChange={e => updateForm("dashcam", e.target.value)} /></FormField>
-                <FormField label="Provider"><select className={inputClass} value={formData.vehicleProvider || ""} onChange={e => updateForm("vehicleProvider", e.target.value)}>
-                  <option value="">Select provider…</option>
-                  {vehicleProviders.map(s => <option key={s.description} value={s.description}>{s.description}</option>)}
-                </select></FormField>
+                <FormField label="Dashcam">
+                  <DropdownOptionSelect
+                    value={formData.dashcam || ""}
+                    onChange={v => updateForm("dashcam", v)}
+                    placeholder="Select dashcam…"
+                    options={dashcams}
+                  />
+                </FormField>
+                <FormField label="Provider">
+                  <DropdownOptionSelect
+                    value={formData.vehicleProvider || ""}
+                    onChange={v => updateForm("vehicleProvider", v)}
+                    placeholder="Select provider…"
+                    options={vehicleProviders}
+                  />
+                </FormField>
                 <FormField label="Start Date"><input type="date" className={inputClass} value={formData.startDate ? formData.startDate.split("T")[0] : ""} onChange={e => updateForm("startDate", e.target.value)} /></FormField>
                 <FormField label="End Date"><input type="date" className={inputClass} value={formData.endDate ? formData.endDate.split("T")[0] : ""} onChange={e => updateForm("endDate", e.target.value)} /></FormField>
                 <FormField label="Reg. Expiration"><input type="date" className={inputClass} value={formData.registrationExpiration ? formData.registrationExpiration.split("T")[0] : ""} onChange={e => updateForm("registrationExpiration", e.target.value)} /></FormField>
