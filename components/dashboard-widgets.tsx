@@ -96,14 +96,25 @@ export function DashboardWidgets() {
       });
   }, []);
 
-  const repairsData = data ? [
-    { status: "All", count: data.totalRepairs || 0 },
-    { status: "Completed", count: data.repairStatusMap?.["Completed"] || 0, color: "bg-emerald-500" },
-    { status: "Not started", count: data.repairStatusMap?.["Not Started"] || 0, color: "bg-slate-500" },
-    { status: "Repair in progress", count: data.repairStatusMap?.["In Progress"] || 0, color: "bg-blue-500" },
-    { status: "Sent to repair shop", count: data.repairStatusMap?.["Sent to Repair Shop"] || 0, color: "bg-amber-500" },
-    { status: "Waiting for parts", count: data.repairStatusMap?.["Waiting for Parts"] || 0, color: "bg-red-500" },
-  ] : REPAIRS_DATA;
+  const STATUS_COLORS: Record<string, string> = {
+    "Not Started": "bg-slate-500",
+    "Not started": "bg-slate-500",
+    "In Progress": "bg-blue-500",
+    "Repair in progress": "bg-blue-500",
+    "Sent to Repair Shop": "bg-amber-500",
+    "Sent to repair shop": "bg-amber-500",
+    "Waiting for Parts": "bg-red-500",
+    "Waiting for parts": "bg-red-500",
+    "Completed": "bg-emerald-500",
+  };
+
+  const repairsData = data?.repairStatusMap ? Object.entries(data.repairStatusMap as Record<string, number>)
+    .filter(([status, count]) => status !== "Completed" && count > 0)
+    .map(([status, count]) => ({
+      status,
+      count,
+      color: STATUS_COLORS[status] || "bg-primary",
+    })) : REPAIRS_DATA.filter(r => r.status !== "All" && r.status !== "Completed" && (r.count ?? 1) > 0);
 
   const fleetNotWorking = data?.fleetNotWorking ? data.fleetNotWorking.map((v: any) => {
     const days = Math.floor((new Date().getTime() - new Date(v.updatedAt || Date.now()).getTime()) / (1000 * 60 * 60 * 24));
@@ -315,25 +326,40 @@ export function DashboardWidgets() {
       {/* ═══ 5. REPAIRS ═══ */}
       <Card className="overflow-hidden group/card hover:shadow-lg transition-shadow">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <div className="p-1.5 rounded-md bg-amber-500/10">
-              <Wrench className="h-4 w-4 text-amber-500" />
-            </div>
-            Repairs
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <div className="p-1.5 rounded-md bg-amber-500/10">
+                <Wrench className="h-4 w-4 text-amber-500" />
+              </div>
+              Open Repairs
+            </CardTitle>
+            {repairsData.length > 0 && (
+              <Badge variant="secondary" className="text-[10px] h-5 font-mono">
+                {repairsData.reduce((sum: number, r: any) => sum + (r.count || 0), 0)}
+              </Badge>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-2">Current Status</div>
+          {repairsData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="p-3 rounded-full bg-muted/50 mb-3">
+                <Wrench className="h-6 w-6 text-muted-foreground/50" />
+              </div>
+              <p className="text-sm text-muted-foreground">All clear!</p>
+              <p className="text-xs text-muted-foreground/60 mt-0.5">No open repairs 🎉</p>
+            </div>
+          ) : (
           <div className="divide-y divide-border/50">
             {repairsData.map((item: any, i: number) => (
               <div
                 key={i}
-                onClick={() => router.push(`/fleet/repairs${item.status !== "All" ? `?status=${item.status}` : ""}`)}
+                onClick={() => router.push(`/fleet/repairs?status=${item.status}`)}
                 className="flex items-center justify-between py-2.5 px-1 hover:bg-muted/30 rounded transition-colors cursor-pointer group"
               >
                 <div className="flex items-center gap-2.5">
                   {item.color && <div className={cn("w-2 h-2 rounded-full", item.color)} />}
-                  <span className={cn("text-sm", i === 0 ? "font-bold" : "text-foreground/80")}>{item.status}</span>
+                  <span className="text-sm text-foreground/80">{item.status}</span>
                   {item.count != null && (
                     <Badge variant="secondary" className="text-[10px] h-4 px-1.5 font-mono">
                       {item.count.toLocaleString()}
@@ -344,6 +370,7 @@ export function DashboardWidgets() {
               </div>
             ))}
           </div>
+          )}
         </CardContent>
       </Card>
 

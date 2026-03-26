@@ -75,8 +75,15 @@ export async function GET(req: NextRequest) {
         ]),
         Vehicle.find({ status: { $in: ["Grounded", "Maintenance", "Inactive"] } })
           .select("unitNumber vehicleName status mileage updatedAt notes fleetCommunications").lean(),
-        Vehicle.find({ registrationExpiration: { $gte: new Date(new Date().getTime() - 1000 * 60 * 60 * 24 * 30), $lte: new Date(new Date().getTime() + 1000 * 60 * 60 * 24 * 60) } })
-          .select("unitNumber vehicleName registrationExpiration").sort({ registrationExpiration: 1 }).limit(10).lean(),
+        Vehicle.find({
+            status: "Active",
+            registrationExpiration: {
+              $gte: new Date(),
+              $lte: new Date(new Date().getTime() + 1000 * 60 * 60 * 24 * 90)
+            }
+          })
+          .select("unitNumber vehicleName registrationExpiration status")
+          .sort({ registrationExpiration: 1 }).limit(10).lean(),
         VehicleRentalAgreement.find({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow } })
           .sort({ registrationEndDate: 1 }).limit(6)
           .select("agreementNumber vin registrationEndDate amount").lean(),
