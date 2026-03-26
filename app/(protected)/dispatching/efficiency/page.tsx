@@ -480,7 +480,7 @@ export default function EfficiencyPage() {
                 <div className="flex-1 overflow-auto w-full relative">
                     <div className="w-max min-w-full flex flex-col min-h-full">
                         {/* Header */}
-                        <div className="flex items-center gap-1 px-3 py-2.5 border-b border-border/50 bg-muted/30 sticky top-0 z-30 shadow-sm">
+                        <div className="flex items-center gap-1 px-3 py-2.5 border-b border-border/50 bg-card sticky top-0 z-30 shadow-sm">
                             {COLUMNS.map((col) => {
                                 const isSticky = col.key === "employee";
                                 return (
@@ -488,7 +488,7 @@ export default function EfficiencyPage() {
                                         className={cn(
                                             "flex items-center gap-0.5 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold hover:text-foreground transition-colors text-left",
                                             col.width,
-                                            isSticky ? "bg-muted/30 hover:bg-muted/40 z-30" : ""
+                                            isSticky ? "bg-card hover:bg-muted/40 z-30" : ""
                                         )}>
                                         {col.label}
                                         {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />)}
