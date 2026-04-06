@@ -6,7 +6,7 @@ export interface IVehicleRepair extends Document {
   unitNumber: string;
   vehicleName: string;
   description: string;
-  currentStatus: 'Not Started' | 'In Progress' | 'Waiting for Parts' | 'Sent to Repair Shop' | 'Completed';
+  currentStatus: string;
   estimatedDate: Date;
   image: string;
   creationDate: Date;
@@ -24,7 +24,6 @@ const VehicleRepairSchema: Schema = new Schema({
   description: { type: String, default: '' },
   currentStatus: {
     type: String,
-    enum: ['Not Started', 'In Progress', 'Waiting for Parts', 'Sent to Repair Shop', 'Completed'],
     default: 'Not Started',
     index: true
   },

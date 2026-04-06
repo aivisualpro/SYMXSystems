@@ -666,6 +666,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { type, data } = body;
 
+    // Sanitize empty string fields to prevent Mongoose CastErrors for Dates and Numbers
+    if (data) {
+      for (const key of Object.keys(data)) {
+        if (data[key] === "") {
+          data[key] = null;
+        }
+      }
+    }
+
     switch (type) {
       case "vehicle": {
         const vehicle = await Vehicle.create(data);
@@ -717,6 +726,15 @@ export async function PUT(req: NextRequest) {
     await connectToDatabase();
     const body = await req.json();
     const { type, id, data } = body;
+
+    // Sanitize empty string fields to prevent Mongoose CastErrors for Dates and Numbers
+    if (data) {
+      for (const key of Object.keys(data)) {
+        if (data[key] === "") {
+          data[key] = null;
+        }
+      }
+    }
 
     switch (type) {
       case "vehicle": {
