@@ -12,11 +12,9 @@ import SymxEmployee from "@/lib/models/SymxEmployee";
  * and populates the SYMXRoutesInfo collection for the given date.
  * Also syncs matching fields to SYMXRoute records (by routeCode → transporterId).
  *
- * Authentication: x-extension-key header (shared secret)
+ * Authentication: Public endpoint under /api/public/ — no auth required
  * ══════════════════════════════════════════════════════════════
  */
-
-const EXTENSION_KEY = process.env.EXTENSION_SYNC_KEY || "symx-ext-route-sync-2026";
 
 // Helper: format duration mins to H:MM
 function fmtDur(mins: number | null): string {
@@ -83,12 +81,14 @@ function parseAmazonTime(time: any): string {
 }
 
 export async function POST(req: NextRequest) {
+    // Add CORS headers to all responses
+    const corsHeaders = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, x-extension-key",
+    };
+
     try {
-        // ── Authenticate ──
-        const key = req.headers.get("x-extension-key");
-        if (key !== EXTENSION_KEY) {
-            return NextResponse.json({ error: "Invalid extension key" }, { status: 401 });
-        }
 
         const body = await req.json();
         const { routes, date } = body;
@@ -248,12 +248,12 @@ export async function POST(req: NextRequest) {
             synced,
             matched,
             total: routes.length,
-        });
+        }, { headers: corsHeaders });
     } catch (error: any) {
         console.error("[Extension Sync] Error:", error);
         return NextResponse.json(
             { error: error.message || "Sync failed" },
-            { status: 500 }
+            { status: 500, headers: corsHeaders }
         );
     }
 }

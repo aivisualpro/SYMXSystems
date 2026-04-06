@@ -250,7 +250,7 @@ syncBtn.addEventListener("click", async () => {
   const target = TARGETS[targetSelect.value] || TARGETS.production;
 
   try {
-    const response = await fetch(`${target}/api/public/extension-sync`, {
+    const response = await fetch(`${target}/api/public/extension-sync?key=${encodeURIComponent(API_KEY)}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
