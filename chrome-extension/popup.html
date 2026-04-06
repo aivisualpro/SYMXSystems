@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SYMX Route Scraper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+    <!-- ── Header ── -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <div class="header-text">
+          <h1>SYMX Route Scraper</h1>
+          <span class="version">v1.0.0</span>
+        </div>
+      </div>
+      <div class="status-dot" id="statusDot" title="Checking..."></div>
+    </header>
+
+    <!-- ── Connection Status ── -->
+    <div class="section" id="connectionSection">
+      <div class="connection-card" id="connectionCard">
+        <div class="connection-icon" id="connectionIcon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+          </svg>
+        </div>
+        <div class="connection-info">
+          <span class="connection-label" id="connectionLabel">Checking page...</span>
+          <span class="connection-detail" id="connectionDetail"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Date & Service Area Info ── -->
+    <div class="section" id="pageInfoSection" style="display: none;">
+      <div class="info-grid">
+        <div class="info-card">
+          <div class="info-icon date-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          </div>
+          <div>
+            <span class="info-label">Date</span>
+            <span class="info-value" id="dateValue">—</span>
+          </div>
+        </div>
+        <div class="info-card">
+          <div class="info-icon area-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+              <circle cx="12" cy="10" r="3"/>
+            </svg>
+          </div>
+          <div>
+            <span class="info-label">Station</span>
+            <span class="info-value" id="stationValue">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Scraped Routes ── -->
+    <div class="section" id="routesSection" style="display: none;">
+      <div class="section-header">
+        <h2>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          Captured Routes
+        </h2>
+        <span class="badge" id="routeCountBadge">0</span>
+      </div>
+
+      <!-- Route list preview -->
+      <div class="route-list" id="routeList">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <line x1="10" y1="9" x2="8" y2="9"/>
+            </svg>
+          </div>
+          <p>No routes captured yet</p>
+          <span>Navigate to the Amazon Logistics routes page and data will be captured automatically</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Actions ── -->
+    <div class="section actions" id="actionsSection" style="display: none;">
+      <button class="btn btn-secondary" id="scrapeBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        <span>Re-Scrape</span>
+      </button>
+      <button class="btn btn-primary" id="syncBtn" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+        <span>Sync to SYMX</span>
+      </button>
+    </div>
+
+    <!-- ── Sync Status ── -->
+    <div class="section" id="syncStatusSection" style="display: none;">
+      <div class="sync-status" id="syncStatus">
+        <div class="sync-spinner"></div>
+        <span>Syncing routes to SYMX Systems...</span>
+      </div>
+    </div>
+
+    <!-- ── Sync Result ── -->
+    <div class="section" id="syncResultSection" style="display: none;">
+      <div class="sync-result" id="syncResult"></div>
+    </div>
+
+    <!-- ── Settings ── -->
+    <div class="section settings">
+      <div class="setting-row">
+        <span class="setting-label">Target</span>
+        <select id="targetSelect" class="setting-select">
+          <option value="production">symx-systems.vercel.app</option>
+          <option value="local">localhost:3000</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ── Footer ── -->
+    <footer class="footer">
+      <span>SYMX Systems</span>
+      <span class="footer-dot">·</span>
+      <span id="lastSyncTime">Never synced</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
