@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════════════════════════
-// SYMX Route Scraper — Content Script (MAIN world)
+// SYMX Route Scraper — Content Script (MAIN world) v1.1
 // Intercepts Amazon Logistics API responses to capture route data
+// Captures the FULL raw JSON from route-summaries for SYMXRoutesInfo
 // Communicates with extension via window.postMessage bridge
 // ══════════════════════════════════════════════════════════════
 
@@ -13,6 +14,8 @@
 
   const capturedRoutes = new Map();
   let lastCaptureTime = 0;
+  let lastCapturedApiDate = "";    // date extracted from the API URL
+  let lastCapturedServiceArea = ""; // serviceAreaId from API URL
 
   XMLHttpRequest.prototype.open = function (method, url, ...rest) {
     this._symxUrl = url;
@@ -28,6 +31,8 @@
           typeof this._symxUrl === "string" &&
           this._symxUrl.includes("route-summaries")
         ) {
+          // Extract date + serviceAreaId from the API URL itself
+          extractApiParams(this._symxUrl);
           const data = JSON.parse(this.responseText);
           processRouteSummariesResponse(data);
         }
@@ -46,6 +51,7 @@
     try {
       const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
       if (url.includes("route-summaries")) {
+        extractApiParams(url);
         const cloned = response.clone();
         const data = await cloned.json();
         processRouteSummariesResponse(data);
@@ -57,11 +63,22 @@
     return response;
   };
 
+  // ── Extract localDate & serviceAreaId from the API URL ──
+  function extractApiParams(url) {
+    try {
+      const u = new URL(url, window.location.origin);
+      const ld = u.searchParams.get("localDate");
+      const sa = u.searchParams.get("serviceAreaId");
+      if (ld) lastCapturedApiDate = ld;
+      if (sa) lastCapturedServiceArea = sa;
+    } catch { /* ignore */ }
+  }
+
   // ── Process route summaries from Amazon API ──
   function processRouteSummariesResponse(data) {
     if (!data) return;
 
-    // Amazon response structure varies — look for the array of routes
+    // Amazon response structure: look for the array of route summaries
     let routeSummaries = [];
 
     if (Array.isArray(data)) {
@@ -81,7 +98,7 @@
 
     if (routeSummaries.length === 0) return;
 
-    // Store each route by routeCode
+    // Store each route by routeCode — keep the FULL raw object
     routeSummaries.forEach((route) => {
       if (route.routeCode || route.routeId) {
         capturedRoutes.set(route.routeCode || route.routeId, route);
@@ -101,9 +118,17 @@
   function sendCapturedRoutes() {
     if (capturedRoutes.size === 0) return;
 
+    // Try to get date from multiple sources
     const urlParams = new URLSearchParams(window.location.search);
-    const selectedDay = urlParams.get("selectedDay") || "";
-    const serviceAreaId = urlParams.get("serviceAreaId") || "";
+    const selectedDay =
+      lastCapturedApiDate ||
+      urlParams.get("localDate") ||
+      urlParams.get("selectedDay") ||
+      "";
+    const serviceAreaId =
+      lastCapturedServiceArea ||
+      urlParams.get("serviceAreaId") ||
+      "";
 
     const routes = [];
     capturedRoutes.forEach((route, code) => {
@@ -132,6 +157,7 @@
   }
 
   // ── Extract route data into SYMX format ──
+  // Keeps the FULL _raw object intact for detail view & database storage
   function extractRouteData(route) {
     const r = {
       routeCode: route.routeCode || "",
@@ -187,7 +213,7 @@
       deliveriesAttempted: route.deliveriesAttempted || 0,
       deliveriesCompleted: route.deliveriesCompleted || route.deliveredPackageCount || 0,
 
-      // Stash raw data for debugging
+      // ★ Store the ENTIRE raw object for the detail view & DB
       _raw: route,
     };
 
@@ -274,9 +300,14 @@
               payload: {
                 routes: domRoutes,
                 selectedDate:
-                  new URLSearchParams(window.location.search).get("selectedDay") || "",
+                  lastCapturedApiDate ||
+                  new URLSearchParams(window.location.search).get("localDate") ||
+                  new URLSearchParams(window.location.search).get("selectedDay") ||
+                  "",
                 serviceAreaId:
-                  new URLSearchParams(window.location.search).get("serviceAreaId") || "",
+                  lastCapturedServiceArea ||
+                  new URLSearchParams(window.location.search).get("serviceAreaId") ||
+                  "",
               },
             },
             "*"
@@ -305,8 +336,15 @@
           type: "GET_PAGE_INFO_RESPONSE",
           payload: {
             isAmazonLogistics: window.location.hostname === "logistics.amazon.com",
-            selectedDay: urlParams.get("selectedDay") || "",
-            serviceAreaId: urlParams.get("serviceAreaId") || "",
+            selectedDay:
+              lastCapturedApiDate ||
+              urlParams.get("localDate") ||
+              urlParams.get("selectedDay") ||
+              "",
+            serviceAreaId:
+              lastCapturedServiceArea ||
+              urlParams.get("serviceAreaId") ||
+              "",
             provider: urlParams.get("provider") || "",
             capturedCount: capturedRoutes.size,
             lastCapture: lastCaptureTime,
@@ -381,6 +419,6 @@
   }, 1000);
 
   console.log(
-    "[SYMX Route Scraper] Content script loaded (MAIN world) — intercepting route data..."
+    "[SYMX Route Scraper] Content script loaded (MAIN world) v1.1 — intercepting route data..."
   );
 })();

@@ -20,7 +20,7 @@
         </div>
         <div class="header-text">
           <h1>SYMX Route Scraper</h1>
-          <span class="version">v1.0.0</span>
+          <span class="version">v1.1.0</span>
         </div>
       </div>
       <div class="status-dot" id="statusDot" title="Checking..."></div>
@@ -154,6 +154,44 @@
       <span class="footer-dot">·</span>
       <span id="lastSyncTime">Never synced</span>
     </footer>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       DETAIL OVERLAY — shows when clicking a route row
+       ══════════════════════════════════════════════════════════ -->
+  <div class="detail-overlay" id="detailOverlay">
+    <div class="detail-panel">
+      <!-- Detail Header -->
+      <div class="detail-header">
+        <button class="detail-back" id="detailBack" title="Back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <div class="detail-title">
+          <span class="detail-route-code" id="detailRouteCode">—</span>
+          <span class="detail-driver" id="detailDriver">—</span>
+        </div>
+        <span class="detail-status-badge" id="detailStatusBadge"></span>
+      </div>
+
+      <!-- Detail Tabs -->
+      <div class="detail-tabs">
+        <button class="detail-tab active" data-tab="summary">Summary</button>
+        <button class="detail-tab" data-tab="transporters">Transporters</button>
+        <button class="detail-tab" data-tab="raw">Raw JSON</button>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="detail-body" id="detailBody">
+        <!-- Summary Tab -->
+        <div class="detail-tab-content active" id="tab-summary"></div>
+        <!-- Transporters Tab -->
+        <div class="detail-tab-content" id="tab-transporters"></div>
+        <!-- Raw JSON Tab -->
+        <div class="detail-tab-content" id="tab-raw"></div>
+      </div>
+    </div>
   </div>
 
   <script src="popup.js"></script>

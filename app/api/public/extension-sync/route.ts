@@ -184,6 +184,7 @@ export async function POST(req: NextRequest) {
                 ov: "",
                 stagingLocation: "",
                 transporterId,
+                rawSummary: route._raw || route,  // Store full Amazon route-summaries JSON
             };
 
             // Upsert into RoutesInfo by date + rowIndex
