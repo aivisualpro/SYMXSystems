@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "SYMX Route Scraper",
-  "version": "1.0.0",
+  "name": "SYMX Route Fetch",
+  "version": "1.0.1",
   "description": "Scrape Amazon Logistics route data and sync to SYMX Systems",
   "permissions": [
     "activeTab",
