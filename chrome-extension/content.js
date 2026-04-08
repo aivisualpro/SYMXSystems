@@ -78,11 +78,13 @@
   function processRouteSummariesResponse(data) {
     if (!data) return;
 
-    // Amazon response structure: look for the array of route summaries
+    // Amazon response: the array is under "rmsRouteSummaries" (primary) or "routeSummaries" (fallback)
     let routeSummaries = [];
 
     if (Array.isArray(data)) {
       routeSummaries = data;
+    } else if (data.rmsRouteSummaries && Array.isArray(data.rmsRouteSummaries)) {
+      routeSummaries = data.rmsRouteSummaries;
     } else if (data.routeSummaries && Array.isArray(data.routeSummaries)) {
       routeSummaries = data.routeSummaries;
     } else if (typeof data === "object") {
@@ -114,6 +116,67 @@
     }, 2000);
   }
 
+  // ── Scrape stop/delivery counts from the Amazon DOM ──
+  function scrapeStatsFromDOM() {
+    const domStats = new Map(); // routeCode → { stops, deliveries, driverName, duration, signOut, avgStopsPerHour }
+
+    // Amazon Logistics route list: each route row contains the code + stats
+    // The route rows show: "CX48" ... "190/190 stops" ... "328/328 deliveries"
+    // Try to grab all visible text blocks that contain route codes
+
+    // Strategy: get all text on page and parse route blocks
+    const allRows = document.querySelectorAll(
+      '[class*="route"], [class*="Route"], [data-testid*="route"]'
+    );
+
+    allRows.forEach(row => {
+      const text = row.textContent || "";
+      // Look for route code pattern (2 letters + 2-3 digits)
+      const codeMatch = text.match(/\b([A-Z]{2}\d{2,3})\b/);
+      if (!codeMatch) return;
+
+      const code = codeMatch[1];
+
+      // Extract stops: "190/190 stops" or "190 stops"
+      const stopsMatch = text.match(/(\d+)\/?\d*\s*stops?/i);
+      // Extract deliveries: "328/328 deliveries" or "328 deliveries"
+      const delsMatch = text.match(/(\d+)\/?\d*\s*deliver/i);
+      // Extract driver name (usually first text after route code, in a bold/name element)
+      const avgMatch = text.match(/Avg:\s*(\d+)\s*stops?\/hour/i);
+
+      if (stopsMatch || delsMatch) {
+        domStats.set(code, {
+          stops: stopsMatch ? parseInt(stopsMatch[1]) : 0,
+          deliveries: delsMatch ? parseInt(delsMatch[1]) : 0,
+          avgStopsPerHour: avgMatch ? parseInt(avgMatch[1]) : 0,
+        });
+      }
+    });
+
+    // Fallback: scan full body text for the "<CODE> ... N/N stops ... N/N deliveries" pattern
+    if (domStats.size === 0) {
+      const body = document.body?.innerText || "";
+      // Match blocks like: "CX48\n...\n190/190 stops    328/328 deliveries"
+      const routeBlocks = body.split(/(?=\b[A-Z]{2}\d{2,3}\b)/);
+      routeBlocks.forEach(block => {
+        const cm = block.match(/^([A-Z]{2}\d{2,3})\b/);
+        if (!cm) return;
+        const code = cm[1];
+        const stp = block.match(/(\d+)\/\d+\s*stops?/i);
+        const del = block.match(/(\d+)\/\d+\s*deliver/i);
+        if (stp || del) {
+          domStats.set(code, {
+            stops: stp ? parseInt(stp[1]) : 0,
+            deliveries: del ? parseInt(del[1]) : 0,
+            avgStopsPerHour: 0,
+          });
+        }
+      });
+    }
+
+    return domStats;
+  }
+
   // ── Send captured routes to extension ──
   function sendCapturedRoutes() {
     if (capturedRoutes.size === 0) return;
@@ -130,9 +193,29 @@
       urlParams.get("serviceAreaId") ||
       "";
 
+    // Scrape DOM for stops/deliveries to merge with API data
+    const domStats = scrapeStatsFromDOM();
+    console.log(`[SYMX Scraper] DOM stats scraped for ${domStats.size} routes`);
+
     const routes = [];
     capturedRoutes.forEach((route, code) => {
-      routes.push(extractRouteData(route));
+      const extracted = extractRouteData(route);
+
+      // Merge DOM-scraped stats if API data has 0 values
+      const ds = domStats.get(extracted.routeCode);
+      if (ds) {
+        if (!extracted.stopCount || extracted.stopCount === 0 || extracted.stopCount === "0") {
+          extracted.stopCount = ds.stops;
+        }
+        if (!extracted.packageCount || extracted.packageCount === 0 || extracted.packageCount === "0") {
+          extracted.packageCount = ds.deliveries;
+        }
+        if ((!extracted.stopsPerHour || extracted.stopsPerHour === 0) && ds.avgStopsPerHour) {
+          extracted.stopsPerHour = ds.avgStopsPerHour;
+        }
+      }
+
+      routes.push(extracted);
     });
 
     console.log(`[SYMX Scraper] Captured ${routes.length} routes for ${selectedDay}`);
@@ -156,74 +239,82 @@
     window._symxCapturedDate = selectedDay;
   }
 
+  // ── Deep search: find a numeric value by searching all keys recursively ──
+  function deepFind(obj, keys, maxDepth = 3) {
+    if (!obj || typeof obj !== "object" || maxDepth <= 0) return undefined;
+    for (const key of keys) {
+      if (obj[key] !== undefined && obj[key] !== null) return obj[key];
+    }
+    for (const val of Object.values(obj)) {
+      if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+        const found = deepFind(val, keys, maxDepth - 1);
+        if (found !== undefined) return found;
+      }
+    }
+    return undefined;
+  }
+
   // ── Extract route data into SYMX format ──
-  // Keeps the FULL _raw object intact for detail view & database storage
+  // Uses the REAL Amazon rmsRouteSummaries structure
   function extractRouteData(route) {
+    // The real counts are inside routeDeliveryProgress (top-level totalStops is always 0)
+    const rdp = route.routeDeliveryProgress || {};
+
+    // Stops: use routeDeliveryProgress.totalStops
+    const stopVal = rdp.totalStops || rdp.completedStops || route.totalStops || 0;
+
+    // Packages: use routeDeliveryProgress.totalDeliveries
+    const pkgVal = rdp.totalDeliveries || rdp.completedDeliveries || route.totalTasks || 0;
+
+    // Transporter ID: use transporterIdFromRms (top-level) or first transporter
+    const transporterId = route.transporterIdFromRms
+      || (route.transporters?.[0]?.transporterId)
+      || route.transporterId
+      || "";
+
     const r = {
       routeCode: route.routeCode || "",
       routeId: route.routeId || "",
-      transporterId: route.transporterId || "",
+      transporterId: transporterId,
       transporterName: route.transporterName || route.driverName || "",
 
-      // Core route info
-      stopCount:
-        route.stopCount ||
-        route.numberOfStops ||
-        route.totalStops ||
-        route.plannedStopCount ||
-        0,
-      packageCount:
-        route.packageCount ||
-        route.numberOfPackages ||
-        route.totalPackages ||
-        route.plannedPackageCount ||
-        0,
-      routeDuration: route.routeDuration || route.duration || route.plannedDuration || "",
+      // Core route info from routeDeliveryProgress
+      stopCount: stopVal,
+      packageCount: pkgVal,
+      routeDuration: route.routeDuration || route.duration || "",
 
       // Status
-      status: route.status || route.routeStatus || route.executionStatus || "",
+      status: route.routeStatus || route.progressStatus || route.status || "",
       progress: route.progress || route.completionPercentage || 0,
-      stopsCompleted: route.stopsCompleted || route.completedStops || route.deliveredStopCount || 0,
+      stopsCompleted: rdp.completedStops || 0,
 
       // Time data
-      departureTime: route.departureTime || route.actualDepartureTime || "",
-      firstStopTime: route.firstStopTime || route.actualFirstStop || route.firstDeliveryTime || "",
-      lastStopTime: route.lastStopTime || route.actualLastStop || route.lastDeliveryTime || "",
-      completionTime:
-        route.completionTime ||
-        route.deliveryCompletionTime ||
-        route.lastDeliveryTime ||
-        "",
-      returnTime: route.returnTime || route.returnToStationTime || "",
+      departureTime: route.plannedDepartureTime || route.departureTime || "",
+      firstStopTime: route.firstStopTime || route.firstDeliveryTime || "",
+      lastStopTime: route.lastStopTime || route.lastDeliveryTime || "",
+      completionTime: route.completionTime || "",
+      returnTime: route.returnTime || "",
 
       // Stems
-      outboundStem:
-        route.outboundStem || route.outboundStemTime || route.actualOutboundStem || "",
-      inboundStem:
-        route.inboundStem || route.inboundStemTime || route.actualInboundStem || "",
+      outboundStem: route.outboundStem || "",
+      inboundStem: route.inboundStem || "",
 
       // Performance
       stopsPerHour: route.stopsPerHour || 0,
 
       // Route details
-      routeSize: route.routeSize || route.serviceType || "",
-      waveTime: route.waveTime || route.departureWaveTime || route.plannedDepartureTime || "",
+      routeSize: route.serviceTypeName || route.routeSize || "",
+      waveTime: route.waveTime || route.plannedDepartureTime || "",
 
-      // Delivery counts
-      deliveriesAttempted: route.deliveriesAttempted || 0,
-      deliveriesCompleted: route.deliveriesCompleted || route.deliveredPackageCount || 0,
+      // Delivery counts from routeDeliveryProgress
+      deliveriesAttempted: rdp.completedDeliveries || 0,
+      deliveriesCompleted: rdp.successfulDeliveries || 0,
+      totalPickups: rdp.totalPickUps || 0,
+      unassignedPackages: rdp.unassignedPackages || 0,
 
       // ★ Store the ENTIRE raw object for the detail view & DB
       _raw: route,
     };
-
-    // Handle nested objects for stopCount / packageCount
-    if (typeof r.stopCount === "object") {
-      r.stopCount = r.stopCount.total || r.stopCount.planned || 0;
-    }
-    if (typeof r.packageCount === "object") {
-      r.packageCount = r.packageCount.total || r.packageCount.planned || 0;
-    }
 
     return r;
   }
@@ -419,6 +510,6 @@
   }, 1000);
 
   console.log(
-    "[SYMX Route Scraper] Content script loaded (MAIN world) v1.1 — intercepting route data..."
+    "[SYMX Route Fetch] Content script loaded (MAIN world) v1.0.2 — intercepting route data..."
   );
 })();

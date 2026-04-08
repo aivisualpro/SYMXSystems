@@ -16,38 +16,39 @@ import SymxEmployee from "@/lib/models/SymxEmployee";
  * ══════════════════════════════════════════════════════════════
  */
 
-// Helper: format duration mins to H:MM
-function fmtDur(mins: number | null): string {
-    if (mins === null || isNaN(mins as number)) return "";
-    const abs = Math.abs(Math.round(mins));
-    const h = Math.floor(abs / 60);
-    const m = abs % 60;
-    return `${h}:${m.toString().padStart(2, "0")}`;
+// Helper: format seconds to H:MM:SS
+function fmtDurSecs(totalSecs: number | null): string {
+    if (totalSecs === null || isNaN(totalSecs as number) || totalSecs <= 0) return "";
+    const abs = Math.abs(Math.round(totalSecs));
+    const h = Math.floor(abs / 3600);
+    const m = Math.floor((abs % 3600) / 60);
+    const s = abs % 60;
+    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-// Helper: Parse Amazon's duration string (e.g. "8h 30m") to "8:30"
+// Helper: Parse Amazon's routeDuration (in SECONDS) to "H:MM:SS"
 function parseAmazonDuration(dur: any): string {
     if (!dur) return "";
     
-    // Already in H:MM format
-    if (typeof dur === "string" && /^\d{1,2}:\d{2}$/.test(dur)) return dur;
+    // Already in H:MM or H:MM:SS format
+    if (typeof dur === "string" && /^\d{1,2}:\d{2}(:\d{2})?$/.test(dur)) return dur;
     
     // "8h 30m" or "8h30m" format
     if (typeof dur === "string") {
         const match = dur.match(/(\d+)h\s*(\d+)m/i);
-        if (match) return `${match[1]}:${match[2].padStart(2, "0")}`;
+        if (match) return `${match[1]}:${match[2].padStart(2, "0")}:00`;
         
         // Just hours: "8h"
         const hMatch = dur.match(/(\d+)h/i);
-        if (hMatch) return `${hMatch[1]}:00`;
+        if (hMatch) return `${hMatch[1]}:00:00`;
         
         // Just minutes: "30m"
         const mMatch = dur.match(/(\d+)m/i);
-        if (mMatch) return fmtDur(parseInt(mMatch[1]));
+        if (mMatch) return fmtDurSecs(parseInt(mMatch[1]) * 60);
     }
     
-    // Numeric minutes
-    if (typeof dur === "number") return fmtDur(dur);
+    // Numeric — Amazon sends routeDuration in SECONDS
+    if (typeof dur === "number") return fmtDurSecs(dur);
 
     return String(dur);
 }
@@ -78,6 +79,50 @@ function parseAmazonTime(time: any): string {
         }
     }
     return String(time);
+}
+
+// Helper: subtract N minutes from a time value and return formatted string in Pacific time
+function subtractMinutes(time: any, mins: number): string {
+    if (!time) return "";
+    let d: Date | null = null;
+
+    // Epoch ms
+    if (typeof time === "number" && time > 1000000000000) {
+        d = new Date(time - mins * 60000);
+    }
+    // ISO string
+    else if (typeof time === "string" && time.includes("T")) {
+        try { d = new Date(new Date(time).getTime() - mins * 60000); } catch { /* ignore */ }
+    }
+    // "H:MM AM/PM"
+    else if (typeof time === "string") {
+        const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if (match) {
+            let h = parseInt(match[1]);
+            const m = parseInt(match[2]);
+            const ampm = match[3].toUpperCase();
+            if (ampm === "PM" && h !== 12) h += 12;
+            if (ampm === "AM" && h === 12) h = 0;
+            const total = h * 60 + m - mins;
+            const nh = Math.floor(((total % 1440) + 1440) % 1440 / 60);
+            const nm = ((total % 1440) + 1440) % 1440 % 60;
+            const ap = nh >= 12 ? "PM" : "AM";
+            const h12 = nh === 0 ? 12 : nh > 12 ? nh - 12 : nh;
+            return `${h12}:${nm.toString().padStart(2, "0")} ${ap}`;
+        }
+    }
+
+    if (d) {
+        // Format in Pacific time (Amazon station timezone)
+        return d.toLocaleString("en-US", {
+            timeZone: "America/Los_Angeles",
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+        });
+    }
+
+    return "";
 }
 
 export async function POST(req: NextRequest) {
@@ -168,15 +213,31 @@ export async function POST(req: NextRequest) {
                 }
             }
 
+            // ── Resolve stopCount, packageCount from raw data ──
+            const raw = route._raw || route;
+            const resolvedStopCount =
+                route.stopCount || raw.totalStops || raw.numberOfStops || raw.plannedStopCount || 0;
+            const resolvedPackageCount =
+                route.packageCount || raw.deliveriesCompleted || raw.deliveredPackageCount ||
+                raw.totalPackages || raw.numberOfPackages || raw.plannedPackageCount || 0;
+
+            // ── waveTime = plannedDepartureTime - 20 mins ──
+            // Amazon's plannedDepartureTime is epoch ms (e.g. 1775586000000)
+            const rawDeparture = raw.plannedDepartureTime || route.departureTime || raw.departureTime || "";
+            let resolvedWaveTime = "";
+            if (rawDeparture) {
+                resolvedWaveTime = subtractMinutes(rawDeparture, 20);
+            }
+
             // Parse route data into SYMX format
             const row: Record<string, any> = {
                 date: dateObj,
                 rowIndex: index,
                 routeNumber: routeCode,
-                stopCount: String(route.stopCount || 0),
-                packageCount: String(route.packageCount || 0),
-                routeDuration: parseAmazonDuration(route.routeDuration),
-                waveTime: parseAmazonTime(route.waveTime),
+                stopCount: String(resolvedStopCount),
+                packageCount: String(resolvedPackageCount),
+                routeDuration: parseAmazonDuration(route.routeDuration || raw.routeDuration || raw.duration),
+                waveTime: parseAmazonTime(resolvedWaveTime),
                 pad: "", // Will be set manually
                 wst: "", // Will be set manually
                 wstDuration: "",
@@ -184,7 +245,7 @@ export async function POST(req: NextRequest) {
                 ov: "",
                 stagingLocation: "",
                 transporterId,
-                rawSummary: route._raw || route,  // Store full Amazon route-summaries JSON
+                rawSummary: raw,  // Store full Amazon route-summaries JSON
             };
 
             // Upsert into RoutesInfo by date + rowIndex

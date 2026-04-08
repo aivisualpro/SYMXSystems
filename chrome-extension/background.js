@@ -16,8 +16,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       scrapedServiceArea: message.serviceAreaId,
     });
 
-    // Notify popup if open
-    chrome.runtime.sendMessage({ type: "SCRAPE_COMPLETE", data: message.data });
+    // Notify popup if open (ignore error if popup is closed)
+    chrome.runtime.sendMessage({ type: "SCRAPE_COMPLETE", data: message.data }).catch(() => {});
     sendResponse({ ok: true });
   }
 

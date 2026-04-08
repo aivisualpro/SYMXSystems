@@ -308,6 +308,38 @@ body::-webkit-scrollbar-track {
   box-shadow: 0 2px 8px var(--accent-glow);
 }
 
+/* ── Search Bar ── */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  transition: border-color 0.2s ease;
+}
+.search-bar:focus-within {
+  border-color: var(--accent);
+}
+.search-bar svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.search-bar input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 11px;
+}
+.search-bar input::placeholder {
+  color: var(--text-muted);
+}
+
 /* ── Route List ── */
 .route-list {
   max-height: 200px;

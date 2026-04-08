@@ -1,22 +1,14 @@
 // ══════════════════════════════════════════════════════════════
-// SYMX Route Scraper — Popup Controller v1.1
+// SYMX Route Fetch — Popup Controller V.1.0.2
 // ══════════════════════════════════════════════════════════════
 
-const TARGETS = {
-  production: "https://symx-systems.vercel.app",
-  local: "http://localhost:3000",
-};
+const SYNC_TARGET = "https://symx-systems.vercel.app";
 const API_KEY = "symx-ext-route-sync-2026";
 
 // DOM Elements
 const statusDot = document.getElementById("statusDot");
-const connectionCard = document.getElementById("connectionCard");
-const connectionIcon = document.getElementById("connectionIcon");
-const connectionLabel = document.getElementById("connectionLabel");
-const connectionDetail = document.getElementById("connectionDetail");
 const pageInfoSection = document.getElementById("pageInfoSection");
 const dateValue = document.getElementById("dateValue");
-const stationValue = document.getElementById("stationValue");
 const routesSection = document.getElementById("routesSection");
 const routeCountBadge = document.getElementById("routeCountBadge");
 const routeList = document.getElementById("routeList");
@@ -27,8 +19,9 @@ const syncBtn = document.getElementById("syncBtn");
 const syncStatusSection = document.getElementById("syncStatusSection");
 const syncResultSection = document.getElementById("syncResultSection");
 const syncResult = document.getElementById("syncResult");
-const targetSelect = document.getElementById("targetSelect");
 const lastSyncTime = document.getElementById("lastSyncTime");
+const searchBar = document.getElementById("searchBar");
+const searchInput = document.getElementById("searchInput");
 
 // Detail overlay elements
 const detailOverlay = document.getElementById("detailOverlay");
@@ -43,9 +36,8 @@ let currentDate = "";
 
 // ── Initialize ──
 async function init() {
-  // Restore settings
-  chrome.storage.local.get(["target", "lastSync"], (result) => {
-    if (result.target) targetSelect.value = result.target;
+  // Restore last sync time
+  chrome.storage.local.get(["lastSync"], (result) => {
     if (result.lastSync) {
       const ago = getTimeAgo(new Date(result.lastSync));
       lastSyncTime.textContent = `Last sync: ${ago}`;
@@ -56,87 +48,72 @@ async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
   if (!tab?.url?.includes("logistics.amazon.com")) {
-    showDisconnected("Navigate to Amazon Logistics", "Open logistics.amazon.com to start scraping routes");
+    statusDot.className = "status-dot disconnected";
     return;
   }
+
+  statusDot.className = "status-dot connected";
 
   // Get page info from content script
   try {
     const response = await chrome.tabs.sendMessage(tab.id, { type: "GET_PAGE_INFO" });
     
     if (response?.isAmazonLogistics) {
-      showConnected(response);
+      // Show date info
+      if (response.selectedDay) {
+        pageInfoSection.style.display = "";
+        const d = new Date(response.selectedDay + "T12:00:00Z");
+        dateValue.textContent = d.toLocaleDateString("en-US", { 
+          weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" 
+        });
+        currentDate = response.selectedDay;
+      }
       
+      routesSection.style.display = "";
+      actionsSection.style.display = "";
+
       // Load any previously captured data
       if (response.capturedCount > 0) {
         loadCapturedData();
       } else {
-        // Try to get from storage
         loadFromStorage();
       }
-    } else {
-      showDisconnected("Not on routes page", "Navigate to the DV Routes page on Amazon Logistics");
     }
   } catch (e) {
-    // Content script not injected yet
-    showWarning("Content script loading...", "Refresh the Amazon Logistics page");
-    // Try storage anyway
+    statusDot.className = "status-dot warning";
+    routesSection.style.display = "";
+    actionsSection.style.display = "";
     loadFromStorage();
   }
 
+  // Set up search
+  setupSearch();
   // Set up detail tabs
   setupDetailTabs();
 }
 
-function showConnected(info) {
-  statusDot.className = "status-dot connected";
-  connectionCard.className = "connection-card connected";
-  connectionLabel.textContent = "Connected to Amazon Logistics";
-  connectionDetail.textContent = info.url ? new URL(info.url).pathname.split("/").slice(-1)[0] : "";
-  connectionIcon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
-
-  // Show page info
-  if (info.selectedDay) {
-    pageInfoSection.style.display = "";
-    const d = new Date(info.selectedDay + "T12:00:00Z");
-    dateValue.textContent = d.toLocaleDateString("en-US", { 
-      weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" 
+// ── Search ──
+function setupSearch() {
+  searchInput.addEventListener("input", () => {
+    const q = searchInput.value.trim().toLowerCase();
+    if (!q) {
+      renderRoutes(currentRoutes);
+      return;
+    }
+    const filtered = currentRoutes.filter(r => {
+      const code = (r.routeCode || "").toLowerCase();
+      const tid = (r.transporterId || "").toLowerCase();
+      const tname = (r.transporterName || "").toLowerCase();
+      return code.includes(q) || tid.includes(q) || tname.includes(q);
     });
-    currentDate = info.selectedDay;
-  }
-  
-  if (info.serviceAreaId) {
-    stationValue.textContent = info.serviceAreaId.substring(0, 8) + "...";
-    stationValue.title = info.serviceAreaId;
-  }
-
-  routesSection.style.display = "";
-  actionsSection.style.display = "";
-}
-
-function showDisconnected(label, detail) {
-  statusDot.className = "status-dot disconnected";
-  connectionCard.className = "connection-card error";
-  connectionLabel.textContent = label;
-  connectionDetail.textContent = detail;
-  connectionIcon.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
-}
-
-function showWarning(label, detail) {
-  statusDot.className = "status-dot warning";
-  connectionCard.className = "connection-card";
-  connectionLabel.textContent = label;
-  connectionDetail.textContent = detail;
-  routesSection.style.display = "";
-  actionsSection.style.display = "";
-  loadFromStorage();
+    renderRoutes(filtered, true);
+  });
 }
 
 async function loadCapturedData() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   try {
-    const result = await chrome.tabs.sendMessage(tab.id, { type: "SCRAPE_NOW" });
-    // Data will come back via storage
+    await chrome.tabs.sendMessage(tab.id, { type: "SCRAPE_NOW" });
     setTimeout(loadFromStorage, 500);
   } catch {
     loadFromStorage();
@@ -162,11 +139,19 @@ function loadFromStorage() {
   });
 }
 
-function renderRoutes(routes) {
-  routeCountBadge.textContent = routes.length;
+function renderRoutes(routes, isFiltered = false) {
+  if (!isFiltered) {
+    routeCountBadge.textContent = routes.length;
+    // Show search bar if we have routes
+    searchBar.style.display = routes.length > 0 ? "" : "none";
+  }
   
   if (routes.length === 0) {
-    routeList.innerHTML = emptyState.outerHTML;
+    if (isFiltered) {
+      routeList.innerHTML = `<div class="empty-state"><p>No matching routes</p></div>`;
+    } else {
+      routeList.innerHTML = emptyState.outerHTML;
+    }
     return;
   }
 
@@ -185,14 +170,15 @@ function renderRoutes(routes) {
   `;
 
   routes.forEach((route, idx) => {
+    // Find the original index in currentRoutes for detail view
+    const origIdx = currentRoutes.indexOf(route);
     const stops = parseInt(route.stopCount) || 0;
     const pkgs = parseInt(route.packageCount) || 0;
     const statusClass = getStatusClass(route.status);
     const statusLabel = getStatusLabel(route.status);
-    const hasRaw = route._raw && Object.keys(route._raw).length > 0;
     
     html += `
-      <div class="route-item ${hasRaw ? 'has-detail' : ''}" data-route-idx="${idx}">
+      <div class="route-item" data-route-idx="${origIdx >= 0 ? origIdx : idx}">
         <span class="route-code">${route.routeCode || "—"}</span>
         <span class="route-driver">${route.transporterName || route.transporterId || "—"}</span>
         <div class="route-stats">
@@ -205,7 +191,7 @@ function renderRoutes(routes) {
             <span>pkg</span>
           </div>
           ${statusLabel ? `<span class="route-status-badge ${statusClass}">${statusLabel}</span>` : ""}
-          <button class="route-detail-btn" title="View Details" data-route-idx="${idx}">
+          <button class="route-detail-btn" title="View Details" data-route-idx="${origIdx >= 0 ? origIdx : idx}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="9 18 15 12 9 6"/>
             </svg>
@@ -217,7 +203,7 @@ function renderRoutes(routes) {
 
   routeList.innerHTML = html;
 
-  // Attach click handlers for detail buttons and route rows
+  // Attach click handlers
   routeList.querySelectorAll(".route-detail-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -257,16 +243,10 @@ function openRouteDetail(route, idx) {
     detailStatusBadge.style.display = "none";
   }
 
-  // Populate Summary tab
   populateSummaryTab(route, raw);
-  
-  // Populate Transporters tab
   populateTransportersTab(raw);
-  
-  // Populate Raw JSON tab
   populateRawTab(raw);
 
-  // Show overlay
   detailOverlay.classList.add("visible");
 }
 
@@ -276,56 +256,40 @@ function closeRouteDetail() {
 
 function populateSummaryTab(route, raw) {
   const tab = document.getElementById("tab-summary");
+  const rdp = raw.routeDeliveryProgress || {};
   
-  // Build key/value pairs from the raw data
   const fields = [
     { label: "Route ID", value: raw.routeId },
     { label: "Route Code", value: raw.routeCode || route.routeCode },
     { label: "Service Area ID", value: raw.serviceAreaId },
-    { label: "Total Stops", value: raw.totalStops ?? raw.numberOfStops ?? route.stopCount },
-    { label: "Total Tasks", value: raw.totalTasks },
-    { label: "Planned Stops", value: raw.plannedSequenceStops ?? raw.plannedStopCount },
-    { label: "Letter/Archive", value: raw.letterArchive ?? raw.routeSize },
-    { label: "Transporter ID", value: raw.transporterId ?? route.transporterId },
-    { label: "Status", value: raw.status ?? raw.routeStatus ?? route.status },
-    { label: "Progress %", value: raw.progress ?? raw.completionPercentage ?? route.progress },
-    { label: "Stops Completed", value: raw.stopsCompleted ?? raw.completedStops ?? raw.deliveredStopCount },
-    { label: "Packages Delivered", value: raw.deliveredPackageCount ?? raw.deliveriesCompleted ?? route.deliveriesCompleted },
-    { label: "Route Duration", value: raw.routeDuration ?? raw.duration ?? route.routeDuration },
-    { label: "Departure Time", value: raw.departureTime ?? raw.actualDepartureTime },
-    { label: "First Stop", value: raw.firstStopTime ?? raw.actualFirstStop ?? raw.firstDeliveryTime },
-    { label: "Last Stop", value: raw.lastStopTime ?? raw.actualLastStop ?? raw.lastDeliveryTime },
-    { label: "Return Time", value: raw.returnTime ?? raw.returnToStationTime },
-    { label: "Outbound Stem", value: raw.outboundStem ?? raw.outboundStemTime },
-    { label: "Inbound Stem", value: raw.inboundStem ?? raw.inboundStemTime },
-    { label: "Stops/Hour", value: raw.stopsPerHour },
-    { label: "Wave Time", value: raw.waveTime ?? raw.departureWaveTime ?? raw.plannedDepartureTime },
-    { label: "Deliveries Attempted", value: raw.deliveriesAttempted },
+    { label: "Route Status", value: raw.routeStatus },
+    { label: "Progress Status", value: raw.progressStatus },
+    { label: "Total Stops", value: rdp.totalStops ?? route.stopCount },
+    { label: "Completed Stops", value: rdp.completedStops },
+    { label: "Total Deliveries", value: rdp.totalDeliveries },
+    { label: "Completed Deliveries", value: rdp.completedDeliveries },
+    { label: "Successful Deliveries", value: rdp.successfulDeliveries },
+    { label: "Total Pickups", value: rdp.totalPickUps },
+    { label: "Total Tasks", value: rdp.totalTasks },
+    { label: "Completed Tasks", value: rdp.completedTasks },
+    { label: "Unassigned Packages", value: rdp.unassignedPackages },
+    { label: "Total Locations", value: rdp.totalLocations },
+    { label: "Transporter ID (RMS)", value: raw.transporterIdFromRms },
+    { label: "Company ID", value: raw.companyId },
+    { label: "Service Type", value: raw.serviceTypeName },
+    { label: "Route Duration (s)", value: raw.routeDuration },
+    { label: "Planned Departure", value: raw.plannedDepartureTime },
+    { label: "Route Labels", value: raw.routeLabels },
+    { label: "Late Departing", value: raw.lateDeparting },
+    { label: "Pre-Dispatch", value: raw.preDispatch },
+    { label: "Route Creation Time", value: raw.routeCreationTime ? raw.routeCreationTime * 1000 : undefined },
+    { label: "RMS Route ID", value: raw.rmsRouteId },
   ];
 
-  // Add any other top-level keys from raw that aren't covered
-  const coveredKeys = new Set([
-    "routeId", "routeCode", "serviceAreaId", "totalStops", "numberOfStops",
-    "totalTasks", "plannedSequenceStops", "plannedStopCount", "letterArchive",
-    "routeSize", "transporterId", "status", "routeStatus", "progress",
-    "completionPercentage", "stopsCompleted", "completedStops", "deliveredStopCount",
-    "deliveredPackageCount", "deliveriesCompleted", "routeDuration", "duration",
-    "departureTime", "actualDepartureTime", "firstStopTime", "actualFirstStop",
-    "firstDeliveryTime", "lastStopTime", "actualLastStop", "lastDeliveryTime",
-    "returnTime", "returnToStationTime", "outboundStem", "outboundStemTime",
-    "inboundStem", "inboundStemTime", "stopsPerHour", "waveTime",
-    "departureWaveTime", "plannedDepartureTime", "deliveriesAttempted",
-    "transporters", "transporterName", "driverName", "stopCount",
-    "packageCount", "numberOfPackages", "totalPackages", "plannedPackageCount",
-    "executionStatus", "completionTime", "deliveryCompletionTime",
-    "actualOutboundStem", "actualInboundStem"
-  ]);
-
-  if (typeof raw === "object" && raw !== null) {
-    Object.keys(raw).forEach(key => {
-      if (!coveredKeys.has(key) && typeof raw[key] !== "object") {
-        fields.push({ label: camelToTitle(key), value: raw[key] });
-      }
+  // Package summary
+  if (rdp.routePackageSummary) {
+    Object.entries(rdp.routePackageSummary).forEach(([k, v]) => {
+      fields.push({ label: `Packages: ${k}`, value: v });
     });
   }
 
@@ -341,7 +305,6 @@ function populateSummaryTab(route, raw) {
     `;
   });
   html += '</div>';
-
   tab.innerHTML = html;
 }
 
@@ -361,57 +324,85 @@ function populateTransportersTab(raw) {
 
   let html = "";
   transporters.forEach((t, i) => {
+    const tRdp = t.routeDeliveryProgress || {};
     html += `<div class="transporter-card">`;
     html += `<div class="transporter-header">`;
     html += `<span class="transporter-num">Transporter ${i + 1}</span>`;
     if (t.transporterId) html += `<span class="transporter-id">${t.transporterId}</span>`;
     html += `</div>`;
 
-    // Transporter fields
-    const tFields = [];
-    if (typeof t === "object" && t !== null) {
-      Object.keys(t).forEach(key => {
-        if (key === "breaks" || key === "transporterId") return;
-        const val = t[key];
-        if (val === undefined || val === null || val === "") return;
-        if (typeof val === "object" && !Array.isArray(val)) return;
-        tFields.push({ label: camelToTitle(key), value: val });
+    // Key transporter fields
+    const tFields = [
+      { label: "Itinerary ID", value: t.itineraryId },
+      { label: "Itinerary Status", value: t.itineraryStatus },
+      { label: "Block Duration (min)", value: t.blockDurationInMinutes },
+      { label: "VIN", value: t.vin },
+      { label: "Stop Rate", value: t.stopCompletionRate },
+      { label: "Stops Last Hour", value: t.completedStopsInLastHour },
+      { label: "Total Stops", value: tRdp.totalStops },
+      { label: "Completed Stops", value: tRdp.completedStops },
+      { label: "Total Deliveries", value: tRdp.totalDeliveries },
+      { label: "Completed Deliveries", value: tRdp.completedDeliveries },
+      { label: "Itinerary Start", value: t.itineraryStartTime },
+      { label: "Actual Departure", value: t.actualRouteDepartureTime },
+      { label: "Schedule End", value: t.scheduleEndTime },
+      { label: "Total Breaks (s)", value: t.totalBreaksDurationSecs },
+    ];
+
+    html += '<div class="detail-grid compact">';
+    tFields.forEach(f => {
+      if (f.value === undefined || f.value === null || f.value === "") return;
+      html += `
+        <div class="detail-field">
+          <span class="detail-field-label">${f.label}</span>
+          <span class="detail-field-value">${formatDetailValue(f.value)}</span>
+        </div>
+      `;
+    });
+    html += '</div>';
+
+    // Associated Routes
+    if (t.associatedRoutes?.length) {
+      html += `<div class="breaks-section">`;
+      html += `<span class="breaks-title">Associated Routes (${t.associatedRoutes.length})</span>`;
+      html += '<div class="detail-grid compact">';
+      t.associatedRoutes.forEach(ar => {
+        html += `<div class="detail-field"><span class="detail-field-label">${ar.routeCode}</span><span class="detail-field-value">${ar.routeId}</span></div>`;
       });
+      html += '</div></div>';
     }
 
-    if (tFields.length > 0) {
-      html += '<div class="detail-grid compact">';
-      tFields.forEach(f => {
-        html += `
-          <div class="detail-field">
-            <span class="detail-field-label">${f.label}</span>
-            <span class="detail-field-value">${formatDetailValue(f.value)}</span>
-          </div>
-        `;
+    // Planned Breaks
+    const plannedBreaks = t.plannedBreaks || [];
+    if (plannedBreaks.length > 0) {
+      html += `<div class="breaks-section">`;
+      html += `<span class="breaks-title">Planned Breaks (${plannedBreaks.length})</span>`;
+      plannedBreaks.forEach((brk, bi) => {
+        html += `<div class="break-card">`;
+        html += `<span class="break-num">${brk.type || "Break"} ${bi + 1}</span>`;
+        html += '<div class="detail-grid compact">';
+        html += `<div class="detail-field"><span class="detail-field-label">Start</span><span class="detail-field-value">${formatDetailValue(brk.plannedStart)}</span></div>`;
+        html += `<div class="detail-field"><span class="detail-field-label">End</span><span class="detail-field-value">${formatDetailValue(brk.plannedEnd)}</span></div>`;
+        html += `<div class="detail-field"><span class="detail-field-label">Duration</span><span class="detail-field-value">${Math.round((brk.minDurationInMillis || 0) / 60000)}m</span></div>`;
+        html += `<div class="detail-field"><span class="detail-field-label">Seq #</span><span class="detail-field-value">${brk.plannedSequenceNumber ?? "—"}</span></div>`;
+        html += '</div></div>';
       });
       html += '</div>';
     }
 
-    // Breaks
-    const breaks = t.breaks || [];
-    if (breaks.length > 0) {
+    // Actual Breaks
+    const actualBreaks = t.breaks || [];
+    if (actualBreaks.length > 0) {
       html += `<div class="breaks-section">`;
-      html += `<span class="breaks-title">Breaks (${breaks.length})</span>`;
-      breaks.forEach((brk, bi) => {
-        html += `<div class="break-card">`;
-        html += `<span class="break-num">Break ${bi + 1}</span>`;
+      html += `<span class="breaks-title" style="color:var(--info)">Actual Breaks (${actualBreaks.length})</span>`;
+      actualBreaks.forEach((brk, bi) => {
+        html += `<div class="break-card" style="border-color:rgba(59,130,246,0.15);background:rgba(59,130,246,0.04);">`;
+        html += `<span class="break-num">${brk.type || "Break"} ${bi + 1}</span>`;
         html += '<div class="detail-grid compact">';
-        Object.keys(brk).forEach(key => {
-          const val = brk[key];
-          if (val === undefined || val === null || val === "") return;
-          if (typeof val === "object") return;
-          html += `
-            <div class="detail-field">
-              <span class="detail-field-label">${camelToTitle(key)}</span>
-              <span class="detail-field-value">${formatDetailValue(val)}</span>
-            </div>
-          `;
-        });
+        html += `<div class="detail-field"><span class="detail-field-label">Clock On</span><span class="detail-field-value">${formatDetailValue(brk.timeStampOn)}</span></div>`;
+        html += `<div class="detail-field"><span class="detail-field-label">Clock Off</span><span class="detail-field-value">${formatDetailValue(brk.timeStampOff)}</span></div>`;
+        html += `<div class="detail-field"><span class="detail-field-label">State</span><span class="detail-field-value">${brk.state || "—"}</span></div>`;
+        html += `<div class="detail-field"><span class="detail-field-label">Seq #</span><span class="detail-field-value">${brk.sequenceNumber ?? "—"}</span></div>`;
         html += '</div></div>';
       });
       html += '</div>';
@@ -458,20 +449,14 @@ function populateRawTab(raw) {
 function setupDetailTabs() {
   document.querySelectorAll(".detail-tab").forEach(tab => {
     tab.addEventListener("click", () => {
-      // Deactivate all
       document.querySelectorAll(".detail-tab").forEach(t => t.classList.remove("active"));
       document.querySelectorAll(".detail-tab-content").forEach(c => c.classList.remove("active"));
-      // Activate clicked
       tab.classList.add("active");
-      const target = tab.dataset.tab;
-      document.getElementById(`tab-${target}`).classList.add("active");
+      document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     });
   });
 
-  // Back button
   detailBack.addEventListener("click", closeRouteDetail);
-  
-  // Click overlay background to close
   detailOverlay.addEventListener("click", (e) => {
     if (e.target === detailOverlay) closeRouteDetail();
   });
@@ -502,10 +487,8 @@ function getStatusLabel(status) {
 // BUTTON HANDLERS
 // ══════════════════════════════════════════════════════════════
 
-// ── Re-Scrape Button ──
 scrapeBtn.addEventListener("click", async () => {
   scrapeBtn.classList.add("loading");
-  
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   try {
     await chrome.tabs.sendMessage(tab.id, { type: "SCRAPE_NOW" });
@@ -518,7 +501,6 @@ scrapeBtn.addEventListener("click", async () => {
   }
 });
 
-// ── Sync to SYMX Button ──
 syncBtn.addEventListener("click", async () => {
   if (currentRoutes.length === 0) return;
 
@@ -527,10 +509,8 @@ syncBtn.addEventListener("click", async () => {
   syncStatusSection.style.display = "";
   syncResultSection.style.display = "none";
 
-  const target = TARGETS[targetSelect.value] || TARGETS.production;
-
   try {
-    const response = await fetch(`${target}/api/public/extension-sync?key=${encodeURIComponent(API_KEY)}`, {
+    const response = await fetch(`${SYNC_TARGET}/api/public/extension-sync?key=${encodeURIComponent(API_KEY)}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -543,20 +523,18 @@ syncBtn.addEventListener("click", async () => {
     });
 
     const data = await response.json();
-
     syncStatusSection.style.display = "none";
 
     if (!response.ok) {
       throw new Error(data.error || "Sync failed");
     }
 
-    // Show success
     syncResultSection.style.display = "";
     syncResult.className = "sync-result success";
     syncResult.innerHTML = `
       <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        Synced successfully to SYMX Systems!
+        Synced successfully!
       </div>
       <div class="sync-result-stats">
         <div class="sync-result-stat">
@@ -565,16 +543,15 @@ syncBtn.addEventListener("click", async () => {
         </div>
         <div class="sync-result-stat">
           <span class="stat-num">${data.synced || 0}</span>
-          <span class="stat-label">Routes Synced</span>
+          <span class="stat-label">Routes</span>
         </div>
         <div class="sync-result-stat">
           <span class="stat-num">${data.matched || 0}</span>
-          <span class="stat-label">Drivers Matched</span>
+          <span class="stat-label">Matched</span>
         </div>
       </div>
     `;
 
-    // Update last sync time
     const now = new Date().toISOString();
     chrome.storage.local.set({ lastSync: now });
     lastSyncTime.textContent = "Just now";
@@ -592,11 +569,6 @@ syncBtn.addEventListener("click", async () => {
     syncBtn.classList.remove("loading");
     syncBtn.disabled = false;
   }
-});
-
-// ── Target select change ──
-targetSelect.addEventListener("change", () => {
-  chrome.storage.local.set({ target: targetSelect.value });
 });
 
 // ── Listen for new scrape data ──
@@ -635,8 +607,8 @@ function formatDetailValue(val) {
   if (val === false) return "No";
   if (val === null || val === undefined) return "—";
   if (typeof val === "number") {
-    // Format epoch timestamps
-    if (val > 1700000000000) {
+    // Format epoch timestamps (> year 2020 in ms)
+    if (val > 1577836800000) {
       try {
         const d = new Date(val);
         return d.toLocaleString("en-US", { 
