@@ -244,7 +244,8 @@ export async function POST(req: NextRequest) {
                 bags: "",
                 ov: "",
                 stagingLocation: "",
-                transporterId,
+                // Store the Amazon transporterId directly (e.g. "A1K8M27DOUL0PC")
+                transporterId: route.transporterId || raw.transporterIdFromRms || "",
                 rawSummary: raw,  // Store full Amazon route-summaries JSON
             };
 
