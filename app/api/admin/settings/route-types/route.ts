@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
         const body = await req.json();
-        const { _id, name, color, startTime, sortOrder, isActive } = body;
+        const { _id, name, color, startTime, routeStatus, sortOrder, isActive } = body;
 
         if (!name?.trim()) {
             return NextResponse.json({ error: "Route type name is required" }, { status: 400 });
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
             // Update existing
             const updated = await RouteType.findByIdAndUpdate(
                 _id,
-                { name: name.trim(), color, startTime, sortOrder, isActive },
+                { name: name.trim(), color, startTime, routeStatus, sortOrder, isActive },
                 { new: true }
             ).lean();
             if (!updated) return NextResponse.json({ error: "Route type not found" }, { status: 404 });
@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
                 name: name.trim(),
                 color: color || "#6B7280",
                 startTime: startTime || "",
+                routeStatus: routeStatus || "Scheduled",
                 sortOrder: sortOrder ?? 0,
                 isActive: isActive ?? true,
             });
@@ -55,6 +56,34 @@ export async function POST(req: NextRequest) {
         if (error.code === 11000) {
             return NextResponse.json({ error: "Route type with this name already exists" }, { status: 409 });
         }
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+// PATCH — bulk reorder
+export async function PATCH(req: NextRequest) {
+    try {
+        const session = await getSession();
+        if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+        await connectToDatabase();
+        const body = await req.json();
+
+        if (Array.isArray(body)) {
+            const bulkOps = body.filter(r => r._id).map((r: any) => ({
+                updateOne: {
+                    filter: { _id: r._id },
+                    update: { $set: { sortOrder: r.sortOrder } }
+                }
+            }));
+            if (bulkOps.length > 0) {
+                await RouteType.bulkWrite(bulkOps);
+            }
+            return NextResponse.json({ success: true });
+        }
+        
+        return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

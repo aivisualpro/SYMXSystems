@@ -61,16 +61,19 @@ const DATASETS: DatasetConfig[] = [
     url: "/api/admin/settings/route-types",
     priority: "critical",
     transform: (raw: any) => {
-      const map: Record<string, { color: string; startTime: string }> = {};
+      const map: Record<string, { color: string; startTime: string; routeStatus: string }> = {};
+      const list: any[] = [];
       if (Array.isArray(raw)) {
         raw.forEach((t: any) => {
           map[t.name?.toLowerCase()] = {
             color: t.color,
             startTime: t.startTime || "",
+            routeStatus: t.routeStatus || "Scheduled",
           };
+          list.push(t);
         });
       }
-      return map;
+      return { map, list };
     },
     ttl: 30 * 60 * 1000,
   },
@@ -612,7 +615,8 @@ export function useDataStore() {
       users: state.datasets["admin.users"]?.data ?? [],
       roles: state.datasets["admin.roles"]?.data ?? [],
       modules: state.datasets["admin.modules"]?.data ?? [],
-      routeTypes: state.datasets["admin.routeTypes"]?.data ?? {},
+      routeTypes: state.datasets["admin.routeTypes"]?.data?.map ?? {},
+      routeTypesList: state.datasets["admin.routeTypes"]?.data?.list ?? [],
       dropdowns: state.datasets["admin.dropdowns"]?.data ?? [],
       wst: state.datasets["admin.wst"]?.data ?? [],
     },

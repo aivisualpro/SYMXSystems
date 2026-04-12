@@ -219,7 +219,7 @@ export async function PATCH(req: NextRequest) {
     const performer = await resolvePerformerName(session);
 
     const body = await req.json();
-    const { scheduleId, type, employeeId, note, startTime } = body;
+    const { scheduleId, type, employeeId, note, startTime, status } = body;
 
     // Update employee global note (ScheduleNotes)
     if (employeeId && note !== undefined) {
@@ -259,9 +259,13 @@ export async function PATCH(req: NextRequest) {
       const existing = await SymxEmployeeSchedule.findById(scheduleId).lean() as any;
 
       const newType = (type || "").trim().toLowerCase();
-      const isWorking = !["off", "", "call out", "request off", "suspension", "stand by"].includes(newType);
       const updateFields: Record<string, any> = { type: type || "" };
-      updateFields.status = isWorking ? "Scheduled" : "Off";
+      if (status !== undefined) {
+        updateFields.status = status;
+      } else {
+        const isWorking = !["off", "", "call out", "request off", "suspension", "stand by"].includes(newType);
+        updateFields.status = isWorking ? "Scheduled" : "Off";
+      }
       if (startTime !== undefined) updateFields.startTime = startTime;
 
       const updated = await SymxEmployeeSchedule.findByIdAndUpdate(
@@ -321,7 +325,7 @@ export async function PATCH(req: NextRequest) {
       // Sync type to SYMXRoute (dispatching)
       if (typeChanged) {
         const newTypeNorm = (type || "").trim().toLowerCase();
-        const isNowWorking = !["off", "", "call out", "request off", "suspension", "stand by"].includes(newTypeNorm);
+        const isNowWorking = status ? (status !== "Off") : !["off", "", "call out", "request off", "suspension", "stand by"].includes(newTypeNorm);
 
         if (isNowWorking) {
           // Working type → upsert a route record (create if it doesn't exist)
@@ -360,7 +364,7 @@ export async function PATCH(req: NextRequest) {
             type: type || "",
             yearWeek,
             weekDay: weekDay || "",
-            status: "Scheduled",
+            status: status || "Scheduled",
             ...(startTime !== undefined ? { startTime } : {}),
           },
           $setOnInsert: {
@@ -391,7 +395,7 @@ export async function PATCH(req: NextRequest) {
       // Sync to SYMXRoute — only create for working types
       if (created && (created as any)._id) {
         const newTypeNorm = (type || "").trim().toLowerCase();
-        const isWorking = !["off", "", "call out", "request off", "suspension", "stand by"].includes(newTypeNorm);
+        const isWorking = status ? (status !== "Off") : !["off", "", "call out", "request off", "suspension", "stand by"].includes(newTypeNorm);
 
         if (isWorking) {
           await SYMXRoute.updateOne(

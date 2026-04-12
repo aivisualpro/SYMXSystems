@@ -109,8 +109,10 @@ const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", 
 // Working types — anything NOT in this list is considered "not working"
 const NON_WORKING_TYPES = new Set(["off", "", "call out", "request off", "suspension", "stand by"]);
 
-function isWorkingDay(type: string): boolean {
-  return !NON_WORKING_TYPES.has((type || "").trim().toLowerCase());
+function isWorkingDay(day: DayData | undefined | null): boolean {
+  if (!day) return false;
+  if (day.status) return day.status !== "Off";
+  return !NON_WORKING_TYPES.has((day.type || "").trim().toLowerCase());
 }
 
 // Route types for consecutive route detection
@@ -181,7 +183,7 @@ function computePlanningData(employees: EmployeeSchedule[]): PlanningRow[] {
       const typeVal = (day.type || "").trim().toLowerCase();
       const empType = (emp.employee?.type || "").trim().toLowerCase();
 
-      if (isWorkingDay(day.type)) {
+      if (isWorkingDay(day)) {
         daStats[d]++;
       }
       if (typeVal === "stand by") standBy[d]++;
@@ -222,7 +224,7 @@ function countWorkingDays(emp: EmployeeSchedule): number {
   let count = 0;
   for (let d = 0; d < 7; d++) {
     const day = emp.days[d];
-    if (day && isWorkingDay(day.type)) {
+    if (isWorkingDay(day)) {
       count++;
     }
   }
@@ -463,7 +465,8 @@ export default function SchedulingPage() {
   const [selectAllTrigger, setSelectAllTrigger] = useState(0);
   const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo | null>(null);
   const [generatingWeek, setGeneratingWeek] = useState(false);
-  const [routeTypeConfigs, setRouteTypeConfigs] = useState<Record<string, { color: string; startTime: string }>>({});
+  const [routeTypeConfigs, setRouteTypeConfigs] = useState<Record<string, { color: string; startTime: string; routeStatus: string }>>({});
+  const [routeTypesList, setRouteTypesList] = useState<any[]>([]);
   const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
   const [showAuditPanel, setShowAuditPanel] = useState(false);
   const [auditEmployee, setAuditEmployee] = useState<{ transporterId: string; name: string } | null>(null);
@@ -535,14 +538,16 @@ export default function SchedulingPage() {
     // Hydrate route type configs from global store if available
     if (store.initialized && store.admin.routeTypes && Object.keys(store.admin.routeTypes).length > 0) {
       setRouteTypeConfigs(store.admin.routeTypes);
+      setRouteTypesList(store.admin.routeTypesList || []);
     } else {
       // Fallback: Fetch route type configs for auto-filling startTime
       fetch("/api/admin/settings/route-types")
         .then(res => res.json())
         .then((types: any[]) => {
-          const map: Record<string, { color: string; startTime: string }> = {};
-          types.forEach((t: any) => { map[t.name.toLowerCase()] = { color: t.color, startTime: t.startTime || "" }; });
+          const map: Record<string, { color: string; startTime: string; routeStatus: string }> = {};
+          types.forEach((t: any) => { map[t.name.toLowerCase()] = { color: t.color, startTime: t.startTime || "", routeStatus: t.routeStatus || "Scheduled" }; });
           setRouteTypeConfigs(map);
+          setRouteTypesList(types);
         })
         .catch(() => { });
     }
@@ -557,6 +562,26 @@ export default function SchedulingPage() {
     const prior = availableWeeks.filter(w => w <= currentWeek).sort((a, b) => b.localeCompare(a));
     return prior.length > 0 ? prior[0] : availableWeeks[0];
   }, []);
+
+  const dynamicTypeOptions = useMemo(() => {
+    if (!routeTypesList || routeTypesList.length === 0) return TYPE_OPTIONS;
+    return routeTypesList
+      .filter((rt: any) => rt.isActive !== false) // Only show active types in dropdowns
+      .map((rt: any) => {
+      const fallback = TYPE_MAP.get(rt.name.toLowerCase()) || {
+        label: rt.name,
+        icon: Navigation,
+        bg: "bg-emerald-600",
+        text: "text-white",
+        border: "border-emerald-700",
+        dotColor: "bg-emerald-500"
+      };
+      return {
+        ...fallback,
+        label: rt.name, // Ensure exact casing from DB used for dropdown label
+      };
+    });
+  }, [routeTypesList]);
 
   // Hydrate weeks from global store for instant load
   const hydratedWeeksRef = useRef(false);
@@ -948,9 +973,11 @@ export default function SchedulingPage() {
     employeeName?: string
   ) => {
     // Optimistic update
-    const isWorking = !NON_WORKING_TYPES.has(newType.trim().toLowerCase());
+    const isWorking = !NON_WORKING_TYPES.has(newType.trim().toLowerCase()); // kept for legacy fallbacks if needed
     const routeConfig = routeTypeConfigs[newType.trim().toLowerCase()];
     const defaultStartTime = routeConfig?.startTime || "";
+    const newRouteStatus = routeConfig?.routeStatus || (isWorking ? "Scheduled" : "Off");
+    
     setWeekData(prev => {
       if (!prev) return prev;
       const updated = { ...prev };
@@ -963,7 +990,7 @@ export default function SchedulingPage() {
             [dayIdx]: {
               ...(emp.days[dayIdx] || {}),
               type: newType,
-              status: isWorking ? "Scheduled" : "Off",
+              status: newRouteStatus,
               startTime: defaultStartTime,
             } as DayData,
           },
@@ -974,7 +1001,7 @@ export default function SchedulingPage() {
 
     try {
       // Build payload — include creation fields when no scheduleId
-      const payload: Record<string, string> = { type: newType, startTime: defaultStartTime };
+      const payload: Record<string, string> = { type: newType, startTime: defaultStartTime, status: newRouteStatus };
       if (employeeName) payload.employeeName = employeeName;
       if (scheduleId) {
         payload.scheduleId = scheduleId;
@@ -1292,74 +1319,72 @@ export default function SchedulingPage() {
 
                               {/* 2. Ultra-compressed Stats Row */}
                               {planningData.length > 0 && (
-                                <div className="flex items-center justify-between w-full max-w-[150px] px-2 py-1.5 bg-zinc-100 dark:bg-zinc-950/50 rounded-lg border border-black/5 dark:border-white/5 shadow-inner backdrop-blur-sm mt-0.5">
-                                  
-                                  <TooltipProvider delayDuration={0}>
-                                    <Tooltip>
-                                      <TooltipTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-default focus:outline-none">
+                                  <Tooltip>
+                                    <TooltipTrigger className="flex items-center justify-between w-full max-w-[150px] px-2 py-1.5 bg-zinc-100 dark:bg-zinc-950/50 rounded-lg border border-black/5 dark:border-white/5 shadow-inner backdrop-blur-sm mt-0.5 cursor-default hover:opacity-90 transition-opacity">
+                                      <div className="flex items-center gap-1">
                                         <Users className="h-3.5 w-3.5 text-emerald-500" />
                                         <span className="text-[13px] font-bold text-foreground leading-none">{planningData[0].values[i]}</span>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="flex flex-col items-center gap-1 px-3 py-2 bg-zinc-950 border border-border shadow-2xl [&>svg]:!fill-zinc-950 [&>svg]:!bg-zinc-950">
-                                        <span className="text-[10px] uppercase text-emerald-500 font-bold tracking-widest leading-none">DA's</span>
-                                        <span className="text-2xl font-black text-foreground">{planningData[0].values[i]}</span>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-
-                                  <TooltipProvider delayDuration={0}>
-                                    <Tooltip>
-                                      <TooltipTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-default focus:outline-none">
+                                      </div>
+                                      <div className="flex items-center gap-1">
                                         <Clock className="h-3.5 w-3.5 text-cyan-500" />
                                         <span className="text-[13px] font-bold text-foreground leading-none">{planningData[1].values[i]}</span>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="flex flex-col items-center gap-1 px-3 py-2 bg-zinc-950 border border-border shadow-2xl [&>svg]:!fill-zinc-950 [&>svg]:!bg-zinc-950">
-                                        <span className="text-[10px] uppercase text-cyan-500 font-bold tracking-widest leading-none">Stand By</span>
-                                        <span className="text-2xl font-black text-foreground">{planningData[1].values[i]}</span>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-
-                                  <TooltipProvider delayDuration={0}>
-                                    <Tooltip>
-                                      <TooltipTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-default focus:outline-none">
+                                      </div>
+                                      <div className="flex items-center gap-1">
                                         <TruckIcon className="h-3.5 w-3.5 text-blue-500" />
                                         <span className="text-[13px] font-bold text-foreground leading-none">{planningData[2].values[i]}</span>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="flex flex-col items-center gap-1 px-3 py-2 bg-zinc-950 border border-border shadow-2xl [&>svg]:!fill-zinc-950 [&>svg]:!bg-zinc-950">
-                                        <span className="text-[10px] uppercase text-blue-500 font-bold tracking-widest leading-none">Routes Assigned</span>
-                                        <span className="text-2xl font-black text-foreground">{planningData[2].values[i]}</span>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-
-                                  <TooltipProvider delayDuration={0}>
-                                    <Tooltip>
-                                      <TooltipTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-default focus:outline-none">
+                                      </div>
+                                      <div className="flex items-center gap-1">
                                         <Wrench className="h-3.5 w-3.5 text-orange-500" />
                                         <span className="text-[13px] font-bold text-foreground leading-none">{planningData[3].values[i]}</span>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="flex flex-col items-center gap-1 px-3 py-2 bg-zinc-950 border border-border shadow-2xl [&>svg]:!fill-zinc-950 [&>svg]:!bg-zinc-950">
-                                        <span className="text-[10px] uppercase text-orange-500 font-bold tracking-widest leading-none">Ops</span>
-                                        <span className="text-2xl font-black text-foreground">{planningData[3].values[i]}</span>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-
-                                  <TooltipProvider delayDuration={0}>
-                                    <Tooltip>
-                                      <TooltipTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-default focus:outline-none">
+                                      </div>
+                                      <div className="flex items-center gap-1">
                                         <UserPlus className="h-3.5 w-3.5 text-purple-500" />
                                         <span className="text-[13px] font-bold text-foreground leading-none">{planningData[4].values[i]}</span>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="flex flex-col items-center gap-1 px-3 py-2 bg-zinc-950 border border-border shadow-2xl [&>svg]:!fill-zinc-950 [&>svg]:!bg-zinc-950">
-                                        <span className="text-[10px] uppercase text-purple-500 font-bold tracking-widest leading-none">Extra DA's</span>
-                                        <span className="text-2xl font-black text-foreground">{planningData[4].values[i]}</span>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-
-                                </div>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="bottom" className="w-[200px] p-0 bg-popover text-popover-foreground border shadow-xl rounded-xl [&>svg]:hidden">
+                                      <div className="font-semibold px-3 py-2 border-b border-border/40 bg-muted/40 text-xs">
+                                        Daily Planning Metrics
+                                      </div>
+                                      <div className="flex flex-col py-1">
+                                        <div className="flex items-center justify-between px-3 py-1.5 hover:bg-muted/30 transition-colors">
+                                          <div className="flex items-center gap-2">
+                                            <Users className="h-3.5 w-3.5 text-emerald-500" />
+                                            <span className="text-xs font-medium">DA's</span>
+                                          </div>
+                                          <span className="text-sm font-bold font-mono">{planningData[0].values[i]}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between px-3 py-1.5 hover:bg-muted/30 transition-colors">
+                                          <div className="flex items-center gap-2">
+                                            <Clock className="h-3.5 w-3.5 text-cyan-500" />
+                                            <span className="text-xs font-medium">Stand By</span>
+                                          </div>
+                                          <span className="text-sm font-bold font-mono">{planningData[1].values[i]}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between px-3 py-1.5 hover:bg-muted/30 transition-colors">
+                                          <div className="flex items-center gap-2">
+                                            <TruckIcon className="h-3.5 w-3.5 text-blue-500" />
+                                            <span className="text-xs font-medium">Routes Assigned</span>
+                                          </div>
+                                          <span className="text-sm font-bold font-mono">{planningData[2].values[i]}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between px-3 py-1.5 hover:bg-muted/30 transition-colors">
+                                          <div className="flex items-center gap-2">
+                                            <Wrench className="h-3.5 w-3.5 text-orange-500" />
+                                            <span className="text-xs font-medium">OPS</span>
+                                          </div>
+                                          <span className="text-sm font-bold font-mono">{planningData[3].values[i]}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between px-3 py-1.5 hover:bg-muted/30 transition-colors">
+                                          <div className="flex items-center gap-2">
+                                            <UserPlus className="h-3.5 w-3.5 text-purple-500" />
+                                            <span className="text-xs font-medium">Extra DA's</span>
+                                          </div>
+                                          <span className="text-sm font-bold font-mono">{planningData[4].values[i]}</span>
+                                        </div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
                               )}
                             </div>
                           </th>
@@ -1514,12 +1539,7 @@ export default function SchedulingPage() {
                                                         <span>{van}</span>
                                                       </>
                                                     )}
-                                                    {day?.note && (
-                                                      <>
-                                                        <span className="text-muted-foreground">Note:</span>
-                                                        <span>{day.note}</span>
-                                                      </>
-                                                    )}
+
                                                   </div>
                                                   {warning && (
                                                     <div className={cn(
@@ -1544,7 +1564,7 @@ export default function SchedulingPage() {
                                                   Change Type
                                                 </DropdownMenuLabel>
                                                 <DropdownMenuSeparator />
-                                                {TYPE_OPTIONS.map(opt => {
+                                                {dynamicTypeOptions.map(opt => {
                                                   const Icon = opt.icon;
                                                   const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();
                                                   return (
