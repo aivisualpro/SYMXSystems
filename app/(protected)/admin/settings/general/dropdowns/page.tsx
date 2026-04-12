@@ -45,7 +45,7 @@ const COLOR_OPTIONS = [
     "#D2B48C", "#DEB887", "#F5DEB3", "#FFFBF1",
 ];
 
-const LUCIDE_ICONS = [...new Set([
+export const LUCIDE_ICONS = [...new Set([
     // General & Status
     "Activity", "AlertCircle", "AlertTriangle", "Award", "Ban", "Bell", "BellDot", "BellOff",
     "BellRing", "Bookmark", "BookmarkCheck", "Box", "Boxes", "Briefcase", "Bug", "Calculator",
@@ -242,7 +242,7 @@ function ColorPicker({ value, onChange, disabled }: { value: string, onChange: (
     );
 }
 
-function IconPicker({ value, onChange, disabled }: { value: string, onChange: (v: string) => void, disabled: boolean }) {
+export function IconPicker({ value, onChange, disabled }: { value: string, onChange: (v: string) => void, disabled: boolean }) {
     const [search, setSearch] = useState("");
     const filtered = useMemo(() => {
         if (!search) return LUCIDE_ICONS;

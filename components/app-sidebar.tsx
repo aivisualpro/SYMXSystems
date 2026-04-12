@@ -16,7 +16,7 @@ import {
   IconCrown,
   IconTruckDelivery,
   IconCalendarTime,
-  IconSun,
+  IconCalendarEvent,
   IconCar,
   IconUsersGroup,
   IconAlertTriangle,
@@ -56,7 +56,7 @@ const ICON_MAP: Record<string, any> = {
   IconCrown,
   IconTruckDelivery,
   IconCalendarTime,
-  IconSun,
+  IconCalendarEvent,
   IconCar,
   IconUsersGroup,
   IconAlertTriangle,
@@ -150,7 +150,7 @@ const data = {
     {
       name: "Everyday",
       url: "/everyday",
-      icon: IconTarget,
+      icon: IconCalendarEvent,
       subModules: []
     },
     {
@@ -257,7 +257,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             fetchedModules = modulesData.modules.map((m: any) => ({
               name: m.name,
               url: m.url || "#",
-              icon: ICON_MAP[m.icon] || IconDashboard,
+              icon: m.name === "Everyday" ? ICON_MAP["IconCalendarEvent"] : (ICON_MAP[m.icon] || IconDashboard),
               subModules: (m.subModules || []).map((sm: any) => ({
                 name: sm.name,
                 url: sm.url || "#",

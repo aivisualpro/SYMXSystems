@@ -15,7 +15,7 @@ import {
   BellRing,
   Calendar,
   CalendarDays,
-  Map,
+  Map as MapIcon,
   Phone,
   MessageSquare,
   ChevronDown,
@@ -36,6 +36,19 @@ import {
   File as FileIcon,
   ToggleLeft,
   ToggleRight,
+  Navigation,
+  DoorOpen,
+  DoorClosed,
+  Coffee,
+  PhoneOff,
+  GraduationCap,
+  Truck as TruckIcon,
+  CalendarOff,
+  UserCheck,
+  BookOpen,
+  Ban,
+  ShieldAlert,
+  Minus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -265,18 +278,6 @@ interface SubTab {
 
 const SUB_TABS: SubTab[] = [
   {
-    id: "future-shift",
-    label: "Future Shift Notification",
-    icon: BellRing,
-    description: "Notify employees about their upcoming scheduled shifts",
-    gradient: "from-blue-500/15 to-cyan-500/15",
-    iconColor: "text-blue-500",
-    borderColor: "border-blue-500/30",
-    defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease confirm here: {confirmationLink}\n\nSee you tomorrow!",
-    variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
-  },
-  {
     id: "shift",
     label: "Shift Notification",
     icon: Bell,
@@ -289,17 +290,28 @@ const SUB_TABS: SubTab[] = [
     variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
   },
   {
-    id: "off-tomorrow",
-    label: "Off Today - Schedule Tomorrow",
-    icon: Calendar,
-    description: "Notify employees who are off today but scheduled tomorrow",
-    gradient: "from-amber-500/15 to-orange-500/15",
-    iconColor: "text-amber-500",
-    borderColor: "border-amber-500/30",
+    id: "future-shift",
+    label: "Future Shift Notification",
+    icon: BellRing,
+    description: "Notify employees about their upcoming scheduled shifts",
+    gradient: "from-blue-500/15 to-cyan-500/15",
+    iconColor: "text-blue-500",
+    borderColor: "border-blue-500/30",
     defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are off today. Reminder: you are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease confirm here: {confirmationLink}\n\nSee you tomorrow!",
+      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease confirm here: {confirmationLink}\n\nSee you tomorrow!",
     variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
-    hidden: true,
+  },
+  {
+    id: "route-itinerary",
+    label: "Route Itinerary",
+    icon: MapIcon,
+    description: "Share route details and itinerary with drivers",
+    gradient: "from-rose-500/15 to-pink-500/15",
+    iconColor: "text-rose-500",
+    borderColor: "border-rose-500/30",
+    defaultMessage:
+      "Hello {name}\n\n{dayOfWeek} {date}\n\nYour route itinerary has been updated. Please review your assigned route for today. Thank you!",
+    variables: ["name", "dayOfWeek", "date", "confirmationLink"],
   },
   {
     id: "week-schedule",
@@ -314,18 +326,6 @@ const SUB_TABS: SubTab[] = [
     variables: ["name", "yearWeek", "weekSchedule", "confirmationLink"],
   },
   {
-    id: "route-itinerary",
-    label: "Route Itinerary",
-    icon: Map,
-    description: "Share route details and itinerary with drivers",
-    gradient: "from-rose-500/15 to-pink-500/15",
-    iconColor: "text-rose-500",
-    borderColor: "border-rose-500/30",
-    defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYour route itinerary has been updated. Please review your assigned route for today. Thank you!",
-    variables: ["name", "dayOfWeek", "date", "confirmationLink"],
-  },
-  {
     id: "flyer",
     label: "Flyer",
     icon: Megaphone,
@@ -335,6 +335,19 @@ const SUB_TABS: SubTab[] = [
     borderColor: "border-orange-500/30",
     defaultMessage: "",
     variables: ["name"],
+  },
+  {
+    id: "off-tomorrow",
+    label: "Off Today - Schedule Tomorrow",
+    icon: Calendar,
+    description: "Notify employees who are off today but scheduled tomorrow",
+    gradient: "from-amber-500/15 to-orange-500/15",
+    iconColor: "text-amber-500",
+    borderColor: "border-amber-500/30",
+    defaultMessage:
+      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are off today. Reminder: you are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease confirm here: {confirmationLink}\n\nSee you tomorrow!",
+    variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
+    hidden: true,
   },
 ];
 
@@ -1270,13 +1283,32 @@ function MessagingSubTab({
                     {/* Schedule Type */}
                     {nextShift ? (() => {
                       const typeKey = nextShift.type.toLowerCase().trim();
-                      const color = routeTypeMap[typeKey] || "#10b981";
+                      const color = routeTypeMap[typeKey] || "#10b981"; // dynamic pull from DB
+                      
+                      let CellIcon = Navigation;
+                      let isOff = false;
+                      if (typeKey === "open") CellIcon = DoorOpen;
+                      else if (typeKey === "close") CellIcon = DoorClosed;
+                      else if (["off", "request off"].includes(typeKey)) { CellIcon = Coffee; isOff = true; }
+                      else if (typeKey === "call out") CellIcon = PhoneOff;
+                      else if (typeKey.includes("train")) CellIcon = GraduationCap;
+                      else if (typeKey === "fleet") CellIcon = TruckIcon;
+                      else if (typeKey === "trainer") CellIcon = UserCheck;
+                      else if (typeKey === "suspension") CellIcon = Ban;
+                      else if (typeKey === "modified duty") CellIcon = ShieldAlert;
+                      else if (typeKey === "stand by") CellIcon = Clock;
+
                       return (
                         <span
-                          className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded truncate"
-                          style={{ backgroundColor: color + "20", color: color }}
+                          className="flex items-center justify-center gap-1 min-w-[70px] w-max h-6 rounded-md text-[10px] font-semibold tracking-wide border px-2 shadow-sm"
+                          style={{
+                            backgroundColor: isOff ? "transparent" : color,
+                            color: isOff ? color : "#ffffff",
+                            borderColor: isOff ? `${color}40` : color
+                          }}
                         >
-                          {nextShift.type}
+                          <CellIcon className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{nextShift.type}</span>
                         </span>
                       );
                     })() : (
@@ -1843,7 +1875,7 @@ export default function MessagingPanel({
   }, [selectedWeek]);
 
   const [selectedDate, setSelectedDate] = useState("");
-  const [showOffToday, setShowOffToday] = useState(false);
+  const [showOffToday, setShowOffToday] = useState(true);
 
   // Auto-select today when week changes
   useEffect(() => {
@@ -2039,7 +2071,7 @@ export default function MessagingPanel({
     <TooltipProvider delayDuration={200}>
       <div className="flex flex-col h-full gap-3">
         {/* ── Sub-Tab Navigation ── */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+        <div className="flex items-center gap-1 overflow-x-auto py-1 px-1 -mx-1">
           {SUB_TABS.filter(tab => !tab.hidden).map((tab) => {
             const isActive = resolvedTab === tab.id;
             return (

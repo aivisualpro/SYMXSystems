@@ -10,11 +10,13 @@ import { restrictToVerticalAxis, restrictToWindowEdges } from "@dnd-kit/modifier
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useAddRef } from "../layout";
+import { IconPicker } from "../dropdowns/page";
 
 interface RouteTypeRow {
     _id?: string;
     name: string;
     color: string;
+    icon: string;
     startTime: string;
     routeStatus: string;
     sortOrder: number;
@@ -28,6 +30,11 @@ export default function DefaultRoutesPage() {
     const [routes, setRoutes] = useState<RouteTypeRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState<string | null>(null);
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -76,6 +83,7 @@ export default function DefaultRoutesPage() {
         setRoutes(prev => [...prev, {
             name: "",
             color: "#6B7280",
+            icon: "",
             startTime: "",
             routeStatus: "Scheduled",
             sortOrder: prev.length,
@@ -100,7 +108,7 @@ export default function DefaultRoutesPage() {
             const res = await fetch("/api/admin/settings/route-types", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ _id: row._id, name: row.name, color: row.color, startTime: row.startTime, routeStatus: row.routeStatus, sortOrder: row.sortOrder, isActive: row.isActive }),
+                body: JSON.stringify({ _id: row._id, name: row.name, color: row.color, icon: row.icon, startTime: row.startTime, routeStatus: row.routeStatus, sortOrder: row.sortOrder, isActive: row.isActive }),
             });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
             const saved = await res.json();
@@ -160,24 +168,60 @@ export default function DefaultRoutesPage() {
 
     return (
         <div className="space-y-4">
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}>
+            {isMounted ? (
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}>
+                    <div className="rounded-lg border border-border overflow-hidden">
+                        <table className="w-full">
+                        <thead>
+                            <tr className="bg-muted/50 border-b border-border">
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[50px]">#</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">Route Type</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Route Status</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Start Time</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Color</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Icon</th>
+                                <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {routes.length === 0 && (
+                                <tr><td colSpan={6} className="text-center text-sm text-muted-foreground py-8">No route types configured. Click &quot;Add Route Type&quot; to get started.</td></tr>
+                            )}
+                            <SortableContext items={routes.map((r, i) => r._id || `new-${i}`)} strategy={verticalListSortingStrategy}>
+                                {routes.map((route, idx) => (
+                                    <SortableRouteRow 
+                                        key={route._id || `new-${idx}`}
+                                        route={route}
+                                        idx={idx}
+                                        totalCount={routes.length}
+                                        saving={saving}
+                                        updateField={updateField}
+                                        saveRow={saveRow}
+                                        cancelEdit={cancelEdit}
+                                        deleteRow={deleteRow}
+                                        moveRow={moveRow}
+                                    />
+                                ))}
+                            </SortableContext>
+                        </tbody>
+                    </table>
+                </div>
+                </DndContext>
+            ) : (
                 <div className="rounded-lg border border-border overflow-hidden">
                     <table className="w-full">
-                    <thead>
-                        <tr className="bg-muted/50 border-b border-border">
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[50px]">#</th>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">Route Type</th>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Route Status</th>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Color</th>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Start Time</th>
-                            <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {routes.length === 0 && (
-                            <tr><td colSpan={6} className="text-center text-sm text-muted-foreground py-8">No route types configured. Click &quot;Add Route Type&quot; to get started.</td></tr>
-                        )}
-                        <SortableContext items={routes.map((r, i) => r._id || `new-${i}`)} strategy={verticalListSortingStrategy}>
+                        <thead>
+                            <tr className="bg-muted/50 border-b border-border">
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[50px]">#</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">Route Type</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Route Status</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Start Time</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Color</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Icon</th>
+                                <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
                             {routes.map((route, idx) => (
                                 <SortableRouteRow 
                                     key={route._id || `new-${idx}`}
@@ -192,11 +236,10 @@ export default function DefaultRoutesPage() {
                                     moveRow={moveRow}
                                 />
                             ))}
-                        </SortableContext>
-                    </tbody>
-                </table>
-            </div>
-            </DndContext>
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </div>
     );
 }
@@ -226,15 +269,18 @@ function SortableRouteRow({ route, idx, totalCount, saving, updateField, saveRow
                     )}
                 </div>
             </td>
-            <td className="px-4 py-2"><Input value={route.name || ""} onChange={(e) => updateField(idx, "name", e.target.value)} placeholder="e.g. Route, Open, Close..." className="h-8 text-sm" /></td>
-            <td className="px-4 py-2"><Input value={route.routeStatus || ""} onChange={(e) => updateField(idx, "routeStatus", e.target.value)} placeholder="e.g. Scheduled, Off..." className="h-8 text-sm" /></td>
+            <td className="px-4 py-2"><Input value={route.name || ""} onChange={(e) => updateField(idx, "name", e.target.value)} placeholder="e.g. Route, Open, Close..." className="h-8 text-sm" disabled={!route.isEditing && !route.isNew} /></td>
+            <td className="px-4 py-2"><Input value={route.routeStatus || ""} onChange={(e) => updateField(idx, "routeStatus", e.target.value)} placeholder="e.g. Scheduled, Off..." className="h-8 text-sm" disabled={!route.isEditing && !route.isNew} /></td>
+            <td className="px-4 py-2"><Input value={route.startTime || ""} onChange={(e) => updateField(idx, "startTime", e.target.value)} placeholder="e.g. 06:00 AM" className="h-8 text-sm" disabled={!route.isEditing && !route.isNew} /></td>
             <td className="px-4 py-2">
                 <div className="flex items-center gap-2">
-                    <input type="color" value={route.color || "#6B7280"} onChange={(e) => updateField(idx, "color", e.target.value)} className="h-8 w-8 rounded cursor-pointer border border-border bg-transparent" />
-                    <Input value={route.color || ""} onChange={(e) => updateField(idx, "color", e.target.value)} className="h-8 text-xs font-mono w-[80px]" placeholder="#HEX" />
+                    <input type="color" value={route.color || "#6B7280"} onChange={(e) => updateField(idx, "color", e.target.value)} className="h-8 w-8 rounded cursor-pointer border border-border bg-transparent" disabled={!route.isEditing && !route.isNew} />
+                    <Input value={route.color || ""} onChange={(e) => updateField(idx, "color", e.target.value)} className="h-8 text-xs font-mono w-[80px]" placeholder="#HEX" disabled={!route.isEditing && !route.isNew} />
                 </div>
             </td>
-            <td className="px-4 py-2"><Input value={route.startTime || ""} onChange={(e) => updateField(idx, "startTime", e.target.value)} placeholder="e.g. 06:00 AM" className="h-8 text-sm" /></td>
+            <td className="px-4 py-2">
+                <IconPicker value={route.icon || ""} onChange={(v) => updateField(idx, "icon", v)} disabled={!route.isEditing && !route.isNew} />
+            </td>
             <td className="px-4 py-2">
                 <div className="flex items-center justify-end gap-1">
                     {route.isEditing && (
@@ -258,3 +304,4 @@ function SortableRouteRow({ route, idx, totalCount, saving, updateField, saveRow
         </tr>
     );
 }
+ 

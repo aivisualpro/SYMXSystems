@@ -43,9 +43,11 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { EmployeeNotesPanel } from "@/components/scheduling/employee-notes-panel";
 import {
   Select,
   SelectContent,
@@ -74,6 +76,7 @@ interface TypeOption {
   text: string;
   border: string;
   dotColor: string;
+  colorHex?: string;
 }
 
 const TYPE_OPTIONS: TypeOption[] = [
@@ -422,7 +425,7 @@ export default function SchedulingPage() {
   );
   const [activeSubTab, setActiveSubTab] = useState<string>(() => {
     const match = pathname.match(/\/scheduling\/messaging\/([^\/]+)/);
-    return match?.[1] || "future-shift";
+    return match?.[1] || "shift";
   });
 
   // ── Sync state changes to URL ──
@@ -472,6 +475,12 @@ export default function SchedulingPage() {
   const [auditEmployee, setAuditEmployee] = useState<{ transporterId: string; name: string } | null>(null);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+
+  // Notes state
+  const [noteCounts, setNoteCounts] = useState<Record<string, number>>({});
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const [notesEmployee, setNotesEmployee] = useState<{ employeeId: string; transporterId: string; name: string } | null>(null);
+
   const { setLeftContent, setRightContent } = useHeaderActions();
 
   // Wrapped setter that also updates URL
@@ -551,6 +560,16 @@ export default function SchedulingPage() {
         })
         .catch(() => { });
     }
+
+    // Fetch initial notes counts globally for all employees
+    fetch("/api/schedules/notes?getCounts=true")
+      .then(res => res.json())
+      .then(data => {
+        if (data.counts) {
+          setNoteCounts(data.counts);
+        }
+      })
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -576,9 +595,13 @@ export default function SchedulingPage() {
         border: "border-emerald-700",
         dotColor: "bg-emerald-500"
       };
+      const DBIcon = rt.icon ? (LucideIcons as any)[rt.icon] : null;
+
       return {
         ...fallback,
         label: rt.name, // Ensure exact casing from DB used for dropdown label
+        colorHex: rt.color,
+        icon: DBIcon || fallback.icon,
       };
     });
   }, [routeTypesList]);
@@ -1029,6 +1052,9 @@ export default function SchedulingPage() {
       }
       toast.success(`Type updated to ${newType}`);
 
+      // Invalidate dispatching routes globally so it's fresh when navigating away
+      store.refresh("dispatching.routes");
+
       // Update audit count for this employee
       setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
 
@@ -1303,10 +1329,11 @@ export default function SchedulingPage() {
                               {/* 1. Ultra-sleek Date row */}
                               <div className={cn(
                                 "flex items-baseline justify-center gap-1.5 w-full max-w-[130px] px-2 py-0.5 rounded-full border transition-colors",
-                                "bg-blue-500 text-white border-blue-400 shadow-sm"
+                                isToday ? "bg-emerald-500 text-white border-emerald-400 shadow-sm" : "bg-blue-500 text-white border-blue-400 shadow-sm"
                               )}>
                                 <span className={cn(
-                                  "text-[10px] uppercase font-bold tracking-widest text-blue-100"
+                                  "text-[10px] uppercase font-bold tracking-widest",
+                                  isToday ? "text-emerald-100" : "text-blue-100"
                                 )}>
                                   {DAY_NAMES[i]}
                                 </span>
@@ -1391,6 +1418,7 @@ export default function SchedulingPage() {
                           );
                         })}
                         <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[36px] sm:min-w-[50px]">Days</th>
+                        <th className="w-[30px] hidden md:table-cell py-2 px-0"></th>
                         <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[180px] hidden md:table-cell">Note</th>
                         <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[40px] sm:min-w-[60px]">
                           <div className="inline-flex items-center gap-1 text-violet-400">
@@ -1470,7 +1498,7 @@ export default function SchedulingPage() {
                                         const type = day?.type || "";
                                         const displayValue = type || status || "";
                                         const style = getTypeStyle(displayValue);
-                                        const matchedOpt = TYPE_MAP.get(displayValue.toLowerCase());
+                                        const matchedOpt = dynamicTypeOptions.find(opt => opt.label.toLowerCase() === displayValue.toLowerCase());
                                         const CellIcon = matchedOpt?.icon;
                                         const warning = consecutiveWarnings.get(dayIdx);
 
@@ -1483,11 +1511,12 @@ export default function SchedulingPage() {
                                                     <div
                                                       className={cn(
                                                         "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
-                                                        style.bg,
-                                                        style.text,
-                                                        style.border,
+                                                        !matchedOpt?.colorHex && style.bg,
+                                                        !matchedOpt?.colorHex && style.text,
+                                                        !matchedOpt?.colorHex && style.border,
                                                         "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
                                                       )}
+                                                      style={matchedOpt?.colorHex ? { backgroundColor: matchedOpt.colorHex, color: "#fff", borderColor: matchedOpt.colorHex } : undefined}
                                                     >
                                                       {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
                                                       <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
@@ -1574,8 +1603,14 @@ export default function SchedulingPage() {
                                                         )}
                                                         onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name)}
                                                       >
-                                                        <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", opt.bg)}>
-                                                          <Icon className={cn("h-3 w-3", opt.text)} />
+                                                        <div 
+                                                          className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", !opt.colorHex && opt.bg)}
+                                                          style={opt.colorHex ? { backgroundColor: opt.colorHex } : undefined}
+                                                        >
+                                                          <Icon 
+                                                            className={cn("h-3 w-3", !opt.colorHex && opt.text)} 
+                                                            style={opt.colorHex ? { color: "#fff" } : undefined}
+                                                          />
                                                         </div>
                                                         <span className="font-medium">{opt.label}</span>
                                                         {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
@@ -1601,6 +1636,34 @@ export default function SchedulingPage() {
                                         )}>
                                           {workDays}
                                         </span>
+                                      </td>
+                                      <td className="w-[34px] px-1 text-center hidden md:table-cell align-middle">
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              onClick={async () => {
+                                                setNotesEmployee({ employeeId: emp.employee?._id || "", transporterId: emp.transporterId, name: emp.employee?.name || emp.transporterId });
+                                                setShowNotesPanel(true);
+                                              }}
+                                              className={cn(
+                                                "inline-flex items-center justify-center p-1.5 rounded-md transition-all relative mt-1",
+                                                (noteCounts[emp.transporterId] || 0) > 0
+                                                  ? "bg-blue-500/10 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20"
+                                                  : "text-muted-foreground/30 hover:text-muted-foreground/60 hover:bg-muted/40"
+                                              )}
+                                            >
+                                              <FileText className="h-[14px] w-[14px]" />
+                                              {(noteCounts[emp.transporterId] || 0) > 0 && (
+                                                <span className="absolute -top-1.5 -right-1.5 bg-blue-500 text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center ring-2 ring-background">
+                                                  {noteCounts[emp.transporterId]}
+                                                </span>
+                                              )}
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="text-xs">
+                                            Employee Notes
+                                          </TooltipContent>
+                                        </Tooltip>
                                       </td>
                                       <td className="px-2 sm:px-3 py-1.5 hidden md:table-cell">
                                         <EditableNote
@@ -1792,6 +1855,13 @@ export default function SchedulingPage() {
           </div>
         </div>
       )}
+      {/* ── Employee Notes Slide-out Panel ── */}
+      <EmployeeNotesPanel
+        open={showNotesPanel}
+        onClose={() => setShowNotesPanel(false)}
+        employee={notesEmployee}
+        onNoteAdded={(tid) => setNoteCounts(prev => ({ ...prev, [tid]: (prev[tid] || 0) + 1 }))}
+      />
     </TooltipProvider>
   );
 }
