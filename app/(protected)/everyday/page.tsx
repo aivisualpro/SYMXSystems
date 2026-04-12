@@ -2,12 +2,13 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, type LucideIcon } from "lucide-react";
+import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
     Select,
     SelectContent,
@@ -106,6 +107,34 @@ export default function EverydayAfterDispatchingPage() {
     const [isSavingRTS, setIsSavingRTS] = useState(false);
     const [rtsMap, setRtsMap] = useState<Record<string, any>>({});
 
+    const [rescueModalOpen, setRescueModalOpen] = useState(false);
+    const [rescueModalRoute, setRescueModalRoute] = useState<RoutesTableRow | null>(null);
+    const [rescueBy, setRescueBy] = useState("");
+    const [rescueBySearch, setRescueBySearch] = useState("");
+    const [rescueByOpen, setRescueByOpen] = useState(false);
+    const [rescueStops, setRescueStops] = useState("");
+    const [rescueReason, setRescueReason] = useState("");
+    const [rescuePerformance, setRescuePerformance] = useState(false);
+    const [rescueReasonsList, setRescueReasonsList] = useState<string[]>([]);
+    const [rescueMap, setRescueMap] = useState<Record<string, any>>({});
+    const [isSavingRescue, setIsSavingRescue] = useState(false);
+
+    const [allEmployees, setAllEmployees] = useState<any[]>([]);
+
+    useEffect(() => {
+        fetch("/api/admin/employees?limit=2000&terminated=false")
+            .then(r => r.json())
+            .then(data => {
+                const arr = data.records || data.employees || (Array.isArray(data) ? data : []);
+                setAllEmployees(arr.sort((a: any, b: any) => {
+                    const fnA = `${a.firstName || ''} ${a.lastName || ''}`.trim() || a.name || "";
+                    const fnB = `${b.firstName || ''} ${b.lastName || ''}`.trim() || b.name || "";
+                    return fnA.localeCompare(fnB);
+                }));
+            })
+            .catch(err => console.error(err));
+    }, []);
+
     const openRTSModal = (row: RoutesTableRow) => {
         setRtsModalRoute(row);
         const existingData = rtsMap[row._id];
@@ -156,6 +185,61 @@ export default function EverydayAfterDispatchingPage() {
         }
     };
 
+    const openRescueModal = (row: RoutesTableRow) => {
+        setRescueModalRoute(row);
+        const existingData = rescueMap[row._id];
+        setRescueBy(existingData ? existingData.rescuedBytransporterId : "");
+        setRescueStops(existingData ? existingData.stopsRescued.toString() : "");
+        setRescueReason(existingData ? existingData.reason : "");
+        setRescuePerformance(existingData ? existingData.performanceRescue : false);
+        setRescueBySearch("");
+        setRescueByOpen(false);
+        setRescueModalOpen(true);
+    };
+
+    const handleSaveRescue = async () => {
+        if (!rescueModalRoute || !rescueBy || !rescueStops || !rescueReason) {
+            toast.error("Please fill in all rescue fields");
+            return;
+        }
+        setIsSavingRescue(true);
+        try {
+            const res = await fetch("/api/everyday/rescue", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    routeId: rescueModalRoute._id,
+                    date: date,
+                    transporterId: rescueModalRoute.transporterId,
+                    rescuedBytransporterId: rescueBy,
+                    stopsRescued: Number(rescueStops),
+                    reason: rescueReason.trim(),
+                    performanceRescue: rescuePerformance
+                })
+            });
+            if (!res.ok) throw new Error("Failed to save Rescue");
+            
+            toast.success("Rescue recorded successfully");
+            setRescueModalOpen(false);
+
+            if (res.ok) {
+                const updatedObj = await res.json();
+                setRescueMap(prev => ({
+                    ...prev,
+                    [rescueModalRoute._id]: updatedObj.rescue
+                }));
+            }
+
+            if (!rescueReasonsList.includes(rescueReason.trim())) {
+                setRescueReasonsList(prev => [...prev, rescueReason.trim()]);
+            }
+        } catch (e) {
+            toast.error("Failed to save Rescue record");
+        } finally {
+            setIsSavingRescue(false);
+        }
+    };
+
     const toggleGroup = (group: string) => {
         setCollapsedGroups(prev => ({ ...prev, [group]: !prev[group] }));
     };
@@ -170,9 +254,6 @@ export default function EverydayAfterDispatchingPage() {
                     <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent leading-none">
                         Everyday
                     </h1>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mt-1">
-                        Daily Operational Review
-                    </p>
                 </div>
             </div>
         );
@@ -334,11 +415,12 @@ export default function EverydayAfterDispatchingPage() {
                 setDebounceNotes(fetchedNotes); // prevent instant auto-save on load
             }
 
-            // 2. Fetch routes, schedules, and rts
-            const [routesRes, schedulesRes, rtsRes] = await Promise.all([
+            // 2. Fetch routes, schedules, rts, and rescue
+            const [routesRes, schedulesRes, rtsRes, rescueRes] = await Promise.all([
                 fetch(`/api/dispatching/routes?yearWeek=${selectedWeek}&date=${date}`),
                 fetch(`/api/everyday/schedules?dateStr=${date}`),
-                fetch(`/api/everyday/rts?dateStr=${date}`)
+                fetch(`/api/everyday/rts?dateStr=${date}`),
+                fetch(`/api/everyday/rescue?dateStr=${date}`)
             ]);
 
             if (routesRes.ok) {
@@ -370,6 +452,18 @@ export default function EverydayAfterDispatchingPage() {
                 setRtsMap(tm);
             } else {
                 setRtsMap({});
+            }
+
+            if (rescueRes.ok) {
+                const resData = await rescueRes.json();
+                if (resData.reasons) setRescueReasonsList(resData.reasons);
+                const rm: Record<string, any> = {};
+                (resData.records || []).forEach((r: any) => {
+                    rm[r.routeId] = r;
+                });
+                setRescueMap(rm);
+            } else {
+                setRescueMap({});
             }
         } catch (error) {
             console.error(error);
@@ -497,6 +591,36 @@ export default function EverydayAfterDispatchingPage() {
                 return a.type.localeCompare(b.type);
             });
     }, [routes, employeesMap, schedulesMap]);
+
+    const rtsEntries = useMemo(() => {
+        return Object.values(rtsMap).map((rts: any) => {
+             const route = routes.find(r => r._id === rts.routeId);
+             const emp = employeesMap[rts.transporterId] || {};
+             return {
+                 _id: rts._id || rts.routeId,
+                 employeeName: route?.employeeName || emp.name || rts.transporterId,
+                 routeNumber: route?.routeNumber || "—",
+                 tba: rts.tba,
+                 reason: rts.reason
+             };
+        });
+    }, [rtsMap, routes, employeesMap]);
+
+    const rescueEntries = useMemo(() => {
+        return Object.values(rescueMap).map((rescue: any) => {
+             const route = routes.find(r => r._id === rescue.routeId);
+             const emp = employeesMap[rescue.transporterId] || {};
+             const rescuerName = allEmployees.find(e => e.transporterId === rescue.rescuedBytransporterId)?.name || rescue.rescuedBytransporterId;
+             return {
+                 _id: rescue._id || rescue.routeId,
+                 employeeName: route?.employeeName || emp.name || rescue.transporterId,
+                 rescuerName,
+                 stopsRescued: rescue.stopsRescued,
+                 reason: rescue.reason,
+                 performanceRescue: rescue.performanceRescue
+             };
+        });
+    }, [rescueMap, routes, employeesMap, allEmployees]);
 
     if (!date || weeks.length === 0) {
         return (
@@ -639,6 +763,7 @@ export default function EverydayAfterDispatchingPage() {
                             { key: "dayBeforeConfirmation",  label: "DB Confirmation", minW: 120, align: "center" },
                             { key: "deliveryCompletionTime", label: "Del. Comp. Time",  minW: 120, align: "center"  },
                             { key: "rts",                    label: "RTS",       minW: 60,  align: "center" },
+                            { key: "rescue",                 label: "Rescue",    minW: 70,  align: "center" },
                             { key: "routeNumber",            label: "Route #",   minW: 80  },
                             { key: "routeDuration",          label: "Duration",  minW: 80, align: "center"  },
                             { key: "stopCount",              label: "Stops",     minW: 56  },
@@ -716,6 +841,30 @@ export default function EverydayAfterDispatchingPage() {
                                     </div>
                                 );
                             }
+                            if (key === "rescue") {
+                                const hasRescue = !!rescueMap[row._id];
+                                return (
+                                    <div className="w-full flex items-center justify-center">
+                                        {hasRescue ? (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all shadow-sm border border-blue-500/20"
+                                                title="View Rescue"
+                                            >
+                                                <LifeBuoy className="h-4 w-4 text-blue-600 group-hover:text-blue-700 transition-colors cursor-pointer" />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-blue-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
+                                                title="Log Rescue"
+                                            >
+                                                <Activity className="h-4 w-4 text-foreground/70 group-hover:text-blue-500 transition-colors cursor-pointer" />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            }
                             if (key === "routeDuration") {
                                 const dur = row.routeDuration || "—";
                                 let formattedDur = dur;
@@ -752,8 +901,35 @@ export default function EverydayAfterDispatchingPage() {
                                 </div>
                                 <h3 className="font-bold tracking-wide">Rescue</h3>
                             </div>
-                            <div className="flex-1 flex items-center justify-center">
-                                <span className="text-muted-foreground/40 text-sm font-medium border border-dashed border-border/60 rounded-xl px-4 py-2 bg-muted/10">Module pending implementation</span>
+                            <div className="flex-1 overflow-auto rounded-md border border-border/50 bg-background/40 max-h-[300px]">
+                                {rescueEntries.length === 0 ? (
+                                    <div className="flex h-full items-center justify-center p-4">
+                                        <span className="text-muted-foreground/50 text-xs font-medium uppercase tracking-wider">No rescue records found</span>
+                                    </div>
+                                ) : (
+                                    <table className="w-full text-xs text-left relative">
+                                        <thead className="bg-muted/40 text-muted-foreground uppercase sticky top-0 backdrop-blur-md z-10 border-b border-border/50 shadow-sm">
+                                            <tr>
+                                                <th className="font-semibold p-2.5 pl-3">Employee</th>
+                                                <th className="font-semibold p-2.5">Rescued By</th>
+                                                <th className="font-semibold p-2.5 text-center">Stops</th>
+                                                <th className="font-semibold p-2.5 pr-3">Reason</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-border/40">
+                                            {rescueEntries.map((rescue) => (
+                                                <tr key={rescue._id} className="hover:bg-muted/20 transition-colors">
+                                                    <td className="p-2 pl-3 font-medium text-foreground/90 whitespace-nowrap">{rescue.employeeName}</td>
+                                                    <td className="p-2 text-muted-foreground">{rescue.rescuerName}</td>
+                                                    <td className="p-2 text-center">
+                                                        <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-blue-500/10 text-blue-600 font-mono tracking-wider text-[11px] border border-blue-500/20">{rescue.stopsRescued}</span>
+                                                    </td>
+                                                    <td className="p-2 pr-3 text-muted-foreground truncate max-w-[120px]" title={rescue.reason}>{rescue.reason}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
                             </div>
                         </div>
                     </Card>
@@ -770,8 +946,33 @@ export default function EverydayAfterDispatchingPage() {
                                 </div>
                                 <h3 className="font-bold tracking-wide">RTS</h3>
                             </div>
-                            <div className="flex-1 flex items-center justify-center">
-                                <span className="text-muted-foreground/40 text-sm font-medium border border-dashed border-border/60 rounded-xl px-4 py-2 bg-muted/10">Module pending implementation</span>
+                            <div className="flex-1 overflow-auto rounded-md border border-border/50 bg-background/40 max-h-[300px]">
+                                {rtsEntries.length === 0 ? (
+                                    <div className="flex h-full items-center justify-center p-4">
+                                        <span className="text-muted-foreground/50 text-xs font-medium uppercase tracking-wider">No records</span>
+                                    </div>
+                                ) : (
+                                    <table className="w-full text-xs text-left relative">
+                                        <thead className="bg-muted/40 text-muted-foreground uppercase sticky top-0 backdrop-blur-md z-10 border-b border-border/50 shadow-sm">
+                                            <tr>
+                                                <th className="font-semibold p-2.5 pl-3">Employee</th>
+                                                <th className="font-semibold p-2.5">TBA</th>
+                                                <th className="font-semibold p-2.5 pr-3">Reason</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-border/40">
+                                            {rtsEntries.map((rts) => (
+                                                <tr key={rts._id} className="hover:bg-muted/20 transition-colors">
+                                                    <td className="p-2 pl-3 font-medium text-foreground/90 whitespace-nowrap">{rts.employeeName}</td>
+                                                    <td className="p-2">
+                                                        <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-orange-500/10 text-orange-600 font-mono tracking-wider text-[10px] border border-orange-500/20">{rts.tba}</span>
+                                                    </td>
+                                                    <td className="p-2 pr-3 text-muted-foreground truncate max-w-[120px]" title={rts.reason}>{rts.reason}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
                             </div>
                         </div>
                     </Card>
@@ -832,6 +1033,146 @@ export default function EverydayAfterDispatchingPage() {
                         <Button disabled={isSavingRTS || !rtsTBA.trim() || !rtsReason.trim()} onClick={handleSaveRTS}>
                             {isSavingRTS && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Save RTS
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Rescue Modal */}
+            <Dialog open={rescueModalOpen} onOpenChange={setRescueModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add Rescue Record</DialogTitle>
+                    </DialogHeader>
+                    {rescueModalRoute && (
+                        <div className="space-y-4 pt-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-semibold text-muted-foreground uppercase">Employee</label>
+                                    <div className="p-2 border rounded-md bg-muted/50 text-sm font-medium">{rescueModalRoute.employeeName}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-muted-foreground uppercase">Date</label>
+                                    <div className="p-2 border rounded-md bg-muted/50 text-sm font-medium">{date}</div>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-semibold uppercase text-foreground mb-1 block">Rescued By</label>
+                                    <Popover open={rescueByOpen} onOpenChange={setRescueByOpen}>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" role="combobox" aria-expanded={rescueByOpen} className="w-full justify-between font-normal h-10 border-input bg-background/50 hover:bg-muted/30">
+                                                {rescueBy ? (
+                                                    (() => {
+                                                        const emp = allEmployees.find(e => e.transporterId === rescueBy);
+                                                        const fullName = emp ? `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name : rescueBy;
+                                                        return (
+                                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                                {emp?.profileImage ? (
+                                                                    <img src={emp.profileImage} alt={fullName} className="w-5 h-5 rounded-full object-cover shrink-0 bg-muted" />
+                                                                ) : (
+                                                                    <div className="w-5 h-5 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center text-[9px] font-bold shrink-0">
+                                                                        {fullName.charAt(0)}
+                                                                    </div>
+                                                                )}
+                                                                <span className="truncate">{fullName}</span>
+                                                            </div>
+                                                        );
+                                                    })()
+                                                ) : <span className="text-muted-foreground/70">Select employee...</span>}
+                                                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0 shadow-xl border-border/60" align="start">
+                                            <div className="flex items-center border-b px-3">
+                                                <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                                                <input 
+                                                    autoFocus
+                                                    className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 border-none"
+                                                    placeholder="Search employees..."
+                                                    value={rescueBySearch}
+                                                    onChange={(e) => setRescueBySearch(e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="max-h-[200px] overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+                                                {allEmployees.filter(emp => {
+                                                    const fn = `${emp.firstName||''} ${emp.lastName||''}`.toLowerCase();
+                                                        return fn.includes(rescueBySearch.toLowerCase()) || (emp.transporterId && emp.transporterId.toLowerCase().includes(rescueBySearch.toLowerCase()));
+                                                    }).map(emp => {
+                                                        const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || emp.transporterId;
+                                                        const isSelected = rescueBy === emp.transporterId;
+                                                        return (
+                                                            <div 
+                                                                key={emp.transporterId}
+                                                                className={cn(
+                                                                    "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-muted/50 transition-colors",
+                                                                    isSelected ? "bg-blue-500/10 text-blue-700 font-medium" : ""
+                                                                )}
+                                                                onClick={() => {
+                                                                    setRescueBy(emp.transporterId);
+                                                                    setRescueByOpen(false);
+                                                                    setRescueBySearch("");
+                                                                }}
+                                                            >
+                                                                <div className="flex items-center gap-2 w-full">
+                                                                    {emp.profileImage ? (
+                                                                        <img src={emp.profileImage} alt={fullName} className="w-6 h-6 rounded-full object-cover shadow-sm bg-muted shrink-0" />
+                                                                    ) : (
+                                                                        <div className="w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center text-[10px] font-bold uppercase ring-1 ring-blue-500/20 shrink-0">
+                                                                            {fullName.charAt(0)}
+                                                                        </div>
+                                                                    )}
+                                                                    <span className="truncate">{fullName}</span>
+                                                                    {isSelected && (
+                                                                        <Check className="ml-auto h-4 w-4 text-blue-600 shrink-0" />
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {allEmployees.length > 0 && allEmployees.filter(emp => {
+                                                        const fn = `${emp.firstName||''} ${emp.lastName||''}`.toLowerCase();
+                                                        return fn.includes(rescueBySearch.toLowerCase()) || (emp.transporterId && emp.transporterId.toLowerCase().includes(rescueBySearch.toLowerCase()));
+                                                    }).length === 0 && (
+                                                        <div className="py-6 text-center text-sm text-muted-foreground">
+                                                            No results found.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold uppercase text-foreground mb-1 block">Stops Rescued</label>
+                                    <Input type="number" placeholder="Stops" value={rescueStops} onChange={e => setRescueStops(e.target.value)} />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-xs font-semibold uppercase text-foreground mb-1 block">Reason</label>
+                                <Input list="rescue-reasons-list" placeholder="Select or type reason" value={rescueReason} onChange={e => setRescueReason(e.target.value)} />
+                                <datalist id="rescue-reasons-list">
+                                    {rescueReasonsList.map(r => <option key={r} value={r} />)}
+                                </datalist>
+                            </div>
+                            <div className="flex items-center gap-3 p-3 mt-2 border rounded-lg bg-card shadow-sm">
+                                <input
+                                    type="checkbox"
+                                    id="performance-rescue"
+                                    className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
+                                    checked={rescuePerformance}
+                                    onChange={(e) => setRescuePerformance(e.target.checked)}
+                                />
+                                <label htmlFor="performance-rescue" className="text-sm font-semibold cursor-pointer select-none">
+                                    Performance Rescue
+                                </label>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRescueModalOpen(false)}>Cancel</Button>
+                        <Button disabled={isSavingRescue || !rescueBy || !rescueStops || !rescueReason.trim()} onClick={handleSaveRescue} className="bg-blue-600 hover:bg-blue-700 text-white">
+                            {isSavingRescue && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Save Rescue
                         </Button>
                     </DialogFooter>
                 </DialogContent>
