@@ -148,6 +148,12 @@ const data = {
       ],
     },
     {
+      name: "Everyday",
+      url: "/everyday",
+      icon: IconTarget,
+      subModules: []
+    },
+    {
       name: "HR",
       url: "/hr",
       icon: IconUsersGroup,
