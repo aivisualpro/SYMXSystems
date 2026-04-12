@@ -40,6 +40,7 @@ import {
   History,
   FileText,
   ArrowRight,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -106,7 +107,7 @@ const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 // Working types — anything NOT in this list is considered "not working"
-const NON_WORKING_TYPES = new Set(["off", ""]);
+const NON_WORKING_TYPES = new Set(["off", "", "call out", "request off", "suspension", "stand by"]);
 
 function isWorkingDay(type: string): boolean {
   return !NON_WORKING_TYPES.has((type || "").trim().toLowerCase());
@@ -144,6 +145,7 @@ interface EmployeeSchedule {
     name: string;
     type: string;
     status: string;
+    ScheduleNotes?: string;
   } | null;
   weekNote: string;
   days: Record<number, DayData>;
@@ -457,7 +459,7 @@ export default function SchedulingPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-  const [planningCollapsed, setPlanningCollapsed] = useState(true);
+
   const [selectAllTrigger, setSelectAllTrigger] = useState(0);
   const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo | null>(null);
   const [generatingWeek, setGeneratingWeek] = useState(false);
@@ -778,14 +780,14 @@ export default function SchedulingPage() {
         {/* Scheduling Chips */}
         {activeMainTab === "scheduling" && (
           <div className="flex items-center gap-1.5 mr-2">
-            <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-950 dark:bg-zinc-950 border border-primary/20 text-[11px] font-semibold text-primary select-none">
+            <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-100 dark:bg-zinc-950 border border-primary/20 text-[11px] font-semibold text-primary select-none">
               <Users className="h-3.5 w-3.5" />
               {totalEmps}
             </div>
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-950 dark:bg-zinc-950 border border-emerald-500/30 text-[11px] font-semibold text-emerald-500 select-none cursor-default">
+                  <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-100 dark:bg-zinc-950 border border-emerald-500/30 text-[11px] font-semibold text-emerald-500 select-none cursor-default">
                     <CalendarDays className="h-3.5 w-3.5" />
                     {averageDays} avg
                   </div>
@@ -800,7 +802,7 @@ export default function SchedulingPage() {
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-950 dark:bg-zinc-950 border border-amber-500/30 text-[11px] font-semibold text-amber-500 select-none cursor-default">
+                  <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-100 dark:bg-zinc-950 border border-amber-500/30 text-[11px] font-semibold text-amber-500 select-none cursor-default">
                     <AlertTriangle className="h-3.5 w-3.5" />
                     {warningCounts.caution} × 6-day
                   </div>
@@ -820,7 +822,7 @@ export default function SchedulingPage() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div className={cn(
-                    "flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-950 dark:bg-zinc-950 border text-[11px] font-semibold select-none cursor-default",
+                    "flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-100 dark:bg-zinc-950 border text-[11px] font-semibold select-none cursor-default",
                     warningCounts.danger > 0 
                       ? "border-red-500/30 text-red-500 animate-pulse"
                       : "border-red-500/20 text-red-500/70"
@@ -1030,6 +1032,10 @@ export default function SchedulingPage() {
           if (emp.transporterId !== transporterId) return emp;
           return {
             ...emp,
+            employee: emp.employee ? {
+              ...emp.employee,
+              ScheduleNotes: newNote,
+            } : null,
             weekNote: newNote,
           };
         }),
@@ -1257,16 +1263,108 @@ export default function SchedulingPage() {
                         <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[180px] sticky left-0 bg-muted z-30 backdrop-blur-sm">
                           Employee Name
                         </th>
-                        {weekData?.dates?.map((date, i) => (
-                          <th key={date} className="text-center font-medium px-1 sm:px-2 py-2 sm:py-2.5 min-w-[70px] sm:min-w-[110px]">
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                                {DAY_NAMES[i]}
-                              </span>
-                              <span className="text-xs font-semibold">{formatDate(date)}</span>
+                        {weekData?.dates?.map((date, i) => {
+                          const isToday = date === new Date().toLocaleDateString("en-CA"); // "YYYY-MM-DD" local time
+                          const d = new Date(date.split("T")[0] + "T00:00:00Z");
+                          const dateNum = isNaN(d.getTime()) ? "" : d.getUTCDate();
+                          const monthStr = isNaN(d.getTime()) ? "" : d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
+                          
+                          return (
+                          <th key={date} className="text-center font-medium px-0 sm:px-1 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[150px]">
+                            <div className="flex flex-col items-center justify-center gap-1.5 w-full">
+                              
+                              {/* 1. Ultra-sleek Date row */}
+                              <div className={cn(
+                                "flex items-baseline justify-center gap-1.5 w-full max-w-[130px] px-2 py-0.5 rounded-full border transition-colors",
+                                "bg-blue-500 text-white border-blue-400 shadow-sm"
+                              )}>
+                                <span className={cn(
+                                  "text-[10px] uppercase font-bold tracking-widest text-blue-100"
+                                )}>
+                                  {DAY_NAMES[i]}
+                                </span>
+                                <span className={cn(
+                                  "text-[12px] font-black tracking-tight text-white"
+                                )}>
+                                  {formatDate(date)}
+                                </span>
+                              </div>
+
+                              {/* 2. Ultra-compressed Stats Row */}
+                              {planningData.length > 0 && (
+                                <div className="flex items-center justify-between w-full max-w-[150px] px-2 py-1.5 bg-zinc-100 dark:bg-zinc-950/50 rounded-lg border border-black/5 dark:border-white/5 shadow-inner backdrop-blur-sm mt-0.5">
+                                  
+                                  <TooltipProvider delayDuration={0}>
+                                    <Tooltip>
+                                      <TooltipTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-default focus:outline-none">
+                                        <Users className="h-3.5 w-3.5 text-emerald-500" />
+                                        <span className="text-[13px] font-bold text-foreground leading-none">{planningData[0].values[i]}</span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="flex flex-col items-center gap-1 px-3 py-2 bg-zinc-950 border border-border shadow-2xl [&>svg]:!fill-zinc-950 [&>svg]:!bg-zinc-950">
+                                        <span className="text-[10px] uppercase text-emerald-500 font-bold tracking-widest leading-none">DA's</span>
+                                        <span className="text-2xl font-black text-foreground">{planningData[0].values[i]}</span>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+
+                                  <TooltipProvider delayDuration={0}>
+                                    <Tooltip>
+                                      <TooltipTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-default focus:outline-none">
+                                        <Clock className="h-3.5 w-3.5 text-cyan-500" />
+                                        <span className="text-[13px] font-bold text-foreground leading-none">{planningData[1].values[i]}</span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="flex flex-col items-center gap-1 px-3 py-2 bg-zinc-950 border border-border shadow-2xl [&>svg]:!fill-zinc-950 [&>svg]:!bg-zinc-950">
+                                        <span className="text-[10px] uppercase text-cyan-500 font-bold tracking-widest leading-none">Stand By</span>
+                                        <span className="text-2xl font-black text-foreground">{planningData[1].values[i]}</span>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+
+                                  <TooltipProvider delayDuration={0}>
+                                    <Tooltip>
+                                      <TooltipTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-default focus:outline-none">
+                                        <TruckIcon className="h-3.5 w-3.5 text-blue-500" />
+                                        <span className="text-[13px] font-bold text-foreground leading-none">{planningData[2].values[i]}</span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="flex flex-col items-center gap-1 px-3 py-2 bg-zinc-950 border border-border shadow-2xl [&>svg]:!fill-zinc-950 [&>svg]:!bg-zinc-950">
+                                        <span className="text-[10px] uppercase text-blue-500 font-bold tracking-widest leading-none">Routes Assigned</span>
+                                        <span className="text-2xl font-black text-foreground">{planningData[2].values[i]}</span>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+
+                                  <TooltipProvider delayDuration={0}>
+                                    <Tooltip>
+                                      <TooltipTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-default focus:outline-none">
+                                        <Wrench className="h-3.5 w-3.5 text-orange-500" />
+                                        <span className="text-[13px] font-bold text-foreground leading-none">{planningData[3].values[i]}</span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="flex flex-col items-center gap-1 px-3 py-2 bg-zinc-950 border border-border shadow-2xl [&>svg]:!fill-zinc-950 [&>svg]:!bg-zinc-950">
+                                        <span className="text-[10px] uppercase text-orange-500 font-bold tracking-widest leading-none">Ops</span>
+                                        <span className="text-2xl font-black text-foreground">{planningData[3].values[i]}</span>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+
+                                  <TooltipProvider delayDuration={0}>
+                                    <Tooltip>
+                                      <TooltipTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-default focus:outline-none">
+                                        <UserPlus className="h-3.5 w-3.5 text-purple-500" />
+                                        <span className="text-[13px] font-bold text-foreground leading-none">{planningData[4].values[i]}</span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="flex flex-col items-center gap-1 px-3 py-2 bg-zinc-950 border border-border shadow-2xl [&>svg]:!fill-zinc-950 [&>svg]:!bg-zinc-950">
+                                        <span className="text-[10px] uppercase text-purple-500 font-bold tracking-widest leading-none">Extra DA's</span>
+                                        <span className="text-2xl font-black text-foreground">{planningData[4].values[i]}</span>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+
+                                </div>
+                              )}
                             </div>
                           </th>
-                        ))}
+                          );
+                        })}
                         <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[36px] sm:min-w-[50px]">Days</th>
                         <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[180px] hidden md:table-cell">Note</th>
                         <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[40px] sm:min-w-[60px]">
@@ -1278,63 +1376,6 @@ export default function SchedulingPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {/* ── Planning Section ── */}
-                      <tr
-                        className="border-b border-border/30 cursor-pointer hover:bg-muted/30 transition-colors"
-                        onClick={() => setPlanningCollapsed(!planningCollapsed)}
-                      >
-                        <td className="px-2 sm:px-3 py-1.5 sticky left-0 bg-card z-10">
-                          <div className="flex items-center gap-2">
-                            <ChevronDown
-                              className={cn(
-                                "h-4 w-4 text-muted-foreground transition-transform duration-200",
-                                planningCollapsed && "-rotate-90"
-                              )}
-                            />
-                            <span className="font-bold text-xs uppercase tracking-wider text-primary">Planning</span>
-                            <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-primary/10 text-primary">
-                              {planningData.length}
-                            </Badge>
-                            {isFiltered && (
-                              <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-amber-500/40 text-amber-500">
-                                Filtered
-                              </Badge>
-                            )}
-                          </div>
-                        </td>
-                        {weekData?.dates?.map((_, i) => (
-                          <td key={`planning-header-${i}`} className="px-2 py-1.5" />
-                        ))}
-                        <td className="px-2 py-1.5" />
-                        <td className="px-2 sm:px-3 py-1.5 hidden md:table-cell" />
-                        <td className="px-1 sm:px-2 py-1.5" />
-                      </tr>
-                      {!planningCollapsed && planningData.map((row) => (
-                        <tr key={row.label} className="border-b border-border/20 hover:bg-muted/20 transition-colors">
-                          <td className="px-3 py-1.5 sticky left-0 bg-card z-10">
-                            <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
-                          </td>
-                          {row.values.map((val, i) => (
-                            <td key={`${row.label}-${i}`} className="text-center px-2 py-1.5">
-                              <span className={cn(
-                                "inline-flex items-center justify-center h-7 min-w-[36px] rounded-md text-xs font-bold transition-all",
-                                val > 0
-                                  ? `${row.color} bg-current/10 border border-current/20`
-                                  : "text-zinc-500"
-                              )}
-                                style={val > 0 ? { backgroundColor: "rgba(255,255,255,0.05)" } : {}}
-                              >
-                                {val}
-                              </span>
-                            </td>
-                          ))}
-                          <td className="text-center px-2 py-1.5">
-                            <span className={cn("text-xs font-bold", row.color)}>{row.total}</span>
-                          </td>
-                          <td className="px-2 sm:px-3 py-1.5 hidden md:table-cell" />
-                          <td className="px-1 sm:px-2 py-1.5" />
-                        </tr>
-                      ))}
 
                       {/* ── Employee Groups ── */}
                       {Object.entries(grouped)
@@ -1381,7 +1422,7 @@ export default function SchedulingPage() {
                                 })
                                 .map((emp) => {
                                   const workDays = countWorkingDays(emp);
-                                  const notes = emp.weekNote || "";
+                                  const notes = emp.employee?.ScheduleNotes || "";
                                   const consecutiveWarnings = getConsecutiveWarnings(emp, weekData?.prevWeekTrailing?.[emp.transporterId] || 0);
 
                                   return (

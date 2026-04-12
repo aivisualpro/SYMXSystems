@@ -119,6 +119,7 @@ export async function GET(req: NextRequest) {
               name: `${emp.firstName} ${emp.lastName}`.toUpperCase(),
               type: emp.type || '',
               status: emp.status || '',
+              ScheduleNotes: emp.ScheduleNotes || '',
             }
             : null,
           weekNote: '',
@@ -220,40 +221,33 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const { scheduleId, type, employeeId, note, startTime } = body;
 
-    // Update employee week note — updates all schedule entries for the employee+week
+    // Update employee global note (ScheduleNotes)
     if (employeeId && note !== undefined) {
-      const { yearWeek: noteYearWeek, transporterId: noteTransporterId, employeeName: noteName, oldNote } = body;
-      if (noteYearWeek && noteTransporterId) {
-        // Update all 7 day entries for this employee+week
-        await SymxEmployeeSchedule.updateMany(
-          { transporterId: noteTransporterId, yearWeek: noteYearWeek },
-          { $set: { note } }
-        );
+      const { transporterId: noteTransporterId, employeeName: noteName, oldNote } = body;
+      
+      const updated = await SymxEmployee.findByIdAndUpdate(
+        employeeId,
+        { $set: { ScheduleNotes: note } },
+        { new: true }
+      ).lean() as any;
 
-        // Audit log
+      if (!updated) {
+        return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+      }
+
+      // Audit log (Record globally under 'Global' yearWeek)
+      if (noteTransporterId) {
         await ScheduleAuditLog.create({
-          yearWeek: noteYearWeek,
+          yearWeek: "Global",
           transporterId: noteTransporterId,
-          employeeName: noteName || "",
+          employeeName: noteName || `${updated.firstName} ${updated.lastName}`,
           action: "note_updated",
-          field: "note",
+          field: "ScheduleNotes",
           oldValue: oldNote || "",
           newValue: note,
           performedBy: performer.email,
           performedByName: performer.name,
         });
-
-        return NextResponse.json({ success: true });
-      }
-      // Fallback: update employee-level note
-      const updated = await SymxEmployee.findByIdAndUpdate(
-        employeeId,
-        { $set: { ScheduleNotes: note } },
-        { new: true }
-      ).lean();
-
-      if (!updated) {
-        return NextResponse.json({ error: "Employee not found" }, { status: 404 });
       }
 
       return NextResponse.json({ success: true, employee: updated });
@@ -265,7 +259,7 @@ export async function PATCH(req: NextRequest) {
       const existing = await SymxEmployeeSchedule.findById(scheduleId).lean() as any;
 
       const newType = (type || "").trim().toLowerCase();
-      const isWorking = !["off", ""].includes(newType);
+      const isWorking = !["off", "", "call out", "request off", "suspension", "stand by"].includes(newType);
       const updateFields: Record<string, any> = { type: type || "" };
       updateFields.status = isWorking ? "Scheduled" : "Off";
       if (startTime !== undefined) updateFields.startTime = startTime;
@@ -327,7 +321,7 @@ export async function PATCH(req: NextRequest) {
       // Sync type to SYMXRoute (dispatching)
       if (typeChanged) {
         const newTypeNorm = (type || "").trim().toLowerCase();
-        const isNowWorking = !["off", ""].includes(newTypeNorm);
+        const isNowWorking = !["off", "", "call out", "request off", "suspension", "stand by"].includes(newTypeNorm);
 
         if (isNowWorking) {
           // Working type → upsert a route record (create if it doesn't exist)
@@ -397,7 +391,7 @@ export async function PATCH(req: NextRequest) {
       // Sync to SYMXRoute — only create for working types
       if (created && (created as any)._id) {
         const newTypeNorm = (type || "").trim().toLowerCase();
-        const isWorking = !["off", ""].includes(newTypeNorm);
+        const isWorking = !["off", "", "call out", "request off", "suspension", "stand by"].includes(newTypeNorm);
 
         if (isWorking) {
           await SYMXRoute.updateOne(
