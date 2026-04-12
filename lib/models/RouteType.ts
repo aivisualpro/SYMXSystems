@@ -20,8 +20,10 @@ const RouteTypeSchema: Schema = new Schema({
     isActive: { type: Boolean, default: true },
 }, { timestamps: true, collection: 'SYMXRouteTypes' });
 
-const RouteType: Model<IRouteType> =
-    mongoose.models.RouteType ||
-    mongoose.model<IRouteType>('RouteType', RouteTypeSchema);
+if (mongoose.models.RouteType) {
+    delete mongoose.models.RouteType;
+}
+
+const RouteType: Model<IRouteType> = mongoose.model<IRouteType>('RouteType', RouteTypeSchema);
 
 export default RouteType;

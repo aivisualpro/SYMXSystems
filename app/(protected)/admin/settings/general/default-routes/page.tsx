@@ -1,10 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, Save, Pencil, X, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, Save, Pencil, X, Trash2, ArrowUp, ArrowDown, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
+import { restrictToVerticalAxis, restrictToWindowEdges } from "@dnd-kit/modifiers";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useAddRef } from "../layout";
 
 interface RouteTypeRow {
@@ -24,6 +28,35 @@ export default function DefaultRoutesPage() {
     const [routes, setRoutes] = useState<RouteTypeRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState<string | null>(null);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    );
+
+    const handleDragEnd = async (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            const oldIndex = routes.findIndex(r => (r._id || `new-${routes.indexOf(r)}`) === active.id);
+            const newIndex = routes.findIndex(r => (r._id || `new-${routes.indexOf(r)}`) === over.id);
+            
+            if (oldIndex !== -1 && newIndex !== -1) {
+                const newRoutes = arrayMove(routes, oldIndex, newIndex);
+                newRoutes.forEach((r, i) => { r.sortOrder = i; });
+                setRoutes(newRoutes);
+                
+                try {
+                    await fetch("/api/admin/settings/route-types", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(newRoutes.map(r => ({ _id: r._id, sortOrder: r.sortOrder })))
+                    });
+                } catch {
+                    toast.error("Failed to save reordering");
+                }
+            }
+        }
+    };
 
     const fetchRoutes = useCallback(async () => {
         try {
@@ -127,8 +160,9 @@ export default function DefaultRoutesPage() {
 
     return (
         <div className="space-y-4">
-            <div className="rounded-lg border border-border overflow-hidden">
-                <table className="w-full">
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}>
+                <div className="rounded-lg border border-border overflow-hidden">
+                    <table className="w-full">
                     <thead>
                         <tr className="bg-muted/50 border-b border-border">
                             <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[50px]">#</th>
@@ -143,46 +177,84 @@ export default function DefaultRoutesPage() {
                         {routes.length === 0 && (
                             <tr><td colSpan={6} className="text-center text-sm text-muted-foreground py-8">No route types configured. Click &quot;Add Route Type&quot; to get started.</td></tr>
                         )}
-                        {routes.map((route, idx) => {
-                            const isSaving = saving === (route._id || `new-${idx}`);
-                            return (
-                                <tr key={route._id || `new-${idx}`} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
-                                    <td className="px-4 py-2 text-xs text-muted-foreground">{idx + 1}</td>
-                                    <td className="px-4 py-2"><Input value={route.name || ""} onChange={(e) => updateField(idx, "name", e.target.value)} placeholder="e.g. Route, Open, Close..." className="h-8 text-sm" /></td>
-                                    <td className="px-4 py-2"><Input value={route.routeStatus || ""} onChange={(e) => updateField(idx, "routeStatus", e.target.value)} placeholder="e.g. Scheduled, Off..." className="h-8 text-sm" /></td>
-                                    <td className="px-4 py-2">
-                                        <div className="flex items-center gap-2">
-                                            <input type="color" value={route.color || "#6B7280"} onChange={(e) => updateField(idx, "color", e.target.value)} className="h-8 w-8 rounded cursor-pointer border border-border bg-transparent" />
-                                            <Input value={route.color || ""} onChange={(e) => updateField(idx, "color", e.target.value)} className="h-8 text-xs font-mono w-[80px]" placeholder="#HEX" />
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-2"><Input value={route.startTime || ""} onChange={(e) => updateField(idx, "startTime", e.target.value)} placeholder="e.g. 06:00 AM" className="h-8 text-sm" /></td>
-                                    <td className="px-4 py-2">
-                                        <div className="flex items-center justify-end gap-1">
-                                            {route.isEditing && (
-                                                <>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10" onClick={() => saveRow(idx)} disabled={isSaving}>
-                                                        {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                                                    </Button>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => cancelEdit(idx)} disabled={isSaving}><X className="h-3.5 w-3.5" /></Button>
-                                                </>
-                                            )}
-                                            {!route.isEditing && (
-                                                <>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => moveRow(idx, "up")} disabled={idx === 0 || isSaving}><ArrowUp className="h-3 w-3" /></Button>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => moveRow(idx, "down")} disabled={idx === routes.length - 1 || isSaving}><ArrowDown className="h-3 w-3" /></Button>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => updateField(idx, "isEditing", true)}><Pencil className="h-3.5 w-3.5" /></Button>
-                                                </>
-                                            )}
-                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-400 hover:bg-red-500/10" onClick={() => deleteRow(idx)} disabled={isSaving}><Trash2 className="h-3.5 w-3.5" /></Button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })}
+                        <SortableContext items={routes.map((r, i) => r._id || `new-${i}`)} strategy={verticalListSortingStrategy}>
+                            {routes.map((route, idx) => (
+                                <SortableRouteRow 
+                                    key={route._id || `new-${idx}`}
+                                    route={route}
+                                    idx={idx}
+                                    totalCount={routes.length}
+                                    saving={saving}
+                                    updateField={updateField}
+                                    saveRow={saveRow}
+                                    cancelEdit={cancelEdit}
+                                    deleteRow={deleteRow}
+                                    moveRow={moveRow}
+                                />
+                            ))}
+                        </SortableContext>
                     </tbody>
                 </table>
             </div>
+            </DndContext>
         </div>
+    );
+}
+
+function SortableRouteRow({ route, idx, totalCount, saving, updateField, saveRow, cancelEdit, deleteRow, moveRow }: any) {
+    const isSaving = saving === (route._id || `new-${idx}`);
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+        id: route._id || `new-${idx}`,
+        disabled: route.isEditing || !route._id
+    });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        ...(isDragging ? { position: "relative" as const, zIndex: 50, opacity: 0.9, backgroundColor: 'hsl(var(--muted)/0.9)', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)' } : {})
+    };
+
+    return (
+        <tr ref={setNodeRef} style={style} className={`border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors ${isDragging ? 'shadow-2xl' : ''}`}>
+            <td className="px-4 py-2 w-20 border-r border-border/10 cursor-default">
+                <div className="flex items-center gap-2">
+                    <span className="w-4 tabular-nums text-right text-xs text-muted-foreground font-medium">{idx + 1}</span>
+                    {!route.isEditing && !!route._id && (
+                        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing hover:bg-black/10 dark:hover:bg-white/10 p-1.5 rounded-md transition-colors text-muted-foreground/60 hover:text-foreground flex items-center justify-center -ml-1">
+                            <GripVertical className="h-4 w-4" />
+                        </div>
+                    )}
+                </div>
+            </td>
+            <td className="px-4 py-2"><Input value={route.name || ""} onChange={(e) => updateField(idx, "name", e.target.value)} placeholder="e.g. Route, Open, Close..." className="h-8 text-sm" /></td>
+            <td className="px-4 py-2"><Input value={route.routeStatus || ""} onChange={(e) => updateField(idx, "routeStatus", e.target.value)} placeholder="e.g. Scheduled, Off..." className="h-8 text-sm" /></td>
+            <td className="px-4 py-2">
+                <div className="flex items-center gap-2">
+                    <input type="color" value={route.color || "#6B7280"} onChange={(e) => updateField(idx, "color", e.target.value)} className="h-8 w-8 rounded cursor-pointer border border-border bg-transparent" />
+                    <Input value={route.color || ""} onChange={(e) => updateField(idx, "color", e.target.value)} className="h-8 text-xs font-mono w-[80px]" placeholder="#HEX" />
+                </div>
+            </td>
+            <td className="px-4 py-2"><Input value={route.startTime || ""} onChange={(e) => updateField(idx, "startTime", e.target.value)} placeholder="e.g. 06:00 AM" className="h-8 text-sm" /></td>
+            <td className="px-4 py-2">
+                <div className="flex items-center justify-end gap-1">
+                    {route.isEditing && (
+                        <>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10" onClick={() => saveRow(idx)} disabled={isSaving}>
+                                {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => cancelEdit(idx)} disabled={isSaving}><X className="h-3.5 w-3.5" /></Button>
+                        </>
+                    )}
+                    {!route.isEditing && (
+                        <>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => moveRow(idx, "up")} disabled={idx === 0 || isSaving}><ArrowUp className="h-3 w-3" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => moveRow(idx, "down")} disabled={idx === totalCount - 1 || isSaving}><ArrowDown className="h-3 w-3" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => updateField(idx, "isEditing", true)}><Pencil className="h-3.5 w-3.5" /></Button>
+                        </>
+                    )}
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-400 hover:bg-red-500/10" onClick={() => deleteRow(idx)} disabled={isSaving}><Trash2 className="h-3.5 w-3.5" /></Button>
+                </div>
+            </td>
+        </tr>
     );
 }

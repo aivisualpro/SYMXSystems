@@ -1558,32 +1558,31 @@ export default function SchedulingPage() {
                                               <DropdownMenuContent
                                                 align="start"
                                                 side="bottom"
-                                                className="w-48 max-h-[320px] overflow-y-auto"
+                                                avoidCollisions
+                                                className="w-48 p-0 overflow-hidden group"
                                               >
-                                                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                                                  Change Type
-                                                </DropdownMenuLabel>
-                                                <DropdownMenuSeparator />
-                                                {dynamicTypeOptions.map(opt => {
-                                                  const Icon = opt.icon;
-                                                  const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();
-                                                  return (
-                                                    <DropdownMenuItem
-                                                      key={opt.label}
-                                                      className={cn(
-                                                        "flex items-center gap-2 cursor-pointer text-xs",
-                                                        isActive && "bg-accent"
-                                                      )}
-                                                      onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name)}
-                                                    >
-                                                      <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", opt.bg)}>
-                                                        <Icon className={cn("h-3 w-3", opt.text)} />
-                                                      </div>
-                                                      <span className="font-medium">{opt.label}</span>
-                                                      {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
-                                                    </DropdownMenuItem>
-                                                  );
-                                                })}
+                                                <div className="max-h-[140px] overflow-y-auto flex flex-col group-data-[side=top]:flex-col-reverse py-1">
+                                                  {dynamicTypeOptions.map(opt => {
+                                                    const Icon = opt.icon;
+                                                    const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();
+                                                    return (
+                                                      <DropdownMenuItem
+                                                        key={opt.label}
+                                                        className={cn(
+                                                          "flex items-center gap-2 cursor-pointer text-xs mx-1 rounded",
+                                                          isActive && "bg-accent"
+                                                        )}
+                                                        onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name)}
+                                                      >
+                                                        <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", opt.bg)}>
+                                                          <Icon className={cn("h-3 w-3", opt.text)} />
+                                                        </div>
+                                                        <span className="font-medium">{opt.label}</span>
+                                                        {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
+                                                      </DropdownMenuItem>
+                                                    );
+                                                  })}
+                                                </div>
                                               </DropdownMenuContent>
                                             </DropdownMenu>
                                           </td>
@@ -1796,3 +1795,5 @@ export default function SchedulingPage() {
     </TooltipProvider>
   );
 }
+
+
