@@ -599,6 +599,7 @@ export default function EverydayAfterDispatchingPage() {
              return {
                  _id: rts._id || rts.routeId,
                  employeeName: route?.employeeName || emp.name || rts.transporterId,
+                 employeeImage: emp.profileImage,
                  routeNumber: route?.routeNumber || "—",
                  tba: rts.tba,
                  reason: rts.reason
@@ -610,11 +611,14 @@ export default function EverydayAfterDispatchingPage() {
         return Object.values(rescueMap).map((rescue: any) => {
              const route = routes.find(r => r._id === rescue.routeId);
              const emp = employeesMap[rescue.transporterId] || {};
-             const rescuerName = allEmployees.find(e => e.transporterId === rescue.rescuedBytransporterId)?.name || rescue.rescuedBytransporterId;
+             const rescuer = allEmployees.find(e => e.transporterId === rescue.rescuedBytransporterId);
+             const rescuerName = rescuer?.name || rescue.rescuedBytransporterId;
              return {
                  _id: rescue._id || rescue.routeId,
                  employeeName: route?.employeeName || emp.name || rescue.transporterId,
+                 employeeImage: emp.profileImage,
                  rescuerName,
+                 rescuerImage: rescuer?.profileImage,
                  stopsRescued: rescue.stopsRescued,
                  reason: rescue.reason,
                  performanceRescue: rescue.performanceRescue
@@ -919,8 +923,30 @@ export default function EverydayAfterDispatchingPage() {
                                         <tbody className="divide-y divide-border/40">
                                             {rescueEntries.map((rescue) => (
                                                 <tr key={rescue._id} className="hover:bg-muted/20 transition-colors">
-                                                    <td className="p-2 pl-3 font-medium text-foreground/90 whitespace-nowrap">{rescue.employeeName}</td>
-                                                    <td className="p-2 text-muted-foreground">{rescue.rescuerName}</td>
+                                                    <td className="p-2 pl-3 font-medium text-foreground/90 whitespace-nowrap">
+                                                        <div className="flex items-center gap-2 max-w-[140px] xl:max-w-max">
+                                                            {rescue.employeeImage ? (
+                                                                <img src={rescue.employeeImage} alt={rescue.employeeName} className="w-5 h-5 rounded-full object-cover shrink-0" />
+                                                            ) : (
+                                                                <div className="w-5 h-5 rounded-full bg-muted/60 text-muted-foreground flex items-center justify-center text-[9px] font-bold shrink-0 uppercase">
+                                                                    {(rescue.employeeName || "-").charAt(0)}
+                                                                </div>
+                                                            )}
+                                                            <span className="truncate">{rescue.employeeName}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 text-muted-foreground whitespace-nowrap">
+                                                        <div className="flex items-center gap-2 max-w-[140px] xl:max-w-max">
+                                                            {rescue.rescuerImage ? (
+                                                                <img src={rescue.rescuerImage} alt={rescue.rescuerName} className="w-5 h-5 rounded-full object-cover shrink-0" />
+                                                            ) : (
+                                                                <div className="w-5 h-5 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center text-[9px] font-bold shrink-0 uppercase border border-blue-500/20">
+                                                                    {(rescue.rescuerName || "-").charAt(0)}
+                                                                </div>
+                                                            )}
+                                                            <span className="truncate">{rescue.rescuerName}</span>
+                                                        </div>
+                                                    </td>
                                                     <td className="p-2 text-center">
                                                         <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-blue-500/10 text-blue-600 font-mono tracking-wider text-[11px] border border-blue-500/20">{rescue.stopsRescued}</span>
                                                     </td>
@@ -963,7 +989,18 @@ export default function EverydayAfterDispatchingPage() {
                                         <tbody className="divide-y divide-border/40">
                                             {rtsEntries.map((rts) => (
                                                 <tr key={rts._id} className="hover:bg-muted/20 transition-colors">
-                                                    <td className="p-2 pl-3 font-medium text-foreground/90 whitespace-nowrap">{rts.employeeName}</td>
+                                                    <td className="p-2 pl-3 font-medium text-foreground/90 whitespace-nowrap">
+                                                        <div className="flex items-center gap-2 max-w-[160px] xl:max-w-max">
+                                                            {rts.employeeImage ? (
+                                                                <img src={rts.employeeImage} alt={rts.employeeName} className="w-5 h-5 rounded-full object-cover shrink-0" />
+                                                            ) : (
+                                                                <div className="w-5 h-5 rounded-full bg-muted/60 text-muted-foreground flex items-center justify-center text-[9px] font-bold shrink-0 uppercase">
+                                                                    {(rts.employeeName || "-").charAt(0)}
+                                                                </div>
+                                                            )}
+                                                            <span className="truncate">{rts.employeeName}</span>
+                                                        </div>
+                                                    </td>
                                                     <td className="p-2">
                                                         <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-orange-500/10 text-orange-600 font-mono tracking-wider text-[10px] border border-orange-500/20">{rts.tba}</span>
                                                     </td>
@@ -1094,51 +1131,57 @@ export default function EverydayAfterDispatchingPage() {
                                                     onChange={(e) => setRescueBySearch(e.target.value)}
                                                 />
                                             </div>
-                                            <div className="max-h-[200px] overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+                                            <div 
+                                                className="max-h-[250px] overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent overscroll-contain"
+                                                onWheel={(e) => e.stopPropagation()}
+                                                onTouchMove={(e) => e.stopPropagation()}
+                                            >
                                                 {allEmployees.filter(emp => {
+                                                    if (rescueModalRoute && emp.transporterId === rescueModalRoute.transporterId) return false;
                                                     const fn = `${emp.firstName||''} ${emp.lastName||''}`.toLowerCase();
-                                                        return fn.includes(rescueBySearch.toLowerCase()) || (emp.transporterId && emp.transporterId.toLowerCase().includes(rescueBySearch.toLowerCase()));
-                                                    }).map(emp => {
-                                                        const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || emp.transporterId;
-                                                        const isSelected = rescueBy === emp.transporterId;
-                                                        return (
-                                                            <div 
-                                                                key={emp.transporterId}
-                                                                className={cn(
-                                                                    "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-muted/50 transition-colors",
-                                                                    isSelected ? "bg-blue-500/10 text-blue-700 font-medium" : ""
+                                                    return fn.includes(rescueBySearch.toLowerCase()) || (emp.transporterId && emp.transporterId.toLowerCase().includes(rescueBySearch.toLowerCase()));
+                                                }).map(emp => {
+                                                    const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || emp.transporterId;
+                                                    const isSelected = rescueBy === emp.transporterId;
+                                                    return (
+                                                        <div 
+                                                            key={emp.transporterId}
+                                                            className={cn(
+                                                                "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-muted/50 transition-colors",
+                                                                isSelected ? "bg-blue-500/10 text-blue-700 font-medium" : ""
+                                                            )}
+                                                            onClick={() => {
+                                                                setRescueBy(emp.transporterId);
+                                                                setRescueByOpen(false);
+                                                                setRescueBySearch("");
+                                                            }}
+                                                        >
+                                                            <div className="flex items-center gap-2 w-full">
+                                                                {emp.profileImage ? (
+                                                                    <img src={emp.profileImage} alt={fullName} className="w-6 h-6 rounded-full object-cover shadow-sm bg-muted shrink-0" />
+                                                                ) : (
+                                                                    <div className="w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center text-[10px] font-bold uppercase ring-1 ring-blue-500/20 shrink-0">
+                                                                        {fullName.charAt(0)}
+                                                                    </div>
                                                                 )}
-                                                                onClick={() => {
-                                                                    setRescueBy(emp.transporterId);
-                                                                    setRescueByOpen(false);
-                                                                    setRescueBySearch("");
-                                                                }}
-                                                            >
-                                                                <div className="flex items-center gap-2 w-full">
-                                                                    {emp.profileImage ? (
-                                                                        <img src={emp.profileImage} alt={fullName} className="w-6 h-6 rounded-full object-cover shadow-sm bg-muted shrink-0" />
-                                                                    ) : (
-                                                                        <div className="w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center text-[10px] font-bold uppercase ring-1 ring-blue-500/20 shrink-0">
-                                                                            {fullName.charAt(0)}
-                                                                        </div>
-                                                                    )}
-                                                                    <span className="truncate">{fullName}</span>
-                                                                    {isSelected && (
-                                                                        <Check className="ml-auto h-4 w-4 text-blue-600 shrink-0" />
-                                                                    )}
-                                                                </div>
+                                                                <span className="truncate">{fullName}</span>
+                                                                {isSelected && (
+                                                                    <Check className="ml-auto h-4 w-4 text-blue-600 shrink-0" />
+                                                                )}
                                                             </div>
-                                                        );
-                                                    })}
-                                                    {allEmployees.length > 0 && allEmployees.filter(emp => {
-                                                        const fn = `${emp.firstName||''} ${emp.lastName||''}`.toLowerCase();
-                                                        return fn.includes(rescueBySearch.toLowerCase()) || (emp.transporterId && emp.transporterId.toLowerCase().includes(rescueBySearch.toLowerCase()));
-                                                    }).length === 0 && (
-                                                        <div className="py-6 text-center text-sm text-muted-foreground">
-                                                            No results found.
                                                         </div>
-                                                    )}
-                                                </div>
+                                                    );
+                                                })}
+                                                {allEmployees.length > 0 && allEmployees.filter(emp => {
+                                                    if (rescueModalRoute && emp.transporterId === rescueModalRoute.transporterId) return false;
+                                                    const fn = `${emp.firstName||''} ${emp.lastName||''}`.toLowerCase();
+                                                    return fn.includes(rescueBySearch.toLowerCase()) || (emp.transporterId && emp.transporterId.toLowerCase().includes(rescueBySearch.toLowerCase()));
+                                                }).length === 0 && (
+                                                    <div className="py-6 text-center text-sm text-muted-foreground">
+                                                        No results found.
+                                                    </div>
+                                                )}
+                                            </div>
                                         </PopoverContent>
                                     </Popover>
                                 </div>
