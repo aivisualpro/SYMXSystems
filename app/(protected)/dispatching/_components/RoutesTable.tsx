@@ -47,7 +47,7 @@ export function getRouteTypeStyle(value: string) {
 // ── Column definition ──
 export interface RoutesTableColumn {
     key: string;
-    label: string;
+    label: React.ReactNode;
     minW?: number;
     sticky?: boolean;
     align?: "left" | "center" | "right";
@@ -191,7 +191,7 @@ export function RoutesTable({
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     </div>
                 )}
-                <table className="w-full border-collapse" style={{ minWidth: Math.max(700, columns.length * 90) }}>
+                <table className="w-full border-collapse" style={{ minWidth: columns.reduce((sum, col) => sum + (col.minW || 90), 0) }}>
                     {/* Header */}
                     <thead className="sticky top-0 z-20">
                         <tr className="bg-muted border-b border-border/50">
@@ -284,7 +284,9 @@ export function RoutesTable({
                                                         className={cn(
                                                             "px-2 py-1.5",
                                                             col.sticky && "sticky left-0 z-[5] bg-card group-hover/row:bg-muted/30 transition-colors",
-                                                            (col.key === "dayBeforeConfirmation" || col.key === "conf") && "text-center"
+                                                            (col.key === "dayBeforeConfirmation" || col.key === "conf" || col.align === "center") && "text-center",
+                                                            col.align === "right" && "text-right",
+                                                            col.align === "left" && "text-left"
                                                         )}
                                                     >
                                                         {renderCell

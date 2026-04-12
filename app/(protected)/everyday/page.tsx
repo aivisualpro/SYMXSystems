@@ -2,13 +2,14 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, Edit2, type LucideIcon } from "lucide-react";
+import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, Edit2, Phone, Timer, Package, Hash, ThumbsUp, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import {
     Select,
     SelectContent,
@@ -79,6 +80,21 @@ function getTypeStyle(value: string): { bg: string; text: string; border: string
     if (opt) return { bg: opt.bg, text: opt.text, border: opt.border };
     return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
 }
+
+const HeaderIcon = ({ icon: Icon, title, className, strokeWidth }: any) => (
+    <TooltipProvider delayDuration={0}>
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <div className="flex cursor-help items-center justify-center w-full focus:outline-none">
+                    <Icon className={className} strokeWidth={strokeWidth} />
+                </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="z-50 border border-border/50 bg-black/90 text-white shadow-xl">
+                <p className="font-bold text-[11px] tracking-wide uppercase">{title}</p>
+            </TooltipContent>
+        </Tooltip>
+    </TooltipProvider>
+);
 
 export default function EverydayAfterDispatchingPage() {
     const { setLeftContent, setRightContent } = useHeaderActions();
@@ -730,15 +746,15 @@ export default function EverydayAfterDispatchingPage() {
                         loading={loading}
                         columns={[
                             { key: "employee",               label: "Employee",  minW: 160, sticky: true },
-                            { key: "deliveryCompletionTime", label: "Del. Comp. Time",  minW: 120, align: "center"  },
-                            { key: "rts",                    label: "RTS",       minW: 60,  align: "center" },
-                            { key: "rescue",                 label: "Rescue",    minW: 70,  align: "center" },
-                            { key: "routeNumber",            label: "Route #",   minW: 80  },
-                            { key: "routeDuration",          label: "Duration",  minW: 80, align: "center"  },
-                            { key: "stopCount",              label: "Stops",     minW: 56  },
-                            { key: "packageCount",           label: "Pkgs",      minW: 56  },
-                            { key: "van",                    label: "Van",       minW: 70  },
-                            { key: "attendance",             label: "ATT",       minW: 80  },
+                            { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500 fill-blue-500/20" strokeWidth={2.5} />, minW: 65, align: "center"  },
+                            { key: "rts",                    label: <HeaderIcon title="Return to Station (RTS)" icon={PackageX} className="h-[18px] w-[18px] text-orange-500 fill-orange-500/20" strokeWidth={2.5} />, minW: 55, align: "center" },
+                            { key: "rescue",                 label: <HeaderIcon title="Route Rescue" icon={Activity} className="h-[18px] w-[18px] text-teal-500" strokeWidth={3} />, minW: 55, align: "center" },
+                            { key: "routeNumber",            label: <HeaderIcon title="Route Number" icon={Hash} className="h-[18px] w-[18px] text-rose-500" strokeWidth={3} />,   minW: 65, align: "center"  },
+                            { key: "routeDuration",          label: <HeaderIcon title="Route Duration" icon={Timer} className="h-[18px] w-[18px] text-yellow-500 fill-yellow-500/20" strokeWidth={2.5} />,  minW: 55, align: "center"  },
+                            { key: "stopCount",              label: <HeaderIcon title="Total Stops" icon={MapPin} className="h-[18px] w-[18px] text-blue-500 fill-blue-500/20" strokeWidth={2.5} />,     minW: 55, align: "center"  },
+                            { key: "packageCount",           label: <HeaderIcon title="Total Packages" icon={Package} className="h-[18px] w-[18px] text-orange-500 fill-orange-500/20" strokeWidth={2.5} />,      minW: 55, align: "center"  },
+                            { key: "van",                    label: <HeaderIcon title="Van Number" icon={TruckIcon} className="h-[18px] w-[18px] text-emerald-500 fill-emerald-500/20" strokeWidth={2.5} />,       minW: 55, align: "center"  },
+                            { key: "attendance",             label: <HeaderIcon title="Attendance Tracker" icon={UserCheck} className="h-[18px] w-[18px] text-purple-500 fill-purple-500/20" strokeWidth={2.5} />,       minW: 55, align: "center"  },
                         ]}
                         renderCell={(key, row) => {
                             if (key === "dayBeforeConfirmation") {
@@ -778,9 +794,9 @@ export default function EverydayAfterDispatchingPage() {
                                         ) : (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, ""); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-blue-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50 title='Log completion time'"
+                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all focus:outline-none shadow-sm ring-1 ring-blue-500/30 title='Log completion time'"
                                             >
-                                                <Clock className="h-4 w-4 text-foreground/70 group-hover:text-blue-500 transition-colors cursor-pointer" />
+                                                <Clock className="h-[18px] w-[18px] text-blue-500 fill-blue-500/20 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
                                             </button>
                                         )}
                                     </div>
@@ -801,10 +817,10 @@ export default function EverydayAfterDispatchingPage() {
                                         ) : (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-orange-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
+                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-orange-500/30"
                                                 title="Log RTS"
                                             >
-                                                <PackageX className="h-4 w-4 text-foreground/70 group-hover:text-orange-500 transition-colors cursor-pointer" />
+                                                <PackageX className="h-[18px] w-[18px] text-orange-500 fill-orange-500/20 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
                                             </button>
                                         )}
                                     </div>
@@ -825,10 +841,10 @@ export default function EverydayAfterDispatchingPage() {
                                         ) : (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-blue-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
+                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-teal-500/10 hover:bg-teal-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-teal-500/30"
                                                 title="Log Rescue"
                                             >
-                                                <Activity className="h-4 w-4 text-foreground/70 group-hover:text-blue-500 transition-colors cursor-pointer" />
+                                                <Activity className="h-[18px] w-[18px] text-teal-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={3} />
                                             </button>
                                         )}
                                     </div>
@@ -874,25 +890,44 @@ export default function EverydayAfterDispatchingPage() {
                         groups={groupedTomorrowRoutes}
                         loading={loading}
                         columns={[
-                            { key: "employee",               label: "Employee",  minW: 160, sticky: true },
-                            { key: "phone",                  label: "Phone",     minW: 120 },
-                            { key: "dayBeforeConfirmation",  label: "DB Confirmation", minW: 120, align: "center" },
+                            { key: "employee",               label: "Employee",  minW: 120, sticky: true },
+                            { key: "phone",                  label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500 fill-blue-500/20" strokeWidth={2.5} />, minW: 50, align: "center" },
+                            { key: "dayBeforeConfirmation",  label: <HeaderIcon title="Day Before Confirmation" icon={ThumbsUp} className="h-[18px] w-[18px] text-emerald-500 fill-emerald-500/20" strokeWidth={2.5} />, minW: 60, align: "center" },
                         ]}
                         renderCell={(key, row) => {
+                            if (key === "phone") {
+                                const val = row.phone;
+                                return (
+                                    <div className="w-full flex items-center justify-center">
+                                        {val ? (
+                                            <a
+                                                href={`tel:${val}`}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/10 hover:bg-blue-500/20 transition-all border border-blue-500/20 shadow-sm"
+                                                title={`Call ${val}`}
+                                            >
+                                                <Phone className="h-4 w-4 text-blue-500 fill-blue-500/20 group-hover:scale-110 transition-transform" />
+                                            </a>
+                                        ) : (
+                                            <span className="text-muted-foreground/30 text-[11px] font-bold">—</span>
+                                        )}
+                                    </div>
+                                );
+                            }
                             if (key === "dayBeforeConfirmation") {
                                 const isTrue = !!row.dayBeforeConfirmation;
                                 return (
                                     <div className="w-full flex items-center justify-center">
                                         {isTrue ? (
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "true"); }}
+                                                onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "true", true); }}
                                                 className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-emerald-500/15 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/25"
                                             >
                                                 CONFIRMED
                                             </button>
                                         ) : (
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "false"); }}
+                                                onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "false", true); }}
                                                 className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-red-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
                                             >
                                                 <X className="h-4 w-4 text-foreground/70 group-hover:text-red-500 transition-colors cursor-pointer" />
@@ -916,9 +951,9 @@ export default function EverydayAfterDispatchingPage() {
                                         ) : (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, ""); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-blue-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50 title='Log completion time'"
+                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all focus:outline-none shadow-sm ring-1 ring-blue-500/30 title='Log completion time'"
                                             >
-                                                <Clock className="h-4 w-4 text-foreground/70 group-hover:text-blue-500 transition-colors cursor-pointer" />
+                                                <Clock className="h-[18px] w-[18px] text-blue-500 fill-blue-500/20 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
                                             </button>
                                         )}
                                     </div>
@@ -939,10 +974,10 @@ export default function EverydayAfterDispatchingPage() {
                                         ) : (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-orange-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
+                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-orange-500/30"
                                                 title="Log RTS"
                                             >
-                                                <PackageX className="h-4 w-4 text-foreground/70 group-hover:text-orange-500 transition-colors cursor-pointer" />
+                                                <PackageX className="h-[18px] w-[18px] text-orange-500 fill-orange-500/20 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
                                             </button>
                                         )}
                                     </div>
@@ -963,10 +998,10 @@ export default function EverydayAfterDispatchingPage() {
                                         ) : (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-blue-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
+                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-teal-500/10 hover:bg-teal-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-teal-500/30"
                                                 title="Log Rescue"
                                             >
-                                                <Activity className="h-4 w-4 text-foreground/70 group-hover:text-blue-500 transition-colors cursor-pointer" />
+                                                <Activity className="h-[18px] w-[18px] text-teal-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={3} />
                                             </button>
                                         )}
                                     </div>
