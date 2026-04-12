@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, type LucideIcon } from "lucide-react";
+import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, Edit2, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -598,6 +598,7 @@ export default function EverydayAfterDispatchingPage() {
              const emp = employeesMap[rts.transporterId] || {};
              return {
                  _id: rts._id || rts.routeId,
+                 routeObj: route,
                  employeeName: route?.employeeName || emp.name || rts.transporterId,
                  employeeImage: emp.profileImage,
                  routeNumber: route?.routeNumber || "—",
@@ -615,6 +616,7 @@ export default function EverydayAfterDispatchingPage() {
              const rescuerName = rescuer?.name || rescue.rescuedBytransporterId;
              return {
                  _id: rescue._id || rescue.routeId,
+                 routeObj: route,
                  employeeName: route?.employeeName || emp.name || rescue.transporterId,
                  employeeImage: emp.profileImage,
                  rescuerName,
@@ -917,7 +919,8 @@ export default function EverydayAfterDispatchingPage() {
                                                 <th className="font-semibold p-2.5 pl-3">Employee</th>
                                                 <th className="font-semibold p-2.5">Rescued By</th>
                                                 <th className="font-semibold p-2.5 text-center">Stops</th>
-                                                <th className="font-semibold p-2.5 pr-3">Reason</th>
+                                                <th className="font-semibold p-2.5">Reason</th>
+                                                <th className="font-semibold p-2.5 pr-3 w-8"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-border/40">
@@ -950,7 +953,17 @@ export default function EverydayAfterDispatchingPage() {
                                                     <td className="p-2 text-center">
                                                         <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-blue-500/10 text-blue-600 font-mono tracking-wider text-[11px] border border-blue-500/20">{rescue.stopsRescued}</span>
                                                     </td>
-                                                    <td className="p-2 pr-3 text-muted-foreground truncate max-w-[120px]" title={rescue.reason}>{rescue.reason}</td>
+                                                    <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rescue.reason}>{rescue.reason}</td>
+                                                    <td className="p-2 pr-3 text-right">
+                                                        <button 
+                                                            onClick={() => rescue.routeObj && openRescueModal(rescue.routeObj)}
+                                                            disabled={!rescue.routeObj}
+                                                            className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            title="Edit Rescue"
+                                                        >
+                                                            <Edit2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -983,7 +996,8 @@ export default function EverydayAfterDispatchingPage() {
                                             <tr>
                                                 <th className="font-semibold p-2.5 pl-3">Employee</th>
                                                 <th className="font-semibold p-2.5">TBA</th>
-                                                <th className="font-semibold p-2.5 pr-3">Reason</th>
+                                                <th className="font-semibold p-2.5">Reason</th>
+                                                <th className="font-semibold p-2.5 pr-3 w-8"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-border/40">
@@ -1004,7 +1018,17 @@ export default function EverydayAfterDispatchingPage() {
                                                     <td className="p-2">
                                                         <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-orange-500/10 text-orange-600 font-mono tracking-wider text-[10px] border border-orange-500/20">{rts.tba}</span>
                                                     </td>
-                                                    <td className="p-2 pr-3 text-muted-foreground truncate max-w-[120px]" title={rts.reason}>{rts.reason}</td>
+                                                    <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rts.reason}>{rts.reason}</td>
+                                                    <td className="p-2 pr-3 text-right">
+                                                        <button 
+                                                            onClick={() => rts.routeObj && openRTSModal(rts.routeObj)}
+                                                            disabled={!rts.routeObj}
+                                                            className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            title="Edit RTS"
+                                                        >
+                                                            <Edit2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -1045,7 +1069,7 @@ export default function EverydayAfterDispatchingPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs font-semibold text-muted-foreground uppercase">Employee</label>
-                                    <div className="p-2 border rounded-md bg-muted/50 text-sm font-medium">{rtsModalRoute.employeeName}</div>
+                                    <div className="p-2 border rounded-md bg-muted/50 text-sm font-medium">{employeesMap[rtsModalRoute.transporterId]?.name || rtsModalRoute.employeeName || rtsModalRoute.transporterId}</div>
                                 </div>
                                 <div>
                                     <label className="text-xs font-semibold text-muted-foreground uppercase">Date</label>
@@ -1086,7 +1110,7 @@ export default function EverydayAfterDispatchingPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs font-semibold text-muted-foreground uppercase">Employee</label>
-                                    <div className="p-2 border rounded-md bg-muted/50 text-sm font-medium">{rescueModalRoute.employeeName}</div>
+                                    <div className="p-2 border rounded-md bg-muted/50 text-sm font-medium">{employeesMap[rescueModalRoute.transporterId]?.name || rescueModalRoute.employeeName || rescueModalRoute.transporterId}</div>
                                 </div>
                                 <div>
                                     <label className="text-xs font-semibold text-muted-foreground uppercase">Date</label>
