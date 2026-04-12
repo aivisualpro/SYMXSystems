@@ -1168,7 +1168,7 @@ export default function SchedulingPage() {
   if (!mounted) return null;
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider delayDuration={0} disableHoverableContent>
       <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-4">
 
         {/* ── Main Tabs: Scheduling | Messaging ── */}
@@ -1481,7 +1481,7 @@ export default function SchedulingPage() {
                                                 </TooltipTrigger>
                                                 <TooltipContent
                                                   side="top"
-                                                  className="max-w-[300px] text-xs space-y-1 bg-popover text-popover-foreground border shadow-xl"
+                                                  className="max-w-[300px] text-xs space-y-1 bg-popover text-popover-foreground border shadow-xl pointer-events-none [&>svg]:hidden"
                                                 >
                                                   <p className="font-semibold">{emp.employee?.name || emp.transporterId}</p>
                                                   <p className="text-muted-foreground">
