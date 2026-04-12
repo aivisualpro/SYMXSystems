@@ -50,6 +50,7 @@ export interface RoutesTableColumn {
     label: string;
     minW?: number;
     sticky?: boolean;
+    align?: "left" | "center" | "right";
 }
 
 // ── Row shape the component works with ──
@@ -199,12 +200,17 @@ export function RoutesTable({
                                     key={col.key}
                                     onClick={() => handleSort(col.key)}
                                     className={cn(
-                                        "text-left px-2 py-2 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap",
+                                        "px-2 py-2 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap",
+                                        col.align === "center" ? "text-center" : col.align === "right" ? "text-right" : "text-left",
                                         col.sticky && "sticky left-0 z-30 bg-muted"
                                     )}
                                     style={{ minWidth: col.minW ?? 80 }}
                                 >
-                                    <span className="inline-flex items-center gap-0.5">
+                                    <span className={cn(
+                                        "inline-flex items-center gap-0.5",
+                                        col.align === "center" && "w-full justify-center",
+                                        col.align === "right" && "w-full justify-end"
+                                    )}>
                                         {col.label}
                                         {sortKey === col.key && (
                                             sortDir === "asc"

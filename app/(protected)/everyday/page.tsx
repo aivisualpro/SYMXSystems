@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, type LucideIcon } from "lucide-react";
+import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +15,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { generateRoutesPDF } from "@/lib/generate-routes-pdf";
 import { RoutesTable, type RoutesTableRow } from "@/app/(protected)/dispatching/_components/RoutesTable";
@@ -95,6 +97,64 @@ export default function EverydayAfterDispatchingPage() {
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
     const [debounceNotes, setDebounceNotes] = useState(notes);
+
+    const [rtsModalOpen, setRtsModalOpen] = useState(false);
+    const [rtsModalRoute, setRtsModalRoute] = useState<RoutesTableRow | null>(null);
+    const [rtsTBA, setRtsTBA] = useState("");
+    const [rtsReason, setRtsReason] = useState("");
+    const [rtsReasonsList, setRtsReasonsList] = useState<string[]>([]);
+    const [isSavingRTS, setIsSavingRTS] = useState(false);
+    const [rtsMap, setRtsMap] = useState<Record<string, any>>({});
+
+    const openRTSModal = (row: RoutesTableRow) => {
+        setRtsModalRoute(row);
+        const existingData = rtsMap[row._id];
+        setRtsTBA(existingData ? existingData.tba : "");
+        setRtsReason(existingData ? existingData.reason : "");
+        setRtsModalOpen(true);
+    };
+
+    const handleSaveRTS = async () => {
+        if (!rtsModalRoute || !rtsTBA.trim() || !rtsReason.trim()) {
+            toast.error("TBA and Reason are required");
+            return;
+        }
+        setIsSavingRTS(true);
+        try {
+            const res = await fetch("/api/everyday/rts", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    routeId: rtsModalRoute._id,
+                    date: date,
+                    transporterId: rtsModalRoute.transporterId,
+                    tba: rtsTBA.trim(),
+                    reason: rtsReason.trim()
+                })
+            });
+            if (!res.ok) throw new Error("Failed to save RTS");
+            
+            toast.success("RTS recorded successfully");
+            setRtsModalOpen(false);
+
+            // Update Map optimistically so the icon refreshes immediately
+            if (res.ok) {
+                const updatedObj = await res.json();
+                setRtsMap(prev => ({
+                    ...prev,
+                    [rtsModalRoute._id]: updatedObj.rts
+                }));
+            }
+
+            if (!rtsReasonsList.includes(rtsReason.trim())) {
+                setRtsReasonsList(prev => [...prev, rtsReason.trim()]);
+            }
+        } catch (e) {
+            toast.error("Failed to save RTS record");
+        } finally {
+            setIsSavingRTS(false);
+        }
+    };
 
     const toggleGroup = (group: string) => {
         setCollapsedGroups(prev => ({ ...prev, [group]: !prev[group] }));
@@ -274,10 +334,11 @@ export default function EverydayAfterDispatchingPage() {
                 setDebounceNotes(fetchedNotes); // prevent instant auto-save on load
             }
 
-            // 2. Fetch routes and schedules
-            const [routesRes, schedulesRes] = await Promise.all([
+            // 2. Fetch routes, schedules, and rts
+            const [routesRes, schedulesRes, rtsRes] = await Promise.all([
                 fetch(`/api/dispatching/routes?yearWeek=${selectedWeek}&date=${date}`),
-                fetch(`/api/everyday/schedules?dateStr=${date}`)
+                fetch(`/api/everyday/schedules?dateStr=${date}`),
+                fetch(`/api/everyday/rts?dateStr=${date}`)
             ]);
 
             if (routesRes.ok) {
@@ -297,6 +358,18 @@ export default function EverydayAfterDispatchingPage() {
                 setSchedulesMap(tempMap);
             } else {
                 setSchedulesMap({});
+            }
+
+            if (rtsRes.ok) {
+                const rtsData = await rtsRes.json();
+                if (rtsData.reasons) setRtsReasonsList(rtsData.reasons);
+                const tm: Record<string, any> = {};
+                (rtsData.records || []).forEach((r: any) => {
+                    tm[r.routeId] = r;
+                });
+                setRtsMap(tm);
+            } else {
+                setRtsMap({});
             }
         } catch (error) {
             console.error(error);
@@ -365,6 +438,30 @@ export default function EverydayAfterDispatchingPage() {
                 ...prev,
                 [transporterId]: { ...prev[transporterId], dayBeforeConfirmation: currentVal }
             }));
+        }
+    };
+
+    const toggleDeliveryCompletionTime = async (routeId: string, currentVal: string) => {
+        let timeStr = "";
+        if (!currentVal) {
+            const now = new Date();
+            timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+        }
+
+        setRoutes(prev => prev.map(r => r._id === routeId ? { ...r, deliveryCompletionTime: timeStr } : r));
+
+        try {
+            const res = await fetch("/api/dispatching/routes", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ routeId, updates: { deliveryCompletionTime: timeStr } })
+            });
+            if (!res.ok) throw new Error("Update failed");
+            if (timeStr) toast.success(`Marked delivery at ${timeStr}`);
+        } catch (err) {
+            toast.error("Failed to update delivery time");
+            // revert locally
+            setRoutes(prev => prev.map(r => r._id === routeId ? { ...r, deliveryCompletionTime: currentVal } : r));
         }
     };
 
@@ -539,10 +636,11 @@ export default function EverydayAfterDispatchingPage() {
                         columns={[
                             { key: "employee",               label: "Employee",  minW: 160, sticky: true },
                             { key: "phone",                  label: "Phone",     minW: 120 },
-                            { key: "dayBeforeConfirmation",  label: "DB Confirmation", minW: 120 },
-                            { key: "deliveryCompletionTime", label: "DCT",       minW: 80  },
+                            { key: "dayBeforeConfirmation",  label: "DB Confirmation", minW: 120, align: "center" },
+                            { key: "deliveryCompletionTime", label: "Del. Comp. Time",  minW: 120, align: "center"  },
+                            { key: "rts",                    label: "RTS",       minW: 60,  align: "center" },
                             { key: "routeNumber",            label: "Route #",   minW: 80  },
-                            { key: "routeDuration",          label: "Dur",       minW: 60  },
+                            { key: "routeDuration",          label: "Duration",  minW: 80, align: "center"  },
                             { key: "stopCount",              label: "Stops",     minW: 56  },
                             { key: "packageCount",           label: "Pkgs",      minW: 56  },
                             { key: "van",                    label: "Van",       minW: 70  },
@@ -563,11 +661,73 @@ export default function EverydayAfterDispatchingPage() {
                                         ) : (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "false"); }}
-                                                className="p-1.5 rounded-full hover:bg-muted/50 transition-colors outline-none focus:outline-none flex items-center justify-center group"
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-red-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
                                             >
-                                                <X className="h-4 w-4 text-muted-foreground/30 group-hover:text-red-400 transition-colors" />
+                                                <X className="h-4 w-4 text-foreground/70 group-hover:text-red-500 transition-colors cursor-pointer" />
                                             </button>
                                         )}
+                                    </div>
+                                );
+                            }
+                            if (key === "deliveryCompletionTime") {
+                                const val = row.deliveryCompletionTime;
+                                return (
+                                    <div className="w-full flex items-center justify-center">
+                                        {val ? (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, val); }}
+                                                className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-blue-500/15 text-blue-600 border-blue-500/20 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20"
+                                                title="Click to reset time"
+                                            >
+                                                {val}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, ""); }}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-blue-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50 title='Log completion time'"
+                                            >
+                                                <Clock className="h-4 w-4 text-foreground/70 group-hover:text-blue-500 transition-colors cursor-pointer" />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            }
+                            if (key === "rts") {
+                                const hasRts = !!rtsMap[row._id];
+                                return (
+                                    <div className="w-full flex items-center justify-center">
+                                        {hasRts ? (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-500/15 hover:bg-orange-500/25 transition-all shadow-sm border border-orange-500/20"
+                                                title="View RTS"
+                                            >
+                                                <PackageX className="h-4 w-4 text-orange-600 group-hover:text-orange-700 transition-colors cursor-pointer" />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-orange-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
+                                                title="Log RTS"
+                                            >
+                                                <PackageX className="h-4 w-4 text-foreground/70 group-hover:text-orange-500 transition-colors cursor-pointer" />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            }
+                            if (key === "routeDuration") {
+                                const dur = row.routeDuration || "—";
+                                let formattedDur = dur;
+                                if (dur !== "—") {
+                                    const parts = dur.split(":");
+                                    if (parts.length >= 2) {
+                                        formattedDur = `${parts[0]}:${parts[1]}`;
+                                    }
+                                }
+                                return (
+                                    <div className="w-full text-center font-bold text-[11px] whitespace-nowrap">
+                                        {formattedDur}
                                     </div>
                                 );
                             }
@@ -635,6 +795,48 @@ export default function EverydayAfterDispatchingPage() {
                     </Card>
                 </div>
             </div>
+
+            {/* RTS Modal */}
+            <Dialog open={rtsModalOpen} onOpenChange={setRtsModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add RTS Record</DialogTitle>
+                    </DialogHeader>
+                    {rtsModalRoute && (
+                        <div className="space-y-4 pt-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-semibold text-muted-foreground uppercase">Employee</label>
+                                    <div className="p-2 border rounded-md bg-muted/50 text-sm font-medium">{rtsModalRoute.employeeName}</div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-semibold text-muted-foreground uppercase">Date</label>
+                                    <div className="p-2 border rounded-md bg-muted/50 text-sm font-medium">{date}</div>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-xs font-semibold uppercase text-foreground mb-1 block">TBA Number</label>
+                                <Input placeholder="Enter TBA" value={rtsTBA} onChange={e => setRtsTBA(e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="text-xs font-semibold uppercase text-foreground mb-1 block">Reason</label>
+                                <Input list="rts-reasons-list" placeholder="Select or type reason" value={rtsReason} onChange={e => setRtsReason(e.target.value)} />
+                                <datalist id="rts-reasons-list">
+                                    {rtsReasonsList.map(r => <option key={r} value={r} />)}
+                                </datalist>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRtsModalOpen(false)}>Cancel</Button>
+                        <Button disabled={isSavingRTS || !rtsTBA.trim() || !rtsReason.trim()} onClick={handleSaveRTS}>
+                            {isSavingRTS && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Save RTS
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }
