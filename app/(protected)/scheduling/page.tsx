@@ -729,23 +729,119 @@ export default function SchedulingPage() {
     return { caution, danger, cautionNames, dangerNames };
   }, [weekData]);
 
-  // Push title into left, all actions into right
+  // Average Days Per Employee (for "Employee" type only, excluding specific inactive types)
+  const averageDays = useMemo(() => {
+    if (!weekData?.employees || weekData.employees.length === 0) return "0.0";
+    const EXCLUDED = new Set(["off", "request off", "assign schedule", "call out", "reduction", "stand by", ""]);
+    
+    // Only include employees with type "Employee" (case insensitive)
+    const validEmps = weekData.employees.filter(emp => (emp.employee?.type || "").trim().toLowerCase() === "employee");
+    if (validEmps.length === 0) return "0.0";
+
+    let totalDays = 0;
+    validEmps.forEach(emp => {
+      for (let d = 0; d < 7; d++) {
+        const day = emp.days[d];
+        if (day) {
+          const typeVal = (day.type || "").trim().toLowerCase();
+          if (!EXCLUDED.has(typeVal)) {
+            totalDays++;
+          }
+        }
+      }
+    });
+
+    return (totalDays / validEmps.length).toFixed(1);
+  }, [weekData]);
+
+  // Push title into left
   useEffect(() => {
     setLeftContent(
-      <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-        {activeMainTab === "messaging"
-          ? (SUB_TABS.find((t) => t.id === activeSubTab)?.label ?? "Messaging")
-          : "Scheduling"}
-      </h1>
+      <div className="flex items-center gap-2.5">
+        <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+          {activeMainTab === "messaging"
+            ? (SUB_TABS.find((t) => t.id === activeSubTab)?.label ?? "Messaging")
+            : "Scheduling"}
+        </h1>
+      </div>
     );
     return () => setLeftContent(null);
   }, [setLeftContent, activeMainTab, activeSubTab]);
 
-  // Right content: search + messaging actions + week selector
+  // Right content: search + messaging actions + week selector + scheduling chips
   useEffect(() => {
     const idx = weeks.indexOf(selectedWeek);
+    const totalEmps = weekData?.totalEmployees ?? 0;
+    
     setRightContent(
       <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+        {/* Scheduling Chips */}
+        {activeMainTab === "scheduling" && (
+          <div className="flex items-center gap-1.5 mr-2">
+            <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-950 dark:bg-zinc-950 border border-primary/20 text-[11px] font-semibold text-primary select-none">
+              <Users className="h-3.5 w-3.5" />
+              {totalEmps}
+            </div>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-950 dark:bg-zinc-950 border border-emerald-500/30 text-[11px] font-semibold text-emerald-500 select-none cursor-default">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    {averageDays} avg
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[280px] text-xs bg-popover text-popover-foreground border shadow-lg">
+                  <p className="font-semibold text-emerald-500 mb-1">Average Working Days</p>
+                  <p className="text-muted-foreground">For all regular Employees.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-950 dark:bg-zinc-950 border border-amber-500/30 text-[11px] font-semibold text-amber-500 select-none cursor-default">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    {warningCounts.caution} × 6-day
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[280px] text-xs bg-popover text-popover-foreground border shadow-lg">
+                  <p className="font-semibold text-amber-500 mb-1">6 consecutive days:</p>
+                  {warningCounts.cautionNames.length > 0 ? (
+                    warningCounts.cautionNames.map((n, i) => <p key={i} className="text-muted-foreground">{n}</p>)
+                  ) : (
+                    <p className="text-muted-foreground">None</p>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className={cn(
+                    "flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-950 dark:bg-zinc-950 border text-[11px] font-semibold select-none cursor-default",
+                    warningCounts.danger > 0 
+                      ? "border-red-500/30 text-red-500 animate-pulse"
+                      : "border-red-500/20 text-red-500/70"
+                  )}>
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    {warningCounts.danger} × 7+ day
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[280px] text-xs bg-popover text-popover-foreground border shadow-lg">
+                  <p className="font-semibold text-red-500 mb-1">7+ consecutive days (violation):</p>
+                  {warningCounts.dangerNames.length > 0 ? (
+                    warningCounts.dangerNames.map((n, i) => <p key={i} className="text-muted-foreground">{n}</p>)
+                  ) : (
+                    <p className="text-muted-foreground">None</p>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
+
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -839,7 +935,7 @@ export default function SchedulingPage() {
       </div>
     );
     return () => setRightContent(null);
-  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek]);
+  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek, weekData?.totalEmployees, warningCounts, averageDays]);
 
   // Handle type change via dropdown
   const handleTypeChange = useCallback(async (
@@ -1047,6 +1143,7 @@ export default function SchedulingPage() {
     }, 0);
   }, [weekData]);
 
+
   // Percentage of scheduled slots that are "working" (not off)
   const activityRate = useMemo(() => {
     if (!totalScheduleEntries || totalScheduleEntries === 0) return 0;
@@ -1141,139 +1238,7 @@ export default function SchedulingPage() {
             </div>
           ) : (<>
 
-            {/* ── KPI Cards ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 shrink-0">
 
-              {/* Employees */}
-              <div className="relative overflow-hidden rounded-xl border border-blue-500/20 p-3 sm:p-4 bg-gradient-to-br from-blue-500/15 to-cyan-500/15">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent rounded-xl" />
-                <div className="relative flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] uppercase tracking-widest text-blue-400/80 font-semibold">Employees</p>
-                    <p className="text-2xl sm:text-3xl font-black mt-0.5 tabular-nums tracking-tight">
-                      {loadingData ? <span className="text-muted-foreground/40">—</span> : totalEmployees}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        {loadingData ? "—" : activeRouteEmployees} on routes
-                      </span>
-                      <span className="text-muted-foreground/30 text-[10px]">·</span>
-                      <span className="inline-flex items-center gap-1 text-[10px] text-cyan-400 font-medium">
-                        {loadingData ? "—" : totalStandBy} stand-by
-                      </span>
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-blue-500/15 flex-shrink-0">
-                    <Users className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Routes */}
-              <div className="relative overflow-hidden rounded-xl border border-violet-500/20 p-3 sm:p-4 bg-gradient-to-br from-violet-500/15 to-purple-500/15">
-                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent rounded-xl" />
-                <div className="relative flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] uppercase tracking-widest text-violet-400/80 font-semibold">Routes</p>
-                    <p className="text-2xl sm:text-3xl font-black mt-0.5 tabular-nums tracking-tight">
-                      {loadingData ? <span className="text-muted-foreground/40">—</span> : totalRoutes}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-[10px] text-muted-foreground/60 font-medium">
-                        <span className="text-violet-400">{loadingData ? "—" : (totalEmployees > 0 ? Math.round((activeRouteEmployees / totalEmployees) * 100) : 0)}%</span> of team on route
-                      </span>
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-violet-500/15 flex-shrink-0">
-                    <TruckIcon className="h-5 w-5 sm:h-6 sm:w-6 text-violet-400" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Activity Rate — replaces Days Off */}
-              <div className="relative overflow-hidden rounded-xl border border-emerald-500/20 p-3 sm:p-4 bg-gradient-to-br from-emerald-500/15 to-teal-500/10">
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent rounded-xl" />
-                <div className="relative flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] uppercase tracking-widest text-emerald-400/80 font-semibold">Activity Rate</p>
-                    <p className="text-2xl sm:text-3xl font-black mt-0.5 tabular-nums tracking-tight">
-                      {loadingData ? <span className="text-muted-foreground/40">—</span> : <>{activityRate}<span className="text-base font-medium text-muted-foreground">%</span></>}
-                    </p>
-                    {/* Gradient progress bar */}
-                    <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-700"
-                        style={{ width: loadingData ? "0%" : `${activityRate}%` }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground/60 mt-1">
-                      <span className="text-yellow-400 font-medium">{loadingData ? "—" : totalCallOuts}</span> call-out{totalCallOuts !== 1 ? "s" : ""}
-                    </p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-emerald-500/15 flex-shrink-0">
-                    <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Warnings */}
-              <div className="relative overflow-hidden rounded-xl border border-amber-500/25 p-3 sm:p-4 bg-gradient-to-br from-amber-500/10 to-orange-500/5">
-                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent rounded-xl" />
-                <div className="relative flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] uppercase tracking-widest text-amber-400/80 font-semibold">Streak Alerts</p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="flex flex-col items-start cursor-default group/tip">
-                            <span className="text-2xl sm:text-3xl font-black tabular-nums text-orange-400 group-hover/tip:text-orange-300 transition-colors">
-                              {loadingData ? "—" : warningCounts.caution}
-                            </span>
-                            <span className="flex items-center gap-1 text-[10px] text-orange-400/70 font-medium -mt-0.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
-                              6-day streak
-                            </span>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-[250px] bg-popover text-popover-foreground border shadow-lg">
-                          <p className="font-semibold text-amber-500 mb-1">6 Consecutive Days</p>
-                          {warningCounts.cautionNames.length > 0
-                            ? warningCounts.cautionNames.map(n => <p key={n} className="text-xs">{n}</p>)
-                            : <p className="text-xs text-muted-foreground">None</p>
-                          }
-                        </TooltipContent>
-                      </Tooltip>
-                      <div className="w-px h-8 bg-border/40" />
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="flex flex-col items-start cursor-default group/tip">
-                            <span className="text-2xl sm:text-3xl font-black tabular-nums text-red-500 group-hover/tip:text-red-400 transition-colors">
-                              {loadingData ? "—" : warningCounts.danger}
-                            </span>
-                            <span className="flex items-center gap-1 text-[10px] text-red-500/70 font-medium -mt-0.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                              7+ days
-                            </span>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-[250px] bg-popover text-popover-foreground border shadow-lg">
-                          <p className="font-semibold text-red-500 mb-1">7+ Consecutive Days</p>
-                          {warningCounts.dangerNames.length > 0
-                            ? warningCounts.dangerNames.map(n => <p key={n} className="text-xs">{n}</p>)
-                            : <p className="text-xs text-muted-foreground">None</p>
-                          }
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-amber-500/15 flex-shrink-0">
-                    <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400" />
-                  </div>
-                </div>
-              </div>
-
-            </div>
 
 
 
@@ -1633,22 +1598,6 @@ export default function SchedulingPage() {
                 </div>
               </div>
             )}
-
-            {/* ── Type Legend ── */}
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 px-1">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mr-2">Legend:</span>
-              {TYPE_OPTIONS.map(opt => {
-                const Icon = opt.icon;
-                return (
-                  <div key={opt.label} className="flex items-center gap-1.5">
-                    <div className={cn("h-4 w-4 rounded-sm flex items-center justify-center", opt.bg)}>
-                      <Icon className={cn("h-2.5 w-2.5", opt.text)} />
-                    </div>
-                    <span className="text-[10px] text-muted-foreground">{opt.label}</span>
-                  </div>
-                );
-              })}
-            </div>
           </>)}
         </div>
       </div>

@@ -94,6 +94,8 @@ export default function EverydayAfterDispatchingPage() {
     const [routes, setRoutes] = useState<any[]>([]);
     const [employeesMap, setEmployeesMap] = useState<Record<string, any>>({});
     const [schedulesMap, setSchedulesMap] = useState<Record<string, any>>({});
+    const [tomorrowRoutes, setTomorrowRoutes] = useState<any[]>([]);
+    const [tomorrowSchedulesMap, setTomorrowSchedulesMap] = useState<Record<string, any>>({});
     const [pdfLoading, setPdfLoading] = useState(false);
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
@@ -270,36 +272,11 @@ export default function EverydayAfterDispatchingPage() {
 
     // Fetch available weeks on mount
     useEffect(() => {
-        const fetchAvailability = async () => {
-            try {
-                const res = await fetch("/api/schedules?weeksList=true");
-                const data = await res.json();
-                if (data.weeks?.length) {
-                    setWeeks(data.weeks);
-                    const today = getTodayPacific();
-                    const currentWeek = getCurrentYearWeek(today);
-                    // Find closest default week
-                    let initWeek = data.weeks.includes(currentWeek) ? currentWeek : data.weeks[0];
-                    const prior = data.weeks.filter((w: string) => w <= currentWeek).sort().reverse();
-                    if (prior.length > 0) initWeek = prior[0];
-                    setSelectedWeek(initWeek);
-                    
-                    // Also default to today if currently in this week, otherwise first day of the week
-                    const firstSunday = new Date(initWeek.split('-W')[0] + "-01-01T00:00:00Z");
-                    const jan1Day = firstSunday.getUTCDay();
-                    firstSunday.setUTCDate(firstSunday.getUTCDate() - jan1Day + (parseInt(initWeek.split('-W')[1]) - 1) * 7);
-                    
-                    if (currentWeek === initWeek) {
-                        setDate(today);
-                    } else {
-                        setDate(firstSunday.toISOString().split("T")[0]);
-                    }
-                }
-            } catch (err) {
-                console.error("Failed to load weeks", err);
-            }
-        };
-        fetchAvailability();
+        const today = getTodayPacific();
+        setDate(today);
+        const currentWeek = getCurrentYearWeek(today);
+        setSelectedWeek(currentWeek);
+        setWeeks([currentWeek]); // set to unlock loading logic
     }, []);
 
     // Compute week dates array based on selectedWeek
@@ -328,78 +305,7 @@ export default function EverydayAfterDispatchingPage() {
         return `${match[1]} – Week ${parseInt(match[2])}`;
     }
 
-    // Set right content header arrows for selecting week
-    useEffect(() => {
-        const idx = weeks.indexOf(selectedWeek);
-        
-        setRightContent(
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
-                {weeks.length > 0 && (
-                    <>
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => {
-                                if (idx < weeks.length - 1) {
-                                    const nextWeek = weeks[idx + 1];
-                                    setSelectedWeek(nextWeek);
-                                    // Set date to Sunday of that week
-                                    const year = parseInt(nextWeek.split('-W')[0]);
-                                    const weekNum = parseInt(nextWeek.split('-W')[1]);
-                                    const d = new Date(Date.UTC(year, 0, 1));
-                                    d.setUTCDate(d.getUTCDate() - d.getUTCDay() + (weekNum - 1) * 7);
-                                    setDate(d.toISOString().split("T")[0]);
-                                }
-                            }}
-                            disabled={idx >= weeks.length - 1}
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Select value={selectedWeek} onValueChange={(val) => {
-                            setSelectedWeek(val);
-                            const year = parseInt(val.split('-W')[0]);
-                            const weekNum = parseInt(val.split('-W')[1]);
-                            const d = new Date(Date.UTC(year, 0, 1));
-                            d.setUTCDate(d.getUTCDate() - d.getUTCDay() + (weekNum - 1) * 7);
-                            setDate(d.toISOString().split("T")[0]);
-                        }}>
-                            <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm" suppressHydrationWarning>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {weeks.map((w) => (
-                                    <SelectItem key={w} value={w}>
-                                        {formatWeekLabel(w)}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => {
-                                if (idx > 0) {
-                                    const prevWeek = weeks[idx - 1];
-                                    setSelectedWeek(prevWeek);
-                                    const year = parseInt(prevWeek.split('-W')[0]);
-                                    const weekNum = parseInt(prevWeek.split('-W')[1]);
-                                    const d = new Date(Date.UTC(year, 0, 1));
-                                    d.setUTCDate(d.getUTCDate() - d.getUTCDay() + (weekNum - 1) * 7);
-                                    setDate(d.toISOString().split("T")[0]);
-                                }
-                            }}
-                            disabled={idx <= 0}
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </Button>
-                    </>
-                )}
-            </div>
-        );
-        return () => setRightContent(null);
-    }, [weeks, selectedWeek, setRightContent]);
+    // Removed week selection widget
 
     // Fetch data whenever date changes
     const fetchData = useCallback(async () => {
@@ -415,21 +321,42 @@ export default function EverydayAfterDispatchingPage() {
                 setDebounceNotes(fetchedNotes); // prevent instant auto-save on load
             }
 
-            // 2. Fetch routes, schedules, rts, and rescue
-            const [routesRes, schedulesRes, rtsRes, rescueRes] = await Promise.all([
+            // 2. Fetch routes, schedules, rts, and rescue FOR TODAY, plus tomorrow's routes/schedules
+            const tomorrow = (() => {
+                const tDate = new Date(date + "T12:00:00Z");
+                tDate.setUTCDate(tDate.getUTCDate() + 1);
+                return tDate.toISOString().split("T")[0];
+            })();
+            const tomorrowWeek = getCurrentYearWeek(tomorrow);
+
+            const [routesRes, schedulesRes, rtsRes, rescueRes, tRoutesRes, tSchedulesRes] = await Promise.all([
                 fetch(`/api/dispatching/routes?yearWeek=${selectedWeek}&date=${date}`),
                 fetch(`/api/everyday/schedules?dateStr=${date}`),
                 fetch(`/api/everyday/rts?dateStr=${date}`),
-                fetch(`/api/everyday/rescue?dateStr=${date}`)
+                fetch(`/api/everyday/rescue?dateStr=${date}`),
+                fetch(`/api/dispatching/routes?yearWeek=${tomorrowWeek}&date=${tomorrow}`),
+                fetch(`/api/everyday/schedules?dateStr=${tomorrow}`)
             ]);
+
+            let empMap: Record<string, any> = {};
 
             if (routesRes.ok) {
                 const rData = await routesRes.json();
                 setRoutes(rData.routes || []);
-                setEmployeesMap(rData.employees || {});
+                empMap = { ...empMap, ...(rData.employees || {}) };
             } else {
                 setRoutes([]);
             }
+
+            if (tRoutesRes.ok) {
+                const tData = await tRoutesRes.json();
+                setTomorrowRoutes(tData.routes || []);
+                empMap = { ...empMap, ...(tData.employees || {}) };
+            } else {
+                setTomorrowRoutes([]);
+            }
+
+            setEmployeesMap(empMap);
 
             if (schedulesRes.ok) {
                 const sData = await schedulesRes.json();
@@ -440,6 +367,17 @@ export default function EverydayAfterDispatchingPage() {
                 setSchedulesMap(tempMap);
             } else {
                 setSchedulesMap({});
+            }
+
+            if (tSchedulesRes.ok) {
+                const tSData = await tSchedulesRes.json();
+                const tempMap: Record<string, any> = {};
+                (tSData.schedules || []).forEach((s: any) => {
+                    tempMap[s.transporterId] = s;
+                });
+                setTomorrowSchedulesMap(tempMap);
+            } else {
+                setTomorrowSchedulesMap({});
             }
 
             if (rtsRes.ok) {
@@ -509,29 +447,44 @@ export default function EverydayAfterDispatchingPage() {
         toast.success("Notes saved successfully");
     };
 
-    const toggleConfirmIcon = async (transporterId: string, currentVal: string) => {
+    const toggleConfirmIcon = async (transporterId: string, currentVal: string, isTomorrow = false) => {
         if (!date) return;
+        
+        const targetDate = isTomorrow ? (() => {
+            const tDate = new Date(date + "T12:00:00Z");
+            tDate.setUTCDate(tDate.getUTCDate() + 1);
+            return tDate.toISOString().split("T")[0];
+        })() : date;
+        
         const nextVal = currentVal === "true" ? "false" : "true";
 
-        setSchedulesMap(prev => ({
-            ...prev,
-            [transporterId]: { ...prev[transporterId], dayBeforeConfirmation: nextVal }
-        }));
+        if (isTomorrow) {
+            setTomorrowSchedulesMap(prev => ({
+                ...prev,
+                [transporterId]: { ...prev[transporterId], dayBeforeConfirmation: nextVal }
+            }));
+        } else {
+            setSchedulesMap(prev => ({
+                ...prev,
+                [transporterId]: { ...prev[transporterId], dayBeforeConfirmation: nextVal }
+            }));
+        }
 
         try {
             const res = await fetch("/api/everyday/schedules", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ transporterId, dateStr: date, dayBeforeConfirmation: nextVal })
+                body: JSON.stringify({ transporterId, dateStr: targetDate, dayBeforeConfirmation: nextVal })
             });
             if (!res.ok) throw new Error("Update failed");
         } catch (err) {
             toast.error("Failed to update status");
             // revert locally
-            setSchedulesMap(prev => ({
-                ...prev,
-                [transporterId]: { ...prev[transporterId], dayBeforeConfirmation: currentVal }
-            }));
+            if (isTomorrow) {
+                setTomorrowSchedulesMap(prev => ({ ...prev, [transporterId]: { ...prev[transporterId], dayBeforeConfirmation: currentVal } }));
+            } else {
+                setSchedulesMap(prev => ({ ...prev, [transporterId]: { ...prev[transporterId], dayBeforeConfirmation: currentVal } }));
+            }
         }
     };
 
@@ -592,6 +545,46 @@ export default function EverydayAfterDispatchingPage() {
             });
     }, [routes, employeesMap, schedulesMap]);
 
+    const groupedTomorrowRoutes = useMemo(() => {
+        const map: Record<string, RoutesTableRow[]> = {};
+
+        // Drive from tomorrowRoutes — this has all employees + types from the dispatching API
+        tomorrowRoutes.forEach(r => {
+            const type = r.type || "Unassigned";
+            if (type.toLowerCase() === "off") return;
+
+            const empFromMap = employeesMap[r.transporterId] || {};
+            // Look up confirmation from schedules fetched for tomorrow
+            const schedule = tomorrowSchedulesMap[r.transporterId] || {};
+
+            if (!map[type]) map[type] = [];
+            map[type].push({
+                _id: r._id,
+                transporterId: r.transporterId,
+                type: type,
+                employeeName: r.employeeName || empFromMap.name || r.transporterId,
+                profileImage: r.profileImage || empFromMap.profileImage || "",
+                phone: r.phone || empFromMap.phoneNumber || empFromMap.phone || "",
+                dayBeforeConfirmation: schedule.dayBeforeConfirmation === "true",
+                deliveryCompletionTime: r.deliveryCompletionTime || "",
+                routeNumber: r.routeNumber || "",
+                routeDuration: r.routeDuration || "",
+                stopCount: r.stopCount ?? 0,
+                packageCount: r.packageCount ?? 0,
+                van: r.van || "",
+                attendance: r.attendance || "",
+            });
+        });
+
+        return Object.entries(map)
+            .map(([type, rows]) => ({ type, rows, count: rows.length }))
+            .sort((a, b) => {
+                if (a.type.toLowerCase() === "route") return -1;
+                if (b.type.toLowerCase() === "route") return 1;
+                return a.type.localeCompare(b.type);
+            });
+    }, [tomorrowRoutes, tomorrowSchedulesMap, employeesMap]);
+
     const rtsEntries = useMemo(() => {
         return Object.values(rtsMap).map((rts: any) => {
              const route = routes.find(r => r._id === rts.routeId);
@@ -643,36 +636,6 @@ export default function EverydayAfterDispatchingPage() {
             {/* Top row: Horizontal Date Selector & Notes inline */}
             <div className="mb-5 overflow-x-auto scrollbar-none">
                 <div className="flex items-stretch gap-1 p-1 rounded-xl bg-muted/50 border border-border min-w-max flex-1">
-                    {/* Date Tabs */}
-                    {weekDates.map((dateStr) => {
-                        const d = new Date(dateStr + "T12:00:00Z");
-                        const dayName = SHORT_DAYS[d.getUTCDay()];
-                        const dayNum = d.getUTCDate();
-                        const monthShort = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase();
-                        const isActive = date === dateStr;
-                        const isToday = dateStr === getTodayPacific();
-                        return (
-                            <button
-                                key={dateStr}
-                                onClick={() => setDate(dateStr)}
-                                className={cn(
-                                    "flex flex-col items-center justify-center px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap min-w-[48px] select-none",
-                                    isActive
-                                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-                                        : isToday
-                                            ? "bg-primary/10 text-primary hover:bg-primary/20"
-                                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                                )}
-                            >
-                                <span className="text-[9px] uppercase tracking-wider leading-tight opacity-80">{dayName}</span>
-                                <span className="text-xs font-bold leading-tight">{dayNum}</span>
-                                <span className="text-[8px] uppercase leading-tight opacity-60">{monthShort}</span>
-                            </button>
-                        );
-                    })}
-
-                    {weekDates.length > 0 && <div className="w-px h-6 bg-border/60 mx-1 self-center shrink-0" />}
-
                     {/* PDF Generation Button */}
                     <button
                         onClick={async () => {
@@ -746,9 +709,11 @@ export default function EverydayAfterDispatchingPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[500px]">
-                {/* Middle Left: Routes Table (Tall) */}
-                <Card className="lg:col-span-8 border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col h-full overflow-hidden p-0 gap-0">
-                    <div className="p-4 border-b border-border/50 bg-muted/20 shrink-0">
+                {/* Middle Left: Tables */}
+                <div className="lg:col-span-8 grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-5">
+                    {/* Routes Overview */}
+                    <Card className="border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-[400px]">
+                        <div className="p-4 border-b border-border/50 bg-muted/20 shrink-0">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <div className="h-8 w-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
@@ -765,8 +730,6 @@ export default function EverydayAfterDispatchingPage() {
                         loading={loading}
                         columns={[
                             { key: "employee",               label: "Employee",  minW: 160, sticky: true },
-                            { key: "phone",                  label: "Phone",     minW: 120 },
-                            { key: "dayBeforeConfirmation",  label: "DB Confirmation", minW: 120, align: "center" },
                             { key: "deliveryCompletionTime", label: "Del. Comp. Time",  minW: 120, align: "center"  },
                             { key: "rts",                    label: "RTS",       minW: 60,  align: "center" },
                             { key: "rescue",                 label: "Rescue",    minW: 70,  align: "center" },
@@ -892,6 +855,145 @@ export default function EverydayAfterDispatchingPage() {
                         emptyMessage="No routes scheduled for this date"
                     />
                 </Card>
+
+                {/* Roster Plan */}
+                <Card className="border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-[400px]">
+                    <div className="p-4 border-b border-border/50 bg-muted/20 shrink-0">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+                                    <MapPin className="h-4 w-4 text-indigo-500" />
+                                </div>
+                                <div>
+                                    <h2 className="text-sm font-bold text-foreground leading-none tracking-tight">Roster Plan</h2>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <RoutesTable
+                        groups={groupedTomorrowRoutes}
+                        loading={loading}
+                        columns={[
+                            { key: "employee",               label: "Employee",  minW: 160, sticky: true },
+                            { key: "phone",                  label: "Phone",     minW: 120 },
+                            { key: "dayBeforeConfirmation",  label: "DB Confirmation", minW: 120, align: "center" },
+                        ]}
+                        renderCell={(key, row) => {
+                            if (key === "dayBeforeConfirmation") {
+                                const isTrue = !!row.dayBeforeConfirmation;
+                                return (
+                                    <div className="w-full flex items-center justify-center">
+                                        {isTrue ? (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "true"); }}
+                                                className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-emerald-500/15 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/25"
+                                            >
+                                                CONFIRMED
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "false"); }}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-red-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
+                                            >
+                                                <X className="h-4 w-4 text-foreground/70 group-hover:text-red-500 transition-colors cursor-pointer" />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            }
+                            if (key === "deliveryCompletionTime") {
+                                const val = row.deliveryCompletionTime;
+                                return (
+                                    <div className="w-full flex items-center justify-center">
+                                        {val ? (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, val); }}
+                                                className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-blue-500/15 text-blue-600 border-blue-500/20 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20"
+                                                title="Click to reset time"
+                                            >
+                                                {val}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, ""); }}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-blue-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50 title='Log completion time'"
+                                            >
+                                                <Clock className="h-4 w-4 text-foreground/70 group-hover:text-blue-500 transition-colors cursor-pointer" />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            }
+                            if (key === "rts") {
+                                const hasRts = !!rtsMap[row._id];
+                                return (
+                                    <div className="w-full flex items-center justify-center">
+                                        {hasRts ? (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-500/15 hover:bg-orange-500/25 transition-all shadow-sm border border-orange-500/20"
+                                                title="View RTS"
+                                            >
+                                                <PackageX className="h-4 w-4 text-orange-600 group-hover:text-orange-700 transition-colors cursor-pointer" />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-orange-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
+                                                title="Log RTS"
+                                            >
+                                                <PackageX className="h-4 w-4 text-foreground/70 group-hover:text-orange-500 transition-colors cursor-pointer" />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            }
+                            if (key === "rescue") {
+                                const hasRescue = !!rescueMap[row._id];
+                                return (
+                                    <div className="w-full flex items-center justify-center">
+                                        {hasRescue ? (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all shadow-sm border border-blue-500/20"
+                                                title="View Rescue"
+                                            >
+                                                <LifeBuoy className="h-4 w-4 text-blue-600 group-hover:text-blue-700 transition-colors cursor-pointer" />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
+                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-blue-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
+                                                title="Log Rescue"
+                                            >
+                                                <Activity className="h-4 w-4 text-foreground/70 group-hover:text-blue-500 transition-colors cursor-pointer" />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            }
+                            if (key === "routeDuration") {
+                                const dur = row.routeDuration || "—";
+                                let formattedDur = dur;
+                                if (dur !== "—") {
+                                    const parts = dur.split(":");
+                                    if (parts.length >= 2) {
+                                        formattedDur = `${parts[0]}:${parts[1]}`;
+                                    }
+                                }
+                                return (
+                                    <div className="w-full text-center font-bold text-[11px] whitespace-nowrap">
+                                        {formattedDur}
+                                    </div>
+                                );
+                            }
+                            return undefined;
+                        }}
+                        onConfirmToggle={(row) => toggleConfirmIcon(row.transporterId, row.dayBeforeConfirmation ? "true" : "false", true)}
+                        emptyMessage="No roster scheduled for tomorrow"
+                    />
+                </Card>
+                </div>
 
                 {/* Right Side: 3 Stacked Boxes */}
                 <div className="lg:col-span-4 flex flex-col gap-4">
