@@ -96,6 +96,7 @@ export async function GET(req: NextRequest) {
                 ov: r.ov || "",
                 stagingLocation: r.stagingLocation || "",
                 transporterId: r.transporterId || "",
+                rawSummary: r.rawSummary || null,
             };
         });
 

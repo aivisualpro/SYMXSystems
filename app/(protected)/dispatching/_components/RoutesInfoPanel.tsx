@@ -11,6 +11,7 @@ import {
     ChevronDown,
     Check,
     AlertCircle,
+    FileJson,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -40,6 +41,7 @@ const COLUMNS: ColumnDef[] = [
     { key: "bags", label: "Bags", width: 60, type: "text" },
     { key: "ov", label: "OV", width: 55, type: "text" },
     { key: "stagingLocation", label: "Staging", width: 85, type: "text" },
+    { key: "actions", label: "Raw", width: 40, readOnly: true, type: "index" }
 ];
 
 const EDITABLE_COLUMNS = COLUMNS.filter(c => !c.readOnly);
@@ -60,6 +62,7 @@ interface RowData {
     ov: string;
     stagingLocation: string;
     transporterId: string;
+    rawSummary?: any;
 }
 
 interface Employee {
@@ -83,6 +86,13 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [dirtyRows, setDirtyRows] = useState<Set<number>>(new Set());
+
+    // Raw modal state
+    const [rawSummaryOpen, setRawSummaryOpen] = useState<{ open: boolean; data: any; routeNumber: string }>({
+        open: false,
+        data: null,
+        routeNumber: ""
+    });
 
     // Active cell state
     const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
@@ -928,6 +938,21 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                                     </td>
                                                 );
                                             })}
+
+                                            {/* Raw Summary Button */}
+                                            <td className="px-1 py-0 border-border border-r last:border-r-0 select-none text-center" style={{ width: 40, minWidth: 40 }}>
+                                                {row.rawSummary && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                                        onClick={() => setRawSummaryOpen({ open: true, data: row.rawSummary, routeNumber: row.routeNumber || `Row ${rowIdx + 1}` })}
+                                                        title="View Raw Summary"
+                                                    >
+                                                        <FileJson className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                )}
+                                            </td>
                                         </tr>
                                     );
                                 })}
@@ -970,6 +995,29 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                     </div>
                 </div>
             </div>
+
+            {/* ── Raw JSON Modal ── */}
+            {rawSummaryOpen.open && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setRawSummaryOpen({ open: false, data: null, routeNumber: "" })} />
+                    <div className="relative w-full max-w-2xl bg-card border border-border rounded-xl shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+                            <h3 className="font-semibold flex items-center gap-2">
+                                <FileJson className="h-4 w-4 text-primary" />
+                                Raw JSON <span className="text-muted-foreground font-normal">({rawSummaryOpen.routeNumber})</span>
+                            </h3>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setRawSummaryOpen({ open: false, data: null, routeNumber: "" })}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                        <div className="flex-1 overflow-auto p-4 bg-muted/10 text-[11px] sm:text-[12px]">
+                            <pre className="font-mono text-foreground whitespace-pre-wrap word-break-all">
+                                {JSON.stringify(rawSummaryOpen.data, null, 2)}
+                            </pre>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
