@@ -214,6 +214,23 @@ export default function EverydayAfterDispatchingPage() {
         }
     };
 
+    const handleDeleteRTS = async () => {
+        if (!rtsModalEditId || !rtsModalRoute) return;
+        if (!confirm("Are you sure you want to delete this RTS record?")) return;
+        try {
+            const res = await fetch(`/api/everyday/rts?id=${rtsModalEditId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed to delete RTS");
+            toast.success("RTS record deleted");
+            setRtsModalOpen(false);
+            setRtsMap(prev => {
+                const currentArr = prev[rtsModalRoute._id] || [];
+                return { ...prev, [rtsModalRoute._id]: currentArr.filter((r: any) => r._id !== rtsModalEditId) };
+            });
+        } catch (e) {
+            toast.error("Failed to delete RTS record");
+        }
+    };
+
     const openRescueModal = (row: RoutesTableRow, existingRecord?: any) => {
         setRescueModalRoute(row);
         setRescueModalEditId(existingRecord ? existingRecord._id : null);
@@ -274,6 +291,23 @@ export default function EverydayAfterDispatchingPage() {
             toast.error("Failed to save Rescue record");
         } finally {
             setIsSavingRescue(false);
+        }
+    };
+
+    const handleDeleteRescue = async () => {
+        if (!rescueModalEditId || !rescueModalRoute) return;
+        if (!confirm("Are you sure you want to delete this Rescue record?")) return;
+        try {
+            const res = await fetch(`/api/everyday/rescue?id=${rescueModalEditId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed to delete Rescue");
+            toast.success("Rescue record deleted");
+            setRescueModalOpen(false);
+            setRescueMap(prev => {
+                const currentArr = prev[rescueModalRoute._id] || [];
+                return { ...prev, [rescueModalRoute._id]: currentArr.filter((r: any) => r._id !== rescueModalEditId) };
+            });
+        } catch (e) {
+            toast.error("Failed to delete Rescue record");
         }
     };
 
@@ -951,10 +985,17 @@ export default function EverydayAfterDispatchingPage() {
                                         <div className="w-full flex items-center justify-center">
                                             {isTrue ? (
                                                 <button
-                                                    onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "true", true); }}
-                                                    className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 transition-all focus:outline-none shadow-sm ring-1 ring-emerald-500/20"
+                                                    onClick={(e) => {
+                                                        if (row.autoConfirmed) return;
+                                                        e.stopPropagation();
+                                                        toggleConfirmIcon(row.transporterId, "true", true);
+                                                    }}
+                                                    className={cn(
+                                                        "group inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/15 shadow-sm ring-1 ring-emerald-500/20 transition-all focus:outline-none",
+                                                        row.autoConfirmed ? "opacity-90 cursor-default" : "cursor-pointer hover:bg-emerald-500/25"
+                                                    )}
                                                 >
-                                                    <ThumbsUp className="h-[15px] w-[15px] text-emerald-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
+                                                    <ThumbsUp className={cn("h-[15px] w-[15px] text-emerald-500", !row.autoConfirmed && "transition-transform group-hover:scale-110")} strokeWidth={2.5} />
                                                 </button>
                                             ) : (
                                                 <button
@@ -1242,12 +1283,19 @@ export default function EverydayAfterDispatchingPage() {
                             </div>
                         </div>
                     )}
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setRtsModalOpen(false)}>Cancel</Button>
-                        <Button disabled={isSavingRTS || !rtsTBA.trim() || !rtsReason.trim()} onClick={handleSaveRTS}>
-                            {isSavingRTS && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Save RTS
-                        </Button>
+                    <DialogFooter className="w-full flex justify-between sm:justify-between items-center sm:items-center">
+                        <div>
+                            {rtsModalEditId && (
+                                <Button variant="destructive" onClick={handleDeleteRTS}>Delete</Button>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" onClick={() => setRtsModalOpen(false)}>Cancel</Button>
+                            <Button disabled={isSavingRTS || !rtsTBA.trim() || !rtsReason.trim()} onClick={handleSaveRTS}>
+                                {isSavingRTS && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Save RTS
+                            </Button>
+                        </div>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -1388,12 +1436,19 @@ export default function EverydayAfterDispatchingPage() {
                             </div>
                         </div>
                     )}
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setRescueModalOpen(false)}>Cancel</Button>
-                        <Button disabled={isSavingRescue || !rescueBy || !rescueStops || !rescueReason.trim()} onClick={handleSaveRescue} className="bg-blue-600 hover:bg-blue-700 text-white">
-                            {isSavingRescue && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Save Rescue
-                        </Button>
+                    <DialogFooter className="w-full flex justify-between sm:justify-between items-center sm:items-center">
+                        <div>
+                            {rescueModalEditId && (
+                                <Button variant="destructive" onClick={handleDeleteRescue}>Delete</Button>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" onClick={() => setRescueModalOpen(false)}>Cancel</Button>
+                            <Button disabled={isSavingRescue || !rescueBy || !rescueStops || !rescueReason.trim()} onClick={handleSaveRescue} className="bg-blue-600 hover:bg-blue-700 text-white">
+                                {isSavingRescue && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Save Rescue
+                            </Button>
+                        </div>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

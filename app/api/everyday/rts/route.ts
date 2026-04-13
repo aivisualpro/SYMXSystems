@@ -54,8 +54,26 @@ export async function POST(req: NextRequest) {
         }
 
         return NextResponse.json({ message: "RTS recorded successfully", rts: updatedRTS });
-    } catch (error: any) {
+} catch (error: any) {
         console.error("Error creating RTS:", error);
         return NextResponse.json({ error: "Failed to save RTS record" }, { status: 500 });
+    }
+}
+
+export async function DELETE(req: NextRequest) {
+    try {
+        const session = await getSession();
+        if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+        const url = new URL(req.url);
+        const id = url.searchParams.get("id");
+        if (!id) return NextResponse.json({ error: "Missing ID" }, { status: 400 });
+
+        await connectToDatabase();
+        await SYMXRTS.findByIdAndDelete(id);
+
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
