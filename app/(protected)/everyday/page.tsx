@@ -677,9 +677,9 @@ export default function EverydayAfterDispatchingPage() {
     const formattedTomorrow = parsedTomorrow.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     return (
-        <div className="flex-1 overflow-auto bg-background min-h-0">
+        <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-background">
             {/* Top row: Horizontal Date Selector & Notes inline */}
-            <div className="mb-5 overflow-x-auto scrollbar-none">
+            <div className="mb-2 shrink-0 overflow-x-auto scrollbar-none">
                 <div className="flex items-stretch gap-1 p-1 rounded-xl bg-muted/50 border border-border min-w-max flex-1">
                     {/* PDF Generation Button */}
                     <button
@@ -753,11 +753,11 @@ export default function EverydayAfterDispatchingPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 min-h-[500px]">
+            <div className="flex-1 min-h-0 pb-4 grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-5">
                 {/* Middle Left: Tables */}
-                <div className="xl:col-span-9 grid grid-cols-1 xl:grid-cols-[2.1fr_1fr] gap-4 lg:gap-5 min-w-0">
+                <div className="xl:col-span-9 grid grid-cols-1 xl:grid-cols-[2.1fr_1fr] gap-4 lg:gap-5 min-h-0">
                     {/* Routes Overview */}
-                    <Card className="border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-[400px]">
+                    <Card className="border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-0">
                         <div className="p-4 border-b border-border/50 bg-muted/20 shrink-0">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -885,7 +885,7 @@ export default function EverydayAfterDispatchingPage() {
                 </Card>
 
                 {/* Roster Plan */}
-                <Card className="border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-[400px]">
+                <Card className="border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-0">
                     <div className="p-4 border-b border-border/50 bg-muted/20 shrink-0">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -1042,26 +1042,23 @@ export default function EverydayAfterDispatchingPage() {
                 </div>
 
                 {/* Right Side: 3 Stacked Boxes */}
-                <div className="xl:col-span-3 flex flex-col gap-4">
+                <div className="xl:col-span-3 flex flex-col gap-4 min-h-0">
                     {/* Fix Punches */}
-                    <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md overflow-hidden relative group/box p-0 gap-0">
-                        <div className="p-5 h-full flex flex-col">
-                            <div className="flex items-center gap-2 mb-4">
-                                <h3 className="font-bold tracking-wide">Fix Punches</h3>
-                            </div>
-                            <div className="flex-1 flex items-center justify-center">
-                                <span className="text-muted-foreground/40 text-sm font-medium border border-dashed border-border/60 rounded-xl px-4 py-2 bg-muted/10">Module pending implementation</span>
-                            </div>
+                    <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-0">
+                        <div className="p-4 border-b border-border/50 bg-muted/20 shrink-0">
+                            <h3 className="text-sm font-bold tracking-wide">Fix Punches</h3>
+                        </div>
+                        <div className="flex-1 flex items-center justify-center bg-background/40">
+                            <span className="text-muted-foreground/40 text-sm font-medium border border-dashed border-border/60 rounded-xl px-4 py-2 bg-muted/10">Module pending implementation</span>
                         </div>
                     </Card>
 
                     {/* Rescue */}
-                    <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md overflow-hidden relative group/box p-0 gap-0">
-                        <div className="p-5 h-full flex flex-col">
-                            <div className="flex items-center gap-2 mb-4">
-                                <h3 className="font-bold tracking-wide">Rescue</h3>
-                            </div>
-                            <div className="flex-1 overflow-auto rounded-md border border-border/50 bg-background/40 max-h-[300px]">
+                    <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-0">
+                        <div className="p-4 border-b border-border/50 bg-muted/20 shrink-0">
+                            <h3 className="text-sm font-bold tracking-wide">Rescue</h3>
+                        </div>
+                        <div className="flex-1 min-h-0 overflow-auto bg-background/40">
                                 {rescueEntries.length === 0 ? (
                                     <div className="flex h-full items-center justify-center p-4">
                                         <span className="text-muted-foreground/50 text-xs font-medium uppercase tracking-wider">No rescue records found</span>
@@ -1133,12 +1130,11 @@ export default function EverydayAfterDispatchingPage() {
                     </Card>
 
                     {/* RTS */}
-                    <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md overflow-hidden relative group/box p-0 gap-0">
-                        <div className="p-5 h-full flex flex-col">
-                            <div className="flex items-center gap-2 mb-4">
-                                <h3 className="font-bold tracking-wide">RTS</h3>
-                            </div>
-                            <div className="flex-1 overflow-auto rounded-md border border-border/50 bg-background/40 max-h-[300px]">
+                    <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-0">
+                        <div className="p-4 border-b border-border/50 bg-muted/20 shrink-0">
+                            <h3 className="text-sm font-bold tracking-wide">RTS</h3>
+                        </div>
+                        <div className="flex-1 min-h-0 overflow-auto bg-background/40">
                                 {rtsEntries.length === 0 ? (
                                     <div className="flex h-full items-center justify-center p-4">
                                         <span className="text-muted-foreground/50 text-xs font-medium uppercase tracking-wider">No records</span>
@@ -1187,7 +1183,6 @@ export default function EverydayAfterDispatchingPage() {
                                         </tbody>
                                     </table>
                                 )}
-                            </div>
                         </div>
                     </Card>
                 </div>
