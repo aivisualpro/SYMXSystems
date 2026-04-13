@@ -775,8 +775,8 @@ export default function EverydayAfterDispatchingPage() {
                         columns={[
                             { key: "employee",               label: "Employee",  minW: 120, sticky: true },
                             { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 70, align: "center"  },
-                            { key: "rts",                    label: <HeaderIcon title="Return to Station (RTS)" icon={PackageX} className="h-[18px] w-[18px] text-orange-500" strokeWidth={1.5} />, minW: 40, align: "center" },
-                            { key: "rescue",                 label: <HeaderIcon title="Route Rescue" icon={Activity} className="h-[18px] w-[18px] text-teal-500" strokeWidth={1.5} />, minW: 40, align: "center" },
+                            { key: "rts",                    label: <span className="font-semibold text-xs text-orange-600">RTS</span>, minW: 55, align: "center" },
+                            { key: "rescue",                 label: <span className="font-semibold text-xs text-teal-600">Rescue</span>, minW: 65, align: "center" },
                             { key: "routeNumber",            label: <HeaderIcon title="Route Number" icon={Hash} className="h-[18px] w-[18px] text-rose-500" strokeWidth={1.5} />,   minW: 55, align: "center"  },
                             { key: "routeDuration",          label: <HeaderIcon title="Route Duration" icon={Timer} className="h-[18px] w-[18px] text-yellow-500" strokeWidth={1.5} />,  minW: 45, align: "center"  },
                             { key: "stopCount",              label: <HeaderIcon title="Total Stops" icon={MapPin} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />,     minW: 40, align: "center"  },
@@ -902,8 +902,8 @@ export default function EverydayAfterDispatchingPage() {
                         loading={loading}
                         columns={[
                             { key: "employee",               label: "Employee",  minW: 100, sticky: true },
-                            { key: "phone",                  label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 46, align: "center" },
                             { key: "dayBeforeConfirmation",  label: <HeaderIcon title="Day Before Confirmation" icon={ThumbsUp} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 46, align: "center" },
+                            { key: "phone",                  label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 46, align: "center" },
                         ]}
                         renderCell={(key, row) => {
                             if (key === "phone") {
@@ -1043,6 +1043,18 @@ export default function EverydayAfterDispatchingPage() {
 
                 {/* Right Side: 3 Stacked Boxes */}
                 <div className="xl:col-span-3 flex flex-col gap-4">
+                    {/* Fix Punches */}
+                    <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md overflow-hidden relative group/box p-0 gap-0">
+                        <div className="p-5 h-full flex flex-col">
+                            <div className="flex items-center gap-2 mb-4">
+                                <h3 className="font-bold tracking-wide">Fix Punches</h3>
+                            </div>
+                            <div className="flex-1 flex items-center justify-center">
+                                <span className="text-muted-foreground/40 text-sm font-medium border border-dashed border-border/60 rounded-xl px-4 py-2 bg-muted/10">Module pending implementation</span>
+                            </div>
+                        </div>
+                    </Card>
+
                     {/* Rescue */}
                     <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md overflow-hidden relative group/box p-0 gap-0">
                         <div className="p-5 h-full flex flex-col">
@@ -1078,6 +1090,11 @@ export default function EverydayAfterDispatchingPage() {
                                                                 </div>
                                                             )}
                                                             <span className="truncate">{rescue.employeeName}</span>
+                                                            {rescue.performanceRescue && (
+                                                                <span title="Performance Rescue" className="flex items-center justify-center shrink-0">
+                                                                    <AlertCircle strokeWidth={1.5} className="h-[14px] w-[14px] text-orange-500" />
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </td>
                                                     <td className="p-2 text-muted-foreground whitespace-nowrap">
@@ -1090,11 +1107,6 @@ export default function EverydayAfterDispatchingPage() {
                                                                 </div>
                                                             )}
                                                             <span className="truncate">{rescue.rescuerName}</span>
-                                                            {rescue.performanceRescue && (
-                                                                <span title="Performance Rescue" className="flex items-center justify-center shrink-0">
-                                                                    <ThumbsUp strokeWidth={1.5} className="h-[14px] w-[14px] text-emerald-500" />
-                                                                </span>
-                                                            )}
                                                         </div>
                                                     </td>
                                                     <td className="p-2 text-center">
@@ -1175,18 +1187,6 @@ export default function EverydayAfterDispatchingPage() {
                                         </tbody>
                                     </table>
                                 )}
-                            </div>
-                        </div>
-                    </Card>
-
-                    {/* Fix Punches */}
-                    <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md overflow-hidden relative group/box p-0 gap-0">
-                        <div className="p-5 h-full flex flex-col">
-                            <div className="flex items-center gap-2 mb-4">
-                                <h3 className="font-bold tracking-wide">Fix Punches</h3>
-                            </div>
-                            <div className="flex-1 flex items-center justify-center">
-                                <span className="text-muted-foreground/40 text-sm font-medium border border-dashed border-border/60 rounded-xl px-4 py-2 bg-muted/10">Module pending implementation</span>
                             </div>
                         </div>
                     </Card>
