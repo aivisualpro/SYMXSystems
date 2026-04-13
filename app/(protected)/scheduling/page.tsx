@@ -41,6 +41,7 @@ import {
   FileText,
   ArrowRight,
   UserPlus,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
@@ -523,6 +524,49 @@ export default function SchedulingPage() {
   const [selectAllTrigger, setSelectAllTrigger] = useState(0);
   const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo | null>(null);
   const [generatingWeek, setGeneratingWeek] = useState(false);
+  
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [deletingWeek, setDeletingWeek] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/user/profile")
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.email) setCurrentUserEmail(data.email.toLowerCase());
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleDeleteWeek = async () => {
+    if (!selectedWeek) return;
+    if (!confirm(`Are you sure you want to delete ALL data (Schedules, Routes, Info, Audits) for ${selectedWeek}? This cannot be undone.`)) return;
+    
+    setDeletingWeek(true);
+    try {
+      const res = await fetch(`/api/schedules/reset-week?yearWeek=${encodeURIComponent(selectedWeek)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete schedule data");
+      
+      toast.success(`Schedule deleted successfully. Removed ${data.deleted?.schedules || 0} schedules.`);
+      
+      // Update UI state
+      setWeeks(prev => prev.filter(w => w !== selectedWeek));
+      
+      // Refresh current week data since it is now empty
+      const idx = weeks.indexOf(selectedWeek);
+      if (weeks.length > 1) {
+        setSelectedWeek(weeks[idx > 0 ? idx - 1 : 1]);
+      } else {
+        setWeekData(null);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete week");
+    } finally {
+      setDeletingWeek(false);
+    }
+  };
   const [routeTypeConfigs, setRouteTypeConfigs] = useState<Record<string, { color: string; startTime: string; routeStatus: string }>>({});
   const [routeTypesList, setRouteTypesList] = useState<any[]>([]);
   const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
@@ -1021,6 +1065,18 @@ export default function SchedulingPage() {
         {weeks.length > 0 && (
           <>
             <div className="w-px h-5 bg-border/60 hidden sm:block" />
+            {currentUserEmail === "adeel@symxlogistics.com" && activeMainTab === "scheduling" && (
+              <Button
+                variant="destructive"
+                size="icon"
+                className="h-8 w-8 mr-1 opacity-80 hover:opacity-100"
+                onClick={handleDeleteWeek}
+                disabled={deletingWeek || generatingWeek}
+                title={`Delete ${selectedWeek}`}
+              >
+                {deletingWeek ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              </Button>
+            )}
             <Button
               variant="outline"
               size="icon"
@@ -1082,7 +1138,7 @@ export default function SchedulingPage() {
       </div>
     );
     return () => setRightContent(null);
-  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek, weekData?.totalEmployees, warningCounts, averageDays]);
+  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek, weekData?.totalEmployees, warningCounts, averageDays, currentUserEmail, deletingWeek]);
 
   // Handle type change via dropdown
   const handleTypeChange = useCallback(async (
