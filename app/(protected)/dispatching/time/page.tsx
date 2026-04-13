@@ -620,8 +620,8 @@ export default function TimePage() {
                             value={value || ""}
                             onChange={(e) => handleSave(row._id, field, e.target.value)}
                             className={cn(
-                                "w-full h-full relative z-10 text-[11px] px-1 rounded border border-border/40 focus:border-primary focus:outline-none transition-all appearance-none shadow-sm cursor-pointer",
-                                value && opt ? `${badgeColor} ${textColor} pl-6 font-semibold` : "bg-foreground/5"
+                                "w-full h-full relative z-10 text-[11px] text-center px-1 rounded border border-border/40 focus:border-primary focus:outline-none transition-all appearance-none shadow-sm cursor-pointer",
+                                value && opt ? `${badgeColor} ${textColor} font-semibold` : "bg-foreground/5"
                             )}
                             style={{ backgroundImage: 'none' }}
                         >
@@ -662,7 +662,7 @@ export default function TimePage() {
                             }
                         }}
                         className={cn(
-                            "w-full h-full text-xs px-1.5 rounded border border-border/40 focus:border-primary focus:outline-none transition-all placeholder:text-muted-foreground/30 shadow-inner",
+                            "w-full h-full text-xs px-1.5 text-center rounded border border-border/40 focus:border-primary focus:outline-none transition-all placeholder:text-muted-foreground/30 shadow-inner",
                             style ? `${style.inputBg} ${style.text}` : "bg-foreground/5 focus:bg-background relative z-10",
                             Icon ? "pr-6" : ""
                         )}
@@ -680,7 +680,7 @@ export default function TimePage() {
                 const textColor = badgeColor.startsWith("bg-") ? "text-white" : "text-foreground";
                 const IconComponent = opt.icon ? (LucideIcons as any)[opt.icon] : null;
                 return (
-                    <div className={cn("inline-flex items-center gap-1.5 px-2 min-h-[22px] rounded text-[11px] font-semibold w-max", badgeColor, textColor)}>
+                    <div className={cn("inline-flex justify-center items-center gap-1.5 px-2 min-h-[22px] rounded text-[11px] font-semibold w-full", badgeColor, textColor)}>
                         {opt.image ? (
                             <img src={opt.image} alt={opt.description} className="h-4 w-4 rounded-full object-cover shrink-0 ring-1 ring-border/20" />
                         ) : IconComponent ? (
@@ -693,9 +693,9 @@ export default function TimePage() {
         }
 
         return (
-            <div className={cn("flex items-center gap-1 w-full rounded px-1 min-h-[28px]", style && `${style.bg} ${style.text}`)}>
+            <div className={cn("flex items-center justify-center gap-1 w-full rounded px-1 min-h-[28px]", style && `${style.bg} ${style.text}`)}>
                 {Icon && <Icon className={cn("h-3.5 w-3.5 shrink-0", (style as any).iconColor || style.text || "opacity-80")} />}
-                <span className={cn("text-[11px] truncate block w-full", !style && (displayVal === "—" ? "text-muted-foreground/40" : "text-foreground"))}>{displayVal}</span>
+                <span className={cn("text-[11px] truncate block w-full text-center", !style && (displayVal === "—" ? "text-muted-foreground/40" : "text-foreground"))}>{displayVal}</span>
             </div>
         );
     };
@@ -739,8 +739,8 @@ export default function TimePage() {
                         {COLUMNS.map((col, i) => (
                             <button key={col.key} onClick={() => handleSort(col.key)}
                                 className={cn(
-                                    "flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold hover:text-foreground transition-colors text-left",
-                                    i === 0 && "sticky left-0 z-20 bg-muted"
+                                    "flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold hover:text-foreground transition-colors",
+                                    i === 0 ? "sticky left-0 z-20 bg-muted text-left" : "justify-center text-center"
                                 )}>
                                 {col.label}
                                 {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
