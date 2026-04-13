@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+import { cn, formatPhoneNumber } from "@/lib/utils";
 import { generateRoutesPDF } from "@/lib/generate-routes-pdf";
 import { RoutesTable, type RoutesTableRow } from "@/app/(protected)/dispatching/_components/RoutesTable";
 
@@ -971,7 +971,7 @@ export default function EverydayAfterDispatchingPage() {
                                                     title={`Call ${val}`}
                                                 >
                                                     <Phone className="h-3 w-3 mr-1.5 text-blue-500" strokeWidth={2} />
-                                                    {val}
+                                                    {formatPhoneNumber(String(val))}
                                                 </a>
                                             ) : (
                                                 <span className="text-muted-foreground/30 text-[11px] font-bold">—</span>
