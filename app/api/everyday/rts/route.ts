@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const body = await req.json();
-        const { routeId, date, transporterId, tba, reason } = body;
+        const { _id, routeId, date, transporterId, tba, reason } = body;
 
         if (!routeId || !date || !transporterId || !tba || !reason) {
             console.error("[RTS API] Missing required fields:", { routeId, date, transporterId, tba, reason });
@@ -40,11 +40,18 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
 
-        const updatedRTS = await SYMXRTS.findOneAndUpdate(
-            { routeId, date },
-            { $set: { transporterId, tba, reason } },
-            { new: true, upsert: true }
-        );
+        let updatedRTS;
+        if (_id) {
+            updatedRTS = await SYMXRTS.findByIdAndUpdate(
+                _id,
+                { $set: { transporterId, tba, reason, routeId, date } },
+                { new: true }
+            );
+        } else {
+            updatedRTS = await SYMXRTS.create({
+                routeId, date, transporterId, tba, reason
+            });
+        }
 
         return NextResponse.json({ message: "RTS recorded successfully", rts: updatedRTS });
     } catch (error: any) {

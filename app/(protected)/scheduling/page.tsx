@@ -1568,6 +1568,12 @@ export default function SchedulingPage() {
                                                         <span>{van}</span>
                                                       </>
                                                     )}
+                                                    {day?.dayBeforeConfirmation === "true" && (
+                                                      <div className="col-span-2 flex items-center justify-end gap-1.5 mt-0.5 pt-0.5 border-t border-border/10">
+                                                        <span className="text-emerald-500 font-bold">Confirmed</span>
+                                                        <LucideIcons.ThumbsUp className="h-3 w-3 text-emerald-500" />
+                                                      </div>
+                                                    )}
 
                                                   </div>
                                                   {warning && (
@@ -1590,7 +1596,7 @@ export default function SchedulingPage() {
                                                 avoidCollisions
                                                 className="w-48 p-0 overflow-hidden group"
                                               >
-                                                <div className="max-h-[140px] overflow-y-auto flex flex-col group-data-[side=top]:flex-col-reverse py-1">
+                                                <div className="max-h-[140px] overflow-y-auto flex flex-col py-1">
                                                   {dynamicTypeOptions.map(opt => {
                                                     const Icon = opt.icon;
                                                     const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();

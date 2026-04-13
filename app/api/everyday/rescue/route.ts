@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const body = await req.json();
-        const { routeId, date, transporterId, rescuedBytransporterId, stopsRescued, reason, performanceRescue } = body;
+        const { _id, routeId, date, transporterId, rescuedBytransporterId, stopsRescued, reason, performanceRescue } = body;
 
         if (!routeId || !date || !transporterId || !rescuedBytransporterId || stopsRescued === undefined || !reason) {
             console.error("[Rescue API] Missing required fields:", { routeId, date, transporterId, rescuedBytransporterId, stopsRescued, reason });
@@ -40,11 +40,18 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
 
-        const updatedRescue = await SYMXRescue.findOneAndUpdate(
-            { routeId, date },
-            { $set: { transporterId, rescuedBytransporterId, stopsRescued, reason, performanceRescue } },
-            { new: true, upsert: true }
-        );
+        let updatedRescue;
+        if (_id) {
+            updatedRescue = await SYMXRescue.findByIdAndUpdate(
+                _id,
+                { $set: { transporterId, rescuedBytransporterId, stopsRescued, reason, performanceRescue, routeId, date } },
+                { new: true }
+            );
+        } else {
+            updatedRescue = await SYMXRescue.create({
+                routeId, date, transporterId, rescuedBytransporterId, stopsRescued, reason, performanceRescue
+            });
+        }
 
         return NextResponse.json({ message: "Rescue recorded successfully", rescue: updatedRescue });
     } catch (error: any) {

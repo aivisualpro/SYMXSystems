@@ -118,6 +118,7 @@ export default function EverydayAfterDispatchingPage() {
     const [debounceNotes, setDebounceNotes] = useState(notes);
 
     const [rtsModalOpen, setRtsModalOpen] = useState(false);
+    const [rtsModalEditId, setRtsModalEditId] = useState<string | null>(null);
     const [rtsModalRoute, setRtsModalRoute] = useState<RoutesTableRow | null>(null);
     const [rtsTBA, setRtsTBA] = useState("");
     const [rtsReason, setRtsReason] = useState("");
@@ -126,6 +127,7 @@ export default function EverydayAfterDispatchingPage() {
     const [rtsMap, setRtsMap] = useState<Record<string, any>>({});
 
     const [rescueModalOpen, setRescueModalOpen] = useState(false);
+    const [rescueModalEditId, setRescueModalEditId] = useState<string | null>(null);
     const [rescueModalRoute, setRescueModalRoute] = useState<RoutesTableRow | null>(null);
     const [rescueBy, setRescueBy] = useState("");
     const [rescueBySearch, setRescueBySearch] = useState("");
@@ -153,11 +155,11 @@ export default function EverydayAfterDispatchingPage() {
             .catch(err => console.error(err));
     }, []);
 
-    const openRTSModal = (row: RoutesTableRow) => {
+    const openRTSModal = (row: RoutesTableRow, existingRecord?: any) => {
         setRtsModalRoute(row);
-        const existingData = rtsMap[row._id];
-        setRtsTBA(existingData ? existingData.tba : "");
-        setRtsReason(existingData ? existingData.reason : "");
+        setRtsModalEditId(existingRecord ? existingRecord._id : null);
+        setRtsTBA(existingRecord ? existingRecord.tba : "");
+        setRtsReason(existingRecord ? existingRecord.reason : "");
         setRtsModalOpen(true);
     };
 
@@ -172,6 +174,7 @@ export default function EverydayAfterDispatchingPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
+                    _id: rtsModalEditId,
                     routeId: rtsModalRoute._id,
                     date: date,
                     transporterId: rtsModalRoute.transporterId,
@@ -187,10 +190,17 @@ export default function EverydayAfterDispatchingPage() {
             // Update Map optimistically so the icon refreshes immediately
             if (res.ok) {
                 const updatedObj = await res.json();
-                setRtsMap(prev => ({
-                    ...prev,
-                    [rtsModalRoute._id]: updatedObj.rts
-                }));
+                setRtsMap(prev => {
+                    const currentArr = prev[rtsModalRoute._id] || [];
+                    const index = currentArr.findIndex((r: any) => r._id === updatedObj.rts._id);
+                    let newArr = [...currentArr];
+                    if (index > -1) {
+                        newArr[index] = updatedObj.rts;
+                    } else {
+                        newArr.push(updatedObj.rts);
+                    }
+                    return { ...prev, [rtsModalRoute._id]: newArr };
+                });
             }
 
             if (!rtsReasonsList.includes(rtsReason.trim())) {
@@ -203,13 +213,13 @@ export default function EverydayAfterDispatchingPage() {
         }
     };
 
-    const openRescueModal = (row: RoutesTableRow) => {
+    const openRescueModal = (row: RoutesTableRow, existingRecord?: any) => {
         setRescueModalRoute(row);
-        const existingData = rescueMap[row._id];
-        setRescueBy(existingData ? existingData.rescuedBytransporterId : "");
-        setRescueStops(existingData ? existingData.stopsRescued.toString() : "");
-        setRescueReason(existingData ? existingData.reason : "");
-        setRescuePerformance(existingData ? existingData.performanceRescue : false);
+        setRescueModalEditId(existingRecord ? existingRecord._id : null);
+        setRescueBy(existingRecord ? existingRecord.rescuedBytransporterId : "");
+        setRescueStops(existingRecord ? String(existingRecord.stopsRescued) : "");
+        setRescueReason(existingRecord ? existingRecord.reason : "");
+        setRescuePerformance(existingRecord ? existingRecord.performanceRescue : false);
         setRescueBySearch("");
         setRescueByOpen(false);
         setRescueModalOpen(true);
@@ -226,6 +236,7 @@ export default function EverydayAfterDispatchingPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
+                    _id: rescueModalEditId,
                     routeId: rescueModalRoute._id,
                     date: date,
                     transporterId: rescueModalRoute.transporterId,
@@ -242,10 +253,17 @@ export default function EverydayAfterDispatchingPage() {
 
             if (res.ok) {
                 const updatedObj = await res.json();
-                setRescueMap(prev => ({
-                    ...prev,
-                    [rescueModalRoute._id]: updatedObj.rescue
-                }));
+                setRescueMap(prev => {
+                    const currentArr = prev[rescueModalRoute._id] || [];
+                    const index = currentArr.findIndex((r: any) => r._id === updatedObj.rescue._id);
+                    let newArr = [...currentArr];
+                    if (index > -1) {
+                        newArr[index] = updatedObj.rescue;
+                    } else {
+                        newArr.push(updatedObj.rescue);
+                    }
+                    return { ...prev, [rescueModalRoute._id]: newArr };
+                });
             }
 
             if (!rescueReasonsList.includes(rescueReason.trim())) {
@@ -399,9 +417,10 @@ export default function EverydayAfterDispatchingPage() {
             if (rtsRes.ok) {
                 const rtsData = await rtsRes.json();
                 if (rtsData.reasons) setRtsReasonsList(rtsData.reasons);
-                const tm: Record<string, any> = {};
+                const tm: Record<string, any[]> = {};
                 (rtsData.records || []).forEach((r: any) => {
-                    tm[r.routeId] = r;
+                    if (!tm[r.routeId]) tm[r.routeId] = [];
+                    tm[r.routeId].push(r);
                 });
                 setRtsMap(tm);
             } else {
@@ -411,9 +430,10 @@ export default function EverydayAfterDispatchingPage() {
             if (rescueRes.ok) {
                 const resData = await rescueRes.json();
                 if (resData.reasons) setRescueReasonsList(resData.reasons);
-                const rm: Record<string, any> = {};
+                const rm: Record<string, any[]> = {};
                 (resData.records || []).forEach((r: any) => {
-                    rm[r.routeId] = r;
+                    if (!rm[r.routeId]) rm[r.routeId] = [];
+                    rm[r.routeId].push(r);
                 });
                 setRescueMap(rm);
             } else {
@@ -602,12 +622,13 @@ export default function EverydayAfterDispatchingPage() {
     }, [tomorrowRoutes, tomorrowSchedulesMap, employeesMap]);
 
     const rtsEntries = useMemo(() => {
-        return Object.values(rtsMap).map((rts: any) => {
+        return Object.values(rtsMap).flat().map((rts: any) => {
              const route = routes.find(r => r._id === rts.routeId);
              const emp = employeesMap[rts.transporterId] || {};
              return {
                  _id: rts._id || rts.routeId,
                  routeObj: route,
+                 originalRecord: rts,
                  employeeName: route?.employeeName || emp.name || rts.transporterId,
                  employeeImage: emp.profileImage,
                  routeNumber: route?.routeNumber || "—",
@@ -618,14 +639,15 @@ export default function EverydayAfterDispatchingPage() {
     }, [rtsMap, routes, employeesMap]);
 
     const rescueEntries = useMemo(() => {
-        return Object.values(rescueMap).map((rescue: any) => {
+        return Object.values(rescueMap).flat().map((rescue: any) => {
              const route = routes.find(r => r._id === rescue.routeId);
              const emp = employeesMap[rescue.transporterId] || {};
              const rescuer = allEmployees.find(e => e.transporterId === rescue.rescuedBytransporterId);
-             const rescuerName = rescuer?.name || rescue.rescuedBytransporterId;
+             const rescuerName = rescuer ? (`${rescuer.firstName || ''} ${rescuer.lastName || ''}`.trim() || rescuer.name || rescue.rescuedBytransporterId) : rescue.rescuedBytransporterId;
              return {
                  _id: rescue._id || rescue.routeId,
                  routeObj: route,
+                 originalRecord: rescue,
                  employeeName: route?.employeeName || emp.name || rescue.transporterId,
                  employeeImage: emp.profileImage,
                  rescuerName,
@@ -646,6 +668,13 @@ export default function EverydayAfterDispatchingPage() {
     }
 
     const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    const parsedDate = date ? new Date(date + "T12:00:00Z") : new Date();
+    const formattedDate = parsedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    const parsedTomorrow = new Date(parsedDate);
+    parsedTomorrow.setUTCDate(parsedTomorrow.getUTCDate() + 1);
+    const formattedTomorrow = parsedTomorrow.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     return (
         <div className="flex-1 overflow-auto bg-background min-h-0">
@@ -736,7 +765,9 @@ export default function EverydayAfterDispatchingPage() {
                                     <MapPin className="h-4 w-4 text-orange-500" />
                                 </div>
                                 <div>
-                                    <h2 className="text-sm font-bold text-foreground leading-none tracking-tight">Routes Overview</h2>
+                                    <h2 className="text-sm font-bold text-foreground leading-none tracking-tight flex items-center">
+                                        Routes Overview <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-orange-500/10 text-orange-600 px-1.5 py-0.5 rounded-sm">({formattedDate})</span>
+                                    </h2>
                                 </div>
                             </div>
                         </div>
@@ -803,50 +834,34 @@ export default function EverydayAfterDispatchingPage() {
                                 );
                             }
                             if (key === "rts") {
-                                const hasRts = !!rtsMap[row._id];
+                                const rtsList = rtsMap[row._id] || [];
+                                const count = rtsList.length;
                                 return (
                                     <div className="w-full flex items-center justify-center">
-                                        {hasRts ? (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-500/15 hover:bg-orange-500/25 transition-all shadow-sm border border-orange-500/20"
-                                                title="View RTS"
-                                            >
-                                                <PackageX className="h-4 w-4 text-orange-600 group-hover:text-orange-700 transition-colors cursor-pointer" />
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
-                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-orange-500/30"
-                                                title="Log RTS"
-                                            >
-                                                <PackageX className="h-[18px] w-[18px] text-orange-500 fill-orange-500/20 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
-                                            </button>
-                                        )}
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
+                                            className={`group inline-flex items-center justify-center h-8 ${count > 0 ? 'px-3' : 'w-12'} rounded-full bg-orange-500/10 hover:bg-orange-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-orange-500/30 gap-1.5`}
+                                            title="Add RTS"
+                                        >
+                                            <PackageX className="h-[18px] w-[18px] text-orange-500 fill-orange-500/20 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
+                                            {count > 0 && <span className="text-[11px] font-bold text-orange-600">{count}</span>}
+                                        </button>
                                     </div>
                                 );
                             }
                             if (key === "rescue") {
-                                const hasRescue = !!rescueMap[row._id];
+                                const list = rescueMap[row._id] || [];
+                                const count = list.length;
                                 return (
                                     <div className="w-full flex items-center justify-center">
-                                        {hasRescue ? (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all shadow-sm border border-blue-500/20"
-                                                title="View Rescue"
-                                            >
-                                                <LifeBuoy className="h-4 w-4 text-blue-600 group-hover:text-blue-700 transition-colors cursor-pointer" />
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
-                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-teal-500/10 hover:bg-teal-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-teal-500/30"
-                                                title="Log Rescue"
-                                            >
-                                                <Activity className="h-[18px] w-[18px] text-teal-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={3} />
-                                            </button>
-                                        )}
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
+                                            className={`group inline-flex items-center justify-center h-8 ${count > 0 ? 'px-3' : 'w-12'} rounded-full bg-teal-500/10 hover:bg-teal-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-teal-500/30 gap-1.5`}
+                                            title="Add Rescue"
+                                        >
+                                            <Activity className="h-[18px] w-[18px] text-teal-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={3} />
+                                            {count > 0 && <span className="text-[11px] font-bold text-teal-600">{count}</span>}
+                                        </button>
                                     </div>
                                 );
                             }
@@ -881,7 +896,9 @@ export default function EverydayAfterDispatchingPage() {
                                     <MapPin className="h-4 w-4 text-indigo-500" />
                                 </div>
                                 <div>
-                                    <h2 className="text-sm font-bold text-foreground leading-none tracking-tight">Roster Plan</h2>
+                                    <h2 className="text-sm font-bold text-foreground leading-none tracking-tight flex items-center">
+                                        Roster Plan <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-indigo-500/10 text-indigo-600 px-1.5 py-0.5 rounded-sm">({formattedTomorrow})</span>
+                                    </h2>
                                 </div>
                             </div>
                         </div>
@@ -1051,7 +1068,7 @@ export default function EverydayAfterDispatchingPage() {
                                     </div>
                                 ) : (
                                     <table className="w-full text-xs text-left relative">
-                                        <thead className="bg-muted/40 text-muted-foreground uppercase sticky top-0 backdrop-blur-md z-10 border-b border-border/50 shadow-sm">
+                                        <thead className="bg-muted text-muted-foreground uppercase sticky top-0 z-10 border-b border-border/50 shadow-sm">
                                             <tr>
                                                 <th className="font-semibold p-2.5 pl-3">Employee</th>
                                                 <th className="font-semibold p-2.5">Rescued By</th>
@@ -1085,6 +1102,11 @@ export default function EverydayAfterDispatchingPage() {
                                                                 </div>
                                                             )}
                                                             <span className="truncate">{rescue.rescuerName}</span>
+                                                            {rescue.performanceRescue && (
+                                                                <span title="Performance Rescue" className="flex items-center justify-center shrink-0">
+                                                                    <ThumbsUp strokeWidth={2.5} className="h-[14px] w-[14px] text-emerald-500 fill-emerald-500/20" />
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </td>
                                                     <td className="p-2 text-center">
@@ -1093,7 +1115,7 @@ export default function EverydayAfterDispatchingPage() {
                                                     <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rescue.reason}>{rescue.reason}</td>
                                                     <td className="p-2 pr-3 text-right">
                                                         <button 
-                                                            onClick={() => rescue.routeObj && openRescueModal(rescue.routeObj)}
+                                                            onClick={() => rescue.routeObj && openRescueModal(rescue.routeObj, rescue.originalRecord)}
                                                             disabled={!rescue.routeObj}
                                                             className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                                                             title="Edit Rescue"
@@ -1129,7 +1151,7 @@ export default function EverydayAfterDispatchingPage() {
                                     </div>
                                 ) : (
                                     <table className="w-full text-xs text-left relative">
-                                        <thead className="bg-muted/40 text-muted-foreground uppercase sticky top-0 backdrop-blur-md z-10 border-b border-border/50 shadow-sm">
+                                        <thead className="bg-muted text-muted-foreground uppercase sticky top-0 z-10 border-b border-border/50 shadow-sm">
                                             <tr>
                                                 <th className="font-semibold p-2.5 pl-3">Employee</th>
                                                 <th className="font-semibold p-2.5">TBA</th>
@@ -1158,7 +1180,7 @@ export default function EverydayAfterDispatchingPage() {
                                                     <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rts.reason}>{rts.reason}</td>
                                                     <td className="p-2 pr-3 text-right">
                                                         <button 
-                                                            onClick={() => rts.routeObj && openRTSModal(rts.routeObj)}
+                                                            onClick={() => rts.routeObj && openRTSModal(rts.routeObj, rts.originalRecord)}
                                                             disabled={!rts.routeObj}
                                                             className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                                                             title="Edit RTS"
