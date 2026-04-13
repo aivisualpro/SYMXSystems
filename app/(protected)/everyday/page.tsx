@@ -226,8 +226,11 @@ export default function EverydayAfterDispatchingPage() {
                         toast.success("RTS record deleted");
                         setRtsModalOpen(false);
                         setRtsMap(prev => {
-                            const currentArr = prev[rtsModalRoute._id] || [];
-                            return { ...prev, [rtsModalRoute._id]: currentArr.filter((r: any) => r._id !== rtsModalEditId) };
+                            const newMap = { ...prev };
+                            Object.keys(newMap).forEach(k => {
+                                newMap[k] = newMap[k].filter((r: any) => String(r._id) !== String(rtsModalEditId));
+                            });
+                            return newMap;
                         });
                     } catch (e) {
                         toast.error("Failed to delete RTS record");
@@ -312,8 +315,11 @@ export default function EverydayAfterDispatchingPage() {
                         toast.success("Rescue record deleted");
                         setRescueModalOpen(false);
                         setRescueMap(prev => {
-                            const currentArr = prev[rescueModalRoute._id] || [];
-                            return { ...prev, [rescueModalRoute._id]: currentArr.filter((r: any) => r._id !== rescueModalEditId) };
+                            const newMap = { ...prev };
+                            Object.keys(newMap).forEach(k => {
+                                newMap[k] = newMap[k].filter((r: any) => String(r._id) !== String(rescueModalEditId));
+                            });
+                            return newMap;
                         });
                     } catch (e) {
                         toast.error("Failed to delete Rescue record");
