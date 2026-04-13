@@ -98,10 +98,10 @@ const HeaderIcon = ({ icon: Icon, title, className, strokeWidth }: any) => (
 
 export default function EverydayAfterDispatchingPage() {
     const { setLeftContent, setRightContent } = useHeaderActions();
-    
+
     const [weeks, setWeeks] = useState<string[]>([]);
     const [selectedWeek, setSelectedWeek] = useState("");
-    
+
     const [date, setDate] = useState("");
     const [notes, setNotes] = useState("");
     const [savingNotes, setSavingNotes] = useState(false);
@@ -112,6 +112,7 @@ export default function EverydayAfterDispatchingPage() {
     const [schedulesMap, setSchedulesMap] = useState<Record<string, any>>({});
     const [tomorrowRoutes, setTomorrowRoutes] = useState<any[]>([]);
     const [tomorrowSchedulesMap, setTomorrowSchedulesMap] = useState<Record<string, any>>({});
+    const [routeTypeConfigs, setRouteTypeConfigs] = useState<Record<string, any>>({});
     const [pdfLoading, setPdfLoading] = useState(false);
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
@@ -183,7 +184,7 @@ export default function EverydayAfterDispatchingPage() {
                 })
             });
             if (!res.ok) throw new Error("Failed to save RTS");
-            
+
             toast.success("RTS recorded successfully");
             setRtsModalOpen(false);
 
@@ -247,7 +248,7 @@ export default function EverydayAfterDispatchingPage() {
                 })
             });
             if (!res.ok) throw new Error("Failed to save Rescue");
-            
+
             toast.success("Rescue recorded successfully");
             setRescueModalOpen(false);
 
@@ -363,13 +364,14 @@ export default function EverydayAfterDispatchingPage() {
             })();
             const tomorrowWeek = getCurrentYearWeek(tomorrow);
 
-            const [routesRes, schedulesRes, rtsRes, rescueRes, tRoutesRes, tSchedulesRes] = await Promise.all([
+            const [routesRes, schedulesRes, rtsRes, rescueRes, tRoutesRes, tSchedulesRes, routeTypesRes] = await Promise.all([
                 fetch(`/api/dispatching/routes?yearWeek=${selectedWeek}&date=${date}`),
                 fetch(`/api/everyday/schedules?dateStr=${date}`),
                 fetch(`/api/everyday/rts?dateStr=${date}`),
                 fetch(`/api/everyday/rescue?dateStr=${date}`),
                 fetch(`/api/dispatching/routes?yearWeek=${tomorrowWeek}&date=${tomorrow}`),
-                fetch(`/api/everyday/schedules?dateStr=${tomorrow}`)
+                fetch(`/api/everyday/schedules?dateStr=${tomorrow}`),
+                fetch(`/api/admin/settings/route-types`)
             ]);
 
             let empMap: Record<string, any> = {};
@@ -439,6 +441,17 @@ export default function EverydayAfterDispatchingPage() {
             } else {
                 setRescueMap({});
             }
+
+            if (routeTypesRes.ok) {
+                const rtData = await routeTypesRes.json();
+                const map: Record<string, any> = {};
+                (Array.isArray(rtData) ? rtData : []).forEach((rt: any) => {
+                    map[rt.name.toLowerCase()] = rt;
+                });
+                setRouteTypeConfigs(map);
+            } else {
+                setRouteTypeConfigs({});
+            }
         } catch (error) {
             console.error(error);
             toast.error("Failed to load dashboard data");
@@ -485,13 +498,13 @@ export default function EverydayAfterDispatchingPage() {
 
     const toggleConfirmIcon = async (transporterId: string, currentVal: string, isTomorrow = false) => {
         if (!date) return;
-        
+
         const targetDate = isTomorrow ? (() => {
             const tDate = new Date(date + "T12:00:00Z");
             tDate.setUTCDate(tDate.getUTCDate() + 1);
             return tDate.toISOString().split("T")[0];
         })() : date;
-        
+
         const nextVal = currentVal === "true" ? "false" : "true";
 
         if (isTomorrow) {
@@ -586,9 +599,15 @@ export default function EverydayAfterDispatchingPage() {
 
         // Drive from tomorrowRoutes — this has all employees + types from the dispatching API
         tomorrowRoutes.forEach(r => {
-            const type = r.type || "Unassigned";
-            if (type.toLowerCase() === "off") return;
+            const typeLower = (r.type || "Unassigned").toLowerCase();
+            const config = routeTypeConfigs[typeLower];
+            
+            // Filter: Route Status must be Scheduled
+            if (config && config.routeStatus?.toLowerCase() !== "scheduled") return;
+            // Also maintain the hardcoded "off" check just in case it takes time to load configs
+            if (typeLower === "off") return;
 
+            const type = r.type || "Unassigned";
             const empFromMap = employeesMap[r.transporterId] || {};
             // Look up confirmation from schedules fetched for tomorrow
             const schedule = tomorrowSchedulesMap[r.transporterId] || {};
@@ -619,43 +638,43 @@ export default function EverydayAfterDispatchingPage() {
                 if (b.type.toLowerCase() === "route") return 1;
                 return a.type.localeCompare(b.type);
             });
-    }, [tomorrowRoutes, tomorrowSchedulesMap, employeesMap]);
+    }, [tomorrowRoutes, tomorrowSchedulesMap, employeesMap, routeTypeConfigs]);
 
     const rtsEntries = useMemo(() => {
         return Object.values(rtsMap).flat().map((rts: any) => {
-             const route = routes.find(r => r._id === rts.routeId);
-             const emp = employeesMap[rts.transporterId] || {};
-             return {
-                 _id: rts._id || rts.routeId,
-                 routeObj: route,
-                 originalRecord: rts,
-                 employeeName: route?.employeeName || emp.name || rts.transporterId,
-                 employeeImage: emp.profileImage,
-                 routeNumber: route?.routeNumber || "—",
-                 tba: rts.tba,
-                 reason: rts.reason
-             };
+            const route = routes.find(r => r._id === rts.routeId);
+            const emp = employeesMap[rts.transporterId] || {};
+            return {
+                _id: rts._id || rts.routeId,
+                routeObj: route,
+                originalRecord: rts,
+                employeeName: route?.employeeName || emp.name || rts.transporterId,
+                employeeImage: emp.profileImage,
+                routeNumber: route?.routeNumber || "—",
+                tba: rts.tba,
+                reason: rts.reason
+            };
         });
     }, [rtsMap, routes, employeesMap]);
 
     const rescueEntries = useMemo(() => {
         return Object.values(rescueMap).flat().map((rescue: any) => {
-             const route = routes.find(r => r._id === rescue.routeId);
-             const emp = employeesMap[rescue.transporterId] || {};
-             const rescuer = allEmployees.find(e => e.transporterId === rescue.rescuedBytransporterId);
-             const rescuerName = rescuer ? (`${rescuer.firstName || ''} ${rescuer.lastName || ''}`.trim() || rescuer.name || rescue.rescuedBytransporterId) : rescue.rescuedBytransporterId;
-             return {
-                 _id: rescue._id || rescue.routeId,
-                 routeObj: route,
-                 originalRecord: rescue,
-                 employeeName: route?.employeeName || emp.name || rescue.transporterId,
-                 employeeImage: emp.profileImage,
-                 rescuerName,
-                 rescuerImage: rescuer?.profileImage,
-                 stopsRescued: rescue.stopsRescued,
-                 reason: rescue.reason,
-                 performanceRescue: rescue.performanceRescue
-             };
+            const route = routes.find(r => r._id === rescue.routeId);
+            const emp = employeesMap[rescue.transporterId] || {};
+            const rescuer = allEmployees.find(e => e.transporterId === rescue.rescuedBytransporterId);
+            const rescuerName = rescuer ? (`${rescuer.firstName || ''} ${rescuer.lastName || ''}`.trim() || rescuer.name || rescue.rescuedBytransporterId) : rescue.rescuedBytransporterId;
+            return {
+                _id: rescue._id || rescue.routeId,
+                routeObj: route,
+                originalRecord: rescue,
+                employeeName: route?.employeeName || emp.name || rescue.transporterId,
+                employeeImage: emp.profileImage,
+                rescuerName,
+                rescuerImage: rescuer?.profileImage,
+                stopsRescued: rescue.stopsRescued,
+                reason: rescue.reason,
+                performanceRescue: rescue.performanceRescue
+            };
         });
     }, [rescueMap, routes, employeesMap, allEmployees]);
 
@@ -723,14 +742,14 @@ export default function EverydayAfterDispatchingPage() {
                             className="w-full h-full bg-background border border-primary ring-1 ring-primary rounded-lg pl-9 pr-[85px] text-sm font-medium placeholder:text-muted-foreground/40 placeholder:font-bold placeholder:text-base focus:outline-none transition-all shadow-sm"
                         />
                         <div className="absolute right-1 flex items-center gap-1.5 pointer-events-auto">
-                            <Button 
+                            <Button
                                 onClick={handleSaveNotes}
                                 disabled={savingNotes}
                                 size="sm"
                                 className={cn(
                                     "h-7 px-3 text-[11px] font-bold tracking-wide rounded-md transition-all shadow-sm",
                                     debounceNotes === notes && notes.length > 0 && !savingNotes
-                                        ? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 shadow-none border border-emerald-500/20" 
+                                        ? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 shadow-none border border-emerald-500/20"
                                         : "bg-primary text-primary-foreground hover:bg-primary/90"
                                 )}
                             >
@@ -759,286 +778,286 @@ export default function EverydayAfterDispatchingPage() {
                     {/* Routes Overview */}
                     <Card className="border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-0">
                         <div className="py-2.5 px-3.5 border-b border-border/50 bg-muted/20 shrink-0">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div>
-                                    <h2 className="text-sm font-bold text-foreground leading-none tracking-tight flex items-center">
-                                        Routes Overview <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-orange-500/10 text-foreground px-1.5 py-0.5 rounded-sm">({formattedDate})</span>
-                                    </h2>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div>
+                                        <h2 className="text-sm font-bold text-foreground leading-none tracking-tight flex items-center">
+                                            Routes Overview <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-orange-500/10 text-foreground px-1.5 py-0.5 rounded-sm">({formattedDate})</span>
+                                        </h2>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    <RoutesTable
-                        groups={groupedRoutes}
-                        loading={loading}
-                        columns={[
-                            { key: "employee",               label: "Employee",  minW: 120, sticky: true },
-                            { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 70, align: "center"  },
-                            { key: "rts",                    label: <span className="font-semibold text-xs text-orange-600">RTS</span>, minW: 55, align: "center" },
-                            { key: "rescue",                 label: <span className="font-semibold text-xs text-teal-600">Rescue</span>, minW: 65, align: "center" },
-                            { key: "routeNumber",            label: <HeaderIcon title="Route Number" icon={Hash} className="h-[18px] w-[18px] text-rose-500" strokeWidth={1.5} />,   minW: 55, align: "center"  },
-                            { key: "routeDuration",          label: <HeaderIcon title="Route Duration" icon={Timer} className="h-[18px] w-[18px] text-yellow-500" strokeWidth={1.5} />,  minW: 45, align: "center"  },
-                            { key: "stopCount",              label: <HeaderIcon title="Total Stops" icon={MapPin} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />,     minW: 40, align: "center"  },
-                            { key: "packageCount",           label: <HeaderIcon title="Total Packages" icon={Package} className="h-[18px] w-[18px] text-orange-500" strokeWidth={1.5} />,      minW: 40, align: "center"  },
-                            { key: "van",                    label: <HeaderIcon title="Van Number" icon={TruckIcon} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />,       minW: 40, align: "center"  },
-                            { key: "attendance",             label: <HeaderIcon title="Attendance Tracker" icon={UserCheck} className="h-[18px] w-[18px] text-purple-500" strokeWidth={1.5} />,       minW: 40, align: "center"  },
-                        ]}
-                        renderCell={(key, row) => {
-                            if (key === "dayBeforeConfirmation") {
-                                const isTrue = !!row.dayBeforeConfirmation;
-                                return (
-                                    <div className="w-full flex items-center justify-center">
-                                        {isTrue ? (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "true"); }}
-                                                className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-emerald-500/15 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/25"
-                                            >
-                                                CONFIRMED
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "false"); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-red-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
-                                            >
-                                                <X className="h-4 w-4 text-foreground/70 group-hover:text-red-500 transition-colors cursor-pointer" />
-                                            </button>
-                                        )}
-                                    </div>
-                                );
-                            }
-                            if (key === "deliveryCompletionTime") {
-                                const val = row.deliveryCompletionTime;
-                                return (
-                                    <div className="w-full flex items-center justify-center">
-                                        {val ? (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, val); }}
-                                                className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-blue-500/15 text-blue-600 border-blue-500/20 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20 whitespace-nowrap"
-                                                title="Click to reset time"
-                                            >
-                                                {val}
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, ""); }}
-                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all focus:outline-none shadow-sm ring-1 ring-blue-500/30 title='Log completion time'"
-                                            >
-                                                <Clock className="h-[18px] w-[18px] text-blue-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
-                                            </button>
-                                        )}
-                                    </div>
-                                );
-                            }
-                            if (key === "rts") {
-                                const rtsList = rtsMap[row._id] || [];
-                                const count = rtsList.length;
-                                return (
-                                    <div className="w-full flex items-center justify-center">
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
-                                            className={`group inline-flex items-center justify-center h-8 ${count > 0 ? 'px-3' : 'w-12'} rounded-full bg-orange-500/10 hover:bg-orange-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-orange-500/30 gap-1.5`}
-                                            title="Add RTS"
-                                        >
-                                            <PackageX className="h-[18px] w-[18px] text-orange-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
-                                            {count > 0 && <span className="text-[11px] font-bold text-orange-600">{count}</span>}
-                                        </button>
-                                    </div>
-                                );
-                            }
-                            if (key === "rescue") {
-                                const list = rescueMap[row._id] || [];
-                                const count = list.length;
-                                return (
-                                    <div className="w-full flex items-center justify-center">
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
-                                            className={`group inline-flex items-center justify-center h-8 ${count > 0 ? 'px-3' : 'w-12'} rounded-full bg-teal-500/10 hover:bg-teal-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-teal-500/30 gap-1.5`}
-                                            title="Add Rescue"
-                                        >
-                                            <Activity className="h-[18px] w-[18px] text-teal-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
-                                            {count > 0 && <span className="text-[11px] font-bold text-teal-600">{count}</span>}
-                                        </button>
-                                    </div>
-                                );
-                            }
-                            if (key === "routeDuration") {
-                                const dur = row.routeDuration || "—";
-                                let formattedDur = dur;
-                                if (dur !== "—") {
-                                    const parts = dur.split(":");
-                                    if (parts.length >= 2) {
-                                        formattedDur = `${parts[0]}:${parts[1]}`;
-                                    }
+                        <RoutesTable
+                            groups={groupedRoutes}
+                            loading={loading}
+                            columns={[
+                                { key: "employee", label: "Employee", minW: 120, sticky: true },
+                                { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 70, align: "center" },
+                                { key: "rts", label: <span className="font-semibold text-xs text-orange-600">RTS</span>, minW: 55, align: "center" },
+                                { key: "rescue", label: <span className="font-semibold text-xs text-teal-600">Rescue</span>, minW: 65, align: "center" },
+                                { key: "routeNumber", label: <HeaderIcon title="Route Number" icon={Hash} className="h-[18px] w-[18px] text-rose-500" strokeWidth={1.5} />, minW: 55, align: "center" },
+                                { key: "routeDuration", label: <HeaderIcon title="Route Duration" icon={Timer} className="h-[18px] w-[18px] text-yellow-500" strokeWidth={1.5} />, minW: 45, align: "center" },
+                                { key: "stopCount", label: <HeaderIcon title="Total Stops" icon={MapPin} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 40, align: "center" },
+                                { key: "packageCount", label: <HeaderIcon title="Total Packages" icon={Package} className="h-[18px] w-[18px] text-orange-500" strokeWidth={1.5} />, minW: 40, align: "center" },
+                                { key: "van", label: <HeaderIcon title="Van Number" icon={TruckIcon} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 40, align: "center" },
+                                { key: "attendance", label: <HeaderIcon title="Attendance Tracker" icon={UserCheck} className="h-[18px] w-[18px] text-purple-500" strokeWidth={1.5} />, minW: 40, align: "center" },
+                            ]}
+                            renderCell={(key, row) => {
+                                if (key === "dayBeforeConfirmation") {
+                                    const isTrue = !!row.dayBeforeConfirmation;
+                                    return (
+                                        <div className="w-full flex items-center justify-center">
+                                            {isTrue ? (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "true"); }}
+                                                    className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-emerald-500/15 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/25"
+                                                >
+                                                    CONFIRMED
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "false"); }}
+                                                    className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-red-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
+                                                >
+                                                    <X className="h-4 w-4 text-foreground/70 group-hover:text-red-500 transition-colors cursor-pointer" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
                                 }
-                                return (
-                                    <div className="w-full text-center font-bold text-[11px] whitespace-nowrap">
-                                        {formattedDur}
-                                    </div>
-                                );
-                            }
-                            return undefined;
-                        }}
-                        onConfirmToggle={(row) => toggleConfirmIcon(row.transporterId, row.dayBeforeConfirmation ? "true" : "false")}
-                        emptyMessage="No routes scheduled for this date"
-                    />
-                </Card>
-
-                {/* Roster Plan */}
-                <Card className="border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-0">
-                    <div className="py-2.5 px-3.5 border-b border-border/50 bg-muted/20 shrink-0">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div>
-                                    <h2 className="text-sm font-bold text-foreground leading-none tracking-tight flex items-center">
-                                        Roster Plan <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-indigo-500/10 text-foreground px-1.5 py-0.5 rounded-sm">({formattedTomorrow})</span>
-                                    </h2>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <RoutesTable
-                        groups={groupedTomorrowRoutes}
-                        loading={loading}
-                        columns={[
-                            { key: "employee",               label: "Employee",  minW: 100, sticky: true },
-                            { key: "dayBeforeConfirmation",  label: <HeaderIcon title="Day Before Confirmation" icon={ThumbsUp} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 46, align: "center" },
-                            { key: "phone",                  label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 46, align: "center" },
-                        ]}
-                        renderCell={(key, row) => {
-                            if (key === "phone") {
-                                const val = row.phone;
-                                return (
-                                    <div className="w-full flex items-center justify-center">
-                                        {val ? (
-                                            <a
-                                                href={`tel:${val}`}
-                                                onClick={(e) => e.stopPropagation()}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/10 hover:bg-blue-500/20 transition-all border border-blue-500/20 shadow-sm"
-                                                title={`Call ${val}`}
-                                            >
-                                                <Phone className="h-4 w-4 text-blue-500 group-hover:scale-110 transition-transform" />
-                                            </a>
-                                        ) : (
-                                            <span className="text-muted-foreground/30 text-[11px] font-bold">—</span>
-                                        )}
-                                    </div>
-                                );
-                            }
-                            if (key === "dayBeforeConfirmation") {
-                                const isTrue = !!row.dayBeforeConfirmation;
-                                return (
-                                    <div className="w-full flex items-center justify-center">
-                                        {isTrue ? (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "true", true); }}
-                                                className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-emerald-500/15 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/25"
-                                            >
-                                                CONFIRMED
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "false", true); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-red-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
-                                            >
-                                                <X className="h-4 w-4 text-foreground/70 group-hover:text-red-500 transition-colors cursor-pointer" />
-                                            </button>
-                                        )}
-                                    </div>
-                                );
-                            }
-                            if (key === "deliveryCompletionTime") {
-                                const val = row.deliveryCompletionTime;
-                                return (
-                                    <div className="w-full flex items-center justify-center">
-                                        {val ? (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, val); }}
-                                                className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-blue-500/15 text-blue-600 border-blue-500/20 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20 whitespace-nowrap"
-                                                title="Click to reset time"
-                                            >
-                                                {val}
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, ""); }}
-                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all focus:outline-none shadow-sm ring-1 ring-blue-500/30 title='Log completion time'"
-                                            >
-                                                <Clock className="h-[18px] w-[18px] text-blue-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
-                                            </button>
-                                        )}
-                                    </div>
-                                );
-                            }
-                            if (key === "rts") {
-                                const hasRts = !!rtsMap[row._id];
-                                return (
-                                    <div className="w-full flex items-center justify-center">
-                                        {hasRts ? (
+                                if (key === "deliveryCompletionTime") {
+                                    const val = row.deliveryCompletionTime;
+                                    return (
+                                        <div className="w-full flex items-center justify-center">
+                                            {val ? (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, val); }}
+                                                    className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-blue-500/15 text-blue-600 border-blue-500/20 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20 whitespace-nowrap"
+                                                    title="Click to reset time"
+                                                >
+                                                    {val}
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, ""); }}
+                                                    className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all focus:outline-none shadow-sm ring-1 ring-blue-500/30 title='Log completion time'"
+                                                >
+                                                    <Clock className="h-[18px] w-[18px] text-blue-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                }
+                                if (key === "rts") {
+                                    const rtsList = rtsMap[row._id] || [];
+                                    const count = rtsList.length;
+                                    return (
+                                        <div className="w-full flex items-center justify-center">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-500/15 hover:bg-orange-500/25 transition-all shadow-sm border border-orange-500/20"
-                                                title="View RTS"
-                                            >
-                                                <PackageX className="h-4 w-4 text-orange-600 group-hover:text-orange-700 transition-colors cursor-pointer" />
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
-                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-orange-500/30"
-                                                title="Log RTS"
+                                                className={`group inline-flex items-center justify-center h-8 ${count > 0 ? 'px-3' : 'w-12'} rounded-full bg-orange-500/10 hover:bg-orange-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-orange-500/30 gap-1.5`}
+                                                title="Add RTS"
                                             >
                                                 <PackageX className="h-[18px] w-[18px] text-orange-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
+                                                {count > 0 && <span className="text-[11px] font-bold text-orange-600">{count}</span>}
                                             </button>
-                                        )}
-                                    </div>
-                                );
-                            }
-                            if (key === "rescue") {
-                                const hasRescue = !!rescueMap[row._id];
-                                return (
-                                    <div className="w-full flex items-center justify-center">
-                                        {hasRescue ? (
+                                        </div>
+                                    );
+                                }
+                                if (key === "rescue") {
+                                    const list = rescueMap[row._id] || [];
+                                    const count = list.length;
+                                    return (
+                                        <div className="w-full flex items-center justify-center">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
-                                                className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all shadow-sm border border-blue-500/20"
-                                                title="View Rescue"
-                                            >
-                                                <LifeBuoy className="h-4 w-4 text-blue-600 group-hover:text-blue-700 transition-colors cursor-pointer" />
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
-                                                className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-teal-500/10 hover:bg-teal-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-teal-500/30"
-                                                title="Log Rescue"
+                                                className={`group inline-flex items-center justify-center h-8 ${count > 0 ? 'px-3' : 'w-12'} rounded-full bg-teal-500/10 hover:bg-teal-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-teal-500/30 gap-1.5`}
+                                                title="Add Rescue"
                                             >
                                                 <Activity className="h-[18px] w-[18px] text-teal-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
+                                                {count > 0 && <span className="text-[11px] font-bold text-teal-600">{count}</span>}
                                             </button>
-                                        )}
-                                    </div>
-                                );
-                            }
-                            if (key === "routeDuration") {
-                                const dur = row.routeDuration || "—";
-                                let formattedDur = dur;
-                                if (dur !== "—") {
-                                    const parts = dur.split(":");
-                                    if (parts.length >= 2) {
-                                        formattedDur = `${parts[0]}:${parts[1]}`;
-                                    }
+                                        </div>
+                                    );
                                 }
-                                return (
-                                    <div className="w-full text-center font-bold text-[11px] whitespace-nowrap">
-                                        {formattedDur}
+                                if (key === "routeDuration") {
+                                    const dur = row.routeDuration || "—";
+                                    let formattedDur = dur;
+                                    if (dur !== "—") {
+                                        const parts = dur.split(":");
+                                        if (parts.length >= 2) {
+                                            formattedDur = `${parts[0]}:${parts[1]}`;
+                                        }
+                                    }
+                                    return (
+                                        <div className="w-full text-center font-bold text-[11px] whitespace-nowrap">
+                                            {formattedDur}
+                                        </div>
+                                    );
+                                }
+                                return undefined;
+                            }}
+                            onConfirmToggle={(row) => toggleConfirmIcon(row.transporterId, row.dayBeforeConfirmation ? "true" : "false")}
+                            emptyMessage="No routes scheduled for this date"
+                        />
+                    </Card>
+
+                    {/* Roster Plan */}
+                    <Card className="border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-0">
+                        <div className="py-2.5 px-3.5 border-b border-border/50 bg-muted/20 shrink-0">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div>
+                                        <h2 className="text-sm font-bold text-foreground leading-none tracking-tight flex items-center">
+                                            Roster Plan <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-indigo-500/10 text-foreground px-1.5 py-0.5 rounded-sm">({formattedTomorrow})</span>
+                                        </h2>
                                     </div>
-                                );
-                            }
-                            return undefined;
-                        }}
-                        onConfirmToggle={(row) => toggleConfirmIcon(row.transporterId, row.dayBeforeConfirmation ? "true" : "false", true)}
-                        emptyMessage="No roster scheduled for tomorrow"
-                    />
-                </Card>
+                                </div>
+                            </div>
+                        </div>
+                        <RoutesTable
+                            groups={groupedTomorrowRoutes}
+                            loading={loading}
+                            columns={[
+                                { key: "employee", label: "Employee", minW: 100, sticky: true },
+                                { key: "dayBeforeConfirmation", label: <HeaderIcon title="Day Before Confirmation" icon={ThumbsUp} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 46, align: "center" },
+                                { key: "phone", label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 46, align: "center" },
+                            ]}
+                            renderCell={(key, row) => {
+                                if (key === "phone") {
+                                    const val = row.phone;
+                                    return (
+                                        <div className="w-full flex items-center justify-center">
+                                            {val ? (
+                                                <a
+                                                    href={`tel:${val}`}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/10 hover:bg-blue-500/20 transition-all border border-blue-500/20 shadow-sm"
+                                                    title={`Call ${val}`}
+                                                >
+                                                    <Phone className="h-4 w-4 text-blue-500 group-hover:scale-110 transition-transform" />
+                                                </a>
+                                            ) : (
+                                                <span className="text-muted-foreground/30 text-[11px] font-bold">—</span>
+                                            )}
+                                        </div>
+                                    );
+                                }
+                                if (key === "dayBeforeConfirmation") {
+                                    const isTrue = !!row.dayBeforeConfirmation;
+                                    return (
+                                        <div className="w-full flex items-center justify-center">
+                                            {isTrue ? (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "true", true); }}
+                                                    className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-emerald-500/15 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/25"
+                                                >
+                                                    CONFIRMED
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "false", true); }}
+                                                    className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted/80 hover:bg-red-500/15 transition-all focus:outline-none shadow-sm ring-1 ring-border/50"
+                                                >
+                                                    <X className="h-4 w-4 text-foreground/70 group-hover:text-red-500 transition-colors cursor-pointer" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                }
+                                if (key === "deliveryCompletionTime") {
+                                    const val = row.deliveryCompletionTime;
+                                    return (
+                                        <div className="w-full flex items-center justify-center">
+                                            {val ? (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, val); }}
+                                                    className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-blue-500/15 text-blue-600 border-blue-500/20 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20 whitespace-nowrap"
+                                                    title="Click to reset time"
+                                                >
+                                                    {val}
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, ""); }}
+                                                    className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all focus:outline-none shadow-sm ring-1 ring-blue-500/30 title='Log completion time'"
+                                                >
+                                                    <Clock className="h-[18px] w-[18px] text-blue-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                }
+                                if (key === "rts") {
+                                    const hasRts = !!rtsMap[row._id];
+                                    return (
+                                        <div className="w-full flex items-center justify-center">
+                                            {hasRts ? (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
+                                                    className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-500/15 hover:bg-orange-500/25 transition-all shadow-sm border border-orange-500/20"
+                                                    title="View RTS"
+                                                >
+                                                    <PackageX className="h-4 w-4 text-orange-600 group-hover:text-orange-700 transition-colors cursor-pointer" />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); openRTSModal(row); }}
+                                                    className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-orange-500/30"
+                                                    title="Log RTS"
+                                                >
+                                                    <PackageX className="h-[18px] w-[18px] text-orange-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                }
+                                if (key === "rescue") {
+                                    const hasRescue = !!rescueMap[row._id];
+                                    return (
+                                        <div className="w-full flex items-center justify-center">
+                                            {hasRescue ? (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
+                                                    className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all shadow-sm border border-blue-500/20"
+                                                    title="View Rescue"
+                                                >
+                                                    <LifeBuoy className="h-4 w-4 text-blue-600 group-hover:text-blue-700 transition-colors cursor-pointer" />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); openRescueModal(row); }}
+                                                    className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-teal-500/10 hover:bg-teal-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-teal-500/30"
+                                                    title="Log Rescue"
+                                                >
+                                                    <Activity className="h-[18px] w-[18px] text-teal-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                }
+                                if (key === "routeDuration") {
+                                    const dur = row.routeDuration || "—";
+                                    let formattedDur = dur;
+                                    if (dur !== "—") {
+                                        const parts = dur.split(":");
+                                        if (parts.length >= 2) {
+                                            formattedDur = `${parts[0]}:${parts[1]}`;
+                                        }
+                                    }
+                                    return (
+                                        <div className="w-full text-center font-bold text-[11px] whitespace-nowrap">
+                                            {formattedDur}
+                                        </div>
+                                    );
+                                }
+                                return undefined;
+                            }}
+                            onConfirmToggle={(row) => toggleConfirmIcon(row.transporterId, row.dayBeforeConfirmation ? "true" : "false", true)}
+                            emptyMessage="No roster scheduled for tomorrow"
+                        />
+                    </Card>
                 </div>
 
                 {/* Right Side: 3 Stacked Boxes */}
@@ -1059,73 +1078,73 @@ export default function EverydayAfterDispatchingPage() {
                             <h3 className="text-sm font-bold tracking-wide">Rescue</h3>
                         </div>
                         <div className="flex-1 min-h-0 overflow-auto bg-background/40">
-                                {rescueEntries.length === 0 ? (
-                                    <div className="flex h-full items-center justify-center p-4">
-                                        <span className="text-muted-foreground/50 text-xs font-medium uppercase tracking-wider">No rescue records found</span>
-                                    </div>
-                                ) : (
-                                    <table className="w-full text-xs text-left relative">
-                                        <thead className="bg-muted text-muted-foreground uppercase sticky top-0 z-10 border-b border-border/50 shadow-sm">
-                                            <tr>
-                                                <th className="font-semibold p-2.5 pl-3">Employee</th>
-                                                <th className="font-semibold p-2.5">Rescued By</th>
-                                                <th className="font-semibold p-2.5 text-center">Stops</th>
-                                                <th className="font-semibold p-2.5">Reason</th>
-                                                <th className="font-semibold p-2.5 pr-3 w-8"></th>
+                            {rescueEntries.length === 0 ? (
+                                <div className="flex h-full items-center justify-center p-4">
+                                    <span className="text-muted-foreground/50 text-xs font-medium uppercase tracking-wider">No rescue records found</span>
+                                </div>
+                            ) : (
+                                <table className="w-full text-xs text-left relative">
+                                    <thead className="bg-muted text-muted-foreground uppercase sticky top-0 z-10 border-b border-border/50 shadow-sm">
+                                        <tr>
+                                            <th className="font-semibold p-2.5 pl-3">Employee</th>
+                                            <th className="font-semibold p-2.5">Rescued By</th>
+                                            <th className="font-semibold p-2.5 text-center">Stops</th>
+                                            <th className="font-semibold p-2.5">Reason</th>
+                                            <th className="font-semibold p-2.5 pr-3 w-8"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border/40">
+                                        {rescueEntries.map((rescue) => (
+                                            <tr key={rescue._id} className="hover:bg-muted/20 transition-colors">
+                                                <td className="p-2 pl-3 font-normal text-foreground/90 whitespace-nowrap">
+                                                    <div className="flex items-center gap-2 max-w-[140px] xl:max-w-max">
+                                                        {rescue.employeeImage ? (
+                                                            <img src={rescue.employeeImage} alt={rescue.employeeName} className="w-5 h-5 rounded-full object-cover shrink-0" />
+                                                        ) : (
+                                                            <div className="w-5 h-5 rounded-full bg-muted/60 text-muted-foreground flex items-center justify-center text-[9px] font-bold shrink-0 uppercase">
+                                                                {(rescue.employeeName || "-").charAt(0)}
+                                                            </div>
+                                                        )}
+                                                        <span className="truncate">{rescue.employeeName}</span>
+                                                        {rescue.performanceRescue && (
+                                                            <span title="Performance Rescue" className="flex items-center justify-center shrink-0">
+                                                                <AlertCircle strokeWidth={1.5} className="h-[14px] w-[14px] text-orange-500" />
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="p-2 text-muted-foreground whitespace-nowrap">
+                                                    <div className="flex items-center gap-2 max-w-[140px] xl:max-w-max">
+                                                        {rescue.rescuerImage ? (
+                                                            <img src={rescue.rescuerImage} alt={rescue.rescuerName} className="w-5 h-5 rounded-full object-cover shrink-0" />
+                                                        ) : (
+                                                            <div className="w-5 h-5 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center text-[9px] font-bold shrink-0 uppercase border border-blue-500/20">
+                                                                {(rescue.rescuerName || "-").charAt(0)}
+                                                            </div>
+                                                        )}
+                                                        <span className="truncate">{rescue.rescuerName}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-2 text-center">
+                                                    <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-blue-500/10 text-blue-600 font-mono tracking-wider text-[11px] border border-blue-500/20">{rescue.stopsRescued}</span>
+                                                </td>
+                                                <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rescue.reason}>{rescue.reason}</td>
+                                                <td className="p-2 pr-3 text-right">
+                                                    <button
+                                                        onClick={() => rescue.routeObj && openRescueModal(rescue.routeObj, rescue.originalRecord)}
+                                                        disabled={!rescue.routeObj}
+                                                        className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title="Edit Rescue"
+                                                    >
+                                                        <Edit2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border/40">
-                                            {rescueEntries.map((rescue) => (
-                                                <tr key={rescue._id} className="hover:bg-muted/20 transition-colors">
-                                                    <td className="p-2 pl-3 font-normal text-foreground/90 whitespace-nowrap">
-                                                        <div className="flex items-center gap-2 max-w-[140px] xl:max-w-max">
-                                                            {rescue.employeeImage ? (
-                                                                <img src={rescue.employeeImage} alt={rescue.employeeName} className="w-5 h-5 rounded-full object-cover shrink-0" />
-                                                            ) : (
-                                                                <div className="w-5 h-5 rounded-full bg-muted/60 text-muted-foreground flex items-center justify-center text-[9px] font-bold shrink-0 uppercase">
-                                                                    {(rescue.employeeName || "-").charAt(0)}
-                                                                </div>
-                                                            )}
-                                                            <span className="truncate">{rescue.employeeName}</span>
-                                                            {rescue.performanceRescue && (
-                                                                <span title="Performance Rescue" className="flex items-center justify-center shrink-0">
-                                                                    <AlertCircle strokeWidth={1.5} className="h-[14px] w-[14px] text-orange-500" />
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 text-muted-foreground whitespace-nowrap">
-                                                        <div className="flex items-center gap-2 max-w-[140px] xl:max-w-max">
-                                                            {rescue.rescuerImage ? (
-                                                                <img src={rescue.rescuerImage} alt={rescue.rescuerName} className="w-5 h-5 rounded-full object-cover shrink-0" />
-                                                            ) : (
-                                                                <div className="w-5 h-5 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center text-[9px] font-bold shrink-0 uppercase border border-blue-500/20">
-                                                                    {(rescue.rescuerName || "-").charAt(0)}
-                                                                </div>
-                                                            )}
-                                                            <span className="truncate">{rescue.rescuerName}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2 text-center">
-                                                        <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-blue-500/10 text-blue-600 font-mono tracking-wider text-[11px] border border-blue-500/20">{rescue.stopsRescued}</span>
-                                                    </td>
-                                                    <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rescue.reason}>{rescue.reason}</td>
-                                                    <td className="p-2 pr-3 text-right">
-                                                        <button 
-                                                            onClick={() => rescue.routeObj && openRescueModal(rescue.routeObj, rescue.originalRecord)}
-                                                            disabled={!rescue.routeObj}
-                                                            className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            title="Edit Rescue"
-                                                        >
-                                                            <Edit2 className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                )}
-                            </div>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
                     </Card>
 
                     {/* RTS */}
@@ -1134,54 +1153,54 @@ export default function EverydayAfterDispatchingPage() {
                             <h3 className="text-sm font-bold tracking-wide">RTS</h3>
                         </div>
                         <div className="flex-1 min-h-0 overflow-auto bg-background/40">
-                                {rtsEntries.length === 0 ? (
-                                    <div className="flex h-full items-center justify-center p-4">
-                                        <span className="text-muted-foreground/50 text-xs font-medium uppercase tracking-wider">No records</span>
-                                    </div>
-                                ) : (
-                                    <table className="w-full text-xs text-left relative">
-                                        <thead className="bg-muted text-muted-foreground uppercase sticky top-0 z-10 border-b border-border/50 shadow-sm">
-                                            <tr>
-                                                <th className="font-semibold p-2.5 pl-3">Employee</th>
-                                                <th className="font-semibold p-2.5">TBA</th>
-                                                <th className="font-semibold p-2.5">Reason</th>
-                                                <th className="font-semibold p-2.5 pr-3 w-8"></th>
+                            {rtsEntries.length === 0 ? (
+                                <div className="flex h-full items-center justify-center p-4">
+                                    <span className="text-muted-foreground/50 text-xs font-medium uppercase tracking-wider">No records</span>
+                                </div>
+                            ) : (
+                                <table className="w-full text-xs text-left relative">
+                                    <thead className="bg-muted text-muted-foreground uppercase sticky top-0 z-10 border-b border-border/50 shadow-sm">
+                                        <tr>
+                                            <th className="font-semibold p-2.5 pl-3">Employee</th>
+                                            <th className="font-semibold p-2.5">TBA</th>
+                                            <th className="font-semibold p-2.5">Reason</th>
+                                            <th className="font-semibold p-2.5 pr-3 w-8"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border/40">
+                                        {rtsEntries.map((rts) => (
+                                            <tr key={rts._id} className="hover:bg-muted/20 transition-colors">
+                                                <td className="p-2 pl-3 font-normal text-foreground/90 whitespace-nowrap">
+                                                    <div className="flex items-center gap-2 max-w-[160px] xl:max-w-max">
+                                                        {rts.employeeImage ? (
+                                                            <img src={rts.employeeImage} alt={rts.employeeName} className="w-5 h-5 rounded-full object-cover shrink-0" />
+                                                        ) : (
+                                                            <div className="w-5 h-5 rounded-full bg-muted/60 text-muted-foreground flex items-center justify-center text-[9px] font-bold shrink-0 uppercase">
+                                                                {(rts.employeeName || "-").charAt(0)}
+                                                            </div>
+                                                        )}
+                                                        <span className="truncate">{rts.employeeName}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-2">
+                                                    <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-orange-500/10 text-orange-600 font-mono tracking-wider text-[10px] border border-orange-500/20">{rts.tba}</span>
+                                                </td>
+                                                <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rts.reason}>{rts.reason}</td>
+                                                <td className="p-2 pr-3 text-right">
+                                                    <button
+                                                        onClick={() => rts.routeObj && openRTSModal(rts.routeObj, rts.originalRecord)}
+                                                        disabled={!rts.routeObj}
+                                                        className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title="Edit RTS"
+                                                    >
+                                                        <Edit2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border/40">
-                                            {rtsEntries.map((rts) => (
-                                                <tr key={rts._id} className="hover:bg-muted/20 transition-colors">
-                                                    <td className="p-2 pl-3 font-normal text-foreground/90 whitespace-nowrap">
-                                                        <div className="flex items-center gap-2 max-w-[160px] xl:max-w-max">
-                                                            {rts.employeeImage ? (
-                                                                <img src={rts.employeeImage} alt={rts.employeeName} className="w-5 h-5 rounded-full object-cover shrink-0" />
-                                                            ) : (
-                                                                <div className="w-5 h-5 rounded-full bg-muted/60 text-muted-foreground flex items-center justify-center text-[9px] font-bold shrink-0 uppercase">
-                                                                    {(rts.employeeName || "-").charAt(0)}
-                                                                </div>
-                                                            )}
-                                                            <span className="truncate">{rts.employeeName}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-2">
-                                                        <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-orange-500/10 text-orange-600 font-mono tracking-wider text-[10px] border border-orange-500/20">{rts.tba}</span>
-                                                    </td>
-                                                    <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rts.reason}>{rts.reason}</td>
-                                                    <td className="p-2 pr-3 text-right">
-                                                        <button 
-                                                            onClick={() => rts.routeObj && openRTSModal(rts.routeObj, rts.originalRecord)}
-                                                            disabled={!rts.routeObj}
-                                                            className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            title="Edit RTS"
-                                                        >
-                                                            <Edit2 className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                )}
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
                         </div>
                     </Card>
                 </div>
@@ -1276,7 +1295,7 @@ export default function EverydayAfterDispatchingPage() {
                                         <PopoverContent className="w-[--radix-popover-trigger-width] p-0 shadow-xl border-border/60" align="start">
                                             <div className="flex items-center border-b px-3">
                                                 <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                                                <input 
+                                                <input
                                                     autoFocus
                                                     className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 border-none"
                                                     placeholder="Search employees..."
@@ -1284,20 +1303,20 @@ export default function EverydayAfterDispatchingPage() {
                                                     onChange={(e) => setRescueBySearch(e.target.value)}
                                                 />
                                             </div>
-                                            <div 
+                                            <div
                                                 className="max-h-[250px] overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent overscroll-contain"
                                                 onWheel={(e) => e.stopPropagation()}
                                                 onTouchMove={(e) => e.stopPropagation()}
                                             >
                                                 {allEmployees.filter(emp => {
                                                     if (rescueModalRoute && emp.transporterId === rescueModalRoute.transporterId) return false;
-                                                    const fn = `${emp.firstName||''} ${emp.lastName||''}`.toLowerCase();
+                                                    const fn = `${emp.firstName || ''} ${emp.lastName || ''}`.toLowerCase();
                                                     return fn.includes(rescueBySearch.toLowerCase()) || (emp.transporterId && emp.transporterId.toLowerCase().includes(rescueBySearch.toLowerCase()));
                                                 }).map(emp => {
                                                     const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || emp.transporterId;
                                                     const isSelected = rescueBy === emp.transporterId;
                                                     return (
-                                                        <div 
+                                                        <div
                                                             key={emp.transporterId}
                                                             className={cn(
                                                                 "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-muted/50 transition-colors",
@@ -1327,13 +1346,13 @@ export default function EverydayAfterDispatchingPage() {
                                                 })}
                                                 {allEmployees.length > 0 && allEmployees.filter(emp => {
                                                     if (rescueModalRoute && emp.transporterId === rescueModalRoute.transporterId) return false;
-                                                    const fn = `${emp.firstName||''} ${emp.lastName||''}`.toLowerCase();
+                                                    const fn = `${emp.firstName || ''} ${emp.lastName || ''}`.toLowerCase();
                                                     return fn.includes(rescueBySearch.toLowerCase()) || (emp.transporterId && emp.transporterId.toLowerCase().includes(rescueBySearch.toLowerCase()));
                                                 }).length === 0 && (
-                                                    <div className="py-6 text-center text-sm text-muted-foreground">
-                                                        No results found.
-                                                    </div>
-                                                )}
+                                                        <div className="py-6 text-center text-sm text-muted-foreground">
+                                                            No results found.
+                                                        </div>
+                                                    )}
                                             </div>
                                         </PopoverContent>
                                     </Popover>
