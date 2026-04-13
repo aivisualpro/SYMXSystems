@@ -596,7 +596,7 @@ export default function TimePage() {
     const renderCell = (row: RouteRow, field: string, value: any) => {
         const isEditable = EDITABLE_FIELDS.has(field);
         const raw = value === 0 || value === "" ? "—" : String(value);
-        const displayVal = raw === "—" ? raw : raw.replace(/:\d{2}$/, "");
+        const displayVal = raw === "—" ? raw : raw.split(':').slice(0, 2).join(':');
 
         const style = getCellFormat(row, field);
         const Icon = style?.icon;
