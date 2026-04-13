@@ -63,6 +63,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
@@ -172,7 +173,7 @@ interface PlanningRow {
   color: string;
 }
 
-function computePlanningData(employees: EmployeeSchedule[]): PlanningRow[] {
+function computePlanningData(employees: EmployeeSchedule[], everydayRecords: Record<string, any> = {}, dates: string[] = []): PlanningRow[] {
   const daStats = Array(7).fill(0);
   const standBy = Array(7).fill(0);
   const routesAssigned = Array(7).fill(0);
@@ -194,6 +195,14 @@ function computePlanningData(employees: EmployeeSchedule[]): PlanningRow[] {
       if ((empType === "ops" || empType === "operations") && ["open", "close", "fleet"].includes(typeVal)) ops[d]++;
     }
   });
+
+  // Override Routes Assigned with manual entries if they exist
+  for (let d = 0; d < 7; d++) {
+    const date = dates[d];
+    if (date && everydayRecords[date]?.routesAssigned !== undefined) {
+      routesAssigned[d] = everydayRecords[date].routesAssigned;
+    }
+  }
 
   // Extra DA's = DA's - Routes Assigned
   for (let d = 0; d < 7; d++) {
@@ -411,6 +420,51 @@ function getCurrentYearWeek(): string {
   return `${year}-W${weekNum.toString().padStart(2, "0")}`;
 }
 
+function RouteAssignedPopover({ date, value, onSave }: { date: string, value: number, onSave: (d: string, v: number) => void }) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState(value.toString());
+
+  useEffect(() => {
+    if (open) setVal(value.toString());
+  }, [open, value]);
+
+  const handleSave = () => {
+    onSave(date, parseInt(val) || 0);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div className="flex items-center gap-0.5 cursor-pointer hover:bg-white/20 px-0.5 py-0.5 rounded transition-colors group" onClick={(e) => { e.stopPropagation(); setOpen(true); }}>
+          <TruckIcon className="h-2.5 w-2.5 text-white" />
+          <span className="text-[11px] font-bold text-white leading-none whitespace-nowrap">{value}</span>
+          <Pencil className="h-1.5 w-1.5 text-white/50 group-hover:text-white transition-colors" />
+        </div>
+      </PopoverTrigger>
+      <PopoverContent className="w-52 p-3" side="bottom">
+        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2 text-primary">
+          <TruckIcon className="h-4 w-4" /> Routes Assigned
+        </h4>
+        <div className="flex gap-2">
+          <Input 
+            type="number" 
+            value={val}
+            onChange={e => setVal(e.target.value)}
+            className="h-8 flex-1" 
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSave();
+            }}
+          />
+          <Button size="sm" onClick={handleSave} className="h-8 px-3">
+            Save
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function SchedulingPage() {
   const pathname = usePathname();
   const router = useRouter();
@@ -480,6 +534,44 @@ export default function SchedulingPage() {
   const [noteCounts, setNoteCounts] = useState<Record<string, number>>({});
   const [showNotesPanel, setShowNotesPanel] = useState(false);
   const [notesEmployee, setNotesEmployee] = useState<{ employeeId: string; transporterId: string; name: string } | null>(null);
+
+  // Routes Assigned Everyday state
+  const [everydayRecords, setEverydayRecords] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    if (!weekData?.dates?.length) return;
+    const fetchEveryday = async () => {
+      try {
+        const res = await fetch(`/api/everyday?dates=${weekData.dates.join(",")}`);
+        const data = await res.json();
+        if (data.records) {
+          setEverydayRecords(data.records);
+        }
+      } catch (err) {}
+    };
+    fetchEveryday();
+  }, [weekData?.dates]);
+
+  const handleRoutesAssignedUpdate = async (date: string, value: number) => {
+    try {
+      const res = await fetch("/api/everyday", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, routesAssigned: value })
+      });
+      if (res.ok) {
+        setEverydayRecords(prev => ({
+          ...prev,
+          [date]: { ...(prev[date] || {}), routesAssigned: value }
+        }));
+        toast.success("Routes Assigned updated");
+      } else {
+        toast.error("Failed to update");
+      }
+    } catch (err) {
+      toast.error("Failed to update");
+    }
+  };
 
   const { setLeftContent, setRightContent } = useHeaderActions();
 
@@ -847,48 +939,52 @@ export default function SchedulingPage() {
               </Tooltip>
             </TooltipProvider>
 
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-100 dark:bg-zinc-950 border border-amber-500/30 text-[11px] font-semibold text-amber-500 select-none cursor-default">
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    {warningCounts.caution} × 6-day
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[280px] text-xs bg-popover text-popover-foreground border shadow-lg">
-                  <p className="font-semibold text-amber-500 mb-1">6 consecutive days:</p>
-                  {warningCounts.cautionNames.length > 0 ? (
-                    warningCounts.cautionNames.map((n, i) => <p key={i} className="text-muted-foreground">{n}</p>)
-                  ) : (
-                    <p className="text-muted-foreground">None</p>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {warningCounts.caution > 0 && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-100 dark:bg-zinc-950 border border-amber-500/30 text-[11px] font-semibold text-amber-500 select-none cursor-default">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {warningCounts.caution} × 6-day
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[280px] text-xs bg-popover text-popover-foreground border shadow-lg">
+                    <p className="font-semibold text-amber-500 mb-1">6 consecutive days:</p>
+                    {warningCounts.cautionNames.length > 0 ? (
+                      warningCounts.cautionNames.map((n, i) => <p key={i} className="text-muted-foreground">{n}</p>)
+                    ) : (
+                      <p className="text-muted-foreground">None</p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
 
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className={cn(
-                    "flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-100 dark:bg-zinc-950 border text-[11px] font-semibold select-none cursor-default",
-                    warningCounts.danger > 0 
-                      ? "border-red-500/30 text-red-500 animate-pulse"
-                      : "border-red-500/20 text-red-500/70"
-                  )}>
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    {warningCounts.danger} × 7+ day
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[280px] text-xs bg-popover text-popover-foreground border shadow-lg">
-                  <p className="font-semibold text-red-500 mb-1">7+ consecutive days (violation):</p>
-                  {warningCounts.dangerNames.length > 0 ? (
-                    warningCounts.dangerNames.map((n, i) => <p key={i} className="text-muted-foreground">{n}</p>)
-                  ) : (
-                    <p className="text-muted-foreground">None</p>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {warningCounts.danger > 0 && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className={cn(
+                      "flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-100 dark:bg-zinc-950 border text-[11px] font-semibold select-none cursor-default",
+                      warningCounts.danger > 0 
+                        ? "border-red-500/30 text-red-500 animate-pulse"
+                        : "border-red-500/20 text-red-500/70"
+                    )}>
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {warningCounts.danger} × 7+ day
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[280px] text-xs bg-popover text-popover-foreground border shadow-lg">
+                    <p className="font-semibold text-red-500 mb-1">7+ consecutive days (violation):</p>
+                    {warningCounts.dangerNames.length > 0 ? (
+                      warningCounts.dangerNames.map((n, i) => <p key={i} className="text-muted-foreground">{n}</p>)
+                    ) : (
+                      <p className="text-muted-foreground">None</p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         )}
 
@@ -1132,8 +1228,8 @@ export default function SchedulingPage() {
 
   // Planning data now uses filtered employees when any filter is active
   const planningData = useMemo(
-    () => computePlanningData(isFiltered ? filteredEmployees : (weekData?.employees || [])),
-    [weekData, filteredEmployees, isFiltered]
+    () => computePlanningData(isFiltered ? filteredEmployees : (weekData?.employees || []), everydayRecords, weekData?.dates || []),
+    [weekData, filteredEmployees, isFiltered, everydayRecords]
   );
 
   // Get unique types and statuses for filters
@@ -1313,7 +1409,7 @@ export default function SchedulingPage() {
                     {/* Table Header with Dates */}
                     <thead className="sticky top-0 z-20">
                       <tr className="bg-muted border-b border-border/50">
-                        <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[180px] sticky left-0 bg-muted z-30 backdrop-blur-sm">
+                        <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[140px] sticky left-0 bg-muted z-30 backdrop-blur-sm">
                           Employee Name
                         </th>
                         {weekData?.dates?.map((date, i) => {
@@ -1323,50 +1419,55 @@ export default function SchedulingPage() {
                           const monthStr = isNaN(d.getTime()) ? "" : d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
                           
                           return (
-                          <th key={date} className="text-center font-medium px-0 sm:px-1 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[150px]">
+                          <th key={date} className="text-center font-medium px-0 sm:px-0.5 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[125px]">
                             <div className="flex flex-col items-center justify-center gap-1.5 w-full">
                               
                               {/* 1. Ultra-sleek Date row */}
                               <div className={cn(
-                                "flex items-baseline justify-center gap-1.5 w-full max-w-[130px] px-2 py-0.5 rounded-full border transition-colors",
+                                "flex items-center justify-between gap-1 w-full max-w-[128px] px-1.5 py-0.5 rounded-full border transition-colors",
                                 isToday ? "bg-emerald-500 text-white border-emerald-400 shadow-sm" : "bg-blue-500 text-white border-blue-400 shadow-sm"
                               )}>
-                                <span className={cn(
-                                  "text-[10px] uppercase font-bold tracking-widest",
-                                  isToday ? "text-emerald-100" : "text-blue-100"
-                                )}>
-                                  {DAY_NAMES[i]}
-                                </span>
-                                <span className={cn(
-                                  "text-[12px] font-black tracking-tight text-white"
-                                )}>
-                                  {formatDate(date)}
-                                </span>
+                                <div className="flex items-baseline gap-1">
+                                  <span className={cn(
+                                    "text-[10px] uppercase font-bold tracking-widest",
+                                    isToday ? "text-emerald-100" : "text-blue-100"
+                                  )}>
+                                    {DAY_NAMES[i]}
+                                  </span>
+                                  <span className={cn(
+                                    "text-[12px] font-black tracking-tight text-white"
+                                  )}>
+                                    {formatDate(date)}
+                                  </span>
+                                </div>
+                                {planningData.length > 0 && (
+                                  <RouteAssignedPopover 
+                                    date={date} 
+                                    value={planningData[2].values[i]} 
+                                    onSave={handleRoutesAssignedUpdate} 
+                                  />
+                                )}
                               </div>
 
                               {/* 2. Ultra-compressed Stats Row */}
                               {planningData.length > 0 && (
                                   <Tooltip>
-                                    <TooltipTrigger className="flex items-center justify-between w-full max-w-[150px] px-2 py-1.5 bg-zinc-100 dark:bg-zinc-950/50 rounded-lg border border-black/5 dark:border-white/5 shadow-inner backdrop-blur-sm mt-0.5 cursor-default hover:opacity-90 transition-opacity">
-                                      <div className="flex items-center gap-1">
-                                        <Users className="h-3.5 w-3.5 text-emerald-500" />
-                                        <span className="text-[13px] font-bold text-foreground leading-none">{planningData[0].values[i]}</span>
+                                    <TooltipTrigger className="flex items-center justify-evenly w-full max-w-[128px] px-1 py-1 bg-zinc-100 dark:bg-zinc-950/50 rounded-lg border border-black/5 dark:border-white/5 shadow-inner backdrop-blur-sm mt-0.5 cursor-default hover:opacity-90 transition-opacity gap-0.5">
+                                      <div className="flex items-center gap-0.5">
+                                        <Users className="h-2.5 w-2.5 text-emerald-500" />
+                                        <span className="text-[11px] font-bold text-foreground leading-none">{planningData[0].values[i]}</span>
                                       </div>
-                                      <div className="flex items-center gap-1">
-                                        <Clock className="h-3.5 w-3.5 text-cyan-500" />
-                                        <span className="text-[13px] font-bold text-foreground leading-none">{planningData[1].values[i]}</span>
+                                      <div className="flex items-center gap-0.5">
+                                        <Clock className="h-2.5 w-2.5 text-cyan-500" />
+                                        <span className="text-[11px] font-bold text-foreground leading-none">{planningData[1].values[i]}</span>
                                       </div>
-                                      <div className="flex items-center gap-1">
-                                        <TruckIcon className="h-3.5 w-3.5 text-blue-500" />
-                                        <span className="text-[13px] font-bold text-foreground leading-none">{planningData[2].values[i]}</span>
+                                      <div className="flex items-center gap-0.5">
+                                        <Wrench className="h-2.5 w-2.5 text-orange-500" />
+                                        <span className="text-[11px] font-bold text-foreground leading-none">{planningData[3].values[i]}</span>
                                       </div>
-                                      <div className="flex items-center gap-1">
-                                        <Wrench className="h-3.5 w-3.5 text-orange-500" />
-                                        <span className="text-[13px] font-bold text-foreground leading-none">{planningData[3].values[i]}</span>
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <UserPlus className="h-3.5 w-3.5 text-purple-500" />
-                                        <span className="text-[13px] font-bold text-foreground leading-none">{planningData[4].values[i]}</span>
+                                      <div className="flex items-center gap-0.5">
+                                        <UserPlus className="h-2.5 w-2.5 text-purple-500" />
+                                        <span className="text-[11px] font-bold text-foreground leading-none">{planningData[4].values[i]}</span>
                                       </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="bottom" className="w-[200px] p-0 bg-popover text-popover-foreground border shadow-xl rounded-xl [&>svg]:hidden">
@@ -1417,10 +1518,10 @@ export default function SchedulingPage() {
                           </th>
                           );
                         })}
-                        <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[36px] sm:min-w-[50px]">Days</th>
+                        <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[36px] sm:min-w-[40px]">Days</th>
                         <th className="w-[30px] hidden md:table-cell py-2 px-0"></th>
-                        <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[180px] hidden md:table-cell">Note</th>
-                        <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[40px] sm:min-w-[60px]">
+                        <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[140px] hidden md:table-cell">Note</th>
+                        <th className="text-center font-semibold px-0.5 sm:px-1 py-2 sm:py-2.5 min-w-[40px] sm:min-w-[50px]">
                           <div className="inline-flex items-center gap-1 text-violet-400">
                             <History className="h-3 w-3" />
                             <span className="text-[10px] font-semibold">Audit</span>
@@ -1483,9 +1584,9 @@ export default function SchedulingPage() {
                                       key={`${groupName}-${emp.transporterId}`}
                                       className="border-b border-border/10 hover:bg-muted/20 transition-colors group"
                                     >
-                                      <td className="px-2 sm:px-3 py-1 sm:py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors">
-                                        <div className="flex items-center gap-1 sm:gap-2">
-                                          <span className="text-[10px] sm:text-xs font-semibold truncate max-w-[80px] sm:max-w-[160px]">
+                                      <td className="px-1.5 sm:px-3 py-1 sm:py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors">
+                                        <div className="flex items-center gap-1 sm:gap-1.5">
+                                          <span className="text-[10px] sm:text-xs font-normal truncate max-w-[80px] sm:max-w-[125px]">
                                             {emp.employee?.name || emp.transporterId}
                                           </span>
                                         </div>
@@ -1596,7 +1697,7 @@ export default function SchedulingPage() {
                                                 avoidCollisions
                                                 className="w-48 p-0 overflow-hidden group"
                                               >
-                                                <div className="max-h-[140px] overflow-y-auto flex flex-col py-1">
+                                                <div className="max-h-[320px] overflow-y-auto flex flex-col py-1">
                                                   {dynamicTypeOptions.map(opt => {
                                                     const Icon = opt.icon;
                                                     const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();
@@ -1651,19 +1752,9 @@ export default function SchedulingPage() {
                                                 setNotesEmployee({ employeeId: emp.employee?._id || "", transporterId: emp.transporterId, name: emp.employee?.name || emp.transporterId });
                                                 setShowNotesPanel(true);
                                               }}
-                                              className={cn(
-                                                "inline-flex items-center justify-center p-1.5 rounded-md transition-all relative mt-1",
-                                                (noteCounts[emp.transporterId] || 0) > 0
-                                                  ? "bg-blue-500/10 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20"
-                                                  : "text-muted-foreground/30 hover:text-muted-foreground/60 hover:bg-muted/40"
-                                              )}
+                                              className="inline-flex items-center justify-center p-1.5 rounded-md transition-all relative mt-1 text-muted-foreground/30 hover:text-muted-foreground/60 hover:bg-muted/40"
                                             >
                                               <FileText className="h-[14px] w-[14px]" />
-                                              {(noteCounts[emp.transporterId] || 0) > 0 && (
-                                                <span className="absolute -top-1.5 -right-1.5 bg-blue-500 text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center ring-2 ring-background">
-                                                  {noteCounts[emp.transporterId]}
-                                                </span>
-                                              )}
                                             </button>
                                           </TooltipTrigger>
                                           <TooltipContent side="top" className="text-xs">

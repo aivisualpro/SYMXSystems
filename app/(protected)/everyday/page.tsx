@@ -753,20 +753,17 @@ export default function EverydayAfterDispatchingPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[500px]">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 min-h-[500px]">
                 {/* Middle Left: Tables */}
-                <div className="lg:col-span-8 grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-5">
+                <div className="xl:col-span-9 grid grid-cols-1 xl:grid-cols-[2.1fr_1fr] gap-4 lg:gap-5 min-w-0">
                     {/* Routes Overview */}
                     <Card className="border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-[400px]">
                         <div className="p-4 border-b border-border/50 bg-muted/20 shrink-0">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <div className="h-8 w-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                                    <MapPin className="h-4 w-4 text-orange-500" />
-                                </div>
                                 <div>
                                     <h2 className="text-sm font-bold text-foreground leading-none tracking-tight flex items-center">
-                                        Routes Overview <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-orange-500/10 text-orange-600 px-1.5 py-0.5 rounded-sm">({formattedDate})</span>
+                                        Routes Overview <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-orange-500/10 text-foreground px-1.5 py-0.5 rounded-sm">({formattedDate})</span>
                                     </h2>
                                 </div>
                             </div>
@@ -776,16 +773,16 @@ export default function EverydayAfterDispatchingPage() {
                         groups={groupedRoutes}
                         loading={loading}
                         columns={[
-                            { key: "employee",               label: "Employee",  minW: 160, sticky: true },
-                            { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500 fill-blue-500/20" strokeWidth={2.5} />, minW: 65, align: "center"  },
-                            { key: "rts",                    label: <HeaderIcon title="Return to Station (RTS)" icon={PackageX} className="h-[18px] w-[18px] text-orange-500 fill-orange-500/20" strokeWidth={2.5} />, minW: 55, align: "center" },
-                            { key: "rescue",                 label: <HeaderIcon title="Route Rescue" icon={Activity} className="h-[18px] w-[18px] text-teal-500" strokeWidth={3} />, minW: 55, align: "center" },
-                            { key: "routeNumber",            label: <HeaderIcon title="Route Number" icon={Hash} className="h-[18px] w-[18px] text-rose-500" strokeWidth={3} />,   minW: 65, align: "center"  },
-                            { key: "routeDuration",          label: <HeaderIcon title="Route Duration" icon={Timer} className="h-[18px] w-[18px] text-yellow-500 fill-yellow-500/20" strokeWidth={2.5} />,  minW: 55, align: "center"  },
-                            { key: "stopCount",              label: <HeaderIcon title="Total Stops" icon={MapPin} className="h-[18px] w-[18px] text-blue-500 fill-blue-500/20" strokeWidth={2.5} />,     minW: 55, align: "center"  },
-                            { key: "packageCount",           label: <HeaderIcon title="Total Packages" icon={Package} className="h-[18px] w-[18px] text-orange-500 fill-orange-500/20" strokeWidth={2.5} />,      minW: 55, align: "center"  },
-                            { key: "van",                    label: <HeaderIcon title="Van Number" icon={TruckIcon} className="h-[18px] w-[18px] text-emerald-500 fill-emerald-500/20" strokeWidth={2.5} />,       minW: 55, align: "center"  },
-                            { key: "attendance",             label: <HeaderIcon title="Attendance Tracker" icon={UserCheck} className="h-[18px] w-[18px] text-purple-500 fill-purple-500/20" strokeWidth={2.5} />,       minW: 55, align: "center"  },
+                            { key: "employee",               label: "Employee",  minW: 120, sticky: true },
+                            { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 70, align: "center"  },
+                            { key: "rts",                    label: <HeaderIcon title="Return to Station (RTS)" icon={PackageX} className="h-[18px] w-[18px] text-orange-500" strokeWidth={1.5} />, minW: 40, align: "center" },
+                            { key: "rescue",                 label: <HeaderIcon title="Route Rescue" icon={Activity} className="h-[18px] w-[18px] text-teal-500" strokeWidth={1.5} />, minW: 40, align: "center" },
+                            { key: "routeNumber",            label: <HeaderIcon title="Route Number" icon={Hash} className="h-[18px] w-[18px] text-rose-500" strokeWidth={1.5} />,   minW: 55, align: "center"  },
+                            { key: "routeDuration",          label: <HeaderIcon title="Route Duration" icon={Timer} className="h-[18px] w-[18px] text-yellow-500" strokeWidth={1.5} />,  minW: 45, align: "center"  },
+                            { key: "stopCount",              label: <HeaderIcon title="Total Stops" icon={MapPin} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />,     minW: 40, align: "center"  },
+                            { key: "packageCount",           label: <HeaderIcon title="Total Packages" icon={Package} className="h-[18px] w-[18px] text-orange-500" strokeWidth={1.5} />,      minW: 40, align: "center"  },
+                            { key: "van",                    label: <HeaderIcon title="Van Number" icon={TruckIcon} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />,       minW: 40, align: "center"  },
+                            { key: "attendance",             label: <HeaderIcon title="Attendance Tracker" icon={UserCheck} className="h-[18px] w-[18px] text-purple-500" strokeWidth={1.5} />,       minW: 40, align: "center"  },
                         ]}
                         renderCell={(key, row) => {
                             if (key === "dayBeforeConfirmation") {
@@ -817,7 +814,7 @@ export default function EverydayAfterDispatchingPage() {
                                         {val ? (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, val); }}
-                                                className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-blue-500/15 text-blue-600 border-blue-500/20 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20"
+                                                className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-blue-500/15 text-blue-600 border-blue-500/20 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20 whitespace-nowrap"
                                                 title="Click to reset time"
                                             >
                                                 {val}
@@ -827,7 +824,7 @@ export default function EverydayAfterDispatchingPage() {
                                                 onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, ""); }}
                                                 className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all focus:outline-none shadow-sm ring-1 ring-blue-500/30 title='Log completion time'"
                                             >
-                                                <Clock className="h-[18px] w-[18px] text-blue-500 fill-blue-500/20 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
+                                                <Clock className="h-[18px] w-[18px] text-blue-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
                                             </button>
                                         )}
                                     </div>
@@ -843,7 +840,7 @@ export default function EverydayAfterDispatchingPage() {
                                             className={`group inline-flex items-center justify-center h-8 ${count > 0 ? 'px-3' : 'w-12'} rounded-full bg-orange-500/10 hover:bg-orange-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-orange-500/30 gap-1.5`}
                                             title="Add RTS"
                                         >
-                                            <PackageX className="h-[18px] w-[18px] text-orange-500 fill-orange-500/20 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
+                                            <PackageX className="h-[18px] w-[18px] text-orange-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
                                             {count > 0 && <span className="text-[11px] font-bold text-orange-600">{count}</span>}
                                         </button>
                                     </div>
@@ -859,7 +856,7 @@ export default function EverydayAfterDispatchingPage() {
                                             className={`group inline-flex items-center justify-center h-8 ${count > 0 ? 'px-3' : 'w-12'} rounded-full bg-teal-500/10 hover:bg-teal-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-teal-500/30 gap-1.5`}
                                             title="Add Rescue"
                                         >
-                                            <Activity className="h-[18px] w-[18px] text-teal-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={3} />
+                                            <Activity className="h-[18px] w-[18px] text-teal-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
                                             {count > 0 && <span className="text-[11px] font-bold text-teal-600">{count}</span>}
                                         </button>
                                     </div>
@@ -892,12 +889,9 @@ export default function EverydayAfterDispatchingPage() {
                     <div className="p-4 border-b border-border/50 bg-muted/20 shrink-0">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <div className="h-8 w-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
-                                    <MapPin className="h-4 w-4 text-indigo-500" />
-                                </div>
                                 <div>
                                     <h2 className="text-sm font-bold text-foreground leading-none tracking-tight flex items-center">
-                                        Roster Plan <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-indigo-500/10 text-indigo-600 px-1.5 py-0.5 rounded-sm">({formattedTomorrow})</span>
+                                        Roster Plan <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-indigo-500/10 text-foreground px-1.5 py-0.5 rounded-sm">({formattedTomorrow})</span>
                                     </h2>
                                 </div>
                             </div>
@@ -907,9 +901,9 @@ export default function EverydayAfterDispatchingPage() {
                         groups={groupedTomorrowRoutes}
                         loading={loading}
                         columns={[
-                            { key: "employee",               label: "Employee",  minW: 120, sticky: true },
-                            { key: "phone",                  label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500 fill-blue-500/20" strokeWidth={2.5} />, minW: 50, align: "center" },
-                            { key: "dayBeforeConfirmation",  label: <HeaderIcon title="Day Before Confirmation" icon={ThumbsUp} className="h-[18px] w-[18px] text-emerald-500 fill-emerald-500/20" strokeWidth={2.5} />, minW: 60, align: "center" },
+                            { key: "employee",               label: "Employee",  minW: 100, sticky: true },
+                            { key: "phone",                  label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 46, align: "center" },
+                            { key: "dayBeforeConfirmation",  label: <HeaderIcon title="Day Before Confirmation" icon={ThumbsUp} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 46, align: "center" },
                         ]}
                         renderCell={(key, row) => {
                             if (key === "phone") {
@@ -923,7 +917,7 @@ export default function EverydayAfterDispatchingPage() {
                                                 className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/10 hover:bg-blue-500/20 transition-all border border-blue-500/20 shadow-sm"
                                                 title={`Call ${val}`}
                                             >
-                                                <Phone className="h-4 w-4 text-blue-500 fill-blue-500/20 group-hover:scale-110 transition-transform" />
+                                                <Phone className="h-4 w-4 text-blue-500 group-hover:scale-110 transition-transform" />
                                             </a>
                                         ) : (
                                             <span className="text-muted-foreground/30 text-[11px] font-bold">—</span>
@@ -960,7 +954,7 @@ export default function EverydayAfterDispatchingPage() {
                                         {val ? (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, val); }}
-                                                className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-blue-500/15 text-blue-600 border-blue-500/20 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20"
+                                                className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-blue-500/15 text-blue-600 border-blue-500/20 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20 whitespace-nowrap"
                                                 title="Click to reset time"
                                             >
                                                 {val}
@@ -970,7 +964,7 @@ export default function EverydayAfterDispatchingPage() {
                                                 onClick={(e) => { e.stopPropagation(); toggleDeliveryCompletionTime(row._id, ""); }}
                                                 className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-blue-500/15 hover:bg-blue-500/25 transition-all focus:outline-none shadow-sm ring-1 ring-blue-500/30 title='Log completion time'"
                                             >
-                                                <Clock className="h-[18px] w-[18px] text-blue-500 fill-blue-500/20 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
+                                                <Clock className="h-[18px] w-[18px] text-blue-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
                                             </button>
                                         )}
                                     </div>
@@ -994,7 +988,7 @@ export default function EverydayAfterDispatchingPage() {
                                                 className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-orange-500/30"
                                                 title="Log RTS"
                                             >
-                                                <PackageX className="h-[18px] w-[18px] text-orange-500 fill-orange-500/20 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
+                                                <PackageX className="h-[18px] w-[18px] text-orange-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
                                             </button>
                                         )}
                                     </div>
@@ -1018,7 +1012,7 @@ export default function EverydayAfterDispatchingPage() {
                                                 className="group inline-flex items-center justify-center w-12 h-8 rounded-full bg-teal-500/10 hover:bg-teal-500/20 transition-all focus:outline-none shadow-sm ring-1 ring-teal-500/30"
                                                 title="Log Rescue"
                                             >
-                                                <Activity className="h-[18px] w-[18px] text-teal-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={3} />
+                                                <Activity className="h-[18px] w-[18px] text-teal-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={1.5} />
                                             </button>
                                         )}
                                     </div>
@@ -1048,17 +1042,11 @@ export default function EverydayAfterDispatchingPage() {
                 </div>
 
                 {/* Right Side: 3 Stacked Boxes */}
-                <div className="lg:col-span-4 flex flex-col gap-4">
+                <div className="xl:col-span-3 flex flex-col gap-4">
                     {/* Rescue */}
                     <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md overflow-hidden relative group/box p-0 gap-0">
-                        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none transition-transform group-hover/box:scale-110 group-hover/box:-rotate-12">
-                            <Activity className="w-24 h-24" />
-                        </div>
                         <div className="p-5 h-full flex flex-col">
                             <div className="flex items-center gap-2 mb-4">
-                                <div className="h-8 w-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                                    <Activity className="h-4 w-4 text-blue-500" />
-                                </div>
                                 <h3 className="font-bold tracking-wide">Rescue</h3>
                             </div>
                             <div className="flex-1 overflow-auto rounded-md border border-border/50 bg-background/40 max-h-[300px]">
@@ -1080,7 +1068,7 @@ export default function EverydayAfterDispatchingPage() {
                                         <tbody className="divide-y divide-border/40">
                                             {rescueEntries.map((rescue) => (
                                                 <tr key={rescue._id} className="hover:bg-muted/20 transition-colors">
-                                                    <td className="p-2 pl-3 font-medium text-foreground/90 whitespace-nowrap">
+                                                    <td className="p-2 pl-3 font-normal text-foreground/90 whitespace-nowrap">
                                                         <div className="flex items-center gap-2 max-w-[140px] xl:max-w-max">
                                                             {rescue.employeeImage ? (
                                                                 <img src={rescue.employeeImage} alt={rescue.employeeName} className="w-5 h-5 rounded-full object-cover shrink-0" />
@@ -1104,7 +1092,7 @@ export default function EverydayAfterDispatchingPage() {
                                                             <span className="truncate">{rescue.rescuerName}</span>
                                                             {rescue.performanceRescue && (
                                                                 <span title="Performance Rescue" className="flex items-center justify-center shrink-0">
-                                                                    <ThumbsUp strokeWidth={2.5} className="h-[14px] w-[14px] text-emerald-500 fill-emerald-500/20" />
+                                                                    <ThumbsUp strokeWidth={1.5} className="h-[14px] w-[14px] text-emerald-500" />
                                                                 </span>
                                                             )}
                                                         </div>
@@ -1134,14 +1122,8 @@ export default function EverydayAfterDispatchingPage() {
 
                     {/* RTS */}
                     <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md overflow-hidden relative group/box p-0 gap-0">
-                        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none transition-transform group-hover/box:scale-110 group-hover/box:-rotate-12">
-                            <AlertCircle className="w-24 h-24" />
-                        </div>
                         <div className="p-5 h-full flex flex-col">
                             <div className="flex items-center gap-2 mb-4">
-                                <div className="h-8 w-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                                    <AlertCircle className="h-4 w-4 text-orange-500" />
-                                </div>
                                 <h3 className="font-bold tracking-wide">RTS</h3>
                             </div>
                             <div className="flex-1 overflow-auto rounded-md border border-border/50 bg-background/40 max-h-[300px]">
@@ -1162,7 +1144,7 @@ export default function EverydayAfterDispatchingPage() {
                                         <tbody className="divide-y divide-border/40">
                                             {rtsEntries.map((rts) => (
                                                 <tr key={rts._id} className="hover:bg-muted/20 transition-colors">
-                                                    <td className="p-2 pl-3 font-medium text-foreground/90 whitespace-nowrap">
+                                                    <td className="p-2 pl-3 font-normal text-foreground/90 whitespace-nowrap">
                                                         <div className="flex items-center gap-2 max-w-[160px] xl:max-w-max">
                                                             {rts.employeeImage ? (
                                                                 <img src={rts.employeeImage} alt={rts.employeeName} className="w-5 h-5 rounded-full object-cover shrink-0" />
@@ -1199,14 +1181,8 @@ export default function EverydayAfterDispatchingPage() {
 
                     {/* Fix Punches */}
                     <Card className="flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md overflow-hidden relative group/box p-0 gap-0">
-                        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none transition-transform group-hover/box:scale-110 group-hover/box:-rotate-12">
-                            <Clock className="w-24 h-24" />
-                        </div>
                         <div className="p-5 h-full flex flex-col">
                             <div className="flex items-center gap-2 mb-4">
-                                <div className="h-8 w-8 rounded-lg bg-red-500/20 flex items-center justify-center">
-                                    <Clock className="h-4 w-4 text-red-500" />
-                                </div>
                                 <h3 className="font-bold tracking-wide">Fix Punches</h3>
                             </div>
                             <div className="flex-1 flex items-center justify-center">

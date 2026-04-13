@@ -133,7 +133,7 @@ export function RoutesTable({
                                 </span>
                             </div>
                         )}
-                        <span className="text-[11px] font-bold whitespace-nowrap">{row.employeeName}</span>
+                        <span className="text-[11px] font-medium whitespace-nowrap">{row.employeeName}</span>
                     </div>
                 );
             case "type": {
