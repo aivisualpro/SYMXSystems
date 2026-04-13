@@ -218,6 +218,17 @@ const timeToMins = (t: string | undefined | null) => {
     return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 };
 
+const formatAmPm = (timeStr: string) => {
+    if (!timeStr || !timeStr.includes(':')) return timeStr;
+    const [hStr, mStr] = timeStr.split(':');
+    let h = parseInt(hStr, 10);
+    if (isNaN(h)) return timeStr;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h}:${mStr} ${ampm}`;
+};
+
 const BUSINESS_TZ = "America/Los_Angeles";
 function toPacificDate(d: string | Date): string {
     const date = typeof d === "string" ? new Date(d) : new Date(d.getTime());
@@ -596,12 +607,15 @@ export default function TimePage() {
     const renderCell = (row: RouteRow, field: string, value: any) => {
         const isEditable = EDITABLE_FIELDS.has(field);
         const raw = value === 0 || value === "" ? "—" : String(value);
-        const displayVal = raw === "—" ? raw : raw.split(':').slice(0, 2).join(':');
+        let displayVal = raw === "—" ? raw : raw.split(':').slice(0, 2).join(':');
+
+        const isTimeField = field !== "routeNumber" && field !== "punchStatus" && field !== "totalHours";
+        if (isTimeField && displayVal !== "—") {
+            displayVal = formatAmPm(displayVal);
+        }
 
         const style = getCellFormat(row, field);
         const Icon = style?.icon;
-
-        const isTimeField = field !== "routeNumber" && field !== "punchStatus";
 
         const handleTimeInputKeyDown = (val: string) => {
             return isTimeField ? parseSmartTime(val) : val;
