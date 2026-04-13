@@ -292,6 +292,7 @@
       departureTime: route.plannedDepartureTime || route.departureTime || "",
       firstStopTime: route.firstStopTime || route.firstDeliveryTime || "",
       lastStopTime: route.lastStopTime || route.lastDeliveryTime || "",
+      plannedFirstStop: route.transporters?.[0]?.plannedBreaks?.[0]?.plannedStart || "",
       completionTime: route.completionTime || "",
       returnTime: route.returnTime || "",
 

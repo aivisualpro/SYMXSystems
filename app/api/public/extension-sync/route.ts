@@ -229,6 +229,13 @@ export async function POST(req: NextRequest) {
                 resolvedWaveTime = subtractMinutes(rawDeparture, 20);
             }
 
+            // ── plannedFirstStop = plannedStart ──
+            const plannedStartRaw = raw.transporters?.[0]?.plannedBreaks?.[0]?.plannedStart || route.plannedFirstStop;
+            let resolvedPlannedFirstStop = "";
+            if (plannedStartRaw) {
+               resolvedPlannedFirstStop = subtractMinutes(plannedStartRaw, 0);
+            }
+
             // Parse route data into SYMX format
             const row: Record<string, any> = {
                 date: dateObj,
@@ -275,6 +282,7 @@ export async function POST(req: NextRequest) {
                 if (route.completionTime) syncFields.deliveryCompletionTime = parseAmazonTime(route.completionTime);
                 if (route.outboundStem) syncFields.actualOutboundStem = parseAmazonTime(route.outboundStem);
                 if (route.stopsPerHour) syncFields.stopsPerHour = parseFloat(route.stopsPerHour) || 0;
+                if (resolvedPlannedFirstStop) syncFields.plannedFirstStop = resolvedPlannedFirstStop;
 
                 syncOps.push({
                     updateOne: {
