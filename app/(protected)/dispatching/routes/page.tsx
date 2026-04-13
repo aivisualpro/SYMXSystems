@@ -175,7 +175,8 @@ function toPacificDate(d: string | Date): string {
 }
 
 // ── Column Definitions ──
-const COLUMNS = [
+type ColumnDef = { key: string; label: string; minW: number; sticky: boolean; align?: "left" | "center" | "right" };
+const COLUMNS: ColumnDef[] = [
     { key: "employee", label: "Employee", minW: 140, sticky: true },
     { key: "confirmationStatus", label: "Conf Status", minW: 100, sticky: false },
     { key: "wst", label: "WST", minW: 50, sticky: false },
@@ -185,7 +186,7 @@ const COLUMNS = [
     { key: "ov", label: "OV", minW: 36, sticky: false },
     { key: "serviceType", label: "Service", minW: 64, sticky: false },
     { key: "dashcam", label: "Dashcam", minW: 64, sticky: false },
-    { key: "type", label: "Type", minW: 72, sticky: false },
+    { key: "type", label: "Type", minW: 100, align: "center", sticky: false },
     { key: "routesCompleted", label: "Routes", minW: 50, sticky: false },
     { key: "routeSize", label: "Rt Size", minW: 56, sticky: false },
     { key: "stopCount", label: "Stops", minW: 46, sticky: false },
@@ -832,12 +833,13 @@ export default function RoutesPage() {
                                             key={col.key}
                                             onClick={() => handleSort(col.key)}
                                             className={cn(
-                                                "text-left px-2 py-2 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap",
-                                                col.sticky && "sticky left-0 z-20 bg-muted"
+                                                "px-2 py-2 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap",
+                                                col.sticky ? "sticky left-0 z-20 bg-muted" : "",
+                                                col.align === "center" ? "text-center" : "text-left"
                                             )}
                                             style={{ minWidth: col.minW }}
                                         >
-                                            <span className="inline-flex items-center gap-0.5">
+                                            <span className={cn("inline-flex items-center gap-0.5", col.align === "center" && "justify-center w-full")}>
                                                 {col.label}
                                                 {sortKey === col.key && (
                                                     sortDir === "asc"
@@ -1053,7 +1055,7 @@ export default function RoutesPage() {
                                                                                 className="text-[11px] cursor-pointer font-medium"
                                                                             >
                                                                                 <div className="flex-1 flex items-center gap-1.5">
-                                                                                    <span>{v.vehicleName}</span>
+                                                                                    <span className={cn(isInactive ? "text-red-500 font-bold" : "text-foreground")}>{v.vehicleName}</span>
                                                                                     {isInactive && (
                                                                                         <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20">
                                                                                             <AlertCircle className="h-3 w-3 text-red-500" />
@@ -1109,10 +1111,10 @@ export default function RoutesPage() {
                                                         </td>
 
                                                         {/* Type (inline dropdown) */}
-                                                        <td className="px-2 py-1.5 align-middle" onClick={(e) => e.stopPropagation()}>
+                                                        <td className="px-2 py-1.5 align-middle text-center" onClick={(e) => e.stopPropagation()}>
                                                             <DropdownMenu>
                                                                 <DropdownMenuTrigger asChild>
-                                                                    <button className="cursor-pointer hover:bg-muted/50 rounded py-0.5 px-1 -ml-1 transition-colors focus:outline-none flex items-center gap-1 w-full text-left group">
+                                                                    <button className="cursor-pointer hover:bg-muted/50 rounded py-0.5 px-1 transition-colors focus:outline-none inline-flex items-center justify-center gap-1 w-full group">
                                                                         {(() => {
                                                                             const typeOpt = TYPE_MAP.get((row.type || "").trim().toLowerCase());
                                                                             const style = getTypeStyle(row.type);
