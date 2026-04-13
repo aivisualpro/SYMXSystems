@@ -45,12 +45,36 @@ export async function GET(req: NextRequest) {
         const startOfDay = new Date(dateStr + "T00:00:00.000Z");
         const endOfDay = new Date(dateStr + "T23:59:59.999Z");
 
-        const schedules = await SymxEmployeeSchedule.find(
+        const yearWeek = url.searchParams.get("yearWeek");
+
+        const schedules = (await SymxEmployeeSchedule.find(
             { date: { $gte: startOfDay, $lte: endOfDay } },
             { transporterId: 1, dayBeforeConfirmation: 1 }
-        ).lean();
+        ).lean()) as any[];
 
-        return NextResponse.json({ schedules });
+        let confirmedIds = new Set<string>();
+        if (yearWeek) {
+            import("@/lib/models/ScheduleConfirmation").then(async ({ default: ScheduleConfirmation }) => {
+                // Ensure model is loaded but avoid duplicate imports for now.
+                // Or simply:
+            });
+            // Actually let's just do it directly.
+            const ScheduleConfirmation = (await import("@/lib/models/ScheduleConfirmation")).default;
+            const weekConfirmations = await ScheduleConfirmation.find(
+                { yearWeek, messageType: "future-shift", status: "confirmed" },
+                { transporterId: 1 }
+            ).lean() as any[];
+            weekConfirmations.forEach((c: any) => confirmedIds.add(c.transporterId));
+        }
+
+        const enrichedSchedules = schedules.map(s => {
+            return {
+                ...s,
+                futureShiftConfirmed: confirmedIds.has(s.transporterId)
+            };
+        });
+
+        return NextResponse.json({ schedules: enrichedSchedules });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

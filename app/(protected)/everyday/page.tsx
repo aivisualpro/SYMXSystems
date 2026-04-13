@@ -366,11 +366,11 @@ export default function EverydayAfterDispatchingPage() {
 
             const [routesRes, schedulesRes, rtsRes, rescueRes, tRoutesRes, tSchedulesRes, routeTypesRes] = await Promise.all([
                 fetch(`/api/dispatching/routes?yearWeek=${selectedWeek}&date=${date}`),
-                fetch(`/api/everyday/schedules?dateStr=${date}`),
+                fetch(`/api/everyday/schedules?dateStr=${date}&yearWeek=${selectedWeek}`),
                 fetch(`/api/everyday/rts?dateStr=${date}`),
                 fetch(`/api/everyday/rescue?dateStr=${date}`),
                 fetch(`/api/dispatching/routes?yearWeek=${tomorrowWeek}&date=${tomorrow}`),
-                fetch(`/api/everyday/schedules?dateStr=${tomorrow}`),
+                fetch(`/api/everyday/schedules?dateStr=${tomorrow}&yearWeek=${tomorrowWeek}`),
                 fetch(`/api/admin/settings/route-types`)
             ]);
 
@@ -620,7 +620,7 @@ export default function EverydayAfterDispatchingPage() {
                 employeeName: r.employeeName || empFromMap.name || r.transporterId,
                 profileImage: r.profileImage || empFromMap.profileImage || "",
                 phone: r.phone || empFromMap.phoneNumber || empFromMap.phone || "",
-                dayBeforeConfirmation: schedule.dayBeforeConfirmation === "true",
+                dayBeforeConfirmation: schedule.dayBeforeConfirmation === "true" || schedule.futureShiftConfirmed === true,
                 deliveryCompletionTime: r.deliveryCompletionTime || "",
                 routeNumber: r.routeNumber || "",
                 routeDuration: r.routeDuration || "",
@@ -952,9 +952,9 @@ export default function EverydayAfterDispatchingPage() {
                                             {isTrue ? (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); toggleConfirmIcon(row.transporterId, "true", true); }}
-                                                    className="px-3 py-1 rounded-full text-[10px] font-bold tracking-wider outline-none focus:outline-none transition-all shadow-sm border bg-emerald-500/15 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/25"
+                                                    className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 transition-all focus:outline-none shadow-sm ring-1 ring-emerald-500/20"
                                                 >
-                                                    CONFIRMED
+                                                    <ThumbsUp className="h-[15px] w-[15px] text-emerald-500 transition-transform group-hover:scale-110 cursor-pointer" strokeWidth={2.5} />
                                                 </button>
                                             ) : (
                                                 <button
