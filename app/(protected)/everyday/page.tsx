@@ -216,28 +216,21 @@ export default function EverydayAfterDispatchingPage() {
 
     const handleDeleteRTS = async () => {
         if (!rtsModalEditId || !rtsModalRoute) return;
-        toast("Are you sure you want to delete this RTS record?", {
-            action: {
-                label: "Delete",
-                onClick: async () => {
-                    try {
-                        const res = await fetch(`/api/everyday/rts?id=${rtsModalEditId}`, { method: "DELETE" });
-                        if (!res.ok) throw new Error("Failed to delete RTS");
-                        toast.success("RTS record deleted");
-                        setRtsModalOpen(false);
-                        setRtsMap(prev => {
-                            const newMap = { ...prev };
-                            Object.keys(newMap).forEach(k => {
-                                newMap[k] = newMap[k].filter((r: any) => String(r._id) !== String(rtsModalEditId));
-                            });
-                            return newMap;
-                        });
-                    } catch (e) {
-                        toast.error("Failed to delete RTS record");
-                    }
-                }
-            }
-        });
+        try {
+            const res = await fetch(`/api/everyday/rts?id=${rtsModalEditId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed to delete RTS");
+            toast.success("RTS record deleted");
+            setRtsModalOpen(false);
+            setRtsMap(prev => {
+                const newMap = { ...prev };
+                Object.keys(newMap).forEach(k => {
+                    newMap[k] = newMap[k].filter((r: any) => String(r._id) !== String(rtsModalEditId));
+                });
+                return newMap;
+            });
+        } catch (e) {
+            toast.error("Failed to delete RTS record");
+        }
     };
 
     const openRescueModal = (row: RoutesTableRow, existingRecord?: any) => {
@@ -305,28 +298,21 @@ export default function EverydayAfterDispatchingPage() {
 
     const handleDeleteRescue = async () => {
         if (!rescueModalEditId || !rescueModalRoute) return;
-        toast("Are you sure you want to delete this Rescue record?", {
-            action: {
-                label: "Delete",
-                onClick: async () => {
-                    try {
-                        const res = await fetch(`/api/everyday/rescue?id=${rescueModalEditId}`, { method: "DELETE" });
-                        if (!res.ok) throw new Error("Failed to delete Rescue");
-                        toast.success("Rescue record deleted");
-                        setRescueModalOpen(false);
-                        setRescueMap(prev => {
-                            const newMap = { ...prev };
-                            Object.keys(newMap).forEach(k => {
-                                newMap[k] = newMap[k].filter((r: any) => String(r._id) !== String(rescueModalEditId));
-                            });
-                            return newMap;
-                        });
-                    } catch (e) {
-                        toast.error("Failed to delete Rescue record");
-                    }
-                }
-            }
-        });
+        try {
+            const res = await fetch(`/api/everyday/rescue?id=${rescueModalEditId}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed to delete Rescue");
+            toast.success("Rescue record deleted");
+            setRescueModalOpen(false);
+            setRescueMap(prev => {
+                const newMap = { ...prev };
+                Object.keys(newMap).forEach(k => {
+                    newMap[k] = newMap[k].filter((r: any) => String(r._id) !== String(rescueModalEditId));
+                });
+                return newMap;
+            });
+        } catch (e) {
+            toast.error("Failed to delete Rescue record");
+        }
     };
 
     const toggleGroup = (group: string) => {
