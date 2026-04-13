@@ -922,7 +922,7 @@ export default function EverydayAfterDispatchingPage() {
                             columns={[
                                 { key: "employee", label: "Employee", minW: 100, sticky: true },
                                 { key: "dayBeforeConfirmation", label: <HeaderIcon title="Day Before Confirmation" icon={ThumbsUp} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 46, align: "center" },
-                                { key: "phone", label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 46, align: "center" },
+                                { key: "phone", label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 105, align: "center" },
                             ]}
                             renderCell={(key, row) => {
                                 if (key === "phone") {
@@ -933,10 +933,11 @@ export default function EverydayAfterDispatchingPage() {
                                                 <a
                                                     href={`tel:${val}`}
                                                     onClick={(e) => e.stopPropagation()}
-                                                    className="group inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/10 hover:bg-blue-500/20 transition-all border border-blue-500/20 shadow-sm"
+                                                    className="inline-flex items-center justify-center px-2 py-1 rounded-[4px] bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-all border border-blue-500/20 shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-[11px] font-mono font-medium tracking-wide whitespace-nowrap"
                                                     title={`Call ${val}`}
                                                 >
-                                                    <Phone className="h-4 w-4 text-blue-500 group-hover:scale-110 transition-transform" />
+                                                    <Phone className="h-3 w-3 mr-1.5 text-blue-500" strokeWidth={2} />
+                                                    {val}
                                                 </a>
                                             ) : (
                                                 <span className="text-muted-foreground/30 text-[11px] font-bold">—</span>
@@ -1131,9 +1132,11 @@ export default function EverydayAfterDispatchingPage() {
                                                 <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rescue.reason}>{rescue.reason}</td>
                                                 <td className="p-2 pr-3 text-right">
                                                     <button
-                                                        onClick={() => rescue.routeObj && openRescueModal(rescue.routeObj, rescue.originalRecord)}
-                                                        disabled={!rescue.routeObj}
-                                                        className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => {
+                                                            const rObj = rescue.routeObj || { _id: rescue.originalRecord.routeId, transporterId: rescue.originalRecord.transporterId, employeeName: rescue.employeeName };
+                                                            openRescueModal(rObj, rescue.originalRecord);
+                                                        }}
+                                                        className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center"
                                                         title="Edit Rescue"
                                                     >
                                                         <Edit2 className="w-3.5 h-3.5" />
@@ -1188,9 +1191,11 @@ export default function EverydayAfterDispatchingPage() {
                                                 <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rts.reason}>{rts.reason}</td>
                                                 <td className="p-2 pr-3 text-right">
                                                     <button
-                                                        onClick={() => rts.routeObj && openRTSModal(rts.routeObj, rts.originalRecord)}
-                                                        disabled={!rts.routeObj}
-                                                        className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => {
+                                                            const rObj = rts.routeObj || { _id: rts.originalRecord.routeId, transporterId: rts.originalRecord.transporterId, employeeName: rts.employeeName };
+                                                            openRTSModal(rObj, rts.originalRecord);
+                                                        }}
+                                                        className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center"
                                                         title="Edit RTS"
                                                     >
                                                         <Edit2 className="w-3.5 h-3.5" />
@@ -1210,7 +1215,7 @@ export default function EverydayAfterDispatchingPage() {
             <Dialog open={rtsModalOpen} onOpenChange={setRtsModalOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Add RTS Record</DialogTitle>
+                        <DialogTitle>{rtsModalEditId ? "Edit" : "Add"} RTS Record</DialogTitle>
                     </DialogHeader>
                     {rtsModalRoute && (
                         <div className="space-y-4 pt-4">
@@ -1251,7 +1256,7 @@ export default function EverydayAfterDispatchingPage() {
             <Dialog open={rescueModalOpen} onOpenChange={setRescueModalOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Add Rescue Record</DialogTitle>
+                        <DialogTitle>{rescueModalEditId ? "Edit" : "Add"} Rescue Record</DialogTitle>
                     </DialogHeader>
                     {rescueModalRoute && (
                         <div className="space-y-4 pt-4">
