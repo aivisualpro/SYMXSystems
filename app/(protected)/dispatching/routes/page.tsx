@@ -12,6 +12,7 @@ import {
     ChevronUp,
     ChevronDown,
     ChevronRight,
+    AlertCircle,
     Minus,
     Plus,
     History,
@@ -320,9 +321,8 @@ export default function RoutesPage() {
     useEffect(() => {
         const storeVehicles = store.fleet?.vehicles;
         if (storeVehicles && Array.isArray(storeVehicles) && storeVehicles.length > 0) {
-            const activeVans = storeVehicles.filter((v: any) => v.status === "Active" || v.status === "active");
-            activeVans.sort((a: any, b: any) => String(a.vehicleName).localeCompare(String(b.vehicleName), undefined, { numeric: true, sensitivity: 'base' }));
-            setVehicles(activeVans);
+            const sortedVans = [...storeVehicles].sort((a: any, b: any) => String(a.vehicleName).localeCompare(String(b.vehicleName), undefined, { numeric: true, sensitivity: 'base' }));
+            setVehicles(sortedVans);
         }
     }, [store.fleet?.vehicles]);
 
@@ -1044,18 +1044,29 @@ export default function RoutesPage() {
                                                                         <span className="flex-1">Clear Van</span>
                                                                         {!row.van && <Check className="h-3 w-3 ml-auto text-primary" />}
                                                                     </DropdownMenuItem>
-                                                                    {getAvailableVans(row.date, row.van).map(v => (
-                                                                        <DropdownMenuItem
-                                                                            key={v.vehicleName}
-                                                                            onClick={() => handleVanChange(row._id, v.vehicleName, row.transporterId)}
-                                                                            className="text-[11px] cursor-pointer font-medium"
-                                                                        >
-                                                                            <span className="flex-1">{v.vehicleName}</span>
-                                                                            {row.van === v.vehicleName && (
-                                                                                <Check className="h-3 w-3 ml-auto text-primary" />
-                                                                            )}
-                                                                        </DropdownMenuItem>
-                                                                    ))}
+                                                                    {getAvailableVans(row.date, row.van).map(v => {
+                                                                        const isInactive = v.status && v.status.toLowerCase() !== "active";
+                                                                        return (
+                                                                            <DropdownMenuItem
+                                                                                key={v.vehicleName}
+                                                                                onClick={() => handleVanChange(row._id, v.vehicleName, row.transporterId)}
+                                                                                className="text-[11px] cursor-pointer font-medium"
+                                                                            >
+                                                                                <div className="flex-1 flex items-center gap-1.5">
+                                                                                    <span>{v.vehicleName}</span>
+                                                                                    {isInactive && (
+                                                                                        <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20">
+                                                                                            <AlertCircle className="h-3 w-3 text-red-500" />
+                                                                                            <span className="text-[9px] font-bold text-red-500 uppercase">{v.status}</span>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                                {row.van === v.vehicleName && (
+                                                                                    <Check className="h-3 w-3 ml-auto text-primary" />
+                                                                                )}
+                                                                            </DropdownMenuItem>
+                                                                        );
+                                                                    })}
                                                                 </DropdownMenuContent>
                                                             </DropdownMenu>
                                                         </td>

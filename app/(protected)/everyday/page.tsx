@@ -216,19 +216,25 @@ export default function EverydayAfterDispatchingPage() {
 
     const handleDeleteRTS = async () => {
         if (!rtsModalEditId || !rtsModalRoute) return;
-        if (!confirm("Are you sure you want to delete this RTS record?")) return;
-        try {
-            const res = await fetch(`/api/everyday/rts?id=${rtsModalEditId}`, { method: "DELETE" });
-            if (!res.ok) throw new Error("Failed to delete RTS");
-            toast.success("RTS record deleted");
-            setRtsModalOpen(false);
-            setRtsMap(prev => {
-                const currentArr = prev[rtsModalRoute._id] || [];
-                return { ...prev, [rtsModalRoute._id]: currentArr.filter((r: any) => r._id !== rtsModalEditId) };
-            });
-        } catch (e) {
-            toast.error("Failed to delete RTS record");
-        }
+        toast("Are you sure you want to delete this RTS record?", {
+            action: {
+                label: "Delete",
+                onClick: async () => {
+                    try {
+                        const res = await fetch(`/api/everyday/rts?id=${rtsModalEditId}`, { method: "DELETE" });
+                        if (!res.ok) throw new Error("Failed to delete RTS");
+                        toast.success("RTS record deleted");
+                        setRtsModalOpen(false);
+                        setRtsMap(prev => {
+                            const currentArr = prev[rtsModalRoute._id] || [];
+                            return { ...prev, [rtsModalRoute._id]: currentArr.filter((r: any) => r._id !== rtsModalEditId) };
+                        });
+                    } catch (e) {
+                        toast.error("Failed to delete RTS record");
+                    }
+                }
+            }
+        });
     };
 
     const openRescueModal = (row: RoutesTableRow, existingRecord?: any) => {
@@ -296,19 +302,25 @@ export default function EverydayAfterDispatchingPage() {
 
     const handleDeleteRescue = async () => {
         if (!rescueModalEditId || !rescueModalRoute) return;
-        if (!confirm("Are you sure you want to delete this Rescue record?")) return;
-        try {
-            const res = await fetch(`/api/everyday/rescue?id=${rescueModalEditId}`, { method: "DELETE" });
-            if (!res.ok) throw new Error("Failed to delete Rescue");
-            toast.success("Rescue record deleted");
-            setRescueModalOpen(false);
-            setRescueMap(prev => {
-                const currentArr = prev[rescueModalRoute._id] || [];
-                return { ...prev, [rescueModalRoute._id]: currentArr.filter((r: any) => r._id !== rescueModalEditId) };
-            });
-        } catch (e) {
-            toast.error("Failed to delete Rescue record");
-        }
+        toast("Are you sure you want to delete this Rescue record?", {
+            action: {
+                label: "Delete",
+                onClick: async () => {
+                    try {
+                        const res = await fetch(`/api/everyday/rescue?id=${rescueModalEditId}`, { method: "DELETE" });
+                        if (!res.ok) throw new Error("Failed to delete Rescue");
+                        toast.success("Rescue record deleted");
+                        setRescueModalOpen(false);
+                        setRescueMap(prev => {
+                            const currentArr = prev[rescueModalRoute._id] || [];
+                            return { ...prev, [rescueModalRoute._id]: currentArr.filter((r: any) => r._id !== rescueModalEditId) };
+                        });
+                    } catch (e) {
+                        toast.error("Failed to delete Rescue record");
+                    }
+                }
+            }
+        });
     };
 
     const toggleGroup = (group: string) => {
@@ -992,7 +1004,7 @@ export default function EverydayAfterDispatchingPage() {
                                                     }}
                                                     className={cn(
                                                         "group inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/15 shadow-sm ring-1 ring-emerald-500/20 transition-all focus:outline-none",
-                                                        row.autoConfirmed ? "opacity-90 cursor-default" : "cursor-pointer hover:bg-emerald-500/25"
+                                                        row.autoConfirmed ? "opacity-90 !cursor-default pointer-events-none" : "cursor-pointer hover:bg-emerald-500/25"
                                                     )}
                                                 >
                                                     <ThumbsUp className={cn("h-[15px] w-[15px] text-emerald-500", !row.autoConfirmed && "transition-transform group-hover:scale-110")} strokeWidth={2.5} />
