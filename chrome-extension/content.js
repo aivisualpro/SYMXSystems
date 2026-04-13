@@ -511,6 +511,6 @@
   }, 1000);
 
   console.log(
-    "[SYMX Route Fetch] Content script loaded (MAIN world) v1.0.2 — intercepting route data..."
+    "[SYMX Route Fetch] Content script loaded (MAIN world) v1.0.3 — intercepting route data..."
   );
 })();

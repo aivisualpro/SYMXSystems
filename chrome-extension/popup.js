@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════
-// SYMX Route Fetch — Popup Controller V.1.0.2
+// SYMX Route Fetch — Popup Controller V.1.0.3
 // ══════════════════════════════════════════════════════════════
 
 const SYNC_TARGET = "https://symx-systems.vercel.app";
