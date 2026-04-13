@@ -60,6 +60,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import RouteDetailModal from "../_components/RouteDetailModal";
 
@@ -260,6 +268,10 @@ interface RouteRow {
     actualLastStop: string;
     deliveryCompletionTime: string;
     totalHours: string;
+    paycomInDay?: string;
+    paycomOutLunch?: string;
+    paycomInLunch?: string;
+    paycomOutDay?: string;
     stopsRescued: number;
     // Computed fields
     departureDelay: string;
@@ -309,6 +321,12 @@ export default function RoutesPage() {
     const [auditEmployee, setAuditEmployee] = useState<{ transporterId: string; name: string } | null>(null);
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
     const [auditLoading, setAuditLoading] = useState(false);
+
+    // Confirmation remarks modal state
+    const [remarksModalOpen, setRemarksModalOpen] = useState(false);
+    const [remarksTarget, setRemarksTarget] = useState<{ rowData: RouteRow, status: "change_requested" } | null>(null);
+    const [remarksInput, setRemarksInput] = useState("");
+    const [remarksSaving, setRemarksSaving] = useState(false);
 
     // Route detail modal state
     const [detailModal, setDetailModal] = useState<{ open: boolean; routeId: string; employeeName: string; profileImage: string }>(
@@ -496,6 +514,42 @@ export default function RoutesPage() {
     }, [refreshRoutes]);
 
 
+    // ── Update Confirmation Status ──
+    const handleUpdateConfirmation = async (row: RouteRow, status: string, remarks: string = "") => {
+        try {
+            const dateStr = row.date && typeof row.date === 'string' ? row.date.split('T')[0] : "";
+            const res = await fetch("/api/dispatching/confirmation-status", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    transporterId: row.transporterId,
+                    scheduleDate: dateStr,
+                    yearWeek: selectedWeek,
+                    status,
+                    changeRemarks: remarks,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            
+            const label = status === "confirmed" ? "Confirmed" : status === "change_requested" ? "Change Requested" : "Pending";
+            toast.success(`${row.employeeName}: ${label}`);
+            
+            setAllRoutes(prev => prev.map(r => r._id === row._id ? { ...r, confirmationStatus: data.confirmation } : r));
+            refreshRoutes();
+        } catch (err: any) {
+            toast.error(err.message || "Failed to update status");
+        }
+    };
+
+    const submitRemarks = async () => {
+        if (!remarksTarget) return;
+        setRemarksSaving(true);
+        await handleUpdateConfirmation(remarksTarget.rowData, remarksTarget.status, remarksInput);
+        setRemarksSaving(false);
+        setRemarksModalOpen(false);
+    };
+
     // ── Open audit panel ──
     const openAuditPanel = useCallback(async (transporterId: string, employeeName: string) => {
         setAuditEmployee({ transporterId, name: employeeName });
@@ -598,8 +652,30 @@ export default function RoutesPage() {
                 if (isFinite(eff)) driverEfficiency = Math.round(eff);
             }
 
-            // 13-14. regHrs / otHrs from totalHours
-            const totalHrsDecimal = durToHrs(r.totalHours);
+            // 13-14. regHrs / otHrs calculated dynamically from paycom times
+            let totalHrsDecimal = durToHrs(r.totalHours); // fallback
+            
+            const inDayM = parseTime(r.paycomInDay || "");
+            const outLunchM = parseTime(r.paycomOutLunch || "");
+            const inLunchM = parseTime(r.paycomInLunch || "");
+            const outDayM = parseTime(r.paycomOutDay || "");
+
+            let dynamicTotalMs = 0;
+            if (inDayM !== null && outDayM !== null) {
+                if (outLunchM !== null && inLunchM !== null) {
+                    dynamicTotalMs = Math.max(0, (outDayM - inLunchM) + (outLunchM - inDayM));
+                } else {
+                    dynamicTotalMs = Math.max(0, outDayM - inDayM);
+                }
+            }
+            if (dynamicTotalMs > 0) {
+                totalHrsDecimal = dynamicTotalMs / 60;
+            }
+
+            const computedTotalHoursStr = totalHrsDecimal > 0 
+                ? `${Math.floor(totalHrsDecimal)}.${String(Math.round((totalHrsDecimal % 1) * 60)).padStart(2, "0")}`
+                : r.totalHours || "";
+
             const regHrs = totalHrsDecimal > 0 ? Math.min(totalHrsDecimal, 8) : 0;
             const otHrs = totalHrsDecimal > 8 ? totalHrsDecimal - 8 : 0;
 
@@ -615,7 +691,8 @@ export default function RoutesPage() {
                 departureDelay, outboundDelay, firstStopDelay, lastStopDelay,
                 plannedRTSTime, plannedInboundStem, estimatedRTSTime,
                 plannedDuration1stToLast, actualDuration1stToLast,
-                stopsPerHour, dctDelay, driverEfficiency,
+                driverEfficiency: Math.round(driverEfficiency * 10) / 10,
+                totalHours: computedTotalHoursStr,
                 regHrs: Math.round(regHrs * 100) / 100,
                 otHrs: Math.round(otHrs * 100) / 100,
                 totalCost, regPay, otPay,
@@ -931,7 +1008,7 @@ export default function RoutesPage() {
                                                         </td>
 
                                                         {/* Confirmation Status — clickable to update */}
-                                                        <td className="px-2 py-1.5 align-middle">
+                                                        <td className="px-2 py-1.5 align-middle" onClick={(e) => e.stopPropagation()}>
                                                             <DropdownMenu>
                                                                 <DropdownMenuTrigger asChild>
                                                                     <button className="cursor-pointer hover:scale-110 transition-transform focus:outline-none">
@@ -964,32 +1041,13 @@ export default function RoutesPage() {
                                                                             key={opt.value}
                                                                             className="gap-2 cursor-pointer"
                                                                             disabled={row.confirmationStatus?.status === opt.value}
-                                                                            onClick={async () => {
-                                                                                let remarks = "";
+                                                                            onClick={() => {
                                                                                 if (opt.value === "change_requested") {
-                                                                                    const input = window.prompt("Change remarks (optional):");
-                                                                                    if (input === null) return; // cancelled
-                                                                                    remarks = input;
-                                                                                }
-                                                                                try {
-                                                                                    const dateStr = row.date && typeof row.date === 'string' ? row.date.split('T')[0] : "";
-                                                                                    const res = await fetch("/api/dispatching/confirmation-status", {
-                                                                                        method: "PUT",
-                                                                                        headers: { "Content-Type": "application/json" },
-                                                                                        body: JSON.stringify({
-                                                                                            transporterId: row.transporterId,
-                                                                                            scheduleDate: dateStr,
-                                                                                            yearWeek: selectedWeek,
-                                                                                            status: opt.value,
-                                                                                            changeRemarks: remarks,
-                                                                                        }),
-                                                                                    });
-                                                                                    const data = await res.json();
-                                                                                    if (!res.ok) throw new Error(data.error);
-                                                                                    toast.success(`${row.employeeName}: ${opt.label}`);
-                                                                                    refreshRoutes();
-                                                                                } catch (err: any) {
-                                                                                    toast.error(err.message || "Failed to update status");
+                                                                                    setRemarksTarget({ rowData: row, status: "change_requested" });
+                                                                                    setRemarksInput("");
+                                                                                    setRemarksModalOpen(true);
+                                                                                } else {
+                                                                                    handleUpdateConfirmation(row, opt.value);
                                                                                 }
                                                                             }}
                                                                         >
@@ -1512,6 +1570,39 @@ export default function RoutesPage() {
                 employeeName={detailModal.employeeName}
                 profileImage={detailModal.profileImage}
             />
+            <Dialog open={remarksModalOpen} onOpenChange={setRemarksModalOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Change Remarks</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="remarks">Remarks (Optional)</Label>
+                            <Input
+                                id="remarks"
+                                value={remarksInput}
+                                onChange={(e) => setRemarksInput(e.target.value)}
+                                placeholder="E.g. Not feeling well, car broke down..."
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !remarksSaving) {
+                                        submitRemarks();
+                                    }
+                                }}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRemarksModalOpen(false)} disabled={remarksSaving}>
+                            Cancel
+                        </Button>
+                        <Button onClick={submitRemarks} disabled={remarksSaving}>
+                            {remarksSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Submit
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
         </TooltipProvider>
     );
 }
