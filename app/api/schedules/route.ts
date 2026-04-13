@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
       // Employee info
       SymxEmployee.find(
         { transporterId: { $in: transporterIds } },
-        { _id: 1, transporterId: 1, firstName: 1, lastName: 1, type: 1, status: 1, ScheduleNotes: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1 }
+        { _id: 1, transporterId: 1, firstName: 1, lastName: 1, type: 1, status: 1, ScheduleNotes: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1, hiredDate: 1 }
       ).lean(),
       // Previous week schedules (only need date, transporterId, status)
       prevYearWeek
@@ -120,6 +120,7 @@ export async function GET(req: NextRequest) {
               type: emp.type || '',
               status: emp.status || '',
               ScheduleNotes: emp.ScheduleNotes || '',
+              hiredDate: emp.hiredDate || null,
             }
             : null,
           weekNote: '',

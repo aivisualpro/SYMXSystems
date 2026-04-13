@@ -152,6 +152,7 @@ interface EmployeeSchedule {
     type: string;
     status: string;
     ScheduleNotes?: string;
+    hiredDate?: string | Date;
   } | null;
   weekNote: string;
   days: Record<number, DayData>;
@@ -1570,6 +1571,11 @@ export default function SchedulingPage() {
                             {!collapsedGroups[groupName] &&
                               emps
                                 .sort((a, b) => {
+                                  const dateA = a.employee?.hiredDate ? new Date(a.employee.hiredDate).getTime() : Infinity;
+                                  const dateB = b.employee?.hiredDate ? new Date(b.employee.hiredDate).getTime() : Infinity;
+                                  if (dateA !== dateB) {
+                                    return dateA - dateB;
+                                  }
                                   const nameA = a.employee?.name || "";
                                   const nameB = b.employee?.name || "";
                                   return nameA.localeCompare(nameB);
