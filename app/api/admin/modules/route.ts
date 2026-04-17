@@ -4,7 +4,7 @@ import connectToDatabase from "@/lib/db";
 import SymxAppModule from "@/lib/models/SymxAppModule";
 
 // ── VERSION: bump this whenever DEFAULT_MODULES changes to force a DB reseed ──
-const MODULES_VERSION = 6;
+const MODULES_VERSION = 7;
 
 // Default modules — must match actual routes in /app/(protected)/
 const DEFAULT_MODULES = [
@@ -42,12 +42,13 @@ const DEFAULT_MODULES = [
     ]
   },
   {
-    name: "Everyday", url: "/everyday", icon: "IconTarget", order: 5, subModules: [
-      { name: "Load Out", url: "/everyday/load-out" },
-    ]
+    name: "Everyday", url: "/everyday", icon: "IconTarget", order: 5, subModules: []
   },
   {
-    name: "HR", url: "/hr", icon: "IconUsersGroup", order: 6, subModules: [
+    name: "Load Out", url: "/load-out", icon: "IconTruckDelivery", order: 6, subModules: []
+  },
+  {
+    name: "HR", url: "/hr", icon: "IconUsersGroup", order: 7, subModules: [
       { name: "Employees", url: "/hr/employees" },
       { name: "Reimbursement", url: "/hr/reimbursement" },
       { name: "Incidents", url: "/hr/incidents" },
@@ -61,7 +62,7 @@ const DEFAULT_MODULES = [
       { name: "Terminations", url: "/hr/terminations" },
     ]
   },
-  { name: "Scorecard", url: "/scorecard", icon: "IconTarget", order: 7, subModules: [] },
+  { name: "Scorecard", url: "/scorecard", icon: "IconChartBar", order: 8, subModules: [] },
 ];
 
 // In-memory cache

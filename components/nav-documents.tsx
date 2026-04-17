@@ -50,8 +50,8 @@ export function NavDocuments({
       <SidebarMenu>
         {items.map((item) => (
           <SidebarMenuItem key={`${item.name}-${item.url}`}>
-            <SidebarMenuButton 
-              asChild 
+            <SidebarMenuButton
+              asChild
               isActive={pathname.startsWith(item.url)}
               tooltip={item.name}
             >
@@ -61,11 +61,11 @@ export function NavDocuments({
               </Link>
             </SidebarMenuButton>
             {item.badge !== undefined && (
-              <SidebarMenuBadge 
+              <SidebarMenuBadge
                 className={cn(
                   "rounded-full px-1.5 min-w-5 h-5 flex items-center justify-center",
-                  pathname.startsWith(item.url) 
-                    ? "bg-white text-primary font-bold" 
+                  pathname.startsWith(item.url)
+                    ? "bg-white text-primary font-bold"
                     : "bg-muted text-muted-foreground"
                 )}
               >

@@ -146,9 +146,13 @@ const data = {
       name: "Everyday",
       url: "/everyday",
       icon: IconCalendarEvent,
-      subModules: [
-        { name: "Load Out", url: "/everyday/load-out" }
-      ]
+      subModules: []
+    },
+    {
+      name: "Load Out",
+      url: "/load-out",
+      icon: IconTruckDelivery,
+      subModules: []
     },
     {
       name: "HR",

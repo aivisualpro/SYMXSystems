@@ -639,7 +639,7 @@ export default function EverydayAfterDispatchingPage() {
         tomorrowRoutes.forEach(r => {
             const typeLower = (r.type || "Unassigned").toLowerCase();
             const config = routeTypeConfigs[typeLower];
-            
+
             // Filter: Route Status must be Scheduled
             if (config && config.routeStatus?.toLowerCase() !== "scheduled") return;
             // Also maintain the hardcoded "off" check just in case it takes time to load configs

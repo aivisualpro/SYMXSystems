@@ -534,7 +534,7 @@ export default function AttendancePage() {
                                     </div>
 
                                     {/* Action Buttons */}
-                                    <div className="flex items-center gap-2 pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-2 pr-1 transition-opacity">
                                         <button
                                             onClick={(e) => handleMarkAbsent(row, e)}
                                             className="px-2.5 py-1.5 rounded-md bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/30 font-bold text-[10px] uppercase tracking-wider transition-colors z-10"

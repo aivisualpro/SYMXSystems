@@ -70,7 +70,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import RouteDetailModal from "../../dispatching/_components/RouteDetailModal";
+import RouteDetailModal from "../dispatching/_components/RouteDetailModal";
 
 // ── Type Options with Icons & Colors ──
 interface TypeOption {
@@ -186,20 +186,20 @@ function toPacificDate(d: string | Date): string {
 // ── Column Definitions ──
 type ColumnDef = { key: string; label: string; minW: number; sticky: boolean; align?: "left" | "center" | "right" };
 const COLUMNS: ColumnDef[] = [
-    { key: "employee", label: "Employee", minW: 140, sticky: true },
-    { key: "routeNumber", label: "Route #", minW: 60, sticky: false },
-    { key: "van", label: "Van", minW: 58, sticky: false },
-    { key: "stagingLocation", label: "Staging", minW: 60, sticky: false },
-    { key: "waveTime", label: "Wave", minW: 56, sticky: false },
-    { key: "stopsPerHour", label: "Min / Stop", minW: 60, sticky: false },
+    { key: "employee", label: "Employee", minW: 130, sticky: true },
+    { key: "routeNumber", label: "Route #", minW: 56, sticky: false },
+    { key: "van", label: "Van", minW: 54, sticky: false },
+    { key: "stagingLocation", label: "Staging", minW: 56, sticky: false },
+    { key: "waveTime", label: "Wave", minW: 50, sticky: false },
+    { key: "stopsPerHour", label: "Min / Stop", minW: 56, sticky: false },
     { key: "attendance", label: "Attendance", minW: 50, sticky: false },
-    { key: "paycomInDay", label: "Paycom In", minW: 60, sticky: false },
-    { key: "type", label: "Type", minW: 100, align: "center", sticky: false },
-    { key: "wst", label: "WST", minW: 50, sticky: false },
-    { key: "wstDuration", label: "WST Dur", minW: 52, sticky: false },
-    { key: "routeDuration", label: "Dur", minW: 48, sticky: false },
-    { key: "dashcam", label: "Dashcam", minW: 64, sticky: false, align: "center" },
-    { key: "departureDelay", label: "Dep Delay", minW: 60, sticky: false },
+    { key: "paycomInDay", label: "Paycom In", minW: 56, sticky: false },
+    { key: "type", label: "Type", minW: 90, align: "center", sticky: false },
+    { key: "wst", label: "WST", minW: 46, sticky: false },
+    { key: "wstDuration", label: "WST Dur", minW: 48, sticky: false },
+    { key: "routeDuration", label: "Dur", minW: 46, sticky: false },
+    { key: "dashcam", label: "Dashcam", minW: 58, sticky: false, align: "center" },
+    { key: "departureDelay", label: "Dep Delay", minW: 56, sticky: false },
     { key: "outboundDelay", label: "OB Delay", minW: 56, sticky: false },
 ] as const;
 
@@ -565,7 +565,7 @@ export default function RoutesPage() {
     const { confirmationFilter } = useDispatching();
 
     // ── Filter by date, search, sort, and group ──
-    const { groups, totalFiltered, totalForDate } = useMemo(() => {
+    const { groups, totalFiltered, totalForDate, uiStats } = useMemo(() => {
         // STEP 1: Enrich ALL routes with computed fields (before date filter for 7d hrs)
         const enriched: RouteRow[] = allRoutes.map(r => {
             const waveM = parseTime(r.waveTime);
@@ -827,13 +827,59 @@ export default function RoutesPage() {
             count: typeGroups[key].length,
         }));
 
-        return { groups, totalFiltered: sorted.length, totalForDate };
+        // Calculate new Load Out Stats
+        const validRoutes = sorted.filter(r => r.type === "Route" || !r.type || r.type.toLowerCase() === "route");
+        const operationsCount = sorted.filter(r => r.type === "Open" || r.type === "Close").length;
+        const rescueCount = sorted.filter(r => r.type === "Rescue").length;
+        const trainerCount = sorted.filter(r => r.type === "Trainer").length;
+        const reductionCount = sorted.filter(r => r.type === "Reduction").length;
+        
+        let validDurations = 0;
+        let sumDurationsM = 0;
+        let totalPackages = 0;
+        let packagesWithCount = 0;
+
+        validRoutes.forEach(r => {
+            const planFirstM = parseTime(r.plannedFirstStop);
+            const planLastM = parseTime(r.plannedLastStop);
+            if (planLastM !== null && planFirstM !== null) {
+                const durM = planLastM - planFirstM;
+                if (durM > 0) {
+                    sumDurationsM += durM;
+                    validDurations++;
+                }
+            }
+
+            if (r.packageCount && r.packageCount > 0) {
+                totalPackages += r.packageCount;
+                packagesWithCount++;
+            }
+        });
+
+        const avgDurM = validDurations > 0 ? (sumDurationsM / validDurations) : 0;
+        const avgDurH = avgDurM > 0 ? (Math.round((avgDurM / 60) * 100) / 100) : 0;
+        const avgPkg = packagesWithCount > 0 ? Math.round(totalPackages / packagesWithCount) : 0;
+
+        const uiStats = {
+            routes: validRoutes.length,
+            operations: operationsCount,
+            rescue: rescueCount,
+            trainer: trainerCount,
+            reduction: reductionCount,
+            avgRouteDuration: avgDurH > 0 ? `${avgDurH}` : "—",
+            avgPackageCount: avgPkg,
+            totalPackageCount: totalPackages
+        };
+
+        return { groups, totalFiltered: sorted.length, totalForDate, uiStats };
     }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir, wstRevenueMap, routeCountsByDate, initialRoutesComp, confirmationFilter]);
 
     // ── Push stats to layout ──
     useEffect(() => {
-        setStats({ employeeCount: totalFiltered, groupCount: groups.length });
-    }, [totalFiltered, groups.length, setStats]);
+        if (uiStats) {
+            setStats(uiStats);
+        }
+    }, [uiStats, setStats]);
     useEffect(() => { return () => setStats({}); }, [setStats]);
 
     // ── Render read-only cell ──
@@ -872,9 +918,7 @@ export default function RoutesPage() {
                 </div>
                 <h2 className="text-xl sm:text-2xl font-bold mb-2">Routes</h2>
                 <p className="text-sm text-muted-foreground max-w-md mb-6">
-                    {!routesGenerated
-                        ? "No routes generated for this week yet. Click \"Generate Routes\" in the header to create route records from the schedule."
-                        : "No route data available for this week."}
+                    No route data available for today.
                 </p>
                 <div className={cn(
                     "inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold",
@@ -897,7 +941,7 @@ export default function RoutesPage() {
                 <div className="flex-1 min-h-0 rounded-xl border border-border/50 bg-card overflow-hidden flex flex-col">
                     {/* Scrollable table container */}
                     <div className="flex-1 overflow-auto">
-                        <table className="w-full border-collapse" style={{ minWidth: 1200 }}>
+                        <table className="w-full border-collapse">
                             {/* Header */}
                             <thead className="sticky top-0 z-10">
                                 <tr className="bg-muted border-b border-border/50">
@@ -906,7 +950,7 @@ export default function RoutesPage() {
                                             key={col.key}
                                             onClick={() => handleSort(col.key)}
                                             className={cn(
-                                                "px-2 py-2 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap",
+                                                "px-1 py-2 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap",
                                                 col.sticky ? "sticky left-0 z-20 bg-muted" : "",
                                                 col.align === "center" ? "text-center" : "text-left"
                                             )}
@@ -940,7 +984,7 @@ export default function RoutesPage() {
                                                 onClick={() => toggleGroup(group.type)}
                                                 className="cursor-pointer hover:bg-muted/60 transition-colors bg-muted/30 border-b border-border/30"
                                             >
-                                                <td colSpan={COLUMNS.length} className="px-2 py-1.5">
+                                                <td colSpan={COLUMNS.length} className="px-1 py-1.5">
                                                     <div className="flex items-center gap-2">
                                                         <ChevronRight className={cn(
                                                             "h-3 w-3 text-muted-foreground transition-transform",
@@ -967,16 +1011,10 @@ export default function RoutesPage() {
                                                 return (
                                                     <tr
                                                         key={row._id}
-                                                        className="border-b border-border/20 hover:bg-muted/30 transition-colors cursor-pointer"
-                                                        onClick={() => setDetailModal({
-                                                            open: true,
-                                                            routeId: row._id,
-                                                            employeeName: row.employeeName,
-                                                            profileImage: row.profileImage,
-                                                        })}
+                                                        className="border-b border-border/20 hover:bg-muted/30 transition-colors"
                                                     >
                                                         {/* 1. Employee */}
-                                                        <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card w-[200px]")}>
+                                                        <td className={cn("px-1 py-1.5", "sticky left-0 z-[5] bg-card w-[200px]")}>
                                                             <div className="flex items-center gap-2 w-full pr-1">
                                                                 {/* Avatar */}
                                                                 {row.profileImage ? (
@@ -1014,63 +1052,68 @@ export default function RoutesPage() {
                                                             </div>
                                                         </td>
 
-                                                        {/* Confirmation Status — clickable to update */}
-                                                        <td className="px-2 py-1.5 align-middle" onClick={(e) => e.stopPropagation()}>
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <button className="cursor-pointer hover:scale-110 transition-transform focus:outline-none">
-                                                                        {row.confirmationStatus ? (
-                                                                            <MessageStatusBadge
-                                                                                status={row.confirmationStatus.status}
-                                                                                createdAt={row.confirmationStatus.updatedAt}
-                                                                                changeRemarks={row.confirmationStatus.changeRemarks}
-                                                                                history={row.confirmationStatus.history}
-                                                                                iconOnly
-                                                                            />
-                                                                        ) : (
-                                                                            <div className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-colors">
-                                                                                <Plus className="h-2.5 w-2.5 text-muted-foreground/40" />
-                                                                            </div>
-                                                                        )}
-                                                                    </button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="start" className="min-w-[180px]">
-                                                                    <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                                                                        Set Confirmation
-                                                                    </DropdownMenuLabel>
-                                                                    <DropdownMenuSeparator />
-                                                                    {[
-                                                                        { value: "confirmed", label: "Confirmed", icon: CheckCircle2, color: "text-emerald-400" },
-                                                                        { value: "change_requested", label: "Change Requested", icon: RefreshCw, color: "text-amber-400" },
-                                                                        { value: "pending", label: "Pending", icon: Clock, color: "text-blue-400" },
-                                                                    ].map((opt) => (
-                                                                        <DropdownMenuItem
-                                                                            key={opt.value}
-                                                                            className="gap-2 cursor-pointer"
-                                                                            disabled={row.confirmationStatus?.status === opt.value}
-                                                                            onClick={() => {
-                                                                                if (opt.value === "change_requested") {
-                                                                                    setRemarksTarget({ rowData: row, status: "change_requested" });
-                                                                                    setRemarksInput("");
-                                                                                    setRemarksModalOpen(true);
-                                                                                } else {
-                                                                                    handleUpdateConfirmation(row, opt.value);
-                                                                                }
-                                                                            }}
-                                                                        >
-                                                                            <opt.icon className={cn("h-3.5 w-3.5", opt.color)} />
-                                                                            <span className="text-xs font-medium">{opt.label}</span>
-                                                                            {row.confirmationStatus?.status === opt.value && (
-                                                                                <Check className="h-3 w-3 ml-auto text-primary" />
-                                                                            )}
-                                                                        </DropdownMenuItem>
-                                                                    ))}
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
+                                                        {/* 2. Route # */}
+                                                        <td className="px-1 py-1.5">{renderCell(row, "routeNumber", row.routeNumber)}</td>
+
+                                                        {/* 3. Van */}
+                                                        <td className="px-1 py-1.5 align-middle">
+                                                            <div className="flex items-center gap-1 w-full text-left">
+                                                                {renderCell(row, "van", row.van)}
+                                                            </div>
                                                         </td>
 
-                                                        {/* 3. WST */}
-                                                        <td className="px-2 py-1.5">
+                                                        {/* 4. Staging */}
+                                                        <td className="px-1 py-1.5">{renderCell(row, "stagingLocation", row.stagingLocation)}</td>
+
+                                                        {/* 5. Wave */}
+                                                        <td className="px-1 py-1.5">{renderCell(row, "waveTime", row.waveTime)}</td>
+
+                                                        {/* 6. Min/Stop */}
+                                                        <td className="px-1 py-1.5">
+                                                            {row.stopsPerHour > 0 ? (
+                                                                <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">{row.stopsPerHour}</span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* 7. Attendance */}
+                                                        <td className="px-1 py-1.5">
+                                                            {(() => {
+                                                                const att = getAttendanceStyle(row.attendance);
+                                                                const Icon = att.icon;
+                                                                return row.attendance ? (
+                                                                    <div className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold border", att.bg, att.text, att.border, "whitespace-nowrap")}>
+                                                                        <Icon className={cn("h-3 w-3", att.iconColor)} />
+                                                                        {att.label}
+                                                                    </div>
+                                                                ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">&mdash;</span>;
+                                                            })()}
+                                                        </td>
+
+                                                        {/* 8. Paycom In */}
+                                                        <td className="px-1 py-1.5">{renderCell(row, "paycomInDay", row.paycomInDay)}</td>
+
+                                                        {/* 9. Type */}
+                                                        <td className="px-1 py-1.5 align-middle text-center">
+                                                            <div className="inline-flex items-center justify-center w-full">
+                                                                {(() => {
+                                                                    const typeOpt = TYPE_MAP.get((row.type || "").trim().toLowerCase());
+                                                                    const style = getTypeStyle(row.type);
+                                                                    const Icon = typeOpt?.icon;
+                                                                    return (
+                                                                        <span className={cn(
+                                                                            "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border",
+                                                                            style.bg, style.text, style.border
+                                                                        )}>
+                                                                            {Icon && <Icon className="h-2.5 w-2.5" />}
+                                                                            {row.type || "—"}
+                                                                        </span>
+                                                                    );
+                                                                })()}
+                                                            </div>
+                                                        </td>
+
+                                                        {/* 10. WST */}
+                                                        <td className="px-1 py-1.5">
                                                             {row.wst ? (
                                                                 <span className={cn(
                                                                     "text-[11px] font-semibold whitespace-nowrap",
@@ -1087,72 +1130,14 @@ export default function RoutesPage() {
                                                             )}
                                                         </td>
 
-                                                        {/* 4. Route # */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "routeNumber", row.routeNumber)}</td>
+                                                        {/* 11. WST Dur */}
+                                                        <td className="px-1 py-1.5">{renderCell(row, "wstDuration", row.wstDuration)}</td>
 
-                                                        {/* 5. Van */}
-                                                        <td className="px-2 py-1.5 align-middle" onClick={(e) => e.stopPropagation()}>
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <button className="cursor-pointer hover:bg-muted/50 rounded py-0.5 px-1 -ml-1 transition-colors focus:outline-none flex items-center gap-1 w-full text-left group">
-                                                                        {renderCell(row, "van", row.van)}
-                                                                        <ChevronDown className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                                    </button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="start" className="min-w-[150px] max-h-[300px] overflow-y-auto">
-                                                                    <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider sticky top-0 bg-popover z-10 pt-2 pb-1">
-                                                                        Select Van
-                                                                    </DropdownMenuLabel>
-                                                                    <DropdownMenuSeparator />
-                                                                    <DropdownMenuItem 
-                                                                        onClick={() => handleVanChange(row._id, "", row.transporterId)}
-                                                                        className="text-[11px] cursor-pointer text-muted-foreground"
-                                                                    >
-                                                                        <span className="flex-1">Clear Van</span>
-                                                                        {!row.van && <Check className="h-3 w-3 ml-auto text-primary" />}
-                                                                    </DropdownMenuItem>
-                                                                    {getAvailableVans(row.date, row.van).map(v => {
-                                                                        const isInactive = v.status && v.status.toLowerCase() !== "active";
-                                                                        return (
-                                                                            <DropdownMenuItem
-                                                                                key={v.vehicleName}
-                                                                                onClick={() => handleVanChange(row._id, v.vehicleName, row.transporterId)}
-                                                                                className="text-[11px] cursor-pointer font-medium"
-                                                                            >
-                                                                                <div className="flex-1 flex items-center gap-1.5">
-                                                                                    <span className={cn(isInactive ? "text-red-500 font-bold" : "text-foreground")}>{v.vehicleName}</span>
-                                                                                    {isInactive && (
-                                                                                        <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20">
-                                                                                            <AlertCircle className="h-3 w-3 text-red-500" />
-                                                                                            <span className="text-[9px] font-bold text-red-500 uppercase">{v.status}</span>
-                                                                                        </div>
-                                                                                    )}
-                                                                                </div>
-                                                                                {row.van === v.vehicleName && (
-                                                                                    <Check className="h-3 w-3 ml-auto text-primary" />
-                                                                                )}
-                                                                            </DropdownMenuItem>
-                                                                        );
-                                                                    })}
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                        </td>
+                                                        {/* 12. Dur */}
+                                                        <td className="px-1 py-1.5">{renderCell(row, "routeDuration", row.routeDuration)}</td>
 
-                                                        {/* 6. Bags */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "bags", row.bags)}</td>
-
-                                                        {/* 7. OV */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "ov", row.ov)}</td>
-
-                                                        {/* 8. Service Type (auto from Van) */}
-                                                        <td className="px-2 py-1.5">
-                                                            <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">
-                                                                {row.serviceType || <span className="text-muted-foreground/30 font-semibold">&mdash;</span>}
-                                                            </span>
-                                                        </td>
-
-                                                        {/* 9. Dashcam (auto from Van) */}
-                                                        <td className="px-2 py-1.5">
+                                                        {/* 13. Dashcam */}
+                                                        <td className="px-1 py-1.5">
                                                             {row.dashcam ? (
                                                                 <div className="flex items-center gap-1.5 whitespace-nowrap">
                                                                     <Video className={cn(
@@ -1175,122 +1160,8 @@ export default function RoutesPage() {
                                                             )}
                                                         </td>
 
-                                                        {/* Type (inline dropdown) */}
-                                                        <td className="px-2 py-1.5 align-middle text-center" onClick={(e) => e.stopPropagation()}>
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <button className="cursor-pointer hover:bg-muted/50 rounded py-0.5 px-1 transition-colors focus:outline-none inline-flex items-center justify-center gap-1 w-full group">
-                                                                        {(() => {
-                                                                            const typeOpt = TYPE_MAP.get((row.type || "").trim().toLowerCase());
-                                                                            const style = getTypeStyle(row.type);
-                                                                            const Icon = typeOpt?.icon;
-                                                                            return (
-                                                                                <span className={cn(
-                                                                                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border",
-                                                                                    style.bg, style.text, style.border
-                                                                                )}>
-                                                                                    {Icon && <Icon className="h-2.5 w-2.5" />}
-                                                                                    {row.type || "—"}
-                                                                                </span>
-                                                                            );
-                                                                        })()}
-                                                                        <ChevronDown className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                                    </button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="start" className="min-w-[170px] max-h-[320px] overflow-y-auto">
-                                                                    <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider sticky top-0 bg-popover z-10 pt-2 pb-1">
-                                                                        Set Type
-                                                                    </DropdownMenuLabel>
-                                                                    <DropdownMenuSeparator />
-                                                                    {TYPE_OPTIONS.map(opt => {
-                                                                        const isActive = (row.type || "").trim().toLowerCase() === opt.label.toLowerCase();
-                                                                        return (
-                                                                            <DropdownMenuItem
-                                                                                key={opt.label}
-                                                                                onClick={() => handleTypeChange(row._id, opt.label, row.transporterId)}
-                                                                                className="gap-2 cursor-pointer"
-                                                                                disabled={isActive}
-                                                                            >
-                                                                                <div className={cn(
-                                                                                    "flex items-center justify-center w-5 h-5 rounded",
-                                                                                    opt.bg, opt.border, "border"
-                                                                                )}>
-                                                                                    <opt.icon className={cn("h-3 w-3", opt.text)} />
-                                                                                </div>
-                                                                                <span className="text-xs font-medium flex-1">{opt.label}</span>
-                                                                                {isActive && <Check className="h-3 w-3 ml-auto text-primary" />}
-                                                                            </DropdownMenuItem>
-                                                                        );
-                                                                    })}
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                        </td>
-
-                                                        {/* 10. Routes Completed */}
-                                                        <td className="px-2 py-1.5">
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <div className="flex items-center gap-0.5 whitespace-nowrap">
-                                                                        {row.routesCompleted > 0 && row.routesCompletedPrev > 0 ? (
-                                                                            row.routesCompleted > row.routesCompletedPrev ? (
-                                                                                <TrendingUp className="h-2.5 w-2.5 text-emerald-500" />
-                                                                            ) : row.routesCompleted === row.routesCompletedPrev ? (
-                                                                                <Minus className="h-2.5 w-2.5 text-amber-400" />
-                                                                            ) : (
-                                                                                <TrendingDown className="h-2.5 w-2.5 text-red-400" />
-                                                                            )
-                                                                        ) : (
-                                                                            <TrendingUp className="h-2.5 w-2.5 text-primary/50" />
-                                                                        )}
-                                                                        <span className="text-[11px] font-medium">{row.routesCompleted}</span>
-                                                                    </div>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>
-                                                                    Routes completed (up to selected date)
-                                                                    {row.routesCompletedPrev > 0 && (
-                                                                        <span className="block text-[10px] text-muted-foreground">
-                                                                            Previous day: {row.routesCompletedPrev}
-                                                                            {row.routesCompleted > row.routesCompletedPrev
-                                                                                ? ` (+${row.routesCompleted - row.routesCompletedPrev})`
-                                                                                : row.routesCompleted === row.routesCompletedPrev
-                                                                                    ? " (no change)"
-                                                                                    : ` (${row.routesCompleted - row.routesCompletedPrev})`}
-                                                                        </span>
-                                                                    )}
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        </td>
-
-                                                        {/* 11. Rt Size */}
-                                                        <td className="px-2 py-1.5">
-                                                            <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
-                                                                {row.routeSize || "—"}
-                                                            </span>
-                                                        </td>
-
-                                                        {/* 12. Stops */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "stopCount", row.stopCount)}</td>
-
-                                                        {/* 13. Packages */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "packageCount", row.packageCount)}</td>
-
-                                                        {/* 14. Duration */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "routeDuration", row.routeDuration)}</td>
-
-                                                        {/* 15. Wave Time */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "waveTime", row.waveTime)}</td>
-
-                                                        {/* 16. PAD */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "pad", row.pad)}</td>
-
-                                                        {/* 17. WST Duration */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "wstDuration", row.wstDuration)}</td>
-
-                                                        {/* 18. Staging */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "stagingLocation", row.stagingLocation)}</td>
-
-                                                        {/* Departure Delay (computed) */}
-                                                        <td className="px-2 py-1.5">
+                                                        {/* 14. Dep Delay */}
+                                                        <td className="px-1 py-1.5">
                                                             {row.departureDelay ? (
                                                                 <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.departureDelay) ? "text-red-400" : "text-emerald-500")}>
                                                                     {stripSec(row.departureDelay)}
@@ -1298,144 +1169,13 @@ export default function RoutesPage() {
                                                             ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
                                                         </td>
 
-                                                        {/* OB Delay (computed) */}
-                                                        <td className="px-2 py-1.5">
+                                                        {/* 15. OB Delay */}
+                                                        <td className="px-1 py-1.5">
                                                             {row.outboundDelay ? (
                                                                 <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.outboundDelay) ? "text-red-400" : "text-emerald-500")}>
                                                                     {stripSec(row.outboundDelay)}
                                                                 </span>
                                                             ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* 1st Stop Delay (computed) */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.firstStopDelay ? (
-                                                                <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.firstStopDelay) ? "text-red-400" : "text-emerald-500")}>
-                                                                    {stripSec(row.firstStopDelay)}
-                                                                </span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* Last Stop Delay (computed) */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.lastStopDelay ? (
-                                                                <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.lastStopDelay) ? "text-red-400" : "text-emerald-500")}>
-                                                                    {stripSec(row.lastStopDelay)}
-                                                                </span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* DCT Delay (computed) */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.dctDelay ? (
-                                                                <span className={cn("text-[11px] font-semibold whitespace-nowrap", isDelayPositive(row.dctDelay) ? "text-red-400" : "text-emerald-500")}>
-                                                                    {stripSec(row.dctDelay)}
-                                                                </span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* Plan RTS */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.plannedRTSTime ? (
-                                                                <span className="text-[11px] font-semibold text-blue-400 whitespace-nowrap">{stripSec(row.plannedRTSTime)}</span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* Plan IB */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.plannedInboundStem ? (
-                                                                <span className="text-[11px] font-semibold text-foreground/70 whitespace-nowrap">{stripSec(row.plannedInboundStem)}</span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* Est RTS */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.estimatedRTSTime ? (
-                                                                <span className="text-[11px] font-semibold text-violet-400 whitespace-nowrap">{stripSec(row.estimatedRTSTime)}</span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* Plan 1st→Last */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.plannedDuration1stToLast ? (
-                                                                <span className="text-[11px] font-semibold text-foreground/70 whitespace-nowrap">{stripSec(row.plannedDuration1stToLast)}</span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* Act 1st→Last */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.actualDuration1stToLast ? (
-                                                                <span className="text-[11px] font-semibold text-foreground/70 whitespace-nowrap">{stripSec(row.actualDuration1stToLast)}</span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* Stops/Hr */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.stopsPerHour > 0 ? (
-                                                                <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">{row.stopsPerHour}</span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* Total Hours */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "totalHours", row.totalHours)}</td>
-
-                                                        {/* Reg Hours */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.regHrs > 0 ? (
-                                                                <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">{row.regHrs.toFixed(2)}</span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* OT Hours */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.otHrs > 0 ? (
-                                                                <span className="text-[11px] font-bold text-amber-400 whitespace-nowrap">{row.otHrs.toFixed(2)}</span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* Reg Pay */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.regPay > 0 ? (
-                                                                <span className="text-[11px] font-semibold text-emerald-500 whitespace-nowrap">${row.regPay.toFixed(2)}</span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* OT Pay */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.otPay > 0 ? (
-                                                                <span className="text-[11px] font-bold text-amber-400 whitespace-nowrap">${row.otPay.toFixed(2)}</span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* Total Cost */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.totalCost > 0 ? (
-                                                                <span className="text-[11px] font-bold text-emerald-400 whitespace-nowrap">${row.totalCost.toFixed(2)}</span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* 7d Hrs */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.hoursWorkedLast7Days > 0 ? (
-                                                                <span className={cn("text-[11px] font-bold whitespace-nowrap", row.hoursWorkedLast7Days > 40 ? "text-red-400" : "text-blue-400")}>
-                                                                    {row.hoursWorkedLast7Days.toFixed(1)}h
-                                                                </span>
-                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
-
-                                                        {/* Eff % */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.driverEfficiency > 0 ? (
-                                                                <span className={cn(
-                                                                    "text-[11px] font-bold",
-                                                                    row.driverEfficiency >= 90 ? "text-emerald-400" :
-                                                                        row.driverEfficiency >= 70 ? "text-amber-400" : "text-red-400"
-                                                                )}>
-                                                                    {row.driverEfficiency}%
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-[11px] text-muted-foreground/40">—</span>
-                                                            )}
                                                         </td>
 
                                                     </tr>
