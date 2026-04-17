@@ -362,7 +362,10 @@ async function _fetchDataset(config: DatasetConfig, force = false): Promise<void
     _setDataset(key, { loading: true, error: null, stale: false });
 
     try {
-      const resolvedUrl = typeof url === "function" ? url() : url;
+      let resolvedUrl = typeof url === "function" ? url() : url;
+      if (force) {
+        resolvedUrl += resolvedUrl.includes("?") ? `&cb=${Date.now()}` : `?cb=${Date.now()}`;
+      }
       const res = await fetch(resolvedUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const raw = await res.json();

@@ -10,6 +10,7 @@ import SYMXSetting from "@/lib/models/SYMXSetting";
 import SymxUser from "@/lib/models/SymxUser";
 import Vehicle from "@/lib/models/Vehicle";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
+import RouteType from "@/lib/models/RouteType";
 
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -57,10 +58,14 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ routesGenerated: count > 0 });
         }
 
-        // Build query — exclude "Off" type records from all dispatching views
+        // Fetch types configured as "Off" to exclude them from dispatching
+        const offTypesConfigs = await RouteType.find({ routeStatus: { $regex: /^off$/i } }, { name: 1 }).lean();
+        const offTypes = offTypesConfigs.map((rt: any) => new RegExp(`^${rt.name.trim()}$`, "i"));
+
+        // Build query — exclude empty types and types mapped to "Off" status
         const query: any = { yearWeek };
         if (date) query.date = new Date(date);
-        query.type = { $not: { $regex: /^off$/i } };
+        query.type = offTypes.length > 0 ? { $nin: offTypes, $ne: "" } : { $ne: "" };
 
         // ── PHASE 1: Fetch routes + completion setting in parallel ──
         const [routes, completionSetting] = await Promise.all([
@@ -72,8 +77,15 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ routes: [], employees: {}, routesGenerated: false });
         }
 
-        // Extract unique IDs for lookups
-        const transporterIds = [...new Set(routes.map((r: any) => r.transporterId))];
+        // Extract unique IDs for lookups and normalize the route docs inline
+        const transporterIdsSet = new Set<string>();
+        routes.forEach((r: any) => {
+            if (r.transporterId) {
+                r.transporterId = r.transporterId.trim().toUpperCase();
+                transporterIdsSet.add(r.transporterId);
+            }
+        });
+        const transporterIds = [...transporterIdsSet];
         const allVins = [...new Set(routes.map((r: any) => r.van).filter(Boolean))];
 
         // Build completion types filter
@@ -87,10 +99,13 @@ export async function GET(req: NextRequest) {
             routeCountMatch.type = { $ne: "" };
         }
 
+        // Build regex array for case-insensitive and whitespace-safe SymxEmployee matching
+        const transporterRegexes = transporterIds.map(id => new RegExp(`^\\s*${id}\\s*$`, "i"));
+
         // ── PHASE 2: ALL enrichment queries in parallel ──
         const [employees, routeCountsByDate, auditCountsRaw, vehicleDocs, confirmationDocs] = await Promise.all([
             SymxEmployee.find(
-                { transporterId: { $in: transporterIds } },
+                { transporterId: { $in: transporterRegexes } },
                 { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, profileImage: 1, routesComp: 1, rate: 1 }
             ).lean(),
             SYMXRoute.aggregate([
@@ -117,7 +132,8 @@ export async function GET(req: NextRequest) {
         const employeeMap: Record<string, any> = {};
         const initialCompMap: Record<string, number> = {};
         employees.forEach((emp: any) => {
-            employeeMap[emp.transporterId] = {
+            const normalizedTid = (emp.transporterId || "").trim().toUpperCase();
+            employeeMap[normalizedTid] = {
                 name: `${emp.firstName} ${emp.lastName}`.toUpperCase(),
                 firstName: emp.firstName,
                 lastName: emp.lastName,
@@ -126,7 +142,7 @@ export async function GET(req: NextRequest) {
                 profileImage: emp.profileImage || "",
                 rate: emp.rate || 0,
             };
-            initialCompMap[emp.transporterId] = parseInt(emp.routesComp) || 0;
+            initialCompMap[normalizedTid] = parseInt(emp.routesComp) || 0;
         });
 
         // Build per-employee per-date count map: { transporterId: { "2026-03-15": 1, ... } }
@@ -247,17 +263,18 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "No schedules found for this week" }, { status: 404 });
         }
 
-        // Filter out "Off" and empty-type schedules — don't create route records for days off
+        // Filter out empty-type schedules and any schedule evaluated as "Off"
         const workingSchedules = schedules.filter((s: any) => {
-            const t = (s.type || "").trim().toLowerCase();
-            return t !== "" && t !== "off";
+            const t = (s.type || "").trim();
+            const isOff = (s.status || "").toLowerCase() === "off";
+            return t !== "" && !isOff;
         });
 
-        console.log(`[Generate Routes] ${schedules.length} total schedules, ${workingSchedules.length} working (excluded Off/empty)`);
+        console.log(`[Generate Routes] ${schedules.length} total schedules, ${workingSchedules.length} working (excluded empty/Off)`);
 
         if (workingSchedules.length === 0) {
             return NextResponse.json({
-                message: "No working schedules found for this week (all entries are Off or empty)",
+                message: "No valid schedules found for this week (all entries are empty)",
                 count: 0,
                 created: 0,
             });

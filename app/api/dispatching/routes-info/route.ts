@@ -77,9 +77,17 @@ export async function GET(req: NextRequest) {
                 .lean(),
         ]);
 
+        // Get unique transporter IDs from routes on this date
+        const transporterIds = [...new Set(routeDrivers.map((r: any) => r.transporterId))];
+        const validTransporterSet = new Set(transporterIds);
+
         // Build a map of saved rows by rowIndex
         const savedMap: Record<number, any> = {};
         saved.forEach((r: any) => {
+            const rawTid = (r.transporterId || "").trim();
+            // Clear transporterId if this driver is no longer scheduled on this day
+            const validTid = validTransporterSet.has(rawTid) ? rawTid : "";
+
             savedMap[r.rowIndex] = {
                 _id: r._id.toString(),
                 date: r.date,
@@ -95,7 +103,7 @@ export async function GET(req: NextRequest) {
                 bags: r.bags || "",
                 ov: r.ov || "",
                 stagingLocation: r.stagingLocation || "",
-                transporterId: r.transporterId || "",
+                transporterId: validTid,
                 rawSummary: r.rawSummary || null,
             };
         });
@@ -105,9 +113,6 @@ export async function GET(req: NextRequest) {
         for (let i = 0; i < TOTAL_ROWS; i++) {
             rows.push(savedMap[i] || emptyRow(date, i));
         }
-
-        // Get unique transporter IDs from routes on this date
-        const transporterIds = [...new Set(routeDrivers.map((r: any) => r.transporterId))];
 
         // Enrich with employee names
         let drivers: { transporterId: string; name: string }[] = [];

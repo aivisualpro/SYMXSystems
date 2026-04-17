@@ -6,6 +6,8 @@ import SymxEmployee from "@/lib/models/SymxEmployee";
 import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
 import SymxUser from "@/lib/models/SymxUser";
 import SYMXRoute from "@/lib/models/SYMXRoute";
+import RouteType from "@/lib/models/RouteType";
+import { SymxEveryday } from "@/lib/models/SymxEveryday";
 
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -190,6 +192,15 @@ export async function GET(req: NextRequest) {
     const auditCounts: Record<string, number> = {};
     auditCountsRaw.forEach((c: any) => { auditCounts[c._id] = c.count; });
 
+    // Fetch everyday records for these dates to prevent UI bouncing
+    const everydayRecords: Record<string, any> = {};
+    if (dates.length > 0) {
+      const dbRecords = await SymxEveryday.find({ date: { $in: dates } }).lean();
+      dbRecords.forEach((r: any) => {
+        everydayRecords[r.date] = { notes: r.notes || "", routesAssigned: r.routesAssigned || 0 };
+      });
+    }
+
     return NextResponse.json({
       yearWeek,
       dates,
@@ -197,6 +208,7 @@ export async function GET(req: NextRequest) {
       totalEmployees: Object.keys(grouped).length,
       prevWeekTrailing,
       auditCounts,
+      everydayRecords,
     });
   } catch (error: any) {
     console.error("Schedules API Error:", error);
@@ -259,13 +271,24 @@ export async function PATCH(req: NextRequest) {
       // Fetch existing record BEFORE update (for audit old values)
       const existing = await SymxEmployeeSchedule.findById(scheduleId).lean() as any;
 
-      const newType = (type || "").trim().toLowerCase();
-      const updateFields: Record<string, any> = { type: type || "" };
+      const newType = (type || "").trim();
+      const updateFields: Record<string, any> = { type: newType };
       if (status !== undefined) {
         updateFields.status = status;
       } else {
-        const isWorking = !["off", "", "call out", "request off", "suspension", "stand by"].includes(newType);
-        updateFields.status = isWorking ? "Scheduled" : "Off";
+        let resolvedStatus = "Scheduled";
+        if (newType === "") {
+          resolvedStatus = "Off";
+        } else {
+          const typeMatch = await RouteType.findOne({ name: { $regex: new RegExp(`^${newType}$`, "i") } }).lean();
+          if (typeMatch && (typeMatch as any).routeStatus) {
+            resolvedStatus = (typeMatch as any).routeStatus;
+          } else {
+            const isWorking = !["off", "call out", "request off", "suspension", "stand by"].includes(newType.toLowerCase());
+            resolvedStatus = isWorking ? "Scheduled" : "Off";
+          }
+        }
+        updateFields.status = resolvedStatus;
       }
       if (startTime !== undefined) updateFields.startTime = startTime;
 
@@ -323,10 +346,10 @@ export async function PATCH(req: NextRequest) {
         });
       }
 
-      // Sync type to SYMXRoute (dispatching)
-      if (typeChanged) {
-        const newTypeNorm = (type || "").trim().toLowerCase();
-        const isNowWorking = status ? (status !== "Off") : !["off", "", "call out", "request off", "suspension", "stand by"].includes(newTypeNorm);
+      // Sync type/status to SYMXRoute (dispatching)
+      if (typeChanged || status !== undefined) {
+        const newTypeNorm = (updated.type || "").trim();
+        const isNowWorking = newTypeNorm !== "" && updated.status !== "Off";
 
         if (isNowWorking) {
           // Working type → upsert a route record (create if it doesn't exist)
@@ -358,14 +381,30 @@ export async function PATCH(req: NextRequest) {
     // Create new schedule entry if no scheduleId but transporterId + date provided
     const { transporterId, date, yearWeek, weekDay } = body;
     if (transporterId && date && yearWeek) {
+      const newType = (type || "").trim();
+      let resolvedStatus = status;
+      if (!resolvedStatus) {
+        if (newType === "") {
+            resolvedStatus = "Off";
+        } else {
+            const typeMatch = await RouteType.findOne({ name: { $regex: new RegExp(`^${newType}$`, "i") } }).lean();
+            if (typeMatch && (typeMatch as any).routeStatus) {
+                resolvedStatus = (typeMatch as any).routeStatus;
+            } else {
+                const isWorking = !["off", "call out", "request off", "suspension", "stand by"].includes(newType.toLowerCase());
+                resolvedStatus = isWorking ? "Scheduled" : "Off";
+            }
+        }
+      }
+
       const created = await SymxEmployeeSchedule.findOneAndUpdate(
         { transporterId, date: new Date(date) },
         {
           $set: {
-            type: type || "",
+            type: newType,
             yearWeek,
             weekDay: weekDay || "",
-            status: status || "Scheduled",
+            status: resolvedStatus,
             ...(startTime !== undefined ? { startTime } : {}),
           },
           $setOnInsert: {
@@ -395,8 +434,8 @@ export async function PATCH(req: NextRequest) {
 
       // Sync to SYMXRoute — only create for working types
       if (created && (created as any)._id) {
-        const newTypeNorm = (type || "").trim().toLowerCase();
-        const isWorking = status ? (status !== "Off") : !["off", "", "call out", "request off", "suspension", "stand by"].includes(newTypeNorm);
+        const newTypeNorm = (created.type || "").trim();
+        const isWorking = newTypeNorm !== "" && created.status !== "Off";
 
         if (isWorking) {
           await SYMXRoute.updateOne(

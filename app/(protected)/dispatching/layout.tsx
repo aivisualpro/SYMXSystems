@@ -321,8 +321,8 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         setRoutesLoading(true);
 
         const phase1Url = targetDate
-            ? `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&date=${encodeURIComponent(targetDate)}`
-            : `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`;
+            ? `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&date=${encodeURIComponent(targetDate)}&cb=${Date.now()}`
+            : `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&cb=${Date.now()}`;
 
         // Phase 1: Quick load (just 1 day)
         fetch(phase1Url)
@@ -337,7 +337,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
 
                 // ── PHASE 2: Full week in background ──
                 if (targetDate) {
-                    fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`)
+                    fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&cb=${Date.now()}`)
                         .then((r) => r.json())
                         .then((fullData) => {
                             if (cancelled) return;
@@ -398,8 +398,9 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     }, [selectedWeek, routesGenerated]);
 
     const refreshRoutes = useCallback(() => {
+        store.refresh("dispatching.routes");
         setRefreshKey((k) => k + 1);
-    }, []);
+    }, [store]);
 
     // ── Push title into global header ──
     const pageTitle = useMemo(() => {

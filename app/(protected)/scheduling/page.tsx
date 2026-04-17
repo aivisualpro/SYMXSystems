@@ -182,29 +182,31 @@ function computePlanningData(employees: EmployeeSchedule[], everydayRecords: Rec
   const ops = Array(7).fill(0);
   const extraDAs = Array(7).fill(0);
 
-  employees.forEach(emp => {
-    for (let d = 0; d < 7; d++) {
-      const day = emp.days[d];
-      if (!day) continue;
-      const typeVal = (day.type || "").trim().toLowerCase();
-      const empType = (emp.employee?.type || "").trim().toLowerCase();
-
-      if (isWorkingDay(day)) {
-        daStats[d]++;
-      }
-      if (typeVal === "stand by") standBy[d]++;
-      if (typeVal === "route") routesAssigned[d]++;
-      if ((empType === "ops" || empType === "operations") && ["open", "close", "fleet"].includes(typeVal)) ops[d]++;
-    }
-  });
-
-  // Override Routes Assigned with manual entries if they exist
+  // Initialize Routes Assigned from manual entries only
   for (let d = 0; d < 7; d++) {
     const date = dates[d];
     if (date && everydayRecords[date]?.routesAssigned !== undefined) {
       routesAssigned[d] = everydayRecords[date].routesAssigned;
     }
   }
+
+  employees.forEach(emp => {
+    for (let d = 0; d < 7; d++) {
+      const day = emp.days[d];
+      if (!day) continue;
+      const typeVal = (day.type || "").trim().toLowerCase();
+
+      if (typeVal === "route") {
+        daStats[d]++;
+      }
+      if (typeVal === "stand by") {
+        standBy[d]++;
+      }
+      if (["open", "close", "fleet"].includes(typeVal)) {
+        ops[d]++;
+      }
+    }
+  });
 
   // Extra DA's = DA's - Routes Assigned
   for (let d = 0; d < 7; d++) {
@@ -583,19 +585,7 @@ export default function SchedulingPage() {
   // Routes Assigned Everyday state
   const [everydayRecords, setEverydayRecords] = useState<Record<string, any>>({});
 
-  useEffect(() => {
-    if (!weekData?.dates?.length) return;
-    const fetchEveryday = async () => {
-      try {
-        const res = await fetch(`/api/everyday?dates=${weekData.dates.join(",")}`);
-        const data = await res.json();
-        if (data.records) {
-          setEverydayRecords(data.records);
-        }
-      } catch (err) {}
-    };
-    fetchEveryday();
-  }, [weekData?.dates]);
+  // The everyday records are now fetched alongside weekData to prevent UI bouncing.
 
   const handleRoutesAssignedUpdate = async (date: string, value: number) => {
     try {
@@ -838,9 +828,12 @@ export default function SchedulingPage() {
         const data = await res.json();
         if (cancelled) return;
         setWeekData(data);
-        // Use audit counts from the bundled response
+        // Use audit counts and everyday records from the bundled response
         if (data.auditCounts) {
           setAuditCounts(data.auditCounts);
+        }
+        if (data.everydayRecords) {
+          setEverydayRecords(data.everydayRecords);
         }
 
         // Auto-sync only once per week per session
@@ -1164,10 +1157,10 @@ export default function SchedulingPage() {
           days: {
             ...emp.days,
             [dayIdx]: {
-              ...(emp.days[dayIdx] || {}),
-              type: newType,
-              status: newRouteStatus,
-              startTime: defaultStartTime,
+               ...(emp.days[dayIdx] || {}),
+               type: newType,
+               status: newRouteStatus,
+               startTime: defaultStartTime,
             } as DayData,
           },
         };
@@ -1213,15 +1206,15 @@ export default function SchedulingPage() {
 
       // Refetch to get the new _id if we created a new entry
       if (!scheduleId) {
-        const refetchRes = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`);
+        const refetchRes = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}&t=${Date.now()}`);
         const refetchData = await refetchRes.json();
         setWeekData(refetchData);
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to update type");
-      // Revert on error — refetch
+      // Revert on error — refetch with cache buster
       if (selectedWeek) {
-        const res = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`);
+        const res = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}&t=${Date.now()}`);
         const data = await res.json();
         setWeekData(data);
       }
@@ -1470,7 +1463,7 @@ export default function SchedulingPage() {
                           Employee Name
                         </th>
                         {weekData?.dates?.map((date, i) => {
-                          const isToday = date === new Date().toLocaleDateString("en-CA"); // "YYYY-MM-DD" local time
+                          const isToday = date === getTodayPacific(); // strictly lock to Pacific Time
                           const d = new Date(date.split("T")[0] + "T00:00:00Z");
                           const dateNum = isNaN(d.getTime()) ? "" : d.getUTCDate();
                           const monthStr = isNaN(d.getTime()) ? "" : d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
@@ -1522,9 +1515,9 @@ export default function SchedulingPage() {
                                         <Wrench className="h-2.5 w-2.5 text-orange-500" />
                                         <span className="text-[11px] font-bold text-foreground leading-none">{planningData[3].values[i]}</span>
                                       </div>
-                                      <div className="flex items-center gap-0.5">
-                                        <UserPlus className="h-2.5 w-2.5 text-purple-500" />
-                                        <span className="text-[11px] font-bold text-foreground leading-none">{planningData[4].values[i]}</span>
+                                      <div className={cn("flex items-center gap-0.5", planningData[4].values[i] < 0 && "text-red-500")}>
+                                        <UserPlus className={cn("h-2.5 w-2.5 text-purple-500", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat inline-block")} />
+                                        <span className={cn("text-[11px] font-bold text-foreground leading-none", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat drop-shadow-[0_0_6px_rgba(239,68,68,0.8)] inline-block")}>{planningData[4].values[i]}</span>
                                       </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="bottom" className="w-[200px] p-0 bg-popover text-popover-foreground border shadow-xl rounded-xl [&>svg]:hidden">
@@ -1562,10 +1555,10 @@ export default function SchedulingPage() {
                                         </div>
                                         <div className="flex items-center justify-between px-3 py-1.5 hover:bg-muted/30 transition-colors">
                                           <div className="flex items-center gap-2">
-                                            <UserPlus className="h-3.5 w-3.5 text-purple-500" />
-                                            <span className="text-xs font-medium">Extra DA's</span>
+                                            <UserPlus className={cn("h-3.5 w-3.5 text-purple-500", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat inline-block")} />
+                                            <span className={cn("text-xs font-medium", planningData[4].values[i] < 0 && "text-red-500 font-bold")}>Extra DA's</span>
                                           </div>
-                                          <span className="text-sm font-bold font-mono">{planningData[4].values[i]}</span>
+                                          <span className={cn("text-sm font-bold font-mono", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat drop-shadow-[0_0_8px_rgba(239,68,68,0.8)] z-10 inline-block")}>{planningData[4].values[i]}</span>
                                         </div>
                                       </div>
                                     </TooltipContent>
@@ -1577,7 +1570,7 @@ export default function SchedulingPage() {
                         })}
                         <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[36px] sm:min-w-[40px]">Days</th>
                         <th className="w-[30px] hidden md:table-cell py-2 px-0"></th>
-                        <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[140px] hidden md:table-cell">Note</th>
+                        <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[140px] hidden md:table-cell">Employee Notes</th>
                         <th className="text-center font-semibold px-0.5 sm:px-1 py-2 sm:py-2.5 min-w-[40px] sm:min-w-[50px]">
                           <div className="inline-flex items-center gap-1 text-violet-400">
                             <History className="h-3 w-3" />
