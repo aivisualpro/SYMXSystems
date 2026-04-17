@@ -42,6 +42,7 @@ import {
     CircleDashed,
     XCircle,
     Video,
+    Baby,
     type LucideIcon,
 } from "lucide-react";
 import {
@@ -240,6 +241,7 @@ interface RouteRow {
     routeSize: string;
     driverEfficiency: number;
     employeeName: string;
+    hiredDate?: string | null;
     confirmationStatus?: { status: string; changeRemarks?: string; updatedAt?: string; history?: Array<{ status: string; changeRemarks?: string; updatedAt?: string; messageType?: string }> } | null;
     phone: string;
     rate: number;
@@ -436,6 +438,7 @@ export default function RoutesPage() {
                 routeSize: rec.routeSize || "",
                 driverEfficiency: rec.driverEfficiency || 0,
                 employeeName: emp?.name || rec.transporterId,
+                hiredDate: emp?.hiredDate || null,
                 confirmationStatus: null,
                 phone: emp?.phoneNumber || "",
                 rate: emp?.rate || 0,
@@ -819,6 +822,18 @@ export default function RoutesPage() {
             typeGroups[typeKey].push(r);
         });
 
+        // If default sorting, sort within groups by hiredDate (oldest to newest)
+        if (sortKey === "employee") {
+            Object.values(typeGroups).forEach(group => {
+                group.sort((a, b) => {
+                    const dA = a.hiredDate ? new Date(a.hiredDate).getTime() : Infinity;
+                    const dB = b.hiredDate ? new Date(b.hiredDate).getTime() : Infinity;
+                    if (dA !== dB) return dA - dB;
+                    return a.employeeName.localeCompare(b.employeeName);
+                });
+            });
+        }
+
         const groupKeys = Object.keys(typeGroups).sort((a, b) => {
             const aLower = a.toLowerCase();
             const bLower = b.toLowerCase();
@@ -984,8 +999,8 @@ export default function RoutesPage() {
                                                         })}
                                                     >
                                                         {/* 1. Employee */}
-                                                        <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card")}>
-                                                            <div className="flex items-center gap-2">
+                                                        <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card w-[200px]")}>
+                                                            <div className="flex items-center gap-2 w-full pr-1">
                                                                 {/* Avatar */}
                                                                 {row.profileImage ? (
                                                                     <img
@@ -1003,11 +1018,22 @@ export default function RoutesPage() {
                                                                 {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
                                                                 {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
                                                                 <span
-                                                                    className="text-[11px] font-bold whitespace-nowrap"
+                                                                    className="text-[11px] font-bold truncate flex-1 min-w-0"
+                                                                    title={row.employeeName}
                                                                     style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
                                                                 >
                                                                     {row.employeeName}
                                                                 </span>
+                                                                {row.hiredDate && (Date.now() - new Date(row.hiredDate).getTime()) / 86400000 <= 30 && (
+                                                                    <TooltipProvider delayDuration={100}>
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger className="flex-shrink-0 cursor-default ml-auto">
+                                                                                <Baby className="h-4 w-4 text-pink-500 drop-shadow animate-baby-rock" />
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent>New Hire (Within 30 Days)</TooltipContent>
+                                                                        </Tooltip>
+                                                                    </TooltipProvider>
+                                                                )}
                                                             </div>
                                                         </td>
 

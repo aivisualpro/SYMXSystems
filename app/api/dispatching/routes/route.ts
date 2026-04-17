@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
         const [employees, routeCountsByDate, auditCountsRaw, vehicleDocs, confirmationDocs] = await Promise.all([
             SymxEmployee.find(
                 { transporterId: { $in: transporterRegexes } },
-                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, profileImage: 1, routesComp: 1, rate: 1 }
+                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, profileImage: 1, routesComp: 1, rate: 1, hiredDate: 1 }
             ).lean(),
             SYMXRoute.aggregate([
                 { $match: routeCountMatch },
@@ -141,6 +141,7 @@ export async function GET(req: NextRequest) {
                 type: emp.type || "",
                 profileImage: emp.profileImage || "",
                 rate: emp.rate || 0,
+                hiredDate: emp.hiredDate || null,
             };
             initialCompMap[normalizedTid] = parseInt(emp.routesComp) || 0;
         });

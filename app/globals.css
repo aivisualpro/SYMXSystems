@@ -443,13 +443,13 @@ body {
     transform: scale(1);
   }
   14% {
-    transform: scale(1.15);
+    transform: scale(1.4);
   }
   28% {
     transform: scale(1);
   }
   42% {
-    transform: scale(1.15);
+    transform: scale(1.4);
   }
   70% {
     transform: scale(1);
@@ -461,4 +461,28 @@ body {
 
 .animate-heartbeat {
   animation: heartbeat 1.5s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+/* ── Cool Baby Rock Animation ── */
+@keyframes babyRock {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(-15deg) scale(1.15);
+  }
+  50% {
+    transform: rotate(0deg) scale(1.05);
+  }
+  75% {
+    transform: rotate(15deg) scale(1.15);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+.animate-baby-rock {
+  animation: babyRock 2s infinite ease-in-out;
+  transform-origin: bottom center;
 }

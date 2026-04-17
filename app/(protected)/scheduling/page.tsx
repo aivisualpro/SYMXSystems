@@ -42,6 +42,7 @@ import {
   ArrowRight,
   UserPlus,
   Trash2,
+  Baby,
   type LucideIcon,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
@@ -380,7 +381,7 @@ function EditableNote({
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className="flex items-center gap-1 cursor-pointer group/note min-w-[100px] max-w-[250px] rounded px-1 py-0.5 hover:bg-muted/40 transition-colors"
+          className="flex items-center gap-1 cursor-pointer group/note min-w-[100px] w-full max-w-full rounded px-1 py-0.5 hover:bg-muted/40 transition-colors"
           onClick={() => setEditing(true)}
         >
           <span className="text-[11px] text-muted-foreground truncate flex-1">
@@ -451,11 +452,11 @@ function RouteAssignedPopover({ date, value, onSave }: { date: string, value: nu
           <TruckIcon className="h-4 w-4" /> Routes Assigned
         </h4>
         <div className="flex gap-2">
-          <Input 
-            type="number" 
+          <Input
+            type="number"
             value={val}
             onChange={e => setVal(e.target.value)}
-            className="h-8 flex-1" 
+            className="h-8 flex-1"
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSave();
             }}
@@ -509,7 +510,7 @@ export default function SchedulingPage() {
       return; // skip the initial mount — URL is already correct
     }
     updateURL(activeMainTab, activeSubTab, selectedWeek);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMainTab, activeSubTab]);
 
   const [mounted, setMounted] = useState(false);
@@ -526,7 +527,8 @@ export default function SchedulingPage() {
   const [selectAllTrigger, setSelectAllTrigger] = useState(0);
   const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo | null>(null);
   const [generatingWeek, setGeneratingWeek] = useState(false);
-  
+  const [messagingRefreshKey, setMessagingRefreshKey] = useState(0);
+
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [deletingWeek, setDeletingWeek] = useState(false);
 
@@ -536,13 +538,13 @@ export default function SchedulingPage() {
       .then(data => {
         if (data && data.email) setCurrentUserEmail(data.email.toLowerCase());
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleDeleteWeek = async () => {
     if (!selectedWeek) return;
     if (!confirm(`Are you sure you want to delete ALL data (Schedules, Routes, Info, Audits) for ${selectedWeek}? This cannot be undone.`)) return;
-    
+
     setDeletingWeek(true);
     try {
       const res = await fetch(`/api/schedules/reset-week?yearWeek=${encodeURIComponent(selectedWeek)}`, {
@@ -550,12 +552,12 @@ export default function SchedulingPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to delete schedule data");
-      
+
       toast.success(`Schedule deleted successfully. Removed ${data.deleted?.schedules || 0} schedules.`);
-      
+
       // Update UI state
       setWeeks(prev => prev.filter(w => w !== selectedWeek));
-      
+
       // Refresh current week data since it is now empty
       const idx = weeks.indexOf(selectedWeek);
       if (weeks.length > 1) {
@@ -696,8 +698,8 @@ export default function SchedulingPage() {
           setNoteCounts(data.counts);
         }
       })
-      .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      .catch(() => { });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** Pick best default week: URL > current > closest ≤ current > latest */
@@ -714,23 +716,23 @@ export default function SchedulingPage() {
     return routeTypesList
       .filter((rt: any) => rt.isActive !== false) // Only show active types in dropdowns
       .map((rt: any) => {
-      const fallback = TYPE_MAP.get(rt.name.toLowerCase()) || {
-        label: rt.name,
-        icon: Navigation,
-        bg: "bg-emerald-600",
-        text: "text-white",
-        border: "border-emerald-700",
-        dotColor: "bg-emerald-500"
-      };
-      const DBIcon = rt.icon ? (LucideIcons as any)[rt.icon] : null;
+        const fallback = TYPE_MAP.get(rt.name.toLowerCase()) || {
+          label: rt.name,
+          icon: Navigation,
+          bg: "bg-emerald-600",
+          text: "text-white",
+          border: "border-emerald-700",
+          dotColor: "bg-emerald-500"
+        };
+        const DBIcon = rt.icon ? (LucideIcons as any)[rt.icon] : null;
 
-      return {
-        ...fallback,
-        label: rt.name, // Ensure exact casing from DB used for dropdown label
-        colorHex: rt.color,
-        icon: DBIcon || fallback.icon,
-      };
-    });
+        return {
+          ...fallback,
+          label: rt.name, // Ensure exact casing from DB used for dropdown label
+          colorHex: rt.color,
+          icon: DBIcon || fallback.icon,
+        };
+      });
   }, [routeTypesList]);
 
   // Hydrate weeks from global store for instant load
@@ -913,7 +915,7 @@ export default function SchedulingPage() {
   const averageDays = useMemo(() => {
     if (!weekData?.employees || weekData.employees.length === 0) return "0.0";
     const EXCLUDED = new Set(["off", "request off", "assign schedule", "call out", "reduction", "stand by", ""]);
-    
+
     // Only include employees with type "Employee" (case insensitive)
     const validEmps = weekData.employees.filter(emp => (emp.employee?.type || "").trim().toLowerCase() === "employee");
     if (validEmps.length === 0) return "0.0";
@@ -952,7 +954,7 @@ export default function SchedulingPage() {
   useEffect(() => {
     const idx = weeks.indexOf(selectedWeek);
     const totalEmps = weekData?.totalEmployees ?? 0;
-    
+
     setRightContent(
       <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
         {/* Scheduling Chips */}
@@ -1004,7 +1006,7 @@ export default function SchedulingPage() {
                   <TooltipTrigger asChild>
                     <div className={cn(
                       "flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-100 dark:bg-zinc-950 border text-[11px] font-semibold select-none cursor-default",
-                      warningCounts.danger > 0 
+                      warningCounts.danger > 0
                         ? "border-red-500/30 text-red-500 animate-pulse"
                         : "border-red-500/20 text-red-500/70"
                     )}>
@@ -1146,7 +1148,7 @@ export default function SchedulingPage() {
     const routeConfig = routeTypeConfigs[newType.trim().toLowerCase()];
     const defaultStartTime = routeConfig?.startTime || "";
     const newRouteStatus = routeConfig?.routeStatus || (isWorking ? "Scheduled" : "Off");
-    
+
     setWeekData(prev => {
       if (!prev) return prev;
       const updated = { ...prev };
@@ -1157,10 +1159,10 @@ export default function SchedulingPage() {
           days: {
             ...emp.days,
             [dayIdx]: {
-               ...(emp.days[dayIdx] || {}),
-               type: newType,
-               status: newRouteStatus,
-               startTime: defaultStartTime,
+              ...(emp.days[dayIdx] || {}),
+              type: newType,
+              status: newRouteStatus,
+              startTime: defaultStartTime,
             } as DayData,
           },
         };
@@ -1200,6 +1202,9 @@ export default function SchedulingPage() {
 
       // Invalidate dispatching routes globally so it's fresh when navigating away
       store.refresh("dispatching.routes");
+
+      // Force messaging panel to instantly re-fetch in the background
+      setMessagingRefreshKey(prev => prev + 1);
 
       // Update audit count for this employee
       setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
@@ -1409,6 +1414,7 @@ export default function SchedulingPage() {
             activeSubTab={activeSubTab}
             onSubTabChange={setActiveSubTab}
             onActiveTabInfo={setActiveTabInfo}
+            refreshTrigger={messagingRefreshKey}
           />
         </div>
 
@@ -1467,40 +1473,40 @@ export default function SchedulingPage() {
                           const d = new Date(date.split("T")[0] + "T00:00:00Z");
                           const dateNum = isNaN(d.getTime()) ? "" : d.getUTCDate();
                           const monthStr = isNaN(d.getTime()) ? "" : d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
-                          
-                          return (
-                          <th key={date} className="text-center font-medium px-0 sm:px-0.5 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[125px]">
-                            <div className="flex flex-col items-center justify-center gap-1.5 w-full">
-                              
-                              {/* 1. Ultra-sleek Date row */}
-                              <div className={cn(
-                                "flex items-center justify-between gap-1 w-full max-w-[128px] px-1.5 py-0.5 rounded-full border transition-colors",
-                                isToday ? "bg-emerald-500 text-white border-emerald-400 shadow-sm" : "bg-blue-500 text-white border-blue-400 shadow-sm"
-                              )}>
-                                <div className="flex items-baseline gap-1">
-                                  <span className={cn(
-                                    "text-[10px] uppercase font-bold tracking-widest",
-                                    isToday ? "text-emerald-100" : "text-blue-100"
-                                  )}>
-                                    {DAY_NAMES[i]}
-                                  </span>
-                                  <span className={cn(
-                                    "text-[12px] font-black tracking-tight text-white"
-                                  )}>
-                                    {formatDate(date)}
-                                  </span>
-                                </div>
-                                {planningData.length > 0 && (
-                                  <RouteAssignedPopover 
-                                    date={date} 
-                                    value={planningData[2].values[i]} 
-                                    onSave={handleRoutesAssignedUpdate} 
-                                  />
-                                )}
-                              </div>
 
-                              {/* 2. Ultra-compressed Stats Row */}
-                              {planningData.length > 0 && (
+                          return (
+                            <th key={date} className="text-center font-medium px-0 sm:px-0.5 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[125px]">
+                              <div className="flex flex-col items-center justify-center gap-1.5 w-full">
+
+                                {/* 1. Ultra-sleek Date row */}
+                                <div className={cn(
+                                  "flex items-center justify-between gap-1 w-full max-w-[128px] px-1.5 py-0.5 rounded-full border transition-colors",
+                                  isToday ? "bg-emerald-500 text-white border-emerald-400 shadow-sm" : "bg-blue-500 text-white border-blue-400 shadow-sm"
+                                )}>
+                                  <div className="flex items-baseline gap-1">
+                                    <span className={cn(
+                                      "text-[10px] uppercase font-bold tracking-widest",
+                                      isToday ? "text-emerald-100" : "text-blue-100"
+                                    )}>
+                                      {DAY_NAMES[i]}
+                                    </span>
+                                    <span className={cn(
+                                      "text-[12px] font-black tracking-tight text-white"
+                                    )}>
+                                      {formatDate(date)}
+                                    </span>
+                                  </div>
+                                  {planningData.length > 0 && (
+                                    <RouteAssignedPopover
+                                      date={date}
+                                      value={planningData[2].values[i]}
+                                      onSave={handleRoutesAssignedUpdate}
+                                    />
+                                  )}
+                                </div>
+
+                                {/* 2. Ultra-compressed Stats Row */}
+                                {planningData.length > 0 && (
                                   <Tooltip>
                                     <TooltipTrigger className="flex items-center justify-evenly w-full max-w-[128px] px-1 py-1 bg-zinc-100 dark:bg-zinc-950/50 rounded-lg border border-black/5 dark:border-white/5 shadow-inner backdrop-blur-sm mt-0.5 cursor-default hover:opacity-90 transition-opacity gap-0.5">
                                       <div className="flex items-center gap-0.5">
@@ -1563,9 +1569,9 @@ export default function SchedulingPage() {
                                       </div>
                                     </TooltipContent>
                                   </Tooltip>
-                              )}
-                            </div>
-                          </th>
+                                )}
+                              </div>
+                            </th>
                           );
                         })}
                         <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[36px] sm:min-w-[40px]">Days</th>
@@ -1634,16 +1640,28 @@ export default function SchedulingPage() {
                                   const notes = emp.employee?.ScheduleNotes || "";
                                   const consecutiveWarnings = getConsecutiveWarnings(emp, weekData?.prevWeekTrailing?.[emp.transporterId] || 0);
 
+                                  const isNewHire = emp.employee?.hiredDate && (Date.now() - new Date(emp.employee.hiredDate).getTime()) / 86400000 <= 30;
+
                                   return (
                                     <tr
                                       key={`${groupName}-${emp.transporterId}`}
                                       className="border-b border-border/10 hover:bg-muted/20 transition-colors group"
                                     >
-                                      <td className="px-1.5 sm:px-3 py-1 sm:py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors">
-                                        <div className="flex items-center gap-1 sm:gap-1.5">
-                                          <span className="text-[10px] sm:text-xs font-normal truncate max-w-[80px] sm:max-w-[125px]">
+                                      <td className="px-1.5 sm:px-3 py-1 sm:py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors w-[130px] sm:w-[170px]">
+                                        <div className="flex items-center justify-between gap-1 sm:gap-1.5 w-full h-full pr-1">
+                                          <span className="text-[10px] sm:text-xs font-normal truncate flex-1 min-w-0" title={emp.employee?.name || emp.transporterId}>
                                             {emp.employee?.name || emp.transporterId}
                                           </span>
+                                          {isNewHire && (
+                                            <TooltipProvider delayDuration={100}>
+                                              <Tooltip>
+                                                <TooltipTrigger className="flex-shrink-0 cursor-default">
+                                                  <Baby className="h-4 w-4 text-pink-500 drop-shadow animate-baby-rock ml-auto" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>New Hire (Within 30 Days)</TooltipContent>
+                                              </Tooltip>
+                                            </TooltipProvider>
+                                          )}
                                         </div>
                                       </td>
                                       {Array.from({ length: 7 }, (_, dayIdx) => {
@@ -1765,12 +1783,12 @@ export default function SchedulingPage() {
                                                         )}
                                                         onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name)}
                                                       >
-                                                        <div 
+                                                        <div
                                                           className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", !opt.colorHex && opt.bg)}
                                                           style={opt.colorHex ? { backgroundColor: opt.colorHex } : undefined}
                                                         >
-                                                          <Icon 
-                                                            className={cn("h-3 w-3", !opt.colorHex && opt.text)} 
+                                                          <Icon
+                                                            className={cn("h-3 w-3", !opt.colorHex && opt.text)}
                                                             style={opt.colorHex ? { color: "#fff" } : undefined}
                                                           />
                                                         </div>
@@ -1817,7 +1835,7 @@ export default function SchedulingPage() {
                                           </TooltipContent>
                                         </Tooltip>
                                       </td>
-                                      <td className="px-2 sm:px-3 py-1.5 hidden md:table-cell">
+                                      <td className="px-2 sm:px-3 py-1.5 hidden md:table-cell max-w-[150px] lg:max-w-[220px] xl:max-w-[300px] 2xl:max-w-[400px]">
                                         <EditableNote
                                           value={notes}
                                           employeeId={emp.employee?._id}

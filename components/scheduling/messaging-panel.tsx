@@ -1808,6 +1808,7 @@ export default function MessagingPanel({
   activeSubTab,
   onSubTabChange,
   onActiveTabInfo,
+  refreshTrigger,
 }: {
   weeks: string[];
   selectedWeek: string;
@@ -1817,6 +1818,7 @@ export default function MessagingPanel({
   activeSubTab: string;
   onSubTabChange?: (tab: string) => void;
   onActiveTabInfo?: (info: ActiveTabInfo) => void;
+  refreshTrigger?: number;
 }) {
   const resolvedTab = SUB_TABS.find((t) => t.id === activeSubTab) ? activeSubTab : SUB_TABS[0].id;
 
@@ -1953,13 +1955,19 @@ export default function MessagingPanel({
       }
     }
 
+    // ── Track forced refreshes ──
+    const forced = refreshTrigger !== undefined && refreshTrigger !== (fetchedWeekRef as any).lastRefresh;
+    if (forced) {
+        (fetchedWeekRef as any).lastRefresh = refreshTrigger;
+    }
+
     // ── If default week but store not ready yet, wait for it ──
     if (isDefaultWeek && !store.initialized) {
       return;
     }
 
-    // ── Skip if we already fetched/hydrated this week ──
-    if (fetchedWeekRef.current === selectedWeek) return;
+    // ── Skip if we already fetched/hydrated this week (unless forced) ──
+    if (!forced && fetchedWeekRef.current === selectedWeek) return;
     fetchedWeekRef.current = selectedWeek;
 
     // ── Fetch active tab first for fastest UX ──
@@ -1996,7 +2004,7 @@ export default function MessagingPanel({
 
     return () => clearTimeout(bgTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedWeek, store.initialized, fetchTabEmployees]); // re-run when store initializes
+  }, [selectedWeek, store.initialized, fetchTabEmployees, refreshTrigger]); // re-run when store initializes or refreshed
 
   // ── Report active tab info to parent ──────────────────────────────────────
   const activeTabConfig = SUB_TABS.find(t => t.id === resolvedTab) || SUB_TABS[0];
