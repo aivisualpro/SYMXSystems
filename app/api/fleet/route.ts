@@ -374,7 +374,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Select only fields needed for the list view
-      const listFields = "vin unitNumber vehicleName description currentStatus estimatedDate creationDate lastEditOn repairDuration images";
+      const listFields = "vin unitNumber vehicleName description currentStatus estimatedDate creationDate lastEditOn repairDuration images completedImages";
 
       const [repairs, total] = await Promise.all([
         VehicleRepair.find(filter).select(listFields).sort({ creationDate: -1 }).skip(skip).limit(limit).lean(),

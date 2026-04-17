@@ -7,6 +7,7 @@ import {
 } from "@tabler/icons-react";
 import * as LucideIcons from "lucide-react";
 import { useFleet } from "../layout";
+import { toast } from "sonner";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 
 import FleetFormModal from "../components/fleet-form-modal";
@@ -394,6 +395,18 @@ export default function FleetRepairsPage() {
                             value={r.currentStatus || "Not Started"}
                             onChange={async (e) => {
                               const newStatus = e.target.value;
+                              
+                              // Check validation for completed status directly from the table UI
+                              if (newStatus === "Completed" && (!r.completedImages || r.completedImages.length === 0)) {
+                                toast.error("Completion images required", { 
+                                  description: "Please upload completion images to close this repair." 
+                                });
+                                // Force the record edit form open, defaulting to Completed status (unsaved) manually here?
+                                // r is readonly, but we can pass it as-is, the user can change status inside the form.
+                                openEditModal("repair", { ...r, currentStatus: "Completed" });
+                                return;
+                              }
+
                               try {
                                 const res = await fetch("/api/fleet", {
                                   method: "PUT",

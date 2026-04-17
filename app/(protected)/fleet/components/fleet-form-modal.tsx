@@ -513,6 +513,11 @@ export default function FleetFormModal() {
 
   const title = `${editId ? "Edit" : "New"} ${modalType.charAt(0).toUpperCase() + modalType.slice(1)}`;
 
+  const isRepairCompletedButNoImages = 
+    modalType === "repair" && 
+    formData.currentStatus === "Completed" && 
+    (!formData.completedImages || formData.completedImages.length === 0);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/60 backdrop-blur-sm" onClick={() => setModalOpen(false)}>
       <div className="w-full max-w-lg mx-4 rounded-2xl border border-border bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -618,12 +623,22 @@ export default function FleetFormModal() {
                 <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.estimatedDate ? formData.estimatedDate.split("T")[0] : ""} onChange={e => updateForm("estimatedDate", e.target.value)} /></FormField>
                 <FormField label="Duration (days)"><input type="number" className={inputClass} value={formData.repairDuration || ""} onChange={e => updateForm("repairDuration", parseInt(e.target.value) || 0)} /></FormField>
               </div>
-              <div className="pt-2">
+              <div className="pt-2 space-y-4">
                 <MultiPhotoUploadField 
                   label="Repair Images" 
                   values={formData.images || []} 
                   onChange={urls => updateForm("images", urls)} 
                 />
+                
+                {formData.currentStatus === "Completed" && (
+                  <div className="pt-2 border-t border-border/50">
+                    <MultiPhotoUploadField 
+                      label="Completion Images" 
+                      values={formData.completedImages || []} 
+                      onChange={urls => updateForm("completedImages", urls)} 
+                    />
+                  </div>
+                )}
               </div>
             </>)}
 
@@ -827,11 +842,16 @@ export default function FleetFormModal() {
             </>)}
 
           </div>
-          <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
-            <button type="button" onClick={() => setModalOpen(false)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium transition-colors disabled:opacity-50">
-              {saving && <IconLoader2 size={14} className="animate-spin" />} Save
-            </button>
+          <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-border">
+            <div className="flex-1 text-[10px] text-red-500/80 font-medium whitespace-nowrap">
+              {isRepairCompletedButNoImages && "Completion images are required to close this repair."}
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setModalOpen(false)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button>
+              <button type="submit" disabled={saving || isRepairCompletedButNoImages} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                {saving && <IconLoader2 size={14} className="animate-spin" />} Save
+              </button>
+            </div>
           </div>
         </form>
       </div>
