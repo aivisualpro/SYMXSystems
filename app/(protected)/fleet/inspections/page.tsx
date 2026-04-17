@@ -156,6 +156,7 @@ export default function FleetInspectionsPage() {
       const params = new URLSearchParams({ section: "inspections", skip: String(skip), limit: String(PAGE_SIZE) });
       if (q) params.set("q", q);
       if (showStandardOnly) params.set("standardOnly", "true");
+      params.set("_t", Date.now().toString());
       const res = await fetch(`/api/fleet?${params}`, { signal: ctrl.signal });
       if (!res.ok) return;
       const json = await res.json();
@@ -182,6 +183,24 @@ export default function FleetInspectionsPage() {
     setTotal(null);
     fetchPage(0, debouncedSearch, false);
   }, [debouncedSearch, fetchPage, showStandardOnly]);
+
+  // Sync with layout updates (e.g., after saving a record)
+  const prevFetchedAt = useRef(inspectionsSeed?.fetchedAt);
+  useEffect(() => {
+    if (inspectionsSeed && inspectionsSeed.fetchedAt !== prevFetchedAt.current) {
+      prevFetchedAt.current = inspectionsSeed.fetchedAt;
+      if (!debouncedSearch) {
+        setInspections(inspectionsSeed.data);
+        setTotal(inspectionsSeed.total);
+        setHasMore(inspectionsSeed.hasMore);
+        skipRef.current = inspectionsSeed.data.length;
+      } else {
+        skipRef.current = 0;
+        setInspections([]);
+        fetchPage(0, debouncedSearch, false);
+      }
+    }
+  }, [inspectionsSeed, debouncedSearch, fetchPage]);
 
   /* ── Infinite scroll ─────────────────────────────────────── */
   useEffect(() => {

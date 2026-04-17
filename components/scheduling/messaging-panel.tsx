@@ -84,6 +84,10 @@ interface EmployeeRecipient {
     status: string;
     startTime: string;
     van: string;
+    routeNumber?: string;
+    stagingLocation?: string;
+    pad?: string;
+    waveTime?: string;
   }[];
 }
 
@@ -191,8 +195,8 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
   const todayPacific = getTodayPacific();
   const tomorrowPacific = getTomorrowPacific();
 
-  if (tabId === "shift") {
-    // Shift notification → use TODAY's schedule (Pacific)
+  if (tabId === "shift" || tabId === "route-itinerary") {
+    // Shift notification or Route Itinerary → use TODAY's schedule (Pacific)
     const todayShift = emp.schedules?.find(
       (s) => s.date?.startsWith(todayPacific) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
     );
@@ -213,7 +217,7 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
   let shiftDate = "";
   let dayOfWeek = "";
 
-  if (tabId === "shift") {
+  if (tabId === "shift" || tabId === "route-itinerary") {
     const todayDate = new Date(todayPacific + "T00:00:00Z");
     shiftDate = formatDateMMDDYYYY(todayDate.toISOString());
     dayOfWeek = FULL_DAY_NAMES[todayDate.getUTCDay()];
@@ -252,6 +256,12 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
     weekSchedule = lines.join("\n");
   }
 
+  const van = targetShift?.van || "";
+  const routeNumber = targetShift?.routeNumber || "";
+  const stagingLocation = targetShift?.stagingLocation || "";
+  const pad = targetShift?.pad || "";
+  const waveTime = targetShift?.waveTime || "";
+
   return template
     .replace(/\{name\}/gi, name)
     .replace(/\{startTime\}/gi, startTime)
@@ -259,7 +269,12 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
     .replace(/\{date\}/gi, shiftDate)
     .replace(/\{dayOfWeek\}/gi, dayOfWeek)
     .replace(/\{yearWeek\}/gi, yearWeekDisplay)
-    .replace(/\{weekSchedule\}/gi, weekSchedule);
+    .replace(/\{weekSchedule\}/gi, weekSchedule)
+    .replace(/\{van\}/gi, van)
+    .replace(/\{routeNumber\}/gi, routeNumber)
+    .replace(/\{stagingLocation\}/gi, stagingLocation)
+    .replace(/\{pad\}/gi, pad)
+    .replace(/\{waveTime\}/gi, waveTime);
 }
 
 // ── Sub Tab Config ──
@@ -310,8 +325,8 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-rose-500",
     borderColor: "border-rose-500/30",
     defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYour route itinerary has been updated. Please review your assigned route for today. Thank you!",
-    variables: ["name", "dayOfWeek", "date", "confirmationLink"],
+      "Hello {name}\n\n{dayOfWeek} {date}\n\nYour route itinerary has been updated. Please review your assigned route for today.\nRoute: {routeNumber}\nVan: {van}\nStaging: {stagingLocation}\nPad: {pad}\nWave Time: {waveTime}\n\nPlease confirm here: {confirmationLink}\n\nThank you!",
+    variables: ["name", "dayOfWeek", "date", "van", "stagingLocation", "routeNumber", "pad", "waveTime", "confirmationLink"],
   },
   {
     id: "week-schedule",
@@ -870,9 +885,14 @@ function MessagingSubTab({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: tab.id, template: content }),
       });
-      if (res.ok) lastSavedRef.current = content;
-    } catch {
-      // silently fail
+      if (res.ok) {
+        lastSavedRef.current = content;
+      } else {
+        const err = await res.json();
+        console.error("Failed to save template:", err);
+      }
+    } catch (e) {
+      console.error("Save template network error:", e);
     } finally {
       setSaving(false);
     }

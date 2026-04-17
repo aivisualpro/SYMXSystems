@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+// Hot reload trigger: ensure route-itinerary is loaded
 
 export interface IMessagingTemplate extends Document {
   type: string; // future-shift, shift, off-tomorrow, week-schedule, route-itinerary

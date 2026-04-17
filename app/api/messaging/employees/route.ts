@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+import SYMXRoute from "@/lib/models/SYMXRoute";
 import MessageLog from "@/lib/models/MessageLog";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
@@ -58,6 +59,13 @@ export async function GET(req: NextRequest) {
       )
         .sort({ date: 1 })
         .lean()
+      : Promise.resolve(null);
+
+    const routePromise = yearWeek
+      ? SYMXRoute.find(
+          { yearWeek },
+          { transporterId: 1, date: 1, routeNumber: 1, stagingLocation: 1, pad: 1, waveTime: 1, van: 1 }
+        ).lean()
       : Promise.resolve(null);
 
     // ── Messaging status — single optimized aggregation ──
@@ -120,9 +128,10 @@ export async function GET(req: NextRequest) {
       })()
       : Promise.resolve({ logMap: {} as Record<string, any>, confirmMap: {} as Record<string, any> });
 
-    const [employees, schedules, { logMap: messageLogStatusMap }] = await Promise.all([
+    const [employees, schedules, routes, { logMap: messageLogStatusMap }] = await Promise.all([
       employeePromise,
       schedulePromise,
+      routePromise,
       messagingStatusPromise,
     ]);
 
@@ -150,6 +159,14 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const routeMap: Record<string, any> = {};
+    if (routes) {
+      routes.forEach((r: any) => {
+        const dStr = r.date instanceof Date ? r.date.toISOString().split("T")[0] : new Date(r.date.toString()).toISOString().split("T")[0];
+        routeMap[`${r.transporterId}_${dStr}`] = r;
+      });
+    }
+
     // Merge employee data with schedule data + messaging statuses
     const enrichedEmployees = employees.map((emp: any) => {
       const empSchedules = scheduleMap[emp.transporterId] || [];
@@ -171,15 +188,24 @@ export async function GET(req: NextRequest) {
         type: emp.type || "Unassigned",
         email: emp.email,
         messagingStatus,
-        schedules: empSchedules.map((s: any) => ({
-          date: s.date,
-          weekDay: s.weekDay,
-          type: s.type || "",
-          subType: s.subType || "",
-          status: s.status || "",
-          startTime: s.startTime || "",
-          van: s.van || "",
-        })),
+        schedules: empSchedules.map((s: any) => {
+          const sDateKey = s.date instanceof Date ? s.date.toISOString().split("T")[0] : new Date(s.date.toString()).toISOString().split("T")[0];
+          const routeInfo = routeMap[`${emp.transporterId}_${sDateKey}`] || {};
+          
+          return {
+            date: s.date,
+            weekDay: s.weekDay,
+            type: s.type || "",
+            subType: s.subType || "",
+            status: s.status || "",
+            startTime: s.startTime || "",
+            van: routeInfo.van || s.van || "",
+            routeNumber: routeInfo.routeNumber || "",
+            stagingLocation: routeInfo.stagingLocation || "",
+            pad: routeInfo.pad || "",
+            waveTime: routeInfo.waveTime || "",
+          };
+        }),
       };
     });
 

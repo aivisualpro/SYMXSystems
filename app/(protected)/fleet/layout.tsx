@@ -159,12 +159,13 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       setLoading(true);
 
       // Fire ALL fetches in parallel — everything loads at once
+      const ts = Date.now();
       const [dashRes, vehRes, repRes, insRes, renRes] = await Promise.all([
-        fetch("/api/fleet?section=dashboard"),
-        fetch(`/api/fleet?section=vehicles${showReturned ? "&includeReturned=true" : ""}`),
-        fetch(`/api/fleet?section=repairs&skip=0&limit=50${showCompleted ? "" : "&excludeCompleted=true"}`),
-        fetch("/api/fleet?section=inspections&skip=0&limit=50"),
-        fetch("/api/fleet?section=rentals"),
+        fetch(`/api/fleet?section=dashboard&_t=${ts}`),
+        fetch(`/api/fleet?section=vehicles${showReturned ? "&includeReturned=true" : ""}&_t=${ts}`),
+        fetch(`/api/fleet?section=repairs&skip=0&limit=50${showCompleted ? "" : "&excludeCompleted=true"}&_t=${ts}`),
+        fetch(`/api/fleet?section=inspections&skip=0&limit=50&_t=${ts}`),
+        fetch(`/api/fleet?section=rentals&_t=${ts}`),
       ]);
 
       const [dashData, vehData, repData, insData, renData] = await Promise.all([
@@ -196,7 +197,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
     // Only re-fetch vehicles, not the whole dashboard
     (async () => {
       try {
-        const vehRes = await fetch(`/api/fleet?section=vehicles${showReturned ? "&includeReturned=true" : ""}`);
+        const vehRes = await fetch(`/api/fleet?section=vehicles${showReturned ? "&includeReturned=true" : ""}&_t=${Date.now()}`);
         const vehData = vehRes.ok ? await vehRes.json() : {};
         setData((prev) => prev ? { ...prev, vehicles: (vehData as any).vehicles || [] } : prev);
       } catch (err) {

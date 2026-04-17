@@ -201,6 +201,7 @@ export default function FleetRepairsPage() {
       const params = new URLSearchParams({ section: "repairs", skip: String(skip), limit: String(PAGE_SIZE) });
       if (q) params.set("q", q);
       if (!showCompleted) params.set("excludeCompleted", "true");
+      params.set("_t", Date.now().toString());
       const res = await fetch(`/api/fleet?${params}`, { signal: ctrl.signal });
       if (!res.ok) return;
       const json = await res.json();
@@ -231,6 +232,24 @@ export default function FleetRepairsPage() {
     setTotal(null);
     fetchPage(0, debouncedSearch, false);
   }, [debouncedSearch, fetchPage, showCompleted]);
+
+  // Sync with layout updates (e.g., after saving a record)
+  const prevFetchedAt = useRef(repairsSeed?.fetchedAt);
+  useEffect(() => {
+    if (repairsSeed && repairsSeed.fetchedAt !== prevFetchedAt.current) {
+      prevFetchedAt.current = repairsSeed.fetchedAt;
+      if (!debouncedSearch) {
+        setRepairs(repairsSeed.data);
+        setTotal(repairsSeed.total);
+        setHasMore(repairsSeed.hasMore);
+        skipRef.current = repairsSeed.data.length;
+      } else {
+        skipRef.current = 0;
+        setRepairs([]);
+        fetchPage(0, debouncedSearch, false);
+      }
+    }
+  }, [repairsSeed, debouncedSearch, fetchPage]);
 
   /* ── Infinite scroll via IntersectionObserver ────────────────── */
   useEffect(() => {
