@@ -8,7 +8,7 @@ export interface IVehicleRepair extends Document {
   description: string;
   currentStatus: string;
   estimatedDate: Date;
-  image: string;
+  images: string[];
   creationDate: Date;
   lastEditOn: Date;
   repairDuration: number; // in days
@@ -28,7 +28,7 @@ const VehicleRepairSchema: Schema = new Schema({
     index: true
   },
   estimatedDate: { type: Date },
-  image: { type: String, default: '' },
+  images: { type: [String], default: [] },
   creationDate: { type: Date, default: Date.now },
   lastEditOn: { type: Date, default: Date.now },
   repairDuration: { type: Number, default: 0 },

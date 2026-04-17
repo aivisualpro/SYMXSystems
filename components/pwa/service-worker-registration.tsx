@@ -33,8 +33,9 @@ export function ServiceWorkerRegistration() {
 
           newWorker.addEventListener("statechange", () => {
             if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-              // New SW installed but waiting → show toast
+              // New SW installed but waiting → show toast and dispatch event
               setWaitingWorker(newWorker);
+              window.dispatchEvent(new CustomEvent("pwa-update-available", { detail: newWorker }));
               toast("App update available!", {
                 description: "Tap to refresh and get the latest version.",
                 action: {

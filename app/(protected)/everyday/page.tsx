@@ -250,6 +250,10 @@ export default function EverydayAfterDispatchingPage() {
             toast.error("Please fill in all rescue fields");
             return;
         }
+        if (Number(rescueStops) < 0) {
+            toast.error("Stops rescued cannot be negative");
+            return;
+        }
         setIsSavingRescue(true);
         try {
             const res = await fetch("/api/everyday/rescue", {
@@ -1416,7 +1420,7 @@ export default function EverydayAfterDispatchingPage() {
                                 </div>
                                 <div>
                                     <label className="text-xs font-semibold uppercase text-foreground mb-1 block">Stops Rescued</label>
-                                    <Input type="number" placeholder="Stops" value={rescueStops} onChange={e => setRescueStops(e.target.value)} />
+                                    <Input type="number" min="0" placeholder="Stops" value={rescueStops} onChange={e => setRescueStops(e.target.value)} />
                                 </div>
                             </div>
                             <div>
@@ -1448,7 +1452,7 @@ export default function EverydayAfterDispatchingPage() {
                         </div>
                         <div className="flex items-center gap-2">
                             <Button variant="outline" onClick={() => setRescueModalOpen(false)}>Cancel</Button>
-                            <Button disabled={isSavingRescue || !rescueBy || !rescueStops || !rescueReason.trim()} onClick={handleSaveRescue} className="bg-blue-600 hover:bg-blue-700 text-white">
+                            <Button disabled={isSavingRescue || !rescueBy || !rescueStops || Number(rescueStops) < 0 || !rescueReason.trim()} onClick={handleSaveRescue} className="bg-blue-600 hover:bg-blue-700 text-white">
                                 {isSavingRescue && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Save Rescue
                             </Button>

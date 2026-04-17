@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import * as LucideIcons from "lucide-react";
-import { IconX, IconLoader2, IconUpload, IconPhoto, IconCheck, IconSearch, IconChevronDown } from "@tabler/icons-react";
+import { IconX, IconLoader2, IconUpload, IconPhoto, IconCheck, IconSearch, IconChevronDown, IconTrash, IconDownload } from "@tabler/icons-react";
+import { toast } from "sonner";
 import { useFleet } from "../layout";
 
 const inputClass = "w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors";
@@ -229,6 +230,111 @@ function PhotoUploadField({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ── Multi Photo upload field for multiple images ────────────────── */
+function MultiPhotoUploadField({
+  label, values = [], onChange,
+}: { label: string; values?: string[]; onChange: (urls: string[]) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = async (files: FileList) => {
+    setUploading(true);
+    try {
+      const newUrls: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/admin/upload?folder=symx-fleet/repairs", { method: "POST", body: fd });
+        const data = await res.json();
+        if (data.secure_url) newUrls.push(data.secure_url);
+      }
+      onChange([...values, ...newUrls]);
+      toast.success(`${newUrls.length} file(s) uploaded successfully!`);
+    } catch (err) { 
+      console.error("Upload failed:", err); 
+      toast.error("Failed to upload image(s).");
+    } finally { 
+      setUploading(false); 
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const handleDelete = (index: number) => {
+    if (confirm("Are you sure you want to delete this image?")) {
+      const newVals = [...values];
+      newVals.splice(index, 1);
+      onChange(newVals);
+      toast.success("Image deleted");
+    }
+  };
+
+  const handleDownload = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `repair_image_${Math.floor(Date.now() / 1000)}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error("Download failed", error);
+      window.open(url, "_blank");
+    }
+  };
+
+  return (
+    <div className="space-y-2 col-span-full">
+      <div className="flex items-center justify-between">
+        <label className="block text-[11px] font-medium text-muted-foreground">{label}</label>
+        <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} className="flex items-center gap-1 text-[10px] bg-primary/10 text-primary px-2 py-1 rounded hover:bg-primary/20 transition-colors disabled:opacity-50">
+          {uploading ? <IconLoader2 size={12} className="animate-spin" /> : <IconUpload size={12} />}
+          Upload
+        </button>
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" multiple capture="environment" className="hidden"
+        onChange={e => { if (e.target.files) handleUpload(e.target.files); }} />
+      
+      {values.length > 0 ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {values.map((v, i) => (
+            <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border/50 group bg-muted/30">
+              <img src={v} className="w-full h-full object-cover" alt="Uploaded" />
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                <button type="button" onClick={() => handleDownload(v)} className="p-1.5 rounded-full bg-white/20 text-white hover:bg-white/40 transition-colors backdrop-blur-sm" title="Download">
+                  <IconDownload size={14} />
+                </button>
+                <button type="button" onClick={() => handleDelete(i)} className="p-1.5 rounded-full bg-red-500/80 text-white hover:bg-red-500 transition-colors backdrop-blur-sm" title="Delete">
+                  <IconTrash size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {uploading && (
+             <div className="aspect-square rounded-lg border-2 border-dashed border-border/60 flex items-center justify-center text-muted-foreground/50 bg-muted/10">
+               <IconLoader2 size={24} className="animate-spin" />
+             </div>
+          )}
+        </div>
+      ) : (
+        <button type="button" onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="w-full h-24 rounded-lg bg-card/50 border-2 border-dashed border-border/60 hover:border-primary/40 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/50 hover:text-primary/60 transition-colors disabled:opacity-50">
+          {uploading ? (
+            <><IconLoader2 size={20} className="animate-spin" /><span className="text-xs font-medium">Uploading…</span></>
+          ) : (
+            <><IconUpload size={20} /><span className="text-xs font-medium">Click or Tap to Upload</span><span className="text-[10px] opacity-70">Supports taking photos directly</span></>
+          )}
+        </button>
+      )}
     </div>
   );
 }
@@ -498,7 +604,7 @@ export default function FleetFormModal() {
                 />
               </FormField>
               <FormField label="Description"><textarea className={inputClass} rows={3} value={formData.description || ""} onChange={e => updateForm("description", e.target.value)} required /></FormField>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <FormField label="Status">
                   <select className={inputClass} value={formData.currentStatus || ""} onChange={e => updateForm("currentStatus", e.target.value)}
                     style={repairStatuses.find(s => s.description === formData.currentStatus)?.color ? { borderLeftWidth: '3px', borderLeftColor: repairStatuses.find(s => s.description === formData.currentStatus)!.color } : {}}>
@@ -511,6 +617,13 @@ export default function FleetFormModal() {
                 </FormField>
                 <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.estimatedDate ? formData.estimatedDate.split("T")[0] : ""} onChange={e => updateForm("estimatedDate", e.target.value)} /></FormField>
                 <FormField label="Duration (days)"><input type="number" className={inputClass} value={formData.repairDuration || ""} onChange={e => updateForm("repairDuration", parseInt(e.target.value) || 0)} /></FormField>
+              </div>
+              <div className="pt-2">
+                <MultiPhotoUploadField 
+                  label="Repair Images" 
+                  values={formData.images || []} 
+                  onChange={urls => updateForm("images", urls)} 
+                />
               </div>
             </>)}
 

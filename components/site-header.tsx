@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, RefreshCw, DownloadCloud } from "lucide-react";
 
 import { ModeSwitcher } from "./mode-switcher";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
@@ -18,7 +18,24 @@ export function SiteHeader() {
   const showBackButton = pathname !== "/dashboard" && pathname !== "/profile" && segments.length > 0;
 
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const [updateWorker, setUpdateWorker] = useState<ServiceWorker | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<ServiceWorker>;
+      setUpdateWorker(customEvent.detail);
+    };
+    window.addEventListener("pwa-update-available", handler);
+    return () => window.removeEventListener("pwa-update-available", handler);
+  }, []);
+
+  const handleUpdateApp = () => {
+    if (updateWorker) {
+      updateWorker.postMessage({ type: "SKIP_WAITING" });
+      setTimeout(() => window.location.reload(), 300);
+    }
+  };
 
   // useHeaderActions already returns a safe fallback when the provider is missing
   const headerCtx = useHeaderActions();
@@ -79,6 +96,28 @@ export function SiteHeader() {
         )}
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          {updateWorker ? (
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 px-2 text-[10px] bg-emerald-500 hover:bg-emerald-600 sm:text-xs text-white"
+              onClick={handleUpdateApp}
+            >
+              <DownloadCloud className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+              Update App
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 sm:h-8 sm:w-8 text-muted-foreground hover:text-foreground lg:hidden"
+              onClick={() => window.location.reload()}
+              title="Refresh App"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          )}
+
           {mounted && (headerCtx.rightContent || headerCtx.actions)}
 
           <ModeSwitcher />

@@ -18,7 +18,7 @@ const symxRescueSchema = new Schema<ISYMXRescue>(
         date: { type: String, required: true },
         transporterId: { type: String, required: true },
         rescuedBytransporterId: { type: String, required: true },
-        stopsRescued: { type: Number, required: true },
+        stopsRescued: { type: Number, required: true, min: [0, "Stops rescued cannot be negative"] },
         reason: { type: String, required: true },
         performanceRescue: { type: Boolean, default: false },
     },

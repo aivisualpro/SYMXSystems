@@ -44,11 +44,11 @@ interface Column {
 
 const columns: Column[] = [
   {
-    key: "image", label: "Photo", sortable: false,
-    accessor: (r) => r.image || "",
-    render: (r) => r.image ? (
-      <a href={r.image} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="block">
-        <img src={r.image} alt="repair" className="w-10 h-7 object-cover rounded-md border border-border/50 hover:scale-110 transition-transform shadow-sm" />
+    key: "images", label: "Photo", sortable: false,
+    accessor: (r) => (r.images && r.images.length > 0) ? r.images[0] : "",
+    render: (r) => (r.images && r.images.length > 0) ? (
+      <a href={r.images[0]} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="block">
+        <img src={r.images[0]} alt="repair" className="w-10 h-7 object-cover rounded-md border border-border/50 hover:scale-110 transition-transform shadow-sm" />
       </a>
     ) : (
       <div className="w-10 h-7 rounded-md bg-muted/60 border border-border/30 flex items-center justify-center">

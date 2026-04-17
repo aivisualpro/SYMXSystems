@@ -36,6 +36,10 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
+        if (stopsRescued < 0) {
+            return NextResponse.json({ error: "Stops rescued cannot be negative" }, { status: 400 });
+        }
+
         console.log("[Rescue API] Proceeding to save Rescue:", { routeId, date, transporterId, rescuedBytransporterId, stopsRescued, reason, performanceRescue });
 
         await connectToDatabase();
