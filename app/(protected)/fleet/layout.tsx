@@ -443,7 +443,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
       showCompleted, setShowCompleted,
       showStandardOnly, setShowStandardOnly,
     }}>
-      <div className="flex flex-col max-w-[1600px] mx-auto h-[calc(100vh-var(--header-height)-2rem)]">
+      <div className="flex flex-col w-full h-[calc(100vh-var(--header-height)-2rem)]">
 
         {/* ── Tab Navigation (sticky) ──────────────────────────── */}
         <div data-tab-nav className="flex-shrink-0 flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">

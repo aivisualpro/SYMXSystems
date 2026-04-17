@@ -145,7 +145,7 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
     ];
 
     return (
-        <div className="space-y-5 max-w-[1600px] mx-auto">
+        <div className="space-y-5 w-full">
             {/* ── Header ────────────────────────────────────── */}
             <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-4">

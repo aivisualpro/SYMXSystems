@@ -792,6 +792,9 @@ export default function SchedulingPage() {
       if (store.schedulingWeekData.auditCounts) {
         setAuditCounts(store.schedulingWeekData.auditCounts);
       }
+      if (store.schedulingWeekData.everydayRecords) {
+        setEverydayRecords(store.schedulingWeekData.everydayRecords);
+      }
       setLoadingData(false);
 
       // Still run background sync
@@ -1835,7 +1838,7 @@ export default function SchedulingPage() {
                                           </TooltipContent>
                                         </Tooltip>
                                       </td>
-                                      <td className="px-2 sm:px-3 py-1.5 hidden md:table-cell max-w-[150px] lg:max-w-[220px] xl:max-w-[300px] 2xl:max-w-[400px]">
+                                      <td className="px-2 sm:px-3 py-1.5 hidden md:table-cell max-w-[100px] lg:max-w-[150px] xl:max-w-[220px] 2xl:max-w-[300px]">
                                         <EditableNote
                                           value={notes}
                                           employeeId={emp.employee?._id}

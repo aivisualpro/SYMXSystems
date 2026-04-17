@@ -151,7 +151,9 @@ const data = {
       name: "Everyday",
       url: "/everyday",
       icon: IconCalendarEvent,
-      subModules: []
+      subModules: [
+        { name: "Load Out", url: "/everyday/load-out" }
+      ]
     },
     {
       name: "HR",
