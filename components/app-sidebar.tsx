@@ -90,11 +90,6 @@ const data = {
       url: "/admin/settings",
       icon: IconSettings,
     },
-    {
-      title: "Search",
-      url: "#",
-      icon: IconSearch,
-    },
   ],
   // Hardcoded fallback — used only when the API hasn't responded yet
   admin: [
@@ -197,26 +192,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [isAdmin, setIsAdmin] = React.useState(false);
   const [loadingPermissions, setLoadingPermissions] = React.useState(true);
   const [dynamicModules, setDynamicModules] = React.useState<any[] | null>(null);
-  const [isSearchOpen, setIsSearchOpen] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState("");
   const router = useRouter();
-
-  const handleSearchClick = (e?: React.MouseEvent) => {
-    e?.preventDefault();
-    setIsSearchOpen(true);
-  };
-
-  // Keyboard shortcut for search
-  React.useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setIsSearchOpen((open) => !open);
-      }
-    };
-    document.addEventListener("keydown", down);
-    return () => document.removeEventListener("keydown", down);
-  }, []);
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -306,76 +282,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       return true;
     });
 
-    // Then, filter by search query (including sub-modules)
-    if (!searchQuery) return permFiltered;
-
-    const lowerQuery = searchQuery.toLowerCase();
-
-    // For search results, we might want to return a slightly different structure or just the parents
-    return permFiltered.reduce((acc: any[], item) => {
-      const name = (item.name || item.title || "").toLowerCase();
-      const subModules = (item.subModules || []) as any[];
-      const matchingSubs = subModules.filter((sm: any) =>
-        (typeof sm === 'string' ? sm : sm.name).toLowerCase().includes(lowerQuery)
-      );
-
-      if (name.includes(lowerQuery) || matchingSubs.length > 0) {
-        const bestMatch = matchingSubs.length > 0 ? matchingSubs[0] : null;
-        const subName = bestMatch ? (typeof bestMatch === 'string' ? bestMatch : bestMatch.name) : null;
-        const subUrl = bestMatch && typeof bestMatch === 'object' && bestMatch.url !== "#" ? bestMatch.url : null;
-
-        acc.push({
-          ...item,
-          url: subUrl || item.url, // Override with sub-module URL if it's a valid route
-          displayName: subName && !name.includes(lowerQuery)
-            ? `${item.name} (${subName})`
-            : item.name || item.title
-        });
-      }
-      return acc;
-    }, []);
+    return permFiltered;
   };
 
   const filteredAdmin = filterItems(adminItems, 'admin');
-  // Secondary nav: filter by permissions too, but Search always stays visible
   const filteredSecondary = data.navSecondary.filter(item => {
-    if (item.title === "Search") return true;
     if (isAdmin) return true;
     const perm = permissions.find((p: any) => p.module === item.title);
     if (perm) return perm.actions?.view !== false;
     return true; // not in permissions → allowed
-  }).map(item =>
-    item.title === "Search" ? { ...item, onClick: handleSearchClick } : item
-  );
-
-  // Flattened list for the search dialog
-  const allSearchableItems = React.useMemo(() => {
-    const items: any[] = [];
-    adminItems.forEach(item => {
-      // Add parent
-      items.push({ name: item.name, url: item.url, icon: item.icon, type: 'Module' });
-      // Add sub-modules
-      if (item.subModules) {
-        item.subModules.forEach((sm: any) => {
-          items.push({
-            name: typeof sm === 'string' ? sm : sm.name,
-            url: (typeof sm === 'string' ? "#" : sm.url) || "#",
-            icon: item.icon,
-            parentName: item.name,
-            type: 'Feature'
-          });
-        });
-      }
-    });
-    return items;
-  }, [adminItems]);
-
-  const searchResults = allSearchableItems.filter(item => {
-    if (!searchQuery) return false;
-    const lowerQuery = searchQuery.toLowerCase();
-    return item.name.toLowerCase().includes(lowerQuery) ||
-      (item.parentName && item.parentName.toLowerCase().includes(lowerQuery));
   });
+
+
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -418,88 +336,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         {filteredSecondary.length > 0 && <NavSecondary items={filteredSecondary as any} className="mt-auto" />}
       </SidebarContent>
       <SidebarFooter>
+        <div className="flex items-center gap-1.5 px-3 py-1 group-data-[collapsible=icon]:hidden">
+          <IconDashboard className="h-4 w-4 text-muted-foreground/60" />
+          <span className="text-xs font-semibold text-muted-foreground">Version: 1.23</span>
+        </div>
         <NavUser user={data.user} />
       </SidebarFooter>
-
-      {/* Premium Search Dialog */}
-      <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-        <DialogContent className="sm:max-w-[550px] p-0 gap-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Search Modules</DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center px-4 pr-12 py-3 border-b bg-muted/30">
-            <IconSearch className="h-5 w-5 text-muted-foreground mr-3" />
-            <input
-              autoFocus
-              placeholder="Search modules and features..."
-              className="flex-1 bg-transparent border-none outline-none text-sm h-10 placeholder:text-muted-foreground/60"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <div className="flex items-center gap-1.5 ml-2">
-              <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
-                <span className="text-xs">⌘</span>K
-              </kbd>
-            </div>
-          </div>
-
-          <ScrollArea className="max-h-[400px]">
-            <div className="p-2">
-              {searchQuery === "" ? (
-                <div className="px-4 py-8 text-center text-muted-foreground/50">
-                  <IconSearch className="h-10 w-10 mx-auto mb-2 opacity-10" />
-                  <p className="text-xs">Start searching for modules, settings, or dashboard cards...</p>
-                </div>
-              ) : searchResults.length === 0 ? (
-                <div className="px-4 py-8 text-center text-muted-foreground/50">
-                  <p className="text-xs">No results found for "{searchQuery}"</p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {searchResults.map((item: any, idx: number) => (
-                    <button
-                      key={`${item.name}-${idx}`}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-primary/10 group transition-colors text-left"
-                      onClick={() => {
-                        if (item.url !== "#") {
-                          router.push(item.url);
-                          setIsSearchOpen(false);
-                          setSearchQuery("");
-                        }
-                      }}
-                    >
-                      <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center group-hover:bg-primary/20 group-hover:text-primary transition-colors">
-                        <item.icon size={18} />
-                      </div>
-                      <div className="flex-1 flex flex-col min-w-0">
-                        <span className="text-sm font-medium leading-none">
-                          {item.name}
-                        </span>
-                        {item.parentName && (
-                          <span className="text-[10px] text-muted-foreground mt-1 truncate">
-                            in {item.parentName}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[10px] font-medium bg-muted px-2 py-0.5 rounded uppercase tracking-wider text-muted-foreground opacity-50">
-                        {item.type}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-
-          <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-t text-[10px] text-muted-foreground">
-            <div className="flex gap-3">
-              <span className="flex items-center gap-1"><kbd className="bg-background border rounded px-1 group-hover:bg-muted">↑↓</kbd> to navigate</span>
-              <span className="flex items-center gap-1"><kbd className="bg-background border rounded px-1 group-hover:bg-muted">↵</kbd> to select</span>
-            </div>
-            <span>SYMX Search</span>
-          </div>
-        </DialogContent>
-      </Dialog>
     </Sidebar>
   );
 }
