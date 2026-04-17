@@ -375,7 +375,14 @@ function RepairsTab({ repairs }: { repairs: any[] }) {
                                 <td className="px-3 py-2.5 text-xs text-muted-foreground">{r.unitNumber || "—"}</td>
                                 <td className="px-3 py-2.5 text-xs text-muted-foreground font-mono">{r.vin || "—"}</td>
                                 <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.estimatedDate)}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground">{r.repairDuration ? `${r.repairDuration}d` : "—"}</td>
+                                <td className="px-3 py-2.5 text-xs text-muted-foreground">{(() => {
+                                    const start = r.creationDate ? new Date(r.creationDate).getTime() : Date.now();
+                                    const end = (r.currentStatus === "Completed" && r.completionDate)
+                                      ? new Date(r.completionDate).getTime()
+                                      : Date.now();
+                                    const diffDays = Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
+                                    return diffDays > 0 ? `${diffDays}d` : <span className="text-[10px] uppercase font-semibold text-muted-foreground/60">Today</span>;
+                                })()}</td>
                                 <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.creationDate)}</td>
                                 <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.lastEditOn)}</td>
                             </tr>

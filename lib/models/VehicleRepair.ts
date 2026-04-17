@@ -11,6 +11,7 @@ export interface IVehicleRepair extends Document {
   images: string[];
   completedImages: string[];
   creationDate: Date;
+  completionDate: Date;
   lastEditOn: Date;
   repairDuration: number; // in days
   createdAt: Date;
@@ -32,6 +33,7 @@ const VehicleRepairSchema: Schema = new Schema({
   images: { type: [String], default: [] },
   completedImages: { type: [String], default: [] },
   creationDate: { type: Date, default: Date.now },
+  completionDate: { type: Date },
   lastEditOn: { type: Date, default: Date.now },
   repairDuration: { type: Number, default: 0 },
 }, {

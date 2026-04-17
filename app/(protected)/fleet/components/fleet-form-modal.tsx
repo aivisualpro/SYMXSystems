@@ -518,6 +518,13 @@ export default function FleetFormModal() {
     formData.currentStatus === "Completed" && 
     (!formData.completedImages || formData.completedImages.length === 0);
 
+  const selectedVehicleImage = useMemo(() => {
+    if (modalType !== "repair") return null;
+    if (!formData.vin && !formData.vehicleName) return null;
+    const v = vehicles.find(v => (formData.vin && v.vin === formData.vin) || (formData.vehicleName && v.vehicleName === formData.vehicleName));
+    return v?.image || null;
+  }, [modalType, vehicles, formData.vin, formData.vehicleName]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/60 backdrop-blur-sm" onClick={() => setModalOpen(false)}>
       <div className="w-full max-w-lg mx-4 rounded-2xl border border-border bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -592,6 +599,14 @@ export default function FleetFormModal() {
 
 
             {modalType === "repair" && (<>
+              {selectedVehicleImage && (
+                <div className="w-full h-32 rounded-xl overflow-hidden border border-border/50 relative mb-2 shadow-sm">
+                  <img src={selectedVehicleImage} alt="Vehicle Thumbnail" className="w-full h-full object-cover" />
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2">
+                    <span className="text-[10px] font-semibold text-white uppercase tracking-wider backdrop-blur-sm bg-black/20 px-1.5 py-0.5 rounded">Selected Vehicle</span>
+                  </div>
+                </div>
+              )}
               <FormField label="Vehicle Name">
                 <SearchableSelect
                   value={formData.vehicleName || ""}
@@ -609,7 +624,7 @@ export default function FleetFormModal() {
                 />
               </FormField>
               <FormField label="Description"><textarea className={inputClass} rows={3} value={formData.description || ""} onChange={e => updateForm("description", e.target.value)} required /></FormField>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <FormField label="Status">
                   <select className={inputClass} value={formData.currentStatus || ""} onChange={e => updateForm("currentStatus", e.target.value)}
                     style={repairStatuses.find(s => s.description === formData.currentStatus)?.color ? { borderLeftWidth: '3px', borderLeftColor: repairStatuses.find(s => s.description === formData.currentStatus)!.color } : {}}>
@@ -621,7 +636,6 @@ export default function FleetFormModal() {
                   </select>
                 </FormField>
                 <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.estimatedDate ? formData.estimatedDate.split("T")[0] : ""} onChange={e => updateForm("estimatedDate", e.target.value)} /></FormField>
-                <FormField label="Duration (days)"><input type="number" className={inputClass} value={formData.repairDuration || ""} onChange={e => updateForm("repairDuration", parseInt(e.target.value) || 0)} /></FormField>
               </div>
               <div className="pt-2 space-y-4">
                 <MultiPhotoUploadField 

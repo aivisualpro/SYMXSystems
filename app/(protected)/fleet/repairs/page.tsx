@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   IconEdit, IconTrash, IconArrowUp, IconArrowDown, IconArrowsSort,
-  IconPhoto, IconTool, IconLoader2,
+  IconPhoto, IconTool, IconLoader2, IconDownload, IconCheck, IconX
 } from "@tabler/icons-react";
 import * as LucideIcons from "lucide-react";
 import { useFleet } from "../layout";
@@ -46,16 +46,27 @@ interface Column {
 const columns: Column[] = [
   {
     key: "images", label: "Photo", sortable: false,
-    accessor: (r) => (r.images && r.images.length > 0) ? r.images[0] : "",
-    render: (r) => (r.images && r.images.length > 0) ? (
-      <a href={r.images[0]} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="block">
-        <img src={r.images[0]} alt="repair" className="w-10 h-7 object-cover rounded-md border border-border/50 hover:scale-110 transition-transform shadow-sm" />
-      </a>
-    ) : (
-      <div className="w-10 h-7 rounded-md bg-muted/60 border border-border/30 flex items-center justify-center">
-        <IconPhoto size={12} className="text-muted-foreground/40" />
-      </div>
-    ),
+    accessor: (r) => {
+      const images = Array.isArray(r.images) ? r.images : [];
+      const completedImages = Array.isArray(r.completedImages) ? r.completedImages : [];
+      return images.length > 0 ? images[0] : (completedImages.length > 0 ? completedImages[0] : "");
+    },
+    render: (r) => {
+      const images = Array.isArray(r.images) ? r.images : [];
+      const completedImages = Array.isArray(r.completedImages) ? r.completedImages : [];
+      const hasThumb = images.length > 0 || completedImages.length > 0;
+      const firstImage = images.length > 0 ? images[0] : (completedImages.length > 0 ? completedImages[0] : "");
+      
+      return hasThumb ? (
+        <button type="button" onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("open-repair-gallery", { detail: r })); }} className="block cursor-pointer">
+          <img src={firstImage} alt="repair" className="w-10 h-7 object-cover rounded-md border border-border/50 hover:scale-110 transition-transform shadow-sm" />
+        </button>
+      ) : (
+        <div className="w-10 h-7 rounded-md bg-muted/60 border border-border/30 flex items-center justify-center">
+          <IconPhoto size={12} className="text-muted-foreground/40" />
+        </div>
+      );
+    },
   },
   { key: "vehicleName", label: "Vehicle", accessor: (r) => r.vehicleName || "", className: "font-semibold text-foreground" },
   { key: "vin", label: "VIN", accessor: (r) => r.vin || "", className: "font-mono text-[11px]" },
@@ -77,13 +88,28 @@ const columns: Column[] = [
     render: (r) => <>{fmtDate(r.lastEditOn)}</>,
   },
   {
-    key: "repairDuration", label: "Repair Duration", accessor: (r) => r.repairDuration ?? 0,
-    render: (r) => r.repairDuration ? (
-      <span className="inline-flex items-center gap-1">
-        {r.repairDuration}
-        <span className="text-muted-foreground/50 text-[10px]">days</span>
-      </span>
-    ) : <span className="text-muted-foreground/30">—</span>,
+    key: "repairDuration", label: "Repair Duration", sortable: false,
+    accessor: (r) => {
+      const start = r.creationDate ? new Date(r.creationDate).getTime() : Date.now();
+      const end = (r.currentStatus === "Completed" && r.completionDate) 
+        ? new Date(r.completionDate).getTime() 
+        : Date.now();
+      return Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
+    },
+    render: (r) => {
+      const start = r.creationDate ? new Date(r.creationDate).getTime() : Date.now();
+      const end = (r.currentStatus === "Completed" && r.completionDate) 
+        ? new Date(r.completionDate).getTime() 
+        : Date.now();
+      const diffDays = Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
+      
+      return diffDays > 0 ? (
+        <span className="inline-flex items-center gap-1">
+          {diffDays}
+          <span className="text-muted-foreground/50 text-[10px]">days</span>
+        </span>
+      ) : <span className="text-muted-foreground/30 text-[10px] uppercase font-semibold">Today</span>;
+    },
   },
 ];
 
@@ -126,6 +152,107 @@ function SkeletonRows({ count = 15 }: { count?: number }) {
 }
 
 const PAGE_SIZE = 50;
+
+/* ── Gallery Modal ────────────────────────────────────────────────── */
+function PhotoGalleryModal() {
+  const [record, setRecord] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => setRecord(e.detail);
+    window.addEventListener("open-repair-gallery", handler);
+    return () => window.removeEventListener("open-repair-gallery", handler);
+  }, []);
+
+  if (!record) return null;
+
+  const handleDownload = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `repair_image_${Math.floor(Date.now() / 1000)}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error("Download failed", error);
+      window.open(url, "_blank");
+    }
+  };
+
+  const images = Array.isArray(record.images) ? record.images : [];
+  const completedImages = Array.isArray(record.completedImages) ? record.completedImages : [];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md transition-all duration-300" onClick={() => setRecord(null)}>
+      <div className="w-full max-w-4xl mx-4 bg-card rounded-2xl border border-border shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-10 zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/30">
+          <div>
+            <h3 className="text-lg font-bold text-foreground tracking-tight">Photo Gallery</h3>
+            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mt-0.5">{record.vehicleName} • {record.vin}</p>
+          </div>
+          <button onClick={() => setRecord(null)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"><IconX size={20} /></button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-6 space-y-10">
+          {images.length > 0 && (
+            <div className="space-y-4">
+              <h4 className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-2">
+                <IconTool size={14} className="opacity-70" /> Repair Images
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {images.map((url: string, i: number) => (
+                  <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-border/50 group bg-muted/20">
+                    <img src={url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={`Repair ${i}`} />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center gap-3 backdrop-blur-[2px]">
+                      <button type="button" onClick={() => handleDownload(url)} className="p-2.5 rounded-full bg-white/20 text-white hover:bg-white/40 transition-colors shadow-xl transform translate-y-2 group-hover:translate-y-0" title="Download">
+                        <IconDownload size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {completedImages.length > 0 ? (
+            <div className="space-y-4">
+              <h4 className="text-[11px] font-bold uppercase tracking-[0.15em] text-green-500/80 flex items-center gap-2">
+                <IconCheck size={14} /> Completion Images
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {completedImages.map((url: string, i: number) => (
+                  <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-green-500/20 group bg-muted/20">
+                    <img src={url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={`Completed ${i}`} />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center gap-3 backdrop-blur-[2px]">
+                      <button type="button" onClick={() => handleDownload(url)} className="p-2.5 rounded-full bg-white/20 text-white hover:bg-green-500/80 transition-colors shadow-xl transform translate-y-2 group-hover:translate-y-0" title="Download">
+                        <IconDownload size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+             <div className="rounded-xl border border-dashed border-border/60 bg-muted/10 p-8 flex items-center justify-center">
+               <p className="text-xs text-muted-foreground/50 font-medium">No completion images available</p>
+             </div>
+          )}
+          
+          {(images.length === 0 && completedImages.length === 0) && (
+            <div className="rounded-xl border border-dashed border-border/60 bg-muted/10 p-12 flex flex-col items-center justify-center gap-2">
+               <IconPhoto size={32} className="text-muted-foreground/30" />
+               <p className="text-sm text-muted-foreground/50 font-medium">No images uploaded for this repair</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function FleetRepairsPage() {
@@ -315,6 +442,7 @@ export default function FleetRepairsPage() {
   /* ── Render ──────────────────────────────────────────────────── */
   return (
     <>
+      <PhotoGalleryModal />
       <div className="h-full overflow-auto rounded-xl border border-border/60 shadow-sm bg-card" id="repairs-scroll-container">
         <table className="w-full border-collapse">
 

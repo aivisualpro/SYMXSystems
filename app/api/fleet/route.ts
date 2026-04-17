@@ -374,7 +374,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Select only fields needed for the list view
-      const listFields = "vin unitNumber vehicleName description currentStatus estimatedDate creationDate lastEditOn repairDuration images completedImages";
+      const listFields = "vin unitNumber vehicleName description currentStatus estimatedDate creationDate lastEditOn repairDuration images completedImages completionDate";
 
       const [repairs, total] = await Promise.all([
         VehicleRepair.find(filter).select(listFields).sort({ creationDate: -1 }).skip(skip).limit(limit).lean(),
@@ -684,6 +684,13 @@ export async function POST(req: NextRequest) {
 
 
       case "repair": {
+        data.createdBy = session.id;
+        
+        // Auto-set completionDate if it's immediately marked as Completed
+        if (data.currentStatus === "Completed" && !data.completionDate) {
+          data.completionDate = new Date();
+        }
+
         const repair = await VehicleRepair.create(data);
         return NextResponse.json({ repair, message: "Repair record created successfully" });
       }
@@ -744,7 +751,27 @@ export async function PUT(req: NextRequest) {
 
       case "repair": {
         data.lastEditOn = new Date();
-        const repair = await VehicleRepair.findByIdAndUpdate(id, { $set: data }, { new: true });
+        
+        // Find existing repair if we are potentially updating status
+        if (data.currentStatus !== undefined) {
+           if (data.currentStatus === "Completed") {
+              const existing = await VehicleRepair.findById(id).select("completionDate");
+              if (!existing?.completionDate && !data.completionDate) {
+                 data.completionDate = new Date();
+              }
+           } else {
+              // If status changes to anything non-Completed, unset completionDate
+              data.$unset = { completionDate: 1 };
+           }
+        }
+        
+        const updatePayload: Record<string, any> = { $set: data };
+        if (data.$unset) {
+           updatePayload.$unset = data.$unset;
+           delete data.$unset;
+        }
+        
+        const repair = await VehicleRepair.findByIdAndUpdate(id, updatePayload, { new: true });
         return NextResponse.json({ repair, message: "Repair updated successfully" });
       }
       case "activity": {
