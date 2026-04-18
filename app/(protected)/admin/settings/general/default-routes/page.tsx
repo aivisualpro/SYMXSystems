@@ -18,6 +18,8 @@ interface RouteTypeRow {
     color: string;
     icon: string;
     startTime: string;
+    theoryHrs: number;
+    group: string;
     routeStatus: string;
     sortOrder: number;
     isActive: boolean;
@@ -85,6 +87,8 @@ export default function DefaultRoutesPage() {
             color: "#6B7280",
             icon: "",
             startTime: "",
+            theoryHrs: 0,
+            group: "None",
             routeStatus: "Scheduled",
             sortOrder: prev.length,
             isActive: true,
@@ -108,7 +112,7 @@ export default function DefaultRoutesPage() {
             const res = await fetch("/api/admin/settings/route-types", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ _id: row._id, name: row.name, color: row.color, icon: row.icon, startTime: row.startTime, routeStatus: row.routeStatus, sortOrder: row.sortOrder, isActive: row.isActive }),
+                body: JSON.stringify({ _id: row._id, name: row.name, color: row.color, icon: row.icon, startTime: row.startTime, theoryHrs: row.theoryHrs, group: row.group, routeStatus: row.routeStatus, sortOrder: row.sortOrder, isActive: row.isActive }),
             });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
             const saved = await res.json();
@@ -178,6 +182,8 @@ export default function DefaultRoutesPage() {
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">Route Type</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Route Status</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Start Time</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Theory Hrs</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Group</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Color</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Icon</th>
                                 <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Actions</th>
@@ -216,6 +222,8 @@ export default function DefaultRoutesPage() {
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">Route Type</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Route Status</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Start Time</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Theory Hrs</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[160px]">Group</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Color</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Icon</th>
                                 <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Actions</th>
@@ -272,6 +280,19 @@ function SortableRouteRow({ route, idx, totalCount, saving, updateField, saveRow
             <td className="px-4 py-2"><Input value={route.name || ""} onChange={(e) => updateField(idx, "name", e.target.value)} placeholder="e.g. Route, Open, Close..." className="h-8 text-sm" disabled={!route.isEditing && !route.isNew} /></td>
             <td className="px-4 py-2"><Input value={route.routeStatus || ""} onChange={(e) => updateField(idx, "routeStatus", e.target.value)} placeholder="e.g. Scheduled, Off..." className="h-8 text-sm" disabled={!route.isEditing && !route.isNew} /></td>
             <td className="px-4 py-2"><Input value={route.startTime || ""} onChange={(e) => updateField(idx, "startTime", e.target.value)} placeholder="e.g. 06:00 AM" className="h-8 text-sm" disabled={!route.isEditing && !route.isNew} /></td>
+            <td className="px-4 py-2"><Input type="number" min="0" step="0.1" value={route.theoryHrs ?? ""} onChange={(e) => updateField(idx, "theoryHrs", parseFloat(e.target.value) || 0)} className="h-8 text-sm" disabled={!route.isEditing && !route.isNew} /></td>
+            <td className="px-4 py-2">
+                <select 
+                    value={route.group || "None"} 
+                    onChange={(e) => updateField(idx, "group", e.target.value)}
+                    disabled={!route.isEditing && !route.isNew}
+                    className="flex h-8 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    <option value="None">None</option>
+                    <option value="Driver">Driver</option>
+                    <option value="Operations">Operations</option>
+                </select>
+            </td>
             <td className="px-4 py-2">
                 <div className="flex items-center gap-2">
                     <input type="color" value={route.color || "#6B7280"} onChange={(e) => updateField(idx, "color", e.target.value)} className="h-8 w-8 rounded cursor-pointer border border-border bg-transparent" disabled={!route.isEditing && !route.isNew} />

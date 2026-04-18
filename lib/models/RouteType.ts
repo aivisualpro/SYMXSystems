@@ -4,6 +4,8 @@ export interface IRouteType extends Document {
     name: string;        // e.g. "Route", "Open", "Close"
     color: string;       // hex color e.g. "#10B981"
     startTime: string;   // default start time e.g. "06:00 AM"
+    theoryHrs: number;   // default theory hours
+    group: string;       // "Operations" or "Driver"
     routeStatus: string; // default status e.g. "Scheduled", "Off", "Double Route"
     icon: string;
     sortOrder: number;   // for display ordering
@@ -16,6 +18,8 @@ const RouteTypeSchema: Schema = new Schema({
     name: { type: String, required: true, unique: true },
     color: { type: String, default: '#6B7280' },
     startTime: { type: String, default: '' },
+    theoryHrs: { type: Number, default: 0 },
+    group: { type: String, enum: ['Operations', 'Driver', 'None'], default: 'None' },
     routeStatus: { type: String, default: 'Scheduled' },
     icon: { type: String, default: '' },
     sortOrder: { type: Number, default: 0 },
