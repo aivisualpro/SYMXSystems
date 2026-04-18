@@ -508,6 +508,12 @@ export default function FleetFormModal() {
       })
       .catch(() => { });
   }, [modalOpen, modalType]);
+  const selectedVehicleImage = useMemo(() => {
+    if (modalType !== "repair") return null;
+    if (!formData.vin && !formData.vehicleName) return null;
+    const v = vehicles.find(v => (formData.vin && v.vin === formData.vin) || (formData.vehicleName && v.vehicleName === formData.vehicleName));
+    return v?.image || null;
+  }, [modalType, vehicles, formData.vin, formData.vehicleName]);
 
   if (!modalOpen) return null;
 
@@ -517,13 +523,6 @@ export default function FleetFormModal() {
     modalType === "repair" && 
     formData.currentStatus === "Completed" && 
     (!formData.completedImages || formData.completedImages.length === 0);
-
-  const selectedVehicleImage = useMemo(() => {
-    if (modalType !== "repair") return null;
-    if (!formData.vin && !formData.vehicleName) return null;
-    const v = vehicles.find(v => (formData.vin && v.vin === formData.vin) || (formData.vehicleName && v.vehicleName === formData.vehicleName));
-    return v?.image || null;
-  }, [modalType, vehicles, formData.vin, formData.vehicleName]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/60 backdrop-blur-sm" onClick={() => setModalOpen(false)}>
