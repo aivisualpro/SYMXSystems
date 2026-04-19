@@ -70,50 +70,72 @@ const columns: Column[] = [
   },
   { key: "vehicleName", label: "Vehicle", accessor: (r) => r.vehicleName || "", className: "font-semibold text-foreground" },
   { key: "vin", label: "VIN", accessor: (r) => r.vin || "", className: "font-mono text-[11px]" },
-  { key: "description", label: "Description", accessor: (r) => r.description || "", className: "max-w-[220px] truncate" },
+  { key: "description", label: "Description", accessor: (r) => r.description || "", className: "max-w-[220px] truncate", render: (r) => <span className="block truncate max-w-[220px]" title={r.description}>{r.description || "—"}</span> },
   {
     key: "currentStatus", label: "Current Status", accessor: (r) => r.currentStatus || "",
     // render handled inline in the table body for dynamic dropdown
-  },
-  {
-    key: "estimatedDate", label: "Estimated Date", accessor: (r) => r.estimatedDate || "",
-    render: (r) => <>{fmtDate(r.estimatedDate)}</>,
   },
   {
     key: "creationDate", label: "Creation Date", accessor: (r) => r.creationDate || "",
     render: (r) => <>{fmtDate(r.creationDate)}</>,
   },
   {
-    key: "lastEditOn", label: "Last Edit On", accessor: (r) => r.lastEditOn || "",
-    render: (r) => <>{fmtDate(r.lastEditOn)}</>,
+    key: "estimatedDate", label: "Estimate Date", accessor: (r) => r.estimatedDate || "",
+    render: (r) => <>{fmtDate(r.estimatedDate)}</>,
+  },
+  {
+    key: "completionDate", label: "Completion Date", accessor: (r) => r.completionDate || "",
+    render: (r) => <>{fmtDate(r.completionDate)}</>,
   },
   {
     key: "repairDuration", label: "Repair Duration", sortable: false,
     accessor: (r) => {
-      const start = r.creationDate ? new Date(r.creationDate).getTime() : Date.now();
-      const end = (r.currentStatus === "Completed" && r.completionDate) 
-        ? new Date(r.completionDate).getTime() 
-        : Date.now();
-      return Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
+      const isCompleted = r.currentStatus === "Completed";
+      if (isCompleted) {
+        const start = r.creationDate ? new Date(r.creationDate).getTime() : Date.now();
+        const end = r.completionDate ? new Date(r.completionDate).getTime() : Date.now();
+        return Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
+      } else {
+        if (!r.estimatedDate) return 0;
+        const est = new Date(r.estimatedDate).getTime();
+        const now = Date.now();
+        return now > est ? Math.max(0, Math.floor((now - est) / (1000 * 60 * 60 * 24))) : 0;
+      }
     },
     render: (r) => {
-      const start = r.creationDate ? new Date(r.creationDate).getTime() : Date.now();
-      const end = (r.currentStatus === "Completed" && r.completionDate) 
-        ? new Date(r.completionDate).getTime() 
-        : Date.now();
-      const diffDays = Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
-      
-      return diffDays > 0 ? (
-        <span className="inline-flex items-center gap-1">
-          {diffDays}
-          <span className="text-muted-foreground/50 text-[10px]">days</span>
-        </span>
-      ) : <span className="text-muted-foreground/30 text-[10px] uppercase font-semibold">Today</span>;
+      const isCompleted = r.currentStatus === "Completed";
+      if (isCompleted) {
+        const start = r.creationDate ? new Date(r.creationDate).getTime() : Date.now();
+        const end = r.completionDate ? new Date(r.completionDate).getTime() : Date.now();
+        const diffDays = Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
+        
+        return diffDays > 0 ? (
+          <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+            {diffDays}
+            <span className="text-emerald-600/60 dark:text-emerald-400/60 text-[10px]">days</span>
+          </span>
+        ) : <span className="text-muted-foreground/30 text-[10px] uppercase font-semibold">Same Day</span>;
+      } else {
+        if (!r.estimatedDate) return <span className="text-muted-foreground/30">—</span>;
+        const est = new Date(r.estimatedDate).getTime();
+        const now = Date.now();
+        if (now > est) {
+          const diffDays = Math.max(0, Math.floor((now - est) / (1000 * 60 * 60 * 24)));
+          return diffDays > 0 ? (
+            <span className="inline-flex items-center gap-1.5 font-medium text-red-500">
+              {diffDays}
+              <span className="text-red-500/60 text-[10px]">days overdue</span>
+            </span>
+          ) : <span className="text-amber-500/80 text-[10px] uppercase font-bold tracking-wide">Due Today</span>;
+        } else {
+          return <span className="text-emerald-500/80 text-[10px] uppercase font-bold tracking-wide">On Track</span>;
+        }
+      }
     },
   },
 ];
 
-const DATE_KEYS = new Set(["estimatedDate", "creationDate", "lastEditOn"]);
+const DATE_KEYS = new Set(["estimatedDate", "creationDate", "completionDate"]);
 
 /* ── Skeleton row ────────────────────────────────────────────────── */
 // Fixed widths per column so they don't change on re-render
@@ -528,12 +550,11 @@ export function FleetRepairsTable({ vin, isTab }: { vin?: string; isTab?: boolea
                               const newStatus = e.target.value;
                               
                               // Check validation for completed status directly from the table UI
-                              if (newStatus === "Completed" && (!r.completedImages || r.completedImages.length === 0)) {
+                              if (newStatus === "Completed" && (!r.completedImages || r.completedImages.length === 0) && !r.imagesNotAvailable) {
                                 toast.error("Completion images required", { 
-                                  description: "Please upload completion images to close this repair." 
+                                  description: "Please upload completion images or check 'Pictures not available' to close this repair." 
                                 });
-                                // Force the record edit form open, defaulting to Completed status (unsaved) manually here?
-                                // r is readonly, but we can pass it as-is, the user can change status inside the form.
+                                // Force the record edit form open, defaulting to Completed status
                                 openEditModal("repair", { ...r, currentStatus: "Completed" });
                                 return;
                               }

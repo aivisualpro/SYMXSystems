@@ -10,6 +10,8 @@ export interface IVehicleRepair extends Document {
   estimatedDate: Date;
   images: string[];
   completedImages: string[];
+  imagesNotAvailable?: boolean;
+  completionNotes?: string;
   creationDate: Date;
   completionDate: Date;
   lastEditOn: Date;
@@ -32,6 +34,8 @@ const VehicleRepairSchema: Schema = new Schema({
   estimatedDate: { type: Date },
   images: { type: [String], default: [] },
   completedImages: { type: [String], default: [] },
+  imagesNotAvailable: { type: Boolean, default: false },
+  completionNotes: { type: String, default: '' },
   creationDate: { type: Date, default: Date.now },
   completionDate: { type: Date },
   lastEditOn: { type: Date, default: Date.now },

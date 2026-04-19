@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       filter = { ...filter, currentStatus: { $ne: "Completed" } };
     }
 
-    const listFields = "vin unitNumber vehicleName description currentStatus estimatedDate creationDate lastEditOn repairDuration images completedImages completionDate";
+    const listFields = "vin unitNumber vehicleName description currentStatus estimatedDate creationDate lastEditOn repairDuration images completedImages completionDate imagesNotAvailable completionNotes";
 
     const [repairs, total] = await Promise.all([
       VehicleRepair.find(filter).select(listFields).sort({ creationDate: -1 }).skip(skip).limit(limit).lean(),

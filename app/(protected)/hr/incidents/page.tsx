@@ -177,13 +177,13 @@ export default function IncidentsPage() {
 
   // ── Seed from TanStack Query cache for instant load ──
   useEffect(() => {
-    if (!debouncedSearch && queryClaims?.records?.length > 0 && data.length === 0) {
+    if (!debouncedSearch && queryClaims && queryClaims.records && queryClaims.records.length > 0 && data.length === 0) {
       setData(queryClaims.records);
       setTotalCount(queryClaims.totalCount || queryClaims.records.length);
       setHasMore(queryClaims.hasMore || false);
       if (queryClaims.kpi) setKpis(queryClaims.kpi);
     }
-  }, [queryClaims]);
+  }, [queryClaims, debouncedSearch, data.length]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;

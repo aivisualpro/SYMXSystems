@@ -522,7 +522,8 @@ export default function FleetFormModal() {
   const isRepairCompletedButNoImages = 
     modalType === "repair" && 
     formData.currentStatus === "Completed" && 
-    (!formData.completedImages || formData.completedImages.length === 0);
+    (!formData.completedImages || formData.completedImages.length === 0) &&
+    !formData.imagesNotAvailable;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/60 backdrop-blur-sm" onClick={() => setModalOpen(false)}>
@@ -644,12 +645,33 @@ export default function FleetFormModal() {
                 />
                 
                 {formData.currentStatus === "Completed" && (
-                  <div className="pt-2 border-t border-border/50">
+                  <div className="pt-3 border-t border-border/50 space-y-4">
                     <MultiPhotoUploadField 
                       label="Completion Images" 
                       values={formData.completedImages || []} 
                       onChange={urls => updateForm("completedImages", urls)} 
                     />
+                    <div className="flex items-center gap-2 px-1">
+                      <input
+                        type="checkbox"
+                        id="imagesNotAvailable"
+                        checked={!!formData.imagesNotAvailable}
+                        onChange={e => updateForm("imagesNotAvailable", e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-primary/20"
+                      />
+                      <label htmlFor="imagesNotAvailable" className="text-[11px] font-medium text-muted-foreground cursor-pointer select-none">
+                        Pictures not available (bypass requirement)
+                      </label>
+                    </div>
+                    <FormField label="Completion Notes (Optional)">
+                      <textarea 
+                        className={inputClass} 
+                        rows={2} 
+                        value={formData.completionNotes || ""} 
+                        onChange={e => updateForm("completionNotes", e.target.value)} 
+                        placeholder="Add any notes regarding the completion..."
+                      />
+                    </FormField>
                   </div>
                 )}
               </div>
