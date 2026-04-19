@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useSchedulingWeeks } from "@/lib/query/hooks/useSchedules";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, Edit2, Phone, Timer, Package, Hash, ThumbsUp, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -341,6 +342,59 @@ export default function EverydayAfterDispatchingPage() {
         return () => setLeftContent(null);
     }, [setLeftContent]);
 
+    // Right header content: Week Selector
+    useEffect(() => {
+        const idx = weeks.indexOf(selectedWeek);
+
+        setRightContent(
+            <div className="flex items-center gap-1.5 sm:gap-2">
+                {weeks.length > 0 && (
+                    <>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                                if (idx < weeks.length - 1) {
+                                    setSelectedWeek(weeks[idx + 1]);
+                                }
+                            }}
+                            disabled={idx >= weeks.length - 1 || idx === -1}
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+                            <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm" suppressHydrationWarning>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {weeks.map((week) => (
+                                    <SelectItem key={week} value={week}>
+                                        {formatWeekLabel(week)}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                                if (idx > 0) {
+                                    setSelectedWeek(weeks[idx - 1]);
+                                }
+                            }}
+                            disabled={idx <= 0}
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                    </>
+                )}
+            </div>
+        );
+        return () => setRightContent(null);
+    }, [setRightContent, weeks, selectedWeek]);
+
     // Sync local notes state to debounce timer
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -349,14 +403,31 @@ export default function EverydayAfterDispatchingPage() {
         return () => clearTimeout(timer);
     }, [notes]);
 
-    // Fetch available weeks on mount
+    // Hydrate weeks from useSchedulingWeeks (same data source as dispatching)
+    const { data: storeWeeksData } = useSchedulingWeeks();
+
     useEffect(() => {
         const today = getTodayPacific();
-        setDate(today);
         const currentWeek = getCurrentYearWeek(today);
+        setDate(today);
         setSelectedWeek(currentWeek);
-        setWeeks([currentWeek]); // set to unlock loading logic
     }, []);
+
+    // Sync weeks from the scheduling hook (identical to dispatching)
+    useEffect(() => {
+        if (storeWeeksData && storeWeeksData.length > 0) {
+            setWeeks(storeWeeksData);
+            // If selectedWeek is not in the list, pick the best match
+            if (selectedWeek && !storeWeeksData.includes(selectedWeek)) {
+                const currentWeek = getCurrentYearWeek(getTodayPacific());
+                if (storeWeeksData.includes(currentWeek)) {
+                    setSelectedWeek(currentWeek);
+                } else {
+                    setSelectedWeek(storeWeeksData[0]);
+                }
+            }
+        }
+    }, [storeWeeksData]);
 
     // Compute week dates array based on selectedWeek
     const weekDates = useMemo(() => {
@@ -377,6 +448,18 @@ export default function EverydayAfterDispatchingPage() {
         }
         return dates;
     }, [selectedWeek]);
+
+    // Auto-select today's date when week changes
+    useEffect(() => {
+        if (weekDates.length === 0) return;
+        const today = getTodayPacific();
+        if (weekDates.includes(today)) {
+            setDate(today);
+        } else {
+            setDate(weekDates[0]);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [weekDates]);
 
     function formatWeekLabel(week: string) {
         const match = week.match(/(\d{4})-W(\d{2})/);
@@ -758,6 +841,35 @@ export default function EverydayAfterDispatchingPage() {
             {/* Top row: Horizontal Date Selector & Notes inline */}
             <div className="mb-2 shrink-0 overflow-x-auto scrollbar-none">
                 <div className="flex items-stretch gap-1 p-1 rounded-xl bg-muted/50 border border-border min-w-max flex-1">
+                    {/* Horizontal Date Selector — identical to dispatching */}
+                    {weekDates.length > 0 && weekDates.map((dateStr) => {
+                        const isActive = date === dateStr;
+                        const d = new Date(dateStr + "T00:00:00Z");
+                        const dayNum = d.getUTCDate();
+                        const monthShort = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+                        const today = getTodayPacific();
+                        const isToday = dateStr === today;
+
+                        return (
+                            <button
+                                key={dateStr}
+                                onClick={() => setDate(dateStr)}
+                                className={cn(
+                                    "flex flex-col items-center px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap min-w-[48px] select-none",
+                                    isActive
+                                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                                        : isToday
+                                            ? "bg-primary/10 text-primary hover:bg-primary/20"
+                                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                )}
+                            >
+                                <span className="text-[9px] uppercase tracking-wider leading-tight opacity-80">{SHORT_DAYS[d.getUTCDay()]}</span>
+                                <span className="text-xs font-bold leading-tight">{dayNum}</span>
+                                <span className="text-[8px] uppercase leading-tight opacity-60">{monthShort}</span>
+                            </button>
+                        );
+                    })}
+
                     {/* PDF Generation Button */}
                     <button
                         onClick={async () => {

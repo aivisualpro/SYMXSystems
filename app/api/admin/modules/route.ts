@@ -5,7 +5,7 @@ import connectToDatabase from "@/lib/db";
 import SymxAppModule from "@/lib/models/SymxAppModule";
 
 // ── VERSION: bump this whenever DEFAULT_MODULES changes to force a DB reseed ──
-const MODULES_VERSION = 7;
+const MODULES_VERSION = 8;
 
 // Default modules — must match actual routes in /app/(protected)/
 const DEFAULT_MODULES = [
@@ -17,21 +17,7 @@ const DEFAULT_MODULES = [
     ]
   },
   {
-    name: "Fleet", url: "/fleet", icon: "IconCar", order: 2, subModules: [
-      { name: "Overview", url: "/fleet" },
-      { name: "Vehicles", url: "/fleet/vehicles" },
-      { name: "Repairs", url: "/fleet/repairs" },
-      { name: "Inspections", url: "/fleet/inspections" },
-      { name: "Rental Agreements", url: "/fleet/rentals" },
-    ]
-  },
-  {
-    name: "Scheduling", url: "/scheduling", icon: "IconCalendarTime", order: 3, subModules: [
-      { name: "Messaging", url: "/scheduling/messaging" },
-    ]
-  },
-  {
-    name: "Dispatching", url: "/dispatching", icon: "IconRoute", order: 4, subModules: [
+    name: "Dispatching", url: "/dispatching", icon: "IconRoute", order: 2, subModules: [
       { name: "Roster", url: "/dispatching/roster" },
       { name: "Opening", url: "/dispatching/opening" },
       { name: "Attendance", url: "/dispatching/attendance" },
@@ -43,10 +29,24 @@ const DEFAULT_MODULES = [
     ]
   },
   {
-    name: "Everyday", url: "/everyday", icon: "IconTarget", order: 5, subModules: []
+    name: "Scheduling", url: "/scheduling", icon: "IconCalendarTime", order: 3, subModules: [
+      { name: "Messaging", url: "/scheduling/messaging" },
+    ]
   },
   {
-    name: "Load Out", url: "/load-out", icon: "IconTruckDelivery", order: 6, subModules: []
+    name: "Everyday", url: "/everyday", icon: "IconTarget", order: 4, subModules: []
+  },
+  {
+    name: "Load Out", url: "/load-out", icon: "IconTruckDelivery", order: 5, subModules: []
+  },
+  {
+    name: "Fleet", url: "/fleet", icon: "IconCar", order: 6, subModules: [
+      { name: "Overview", url: "/fleet" },
+      { name: "Vehicles", url: "/fleet/vehicles" },
+      { name: "Repairs", url: "/fleet/repairs" },
+      { name: "Inspections", url: "/fleet/inspections" },
+      { name: "Rental Agreements", url: "/fleet/rentals" },
+    ]
   },
   {
     name: "HR", url: "/hr", icon: "IconUsersGroup", order: 7, subModules: [
