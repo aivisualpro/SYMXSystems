@@ -553,7 +553,7 @@ export async function processScorecard(type: string, data: any, week: string | u
                         upsert: true
                     }
                 };
-            }).filter((op): op is NonNullable<typeof op> => op !== null);
+            }).filter((op: any): op is NonNullable<typeof op> => op !== null);
 
             if (operations.length > 0) {
                 const result = await SymxDeliveryExcellence.bulkWrite(operations);
@@ -628,7 +628,7 @@ export async function processScorecard(type: string, data: any, week: string | u
                         upsert: true
                     }
                 };
-            }).filter((op): op is NonNullable<typeof op> => op !== null);
+            }).filter((op: any): op is NonNullable<typeof op> => op !== null);
 
             if (operations.length > 0) {
                 const result = await SymxPhotoOnDelivery.bulkWrite(operations);
