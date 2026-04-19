@@ -1539,32 +1539,60 @@ function SchedulingPageContent() {
                                         return (
                                           <td key={dayIdx} className="text-center px-0.5 sm:px-1 py-0.5 sm:py-1">
                                             <DropdownMenu>
-                                              <DropdownMenuTrigger asChild>
-                                                <div
-                                                  title={`${emp.employee?.name || emp.transporterId}\n${day?.weekDay || FULL_DAY_NAMES[dayIdx]} — ${day?.date ? formatDate(day.date) : ""}\nStatus: ${status}${type ? `\nType: ${type}` : ""}${day?.subType ? `\nSub Type: ${day.subType}` : ""}${startTime ? `\nStart: ${startTime}` : ""}${van ? `\nVan: ${van}` : ""}${day?.dayBeforeConfirmation === "true" ? `\nCONFIRMED` : ""}${warning ? `\n⚠️ ${warning.consecutive} consecutive work days` : ""}`}
-                                                  className={cn(
-                                                    "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
-                                                    !matchedOpt?.colorHex && style.bg,
-                                                    !matchedOpt?.colorHex && style.text,
-                                                    !matchedOpt?.colorHex && style.border,
-                                                    "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
-                                                  )}
-                                                  style={matchedOpt?.colorHex ? { backgroundColor: matchedOpt.colorHex, color: "#fff", borderColor: matchedOpt.colorHex } : undefined}
-                                                >
-                                                  {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
-                                                  <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
+                                              <Tooltip delayDuration={400}>
+                                                <TooltipTrigger asChild>
+                                                  <DropdownMenuTrigger asChild>
+                                                    <div
+                                                      className={cn(
+                                                        "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
+                                                        !matchedOpt?.colorHex && style.bg,
+                                                        !matchedOpt?.colorHex && style.text,
+                                                        !matchedOpt?.colorHex && style.border,
+                                                        "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                                                      )}
+                                                      style={matchedOpt?.colorHex ? { backgroundColor: matchedOpt.colorHex, color: "#fff", borderColor: matchedOpt.colorHex } : undefined}
+                                                    >
+                                                      {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
+                                                      <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
+                                                      {warning && (
+                                                        <span className={cn(
+                                                          "flex items-center justify-center h-4 min-w-[16px] rounded-full text-[9px] font-bold text-white leading-none px-1 ml-0.5 shrink-0",
+                                                          warning.type === 'danger'
+                                                            ? "bg-red-500 animate-pulse"
+                                                            : "bg-orange-400"
+                                                        )}>
+                                                          {warning.consecutive}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </DropdownMenuTrigger>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="top" align="center" className="flex flex-col gap-1 p-2.5 text-xs w-[180px] shadow-xl bg-card border-border/60 rounded-xl">
+                                                  <div className="font-bold text-[13px] uppercase tracking-tight text-foreground flex items-center justify-between pb-1">
+                                                    <span className="truncate">{emp.employee?.name || emp.transporterId}</span>
+                                                    {day?.dayBeforeConfirmation === "true" && <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />}
+                                                  </div>
+                                                  
+                                                  <div className="font-semibold text-muted-foreground/80 mb-1 flex items-center gap-1.5 bg-muted/40 p-1.5 rounded-lg text-[11px]">
+                                                    <CalendarDays className="h-3 w-3" />
+                                                    {day?.weekDay || FULL_DAY_NAMES[dayIdx]} — {day?.date ? formatDate(day.date) : ""}
+                                                  </div>
+                                                  
+                                                  <div className="flex flex-col gap-1.5 mt-0.5 pl-0.5">
+                                                    {status && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[50px]">Status:</span><span className="font-semibold text-foreground uppercase tracking-wide">{status}</span></div>}
+                                                    {type && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[50px]">Type:</span><span className="font-semibold text-primary drop-shadow-[0_0_8px_rgba(59,130,246,0.2)]">{type}</span></div>}
+                                                    {day?.subType && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[50px]">Sub Type:</span><span className="font-semibold text-foreground">{day.subType}</span></div>}
+                                                    {startTime && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[50px]">Start:</span><span className="font-semibold text-blue-500 font-mono tracking-wider">{startTime}</span></div>}
+                                                    {van && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[50px]">Van:</span><span className="font-semibold text-emerald-600 font-mono">{van}</span></div>}
+                                                  </div>
+                                                  
                                                   {warning && (
-                                                    <span className={cn(
-                                                      "flex items-center justify-center h-4 min-w-[16px] rounded-full text-[9px] font-bold text-white leading-none px-1 ml-0.5 shrink-0",
-                                                      warning.type === 'danger'
-                                                        ? "bg-red-500 animate-pulse"
-                                                        : "bg-orange-400"
-                                                    )}>
-                                                      {warning.consecutive}
-                                                    </span>
+                                                    <div className="mt-2 text-[10px] flex items-center gap-1.5 text-red-500 font-bold bg-red-500/10 border border-red-500/20 px-2 py-1.5 rounded-lg leading-tight">
+                                                      <span className="text-[14px]">⚠️</span> {warning.consecutive} consecutive work days
+                                                    </div>
                                                   )}
-                                                </div>
-                                              </DropdownMenuTrigger>
+                                                </TooltipContent>
+                                              </Tooltip>
                                               <DropdownMenuContent
                                                 align="start"
                                                 side="bottom"
