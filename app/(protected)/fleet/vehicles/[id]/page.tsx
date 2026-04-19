@@ -147,47 +147,6 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
 
     return (
         <div className="space-y-5 w-full">
-            {/* ── Header ────────────────────────────────────── */}
-            <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => router.push("/fleet/vehicles")}
-                        className="p-2 rounded-xl border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-all hover:shadow-md"
-                    >
-                        <IconArrowLeft size={18} />
-                    </button>
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-xl font-bold text-foreground">{getVehicleTitle(v)}</h1>
-                            <StatusBadge status={v.status} />
-                        </div>
-                        <div className="flex items-center gap-3 mt-1">
-                            <span className="text-xs text-muted-foreground font-mono">{v.vin}</span>
-                            {v.unitNumber && (
-                                <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-semibold">
-                                    Unit #{v.unitNumber}
-                                </span>
-                            )}
-                            {v.licensePlate && (
-                                <span className="px-2 py-0.5 rounded-md bg-muted text-muted-foreground text-[10px] font-medium">
-                                    {v.licensePlate}
-                                </span>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* ── Stats KPI Row ─────────────────────────────── */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                <MiniKPI icon={IconTool} label="Open Repairs" value={stats.openRepairs} color="bg-amber-500/15 text-amber-600 dark:text-amber-400" />
-                <MiniKPI icon={IconCheck} label="Completed Repairs" value={stats.completedRepairs} color="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" />
-                <MiniKPI icon={IconClipboardCheck} label="Inspections" value={stats.totalInspections} color="bg-blue-500/15 text-blue-600 dark:text-blue-400" />
-                <MiniKPI icon={stats.failedInspections > 0 ? IconX : IconCheck} label="Pass / Fail" value={`${stats.passedInspections} / ${stats.failedInspections}`} color={stats.failedInspections > 0 ? "bg-red-500/15 text-red-600 dark:text-red-400" : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"} />
-                <MiniKPI icon={IconActivity} label="Activity Logs" value={stats.totalActivityLogs} color="bg-purple-500/15 text-purple-600 dark:text-purple-400" />
-                <MiniKPI icon={IconCreditCard} label="Rental Total" value={`$${stats.totalRentalAmount.toLocaleString()}`} color="bg-cyan-500/15 text-cyan-600 dark:text-cyan-400" />
-            </div>
-
             {/* ── Tabs ──────────────────────────────────────── */}
             <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border overflow-x-auto">
                 {tabs.map((tab) => (
@@ -247,6 +206,11 @@ function OverviewTab({ v, masterPhoto }: { v: any; masterPhoto: any }) {
                 {/* Column 1: Vehicle Details */}
                 <GlassCard className="p-4">
                     <h3 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-2"><IconCar size={14} className="text-blue-500" /> Vehicle Details</h3>
+                    <InfoRow icon={IconCar} label="Name" value={getVehicleTitle(v)} />
+                    <InfoRow icon={IconActivity} label="Status" value={<span className="inline-flex"><StatusBadge status={v.status} /></span>} />
+                    <InfoRow icon={IconHash} label="VIN" value={v.vin} />
+                    <InfoRow icon={IconHash} label="Unit" value={v.unitNumber ? `Unit #${v.unitNumber}` : "—"} />
+                    <InfoRow icon={IconLicense} label="License" value={v.licensePlate} />
                     <InfoRow icon={IconCalendar} label="Year" value={v.year} />
                     <InfoRow icon={IconEngine} label="Make" value={v.make} />
                     <InfoRow icon={IconSteeringWheel} label="Model" value={v.vehicleModel} />

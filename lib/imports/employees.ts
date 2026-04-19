@@ -558,7 +558,7 @@ export async function processEmployees(type: string, data: any, week: string | u
                         upsert: true,
                     },
                 };
-            }).filter((op): op is NonNullable<typeof op> => op !== null);
+            }).filter((op: any): op is NonNullable<typeof op> => op !== null);
 
             if (operations.length > 0) {
                 try {
