@@ -1,7 +1,7 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import { SymxEveryday } from "@/lib/models/SymxEveryday";
+import SymxEveryday from "@/lib/models/SymxEveryday";
 import { authorizeAction } from "@/lib/rbac";
 
 

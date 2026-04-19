@@ -9,7 +9,7 @@ import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
 import SymxUser from "@/lib/models/SymxUser";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import RouteType from "@/lib/models/RouteType";
-import { SymxEveryday } from "@/lib/models/SymxEveryday";
+import SymxEveryday from "@/lib/models/SymxEveryday";
 import { authorizeAction } from "@/lib/rbac";
 import { z } from "zod";
 import { validateBody, validateSearchParams } from "@/lib/validations";
