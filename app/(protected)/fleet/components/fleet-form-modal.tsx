@@ -517,7 +517,9 @@ export default function FleetFormModal() {
 
   if (!modalOpen) return null;
 
-  const title = `${editId ? "Edit" : "New"} ${modalType.charAt(0).toUpperCase() + modalType.slice(1)}`;
+  const title = formData.isCompletionMode
+    ? "Repair Completion"
+    : `${editId ? "Edit" : "New"} ${modalType.charAt(0).toUpperCase() + modalType.slice(1)}`;
 
   const isRepairCompletedButNoImages = 
     modalType === "repair" && 
@@ -599,82 +601,84 @@ export default function FleetFormModal() {
 
 
             {modalType === "repair" && (<>
-              {selectedVehicleImage && (
-                <div className="w-full h-32 rounded-xl overflow-hidden border border-border/50 relative mb-2 shadow-sm">
-                  <img src={selectedVehicleImage} alt="Vehicle Thumbnail" className="w-full h-full object-cover" />
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2">
-                    <span className="text-[10px] font-semibold text-white uppercase tracking-wider backdrop-blur-sm bg-black/20 px-1.5 py-0.5 rounded">Selected Vehicle</span>
-                  </div>
-                </div>
-              )}
-              <FormField label="Vehicle Name">
-                <SearchableSelect
-                  value={formData.vehicleName || ""}
-                  placeholder="Search vehicle…"
-                  options={vehicles.map((v: any) => ({
-                    value: v.vehicleName || "",
-                    label: v.vehicleName || v.vin || "—",
-                    raw: v,
-                  }))}
-                  onChange={(val, raw) => {
-                    updateForm("vehicleName", val);
-                    if (raw?.vin) updateForm("vin", raw.vin);
-                    if (raw?.unitNumber) updateForm("unitNumber", raw.unitNumber);
-                  }}
-                />
-              </FormField>
-              <FormField label="Description"><textarea className={inputClass} rows={3} value={formData.description || ""} onChange={e => updateForm("description", e.target.value)} required /></FormField>
-              <div className="grid grid-cols-2 gap-3">
-                <FormField label="Status">
-                  <select className={inputClass} value={formData.currentStatus || ""} onChange={e => updateForm("currentStatus", e.target.value)}
-                    style={repairStatuses.find(s => s.description === formData.currentStatus)?.color ? { borderLeftWidth: '3px', borderLeftColor: repairStatuses.find(s => s.description === formData.currentStatus)!.color } : {}}>
-                    <option value="">Select status…</option>
-                    {(repairStatuses.length > 0
-                      ? repairStatuses.map(s => <option key={s.description} value={s.description}>{s.description}</option>)
-                      : ["Not Started", "In Progress", "Waiting for Parts", "Sent to Repair Shop", "Completed"].map(s => <option key={s} value={s}>{s}</option>)
-                    )}
-                  </select>
-                </FormField>
-                <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.estimatedDate ? formData.estimatedDate.split("T")[0] : ""} onChange={e => updateForm("estimatedDate", e.target.value)} /></FormField>
-              </div>
-              <div className="pt-2 space-y-4">
-                <MultiPhotoUploadField 
-                  label="Repair Images" 
-                  values={formData.images || []} 
-                  onChange={urls => updateForm("images", urls)} 
-                />
-                
-                {formData.currentStatus === "Completed" && (
-                  <div className="pt-3 border-t border-border/50 space-y-4">
-                    <MultiPhotoUploadField 
-                      label="Completion Images" 
-                      values={formData.completedImages || []} 
-                      onChange={urls => updateForm("completedImages", urls)} 
-                    />
-                    <div className="flex items-center gap-2 px-1">
-                      <input
-                        type="checkbox"
-                        id="imagesNotAvailable"
-                        checked={!!formData.imagesNotAvailable}
-                        onChange={e => updateForm("imagesNotAvailable", e.target.checked)}
-                        className="rounded border-border text-primary focus:ring-primary/20"
-                      />
-                      <label htmlFor="imagesNotAvailable" className="text-[11px] font-medium text-muted-foreground cursor-pointer select-none">
-                        Pictures not available (bypass requirement)
-                      </label>
+              {!formData.isCompletionMode && (<>
+                {selectedVehicleImage && (
+                  <div className="w-full h-32 rounded-xl overflow-hidden border border-border/50 relative mb-2 shadow-sm">
+                    <img src={selectedVehicleImage} alt="Vehicle Thumbnail" className="w-full h-full object-cover" />
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2">
+                      <span className="text-[10px] font-semibold text-white uppercase tracking-wider backdrop-blur-sm bg-black/20 px-1.5 py-0.5 rounded">Selected Vehicle</span>
                     </div>
-                    <FormField label="Completion Notes (Optional)">
-                      <textarea 
-                        className={inputClass} 
-                        rows={2} 
-                        value={formData.completionNotes || ""} 
-                        onChange={e => updateForm("completionNotes", e.target.value)} 
-                        placeholder="Add any notes regarding the completion..."
-                      />
-                    </FormField>
                   </div>
                 )}
-              </div>
+                <FormField label="Vehicle Name">
+                  <SearchableSelect
+                    value={formData.vehicleName || ""}
+                    placeholder="Search vehicle…"
+                    options={vehicles.map((v: any) => ({
+                      value: v.vehicleName || "",
+                      label: v.vehicleName || v.vin || "—",
+                      raw: v,
+                    }))}
+                    onChange={(val, raw) => {
+                      updateForm("vehicleName", val);
+                      if (raw?.vin) updateForm("vin", raw.vin);
+                      if (raw?.unitNumber) updateForm("unitNumber", raw.unitNumber);
+                    }}
+                  />
+                </FormField>
+                <FormField label="Description"><textarea className={inputClass} rows={3} value={formData.description || ""} onChange={e => updateForm("description", e.target.value)} required /></FormField>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField label="Status">
+                    <select className={inputClass} value={formData.currentStatus || ""} onChange={e => updateForm("currentStatus", e.target.value)}
+                      style={repairStatuses.find(s => s.description === formData.currentStatus)?.color ? { borderLeftWidth: '3px', borderLeftColor: repairStatuses.find(s => s.description === formData.currentStatus)!.color } : {}}>
+                      <option value="">Select status…</option>
+                      {(repairStatuses.length > 0
+                        ? repairStatuses.map(s => <option key={s.description} value={s.description}>{s.description}</option>)
+                        : ["Not Started", "In Progress", "Waiting for Parts", "Sent to Repair Shop", "Completed"].map(s => <option key={s} value={s}>{s}</option>)
+                      )}
+                    </select>
+                  </FormField>
+                  <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.estimatedDate ? formData.estimatedDate.split("T")[0] : ""} onChange={e => updateForm("estimatedDate", e.target.value)} /></FormField>
+                </div>
+                <div className="pt-2 space-y-4">
+                  <MultiPhotoUploadField 
+                    label="Repair Images" 
+                    values={formData.images || []} 
+                    onChange={urls => updateForm("images", urls)} 
+                  />
+                </div>
+              </>)}
+                
+              {formData.currentStatus === "Completed" && (
+                <div className={formData.isCompletionMode ? "space-y-4" : "pt-3 border-t border-border/50 space-y-4"}>
+                  <MultiPhotoUploadField 
+                    label="Completion Images" 
+                    values={formData.completedImages || []} 
+                    onChange={urls => updateForm("completedImages", urls)} 
+                  />
+                  <div className="flex items-center gap-2 px-1">
+                    <input
+                      type="checkbox"
+                      id="imagesNotAvailable"
+                      checked={!!formData.imagesNotAvailable}
+                      onChange={e => updateForm("imagesNotAvailable", e.target.checked)}
+                      className="rounded border-border text-primary focus:ring-primary/20"
+                    />
+                    <label htmlFor="imagesNotAvailable" className="text-[11px] font-medium text-muted-foreground cursor-pointer select-none">
+                      Pictures not available
+                    </label>
+                  </div>
+                  <FormField label="Completion Notes (Optional)">
+                    <textarea 
+                      className={inputClass} 
+                      rows={2} 
+                      value={formData.completionNotes || ""} 
+                      onChange={e => updateForm("completionNotes", e.target.value)} 
+                      placeholder="Add any notes regarding the completion..."
+                    />
+                  </FormField>
+                </div>
+              )}
             </>)}
 
             {modalType === "inspection" && (<>
@@ -879,7 +883,7 @@ export default function FleetFormModal() {
           </div>
           <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-border">
             <div className="flex-1 text-[10px] text-red-500/80 font-medium whitespace-nowrap">
-              {isRepairCompletedButNoImages && "Completion images are required to close this repair."}
+              {isRepairCompletedButNoImages && ""}
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setModalOpen(false)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button>

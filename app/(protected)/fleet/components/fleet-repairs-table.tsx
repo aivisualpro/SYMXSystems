@@ -501,11 +501,10 @@ export function FleetRepairsTable({ vin, isTab }: { vin?: string; isTab?: boolea
                   </th>
                 );
               })}
-              <th className="px-3 py-3 bg-card/95 backdrop-blur-sm w-16" />
             </tr>
             {/* Gradient separator */}
             <tr>
-              <td colSpan={columns.length + 1} className="p-0">
+              <td colSpan={columns.length} className="p-0">
                 <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
               </td>
             </tr>
@@ -551,11 +550,8 @@ export function FleetRepairsTable({ vin, isTab }: { vin?: string; isTab?: boolea
                               
                               // Check validation for completed status directly from the table UI
                               if (newStatus === "Completed" && (!r.completedImages || r.completedImages.length === 0) && !r.imagesNotAvailable) {
-                                toast.error("Completion images required", { 
-                                  description: "Please upload completion images or check 'Pictures not available' to close this repair." 
-                                });
-                                // Force the record edit form open, defaulting to Completed status
-                                openEditModal("repair", { ...r, currentStatus: "Completed" });
+                                // Force the record edit form open, defaulting to Completed status with Completion Mode restricted view
+                                openEditModal("repair", { ...r, currentStatus: "Completed", isCompletionMode: true });
                                 return;
                               }
 
@@ -615,22 +611,6 @@ export function FleetRepairsTable({ vin, isTab }: { vin?: string; isTab?: boolea
                     </td>
                   );
                 })}
-                <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150 translate-x-1 group-hover:translate-x-0">
-                    <button
-                      onClick={() => openEditModal("repair", r)}
-                      className="p-1.5 rounded-lg bg-card border border-border/60 hover:border-blue-400/60 hover:bg-blue-50 dark:hover:bg-blue-950/40 text-muted-foreground hover:text-blue-500 transition-all shadow-sm"
-                    >
-                      <IconEdit size={12} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete("repair", r._id)}
-                      className="p-1.5 rounded-lg bg-card border border-border/60 hover:border-red-400/60 hover:bg-red-50 dark:hover:bg-red-950/40 text-muted-foreground hover:text-red-500 transition-all shadow-sm"
-                    >
-                      <IconTrash size={12} />
-                    </button>
-                  </div>
-                </td>
               </tr>
             ))}
 

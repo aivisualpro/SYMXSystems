@@ -190,13 +190,13 @@ export default function ReimbursementPage() {
 
   // ── Seed from TanStack Query cache for instant load ──
   useEffect(() => {
-    if (!debouncedSearch && queryReimbursements?.records?.length > 0 && data.length === 0) {
+    if (!debouncedSearch && queryReimbursements && queryReimbursements.records && queryReimbursements.records.length > 0 && data.length === 0) {
       setData(queryReimbursements.records);
       setTotalCount(queryReimbursements.totalCount || queryReimbursements.records.length);
       setHasMore(queryReimbursements.hasMore || false);
       if (queryReimbursements.kpi) setKpis(queryReimbursements.kpi);
     }
-  }, [queryReimbursements]);
+  }, [queryReimbursements, debouncedSearch, data.length]);
 
   // Initial load + search changes trigger reset
   useEffect(() => {
