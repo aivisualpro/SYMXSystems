@@ -846,7 +846,7 @@ export default function EverydayAfterDispatchingPage() {
                             columns={[
                                 { key: "employee", label: "Employee", minW: 120, sticky: true },
                                 { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 70, align: "center" },
-                                ...(everydayRtsEnabled ? [{ key: "rts", label: <span className="font-semibold text-xs text-orange-600">RTS</span>, minW: 55, align: "center" }] : []),
+                                ...(everydayRtsEnabled ? [{ key: "rts", label: <span className="font-semibold text-xs text-orange-600">RTS</span>, minW: 55, align: "center" as const }] : []),
                                 { key: "rescue", label: <span className="font-semibold text-xs text-teal-600">Rescue</span>, minW: 65, align: "center" },
                                 { key: "routeNumber", label: <HeaderIcon title="Route Number" icon={Hash} className="h-[18px] w-[18px] text-rose-500" strokeWidth={1.5} />, minW: 55, align: "center" },
                                 { key: "routeDuration", label: <HeaderIcon title="Route Duration" icon={Timer} className="h-[18px] w-[18px] text-yellow-500" strokeWidth={1.5} />, minW: 45, align: "center" },
