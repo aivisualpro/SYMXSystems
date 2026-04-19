@@ -170,12 +170,13 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const searchParams = useSearchParams();
     const urlWeek = searchParams.get("week") || "";
     const urlDate = searchParams.get("date") || "";
+    const urlSearch = searchParams.get("search") || "";
 
     // ── State ──
     const [weeks, setWeeks] = useState<string[]>([]);
     const [selectedWeek, setSelectedWeekState] = useState(urlWeek);
     const [selectedDate, setSelectedDateState] = useState(urlDate);
-    const [searchQuery, setSearchQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useState(urlSearch);
     const [generatingRoutes, setGeneratingRoutes] = useState(false);
     const [routesGenerated, setRoutesGenerated] = useState(false);
     const [routesLoading, setRoutesLoading] = useState(false);

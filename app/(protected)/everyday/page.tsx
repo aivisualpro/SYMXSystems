@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useSchedulingWeeks } from "@/lib/query/hooks/useSchedules";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, Edit2, Phone, Timer, Package, Hash, ThumbsUp, type LucideIcon } from "lucide-react";
@@ -98,6 +99,7 @@ const HeaderIcon = ({ icon: Icon, title, className, strokeWidth }: any) => (
 );
 
 export default function EverydayAfterDispatchingPage() {
+    const router = useRouter();
     const { setLeftContent, setRightContent } = useHeaderActions();
 
     const [weeks, setWeeks] = useState<string[]>([]);
@@ -107,6 +109,8 @@ export default function EverydayAfterDispatchingPage() {
     const [notes, setNotes] = useState("");
     const [savingNotes, setSavingNotes] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [endDay, setEndDay] = useState(false);
+    const [endDayLoading, setEndDayLoading] = useState(false);
 
     const [routes, setRoutes] = useState<any[]>([]);
     const [employeesMap, setEmployeesMap] = useState<Record<string, any>>({});
@@ -137,6 +141,11 @@ export default function EverydayAfterDispatchingPage() {
     const [rescueStops, setRescueStops] = useState("");
     const [rescueReason, setRescueReason] = useState("");
     const [rescuePerformance, setRescuePerformance] = useState(false);
+
+    const [missingHoursModal, setMissingHoursModal] = useState<{ open: boolean; records: { transporterId: string; employeeName: string; type: string; routeNumber: string }[] }>({
+        open: false,
+        records: []
+    });
     const [rescueReasonsList, setRescueReasonsList] = useState<string[]>([]);
     const [rescueMap, setRescueMap] = useState<Record<string, any>>({});
     const [isSavingRescue, setIsSavingRescue] = useState(false);
@@ -326,6 +335,51 @@ export default function EverydayAfterDispatchingPage() {
         setCollapsedGroups(prev => ({ ...prev, [group]: !prev[group] }));
     };
 
+    const handleEndDay = useCallback(async () => {
+        if (!date) return;
+        
+        const missingRecords: { transporterId: string; employeeName: string; type: string; routeNumber: string }[] = [];
+        
+        routes.forEach(r => {
+            const typeLower = (r.type || "").toLowerCase();
+            const config = routeTypeConfigs[typeLower];
+            
+            // Only enforce working executed routes (Scheduled) and logically ignore 'Off', 'Call Out', etc.
+            if (config && config.routeStatus?.toLowerCase() === "scheduled") {
+                if (!r.totalHours || String(r.totalHours).trim() === "") {
+                    missingRecords.push({
+                        transporterId: r.transporterId,
+                        employeeName: r.employeeName || employeesMap[r.transporterId]?.name || r.transporterId,
+                        type: r.type || "Unknown",
+                        routeNumber: r.routeNumber || "—"
+                    });
+                }
+            }
+        });
+
+        if (missingRecords.length > 0) {
+            setMissingHoursModal({ open: true, records: missingRecords });
+            return;
+        }
+
+        setEndDayLoading(true);
+        try {
+            const res = await fetch("/api/everyday", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ date, endDay: true })
+            });
+            if (!res.ok) throw new Error("Failed to end day");
+            
+            toast.success("Day ended successfully");
+            setEndDay(true);
+        } catch (error) {
+            toast.error("Failed to mark day as ended");
+        } finally {
+            setEndDayLoading(false);
+        }
+    }, [date, routes, routeTypeConfigs, employeesMap]);
+
     useEffect(() => {
         setLeftContent(
             <div className="flex items-center gap-3">
@@ -348,52 +402,65 @@ export default function EverydayAfterDispatchingPage() {
 
         setRightContent(
             <div className="flex items-center gap-1.5 sm:gap-2">
-                {weeks.length > 0 && (
-                    <>
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => {
-                                if (idx < weeks.length - 1) {
-                                    setSelectedWeek(weeks[idx + 1]);
-                                }
-                            }}
-                            disabled={idx >= weeks.length - 1 || idx === -1}
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Select value={selectedWeek} onValueChange={setSelectedWeek}>
-                            <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm" suppressHydrationWarning>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {weeks.map((week) => (
-                                    <SelectItem key={week} value={week}>
-                                        {formatWeekLabel(week)}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => {
-                                if (idx > 0) {
-                                    setSelectedWeek(weeks[idx - 1]);
-                                }
-                            }}
-                            disabled={idx <= 0}
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </Button>
-                    </>
-                )}
+                <Button 
+                    variant={endDay ? "default" : "secondary"}
+                    className={cn("h-8 text-[11px] sm:text-xs font-bold mr-1 sm:mr-3 transition-colors", endDay ? "bg-emerald-600 hover:bg-emerald-700 text-white opacity-100 cursor-default ring-1 ring-emerald-500/50" : "hover:bg-muted text-muted-foreground")}
+                    disabled={endDay || endDayLoading || loading}
+                    onClick={endDay ? undefined : handleEndDay}
+                >
+                    {endDayLoading && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                    {!endDayLoading && (endDay ? <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> : <Timer className="mr-1.5 h-3.5 w-3.5" />)}
+                    {endDay ? "Day Ended" : "End Day"}
+                </Button>
+
+                <div className="flex items-center gap-1 sm:gap-1.5 pl-1.5 border-l border-border/50">
+                    {weeks.length > 0 && (
+                        <>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                    if (idx < weeks.length - 1) {
+                                        setSelectedWeek(weeks[idx + 1]);
+                                    }
+                                }}
+                                disabled={idx >= weeks.length - 1 || idx === -1}
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+                                <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm" suppressHydrationWarning>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {weeks.map((week) => (
+                                        <SelectItem key={week} value={week}>
+                                            {formatWeekLabel(week)}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                    if (idx > 0) {
+                                        setSelectedWeek(weeks[idx - 1]);
+                                    }
+                                }}
+                                disabled={idx <= 0}
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        </>
+                    )}
+                </div>
             </div>
         );
         return () => setRightContent(null);
-    }, [setRightContent, weeks, selectedWeek]);
+    }, [setRightContent, weeks, selectedWeek, endDay, endDayLoading, loading, handleEndDay]);
 
     // Sync local notes state to debounce timer
     useEffect(() => {
@@ -481,6 +548,9 @@ export default function EverydayAfterDispatchingPage() {
                 const fetchedNotes = notesData.notes || "";
                 setNotes(fetchedNotes);
                 setDebounceNotes(fetchedNotes); // prevent instant auto-save on load
+                setEndDay(notesData.endDay || false);
+            } else {
+                setEndDay(false);
             }
 
             // 2. Fetch routes, schedules, rts, and rescue FOR TODAY, plus tomorrow's routes/schedules
@@ -1591,6 +1661,62 @@ export default function EverydayAfterDispatchingPage() {
                 </DialogContent>
             </Dialog>
 
+            {/* ── Missing Hours Modal ── */}
+            <Dialog open={missingHoursModal.open} onOpenChange={(o) => setMissingHoursModal(p => ({ ...p, open: o }))}>
+                <DialogContent className="max-w-md bg-card border border-border shadow-2xl p-0 overflow-hidden sm:rounded-xl">
+                    <DialogHeader className="px-6 py-5 border-b border-border bg-gradient-to-r from-rose-500/10 to-red-500/5">
+                        <DialogTitle className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center ring-1 ring-rose-500/30 shrink-0">
+                                <Clock className="w-5 h-5 text-rose-500" />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <span className="text-base font-bold leading-none">Missing Total Hours</span>
+                                <span className="text-[11px] font-medium text-muted-foreground leading-none">
+                                    {missingHoursModal.records.length} driver{missingHoursModal.records.length !== 1 ? "s require" : " requires"} recorded time before ending day
+                                </span>
+                            </div>
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="p-0">
+                        <ScrollArea className="max-h-[350px]">
+                            <div className="flex flex-col divide-y divide-border/50">
+                                {missingHoursModal.records.map((r, i) => {
+                                    const typeObj = getTypeStyle(r.type);
+                                    return (
+                                        <button
+                                            key={r.transporterId + i}
+                                            onClick={() => {
+                                                router.push(`/dispatching/time?date=${date}&search=${encodeURIComponent(r.transporterId)}`);
+                                            }}
+                                            className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors group text-left"
+                                        >
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">{r.employeeName}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md border tracking-wider uppercase", typeObj.bg, typeObj.text, typeObj.border)}>
+                                                        {r.type}
+                                                    </span>
+                                                    {r.routeNumber !== "—" && (
+                                                        <span className="text-[11px] font-semibold text-muted-foreground">· Route {r.routeNumber}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="h-8 w-8 rounded-full bg-border flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0">
+                                                <ChevronRight className="w-4 h-4" />
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                    <DialogFooter className="px-5 py-4 border-t border-border bg-muted/30">
+                        <Button variant="outline" className="w-full text-xs font-bold h-9" onClick={() => setMissingHoursModal(p => ({ ...p, open: false }))}>
+                            Close & Continue Editing
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

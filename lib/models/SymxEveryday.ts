@@ -4,6 +4,7 @@ export interface ISymxEveryday extends Document {
   date: string;
   notes: string;
   routesAssigned: number;
+  endDay: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -22,6 +23,10 @@ const SymxEverydaySchema: Schema = new Schema(
     routesAssigned: {
       type: Number,
       default: 0,
+    },
+    endDay: {
+      type: Boolean,
+      default: false,
     },
   },
   {

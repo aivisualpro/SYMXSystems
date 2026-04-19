@@ -53,7 +53,7 @@ export default function FleetOverviewPage() {
           <KPICard icon={IconCheck} label="Active" value={kpis.activeVehicles} sub="Operational" color="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" onClick={() => router.push("/fleet/vehicles?status=Active")} />
           <KPICard icon={IconTool} label="Open Repairs" value={totalOpenRepairs} sub="Needs attention" color="bg-amber-500/15 text-amber-600 dark:text-amber-400" onClick={() => router.push("/fleet/repairs")} />
           <KPICard icon={IconClipboardCheck} label="Inspections" value={recentInspections.length} sub="Recent" color="bg-violet-500/15 text-violet-600 dark:text-violet-400" onClick={() => router.push("/fleet/inspections")} />
-          <KPICard icon={IconFileInvoice} label="Rental Agreements" value={rs.total} sub={`$${rs.totalAmount.toLocaleString()} total`} color="bg-teal-500/15 text-teal-600 dark:text-teal-400" onClick={() => router.push("/fleet/rentals")} />
+          <KPICard icon={IconFileInvoice} label="Rental Agreements" value={rs.total} sub="Total agreements" color="bg-teal-500/15 text-teal-600 dark:text-teal-400" onClick={() => router.push("/fleet/rentals")} />
         </div>
 
         {/* Row 2 — 3 columns: Status Donut, Ownership Donut, Rental Stats */}
@@ -134,7 +134,6 @@ export default function FleetOverviewPage() {
                 { label: "Active", value: rs.active, color: "text-emerald-500", bg: "bg-emerald-500/10", icon: IconCheck },
                 { label: "Expiring (30d)", value: rs.expiringSoon, color: "text-amber-500", bg: "bg-amber-500/10", icon: IconClock },
                 { label: "Expired", value: rs.expired, color: "text-red-500", bg: "bg-red-500/10", icon: IconAlertTriangle },
-                { label: "Total Amount", value: `$${rs.totalAmount.toLocaleString()}`, color: "text-primary", bg: "bg-primary/10", icon: IconCurrencyDollar },
               ].map((item) => (
                 <div key={item.label} className="flex items-center justify-between p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors">
                   <div className="flex items-center gap-2.5">
