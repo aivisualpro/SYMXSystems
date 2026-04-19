@@ -1663,23 +1663,28 @@ export default function EverydayAfterDispatchingPage() {
 
             {/* ── Missing Hours Modal ── */}
             <Dialog open={missingHoursModal.open} onOpenChange={(o) => setMissingHoursModal(p => ({ ...p, open: o }))}>
-                <DialogContent className="max-w-md bg-card border border-border shadow-2xl p-0 overflow-hidden sm:rounded-xl">
-                    <DialogHeader className="px-6 py-5 border-b border-border bg-gradient-to-r from-rose-500/10 to-red-500/5">
+                <DialogContent className="max-w-4xl bg-card border border-border shadow-2xl p-0 overflow-hidden sm:rounded-xl">
+                    <DialogHeader className="px-6 py-5 border-b border-border bg-gradient-to-r from-rose-500/10 to-red-500/5 relative">
+                        <div className="absolute right-4 top-4">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setMissingHoursModal(p => ({ ...p, open: false }))}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
                         <DialogTitle className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center ring-1 ring-rose-500/30 shrink-0">
                                 <Clock className="w-5 h-5 text-rose-500" />
                             </div>
                             <div className="flex flex-col gap-1">
-                                <span className="text-base font-bold leading-none">Missing Total Hours</span>
-                                <span className="text-[11px] font-medium text-muted-foreground leading-none">
+                                <span className="text-base font-bold leading-none pl-1">Missing Total Hours</span>
+                                <span className="text-[11px] font-medium text-muted-foreground leading-none pl-1 mt-1">
                                     {missingHoursModal.records.length} driver{missingHoursModal.records.length !== 1 ? "s require" : " requires"} recorded time before ending day
                                 </span>
                             </div>
                         </DialogTitle>
                     </DialogHeader>
-                    <div className="p-0">
-                        <ScrollArea className="max-h-[350px]">
-                            <div className="flex flex-col divide-y divide-border/50">
+                    <div className="p-4 bg-muted/10">
+                        <ScrollArea className="max-h-[500px]">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-4">
                                 {missingHoursModal.records.map((r, i) => {
                                     const typeObj = getTypeStyle(r.type);
                                     return (
@@ -1688,7 +1693,7 @@ export default function EverydayAfterDispatchingPage() {
                                             onClick={() => {
                                                 router.push(`/dispatching/time?date=${date}&search=${encodeURIComponent(r.transporterId)}`);
                                             }}
-                                            className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors group text-left"
+                                            className="flex items-center justify-between p-3.5 rounded-xl border border-border/50 bg-background hover:bg-muted/50 hover:border-primary/30 transition-all shadow-sm group text-left"
                                         >
                                             <div className="flex flex-col gap-1">
                                                 <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">{r.employeeName}</span>
@@ -1701,7 +1706,7 @@ export default function EverydayAfterDispatchingPage() {
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="h-8 w-8 rounded-full bg-border flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0">
+                                            <div className="h-8 w-8 rounded-full bg-border/40 flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0">
                                                 <ChevronRight className="w-4 h-4" />
                                             </div>
                                         </button>

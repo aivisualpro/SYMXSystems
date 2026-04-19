@@ -425,6 +425,20 @@ export default function TimePage() {
     const [quickEditForm, setQuickEditForm] = useState<Partial<RouteRow>>({});
     const [punchStatusOptions, setPunchStatusOptions] = useState<any[]>([]);
 
+    const [highlightSearch, setHighlightSearch] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (searchQuery) {
+            setHighlightSearch(searchQuery.toLowerCase());
+            const tm = setTimeout(() => {
+                setHighlightSearch(null);
+            }, 5000);
+            return () => clearTimeout(tm);
+        } else {
+            setHighlightSearch(null);
+        }
+    }, [searchQuery]);
+
     const { data: dropdownsData } = useDropdowns();
 
     // ── Hydrate Punch Status Options from TanStack Query ──
@@ -854,10 +868,15 @@ export default function TimePage() {
                                     
                                     {/* Group Data Rows */}
                                     {!isCollapsed && group.rows.map((row) => (
-                                        <div key={row._id} className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors group/row"
+                                        <div key={row._id} className={cn(
+                                            "grid items-center gap-2 px-3 py-2 border-b transition-all duration-700 group/row",
+                                            highlightSearch && (row.transporterId.toLowerCase() === highlightSearch || row.employeeName.toLowerCase().includes(highlightSearch))
+                                                ? "bg-emerald-500/20 border-emerald-500/40 shadow-[inset_0_0_12px_rgba(16,185,129,0.1)]"
+                                                : "border-border/20 hover:bg-muted/20"
+                                        )}
                                             style={{ gridTemplateColumns: GRID_TEMPLATE }}>
                                             {/* Employee (sticky) */}
-                                            <div className="flex items-center gap-2 min-w-0 pr-2 sticky left-0 z-10 bg-card group-hover/row:bg-muted/20 transition-colors">
+                                            <div className="flex items-center gap-2 min-w-0 pr-2 sticky left-0 z-10 bg-[initial] group-hover/row:bg-muted/20 transition-colors">
                                                 {row.profileImage ? (
                                                     <img src={row.profileImage} alt={row.employeeName} className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-border" />
                                                 ) : (
