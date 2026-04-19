@@ -219,6 +219,7 @@ function OverviewTab({ v, masterPhoto }: { v: any; masterPhoto: any }) {
                     <InfoRow icon={IconTool} label="Service Type" value={v.serviceType} />
                     <InfoRow icon={IconCar} label="Dashcam" value={v.dashcam} />
                     <InfoRow icon={IconCar} label="Provider" value={v.vehicleProvider} />
+                    <InfoRow icon={IconClipboardCheck} label="Notes" value={v.notes} />
                 </GlassCard>
 
                 {/* Column 2: Location & Dates */}

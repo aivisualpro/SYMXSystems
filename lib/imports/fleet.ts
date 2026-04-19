@@ -491,6 +491,7 @@ const employeeScheduleHeaderMap: Record<string, string> = {
 
 
 export async function processFleet(type: string, data: any, week: string | undefined) {
+  const session = await getSession();
   if (type === 'dvic-vehicle-inspection') {
             // 1. Gather Transporter IDs
             const transporterIds = data
@@ -787,7 +788,7 @@ export async function processFleet(type: string, data: any, week: string | undef
             )];
 
             const vehicles = vins.length
-                ? await Vehicle.find({ vin: { $in: vins } }, { _id: 1, vin: 1, unitNumber: 1 }).lean()
+                ? await Vehicle.find({ vin: { $in: vins as string[] } }, { _id: 1, vin: 1, unitNumber: 1 }).lean()
                 : [];
             const vehicleMap = new Map(
                 (vehicles as any[]).map((v: any) => [v.vin, { _id: v._id, unitNumber: v.unitNumber || "" }])
@@ -955,7 +956,7 @@ export async function processFleet(type: string, data: any, week: string | undef
             )];
 
             const vehicles = vins.length
-                ? await Vehicle.find({ vin: { $in: vins } }, { _id: 1, vin: 1 }).lean()
+                ? await Vehicle.find({ vin: { $in: vins as string[] } }, { _id: 1, vin: 1 }).lean()
                 : [];
             const vehicleMap = new Map(
                 (vehicles as any[]).map((v: any) => [v.vin, v._id])

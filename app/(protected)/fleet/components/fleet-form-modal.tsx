@@ -637,12 +637,11 @@ export default function FleetFormModal() {
                 <FormField label="Description"><textarea className={inputClass} rows={3} value={formData.description || ""} onChange={e => updateForm("description", e.target.value)} required disabled={isRepairReadOnly} /></FormField>
                 <div className="grid grid-cols-2 gap-3">
                   <FormField label="Status">
-                    <select className={inputClass} value={formData.currentStatus || ""} onChange={e => updateForm("currentStatus", e.target.value)} disabled={isRepairReadOnly}
+                    <select className={inputClass} value={formData.currentStatus || "Not started"} onChange={e => updateForm("currentStatus", e.target.value)} disabled={isRepairReadOnly}
                       style={repairStatuses.find(s => s.description === formData.currentStatus)?.color ? { borderLeftWidth: '3px', borderLeftColor: repairStatuses.find(s => s.description === formData.currentStatus)!.color } : {}}>
-                      <option value="">Select status…</option>
                       {(repairStatuses.length > 0
                         ? repairStatuses.map(s => <option key={s.description} value={s.description}>{s.description}</option>)
-                        : ["Not Started", "In Progress", "Waiting for Parts", "Sent to Repair Shop", "Completed"].map(s => <option key={s} value={s}>{s}</option>)
+                        : ["Not started", "In Progress", "Waiting for Parts", "Sent to Repair Shop", "Completed"].map(s => <option key={s} value={s}>{s}</option>)
                       )}
                     </select>
                   </FormField>

@@ -544,6 +544,7 @@ export function FleetRepairsTable({ vin, isTab }: { vin?: string; isTab?: boolea
                             />
                           )}
                           <select
+                            disabled={r.currentStatus === "Completed"}
                             value={r.currentStatus || "Not Started"}
                             onChange={async (e) => {
                               const newStatus = e.target.value;
@@ -573,18 +574,18 @@ export function FleetRepairsTable({ vin, isTab }: { vin?: string; isTab?: boolea
                                 // revert will happen on next fetch
                               }
                             }}
-                            className="rounded-md text-[11px] font-medium border cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            className={`rounded-md text-[11px] font-medium border focus:outline-none focus:ring-1 focus:ring-primary/40 ${r.currentStatus === "Completed" ? "cursor-default opacity-80" : "cursor-pointer"}`}
                             style={{
                               appearance: "none",
                               WebkitAppearance: "none",
                               paddingLeft: StatusIcon ? "22px" : "8px",
-                              paddingRight: "18px",
+                              paddingRight: r.currentStatus === "Completed" ? "8px" : "18px",
                               paddingTop: "2px",
                               paddingBottom: "2px",
                               backgroundColor: statusColor ? `${statusColor}15` : undefined,
                               color: statusColor || undefined,
                               borderColor: statusColor ? `${statusColor}50` : undefined,
-                              backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+                              backgroundImage: r.currentStatus === "Completed" ? "none" : "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
                               backgroundRepeat: "no-repeat",
                               backgroundPosition: "right 4px center",
                             }}
