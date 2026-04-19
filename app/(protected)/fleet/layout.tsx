@@ -217,7 +217,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const openCreateModal = useCallback((type: string) => {
     setModalType(type);
     setEditId(null);
-    setFormData({});
+    setFormData(type === "repair" ? { currentStatus: "Not Started" } : {});
     setModalOpen(true);
   }, []);
 

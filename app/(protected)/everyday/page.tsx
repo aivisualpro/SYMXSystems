@@ -638,7 +638,10 @@ export default function EverydayAfterDispatchingPage() {
             });
         });
         return Object.entries(map)
-            .map(([type, rows]) => ({ type, rows, count: rows.length }))
+            .map(([type, rows]) => {
+                rows.sort((a, b) => (a.employeeName || "").localeCompare(b.employeeName || ""));
+                return { type, rows, count: rows.length };
+            })
             .sort((a, b) => {
                 if (a.type.toLowerCase() === "route") return -1;
                 if (b.type.toLowerCase() === "route") return 1;
@@ -684,7 +687,10 @@ export default function EverydayAfterDispatchingPage() {
         });
 
         return Object.entries(map)
-            .map(([type, rows]) => ({ type, rows, count: rows.length }))
+            .map(([type, rows]) => {
+                rows.sort((a, b) => (a.employeeName || "").localeCompare(b.employeeName || ""));
+                return { type, rows, count: rows.length };
+            })
             .sort((a, b) => {
                 if (a.type.toLowerCase() === "route") return -1;
                 if (b.type.toLowerCase() === "route") return 1;
@@ -706,7 +712,7 @@ export default function EverydayAfterDispatchingPage() {
                 tba: rts.tba,
                 reason: rts.reason
             };
-        });
+        }).sort((a, b) => (a.employeeName || "").localeCompare(b.employeeName || ""));
     }, [rtsMap, routes, employeesMap]);
 
     const rescueEntries = useMemo(() => {
@@ -727,7 +733,7 @@ export default function EverydayAfterDispatchingPage() {
                 reason: rescue.reason,
                 performanceRescue: rescue.performanceRescue
             };
-        });
+        }).sort((a, b) => (a.employeeName || "").localeCompare(b.employeeName || ""));
     }, [rescueMap, routes, employeesMap, allEmployees]);
 
     if (!date || weeks.length === 0) {

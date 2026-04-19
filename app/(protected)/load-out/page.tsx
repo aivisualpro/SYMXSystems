@@ -798,15 +798,10 @@ export default function RoutesPage() {
             typeGroups[typeKey].push(r);
         });
 
-        // If default sorting, sort within groups by hiredDate (oldest to newest)
+        // If default sorting, sort within groups by employeeName (alphabetically)
         if (sortKey === "employee") {
             Object.values(typeGroups).forEach(group => {
-                group.sort((a, b) => {
-                    const dA = a.hiredDate ? new Date(a.hiredDate).getTime() : Infinity;
-                    const dB = b.hiredDate ? new Date(b.hiredDate).getTime() : Infinity;
-                    if (dA !== dB) return dA - dB;
-                    return a.employeeName.localeCompare(b.employeeName);
-                });
+                group.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
             });
         }
 

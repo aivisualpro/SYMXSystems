@@ -71,9 +71,11 @@ function EmployeesPageContent() {
   const hasUrlFilters = searchParams.get('status') || searchParams.get('type') || searchParams.get('filter') || searchParams.get('hourlyStatus');
   const needsApiCall = !!searchParams.get('search') || !!hasUrlFilters;
 
+  const { data: storeEmployees = { records: [], totalCount: 0, hasMore: false }, isLoading: isLoadingEmployees } = useEmployeesList();
+
   const [data, setData] = useState<ISymxEmployee[]>(() => {
-    if (!needsApiCall && store.employees?.records?.length > 0) {
-      return store.employees.records;
+    if (!needsApiCall && storeEmployees?.records?.length > 0) {
+      return storeEmployees.records;
     }
     return [];
   });
@@ -92,10 +94,7 @@ function EmployeesPageContent() {
   const [fetchedFromApi, setFetchedFromApi] = useState(false);
   const PAGE_SIZE = 50;
   const router = useRouter();
-  // ── Read from store (instant, no loading) ──
-  
-  
-  
+
 
   // Vehicle names from store
   const vehicleNames = useMemo(() => {
@@ -122,16 +121,16 @@ function EmployeesPageContent() {
 
   // ── Sync from store when no filters are active ──
   useEffect(() => {
-    if (!needsApiCall && false > 0 && !fetchedFromApi) {
-      setData([]);
-      setTotalCount(storeEmployees.totalCount || [].length);
+    if (!needsApiCall && storeEmployees?.records?.length > 0 && !fetchedFromApi) {
+      setData(storeEmployees.records);
+      setTotalCount(storeEmployees.totalCount || storeEmployees.records.length);
       setHasMore(storeEmployees.hasMore || false);
       setLoading(false);
     }
   }, [storeEmployees, needsApiCall, fetchedFromApi]);
 
   // ── Show loading only if store has no data yet AND no API call is pending ──
-  const isInitialLoading = isLoadingDropdowns || isLoadingVehicles;
+  const isInitialLoading = isLoadingDropdowns || isLoadingVehicles || (!fetchedFromApi && isLoadingEmployees);
 
   // Inline update helper
   const updateEmployeeField = async (id: string, field: string, value: string) => {
