@@ -10,6 +10,7 @@ import SymxUser from "@/lib/models/SymxUser";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import RouteType from "@/lib/models/RouteType";
 import SymxEveryday from "@/lib/models/SymxEveryday";
+import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
 import { authorizeAction } from "@/lib/rbac";
 import { z } from "zod";
 import { validateBody, validateSearchParams } from "@/lib/validations";
@@ -119,11 +120,11 @@ export async function GET(req: NextRequest) {
       prevYearWeek = `${prevYr}-W${String(prevWk).padStart(2, "0")}`;
     }
 
-    const [employees, prevSchedules, auditCountsRaw] = await Promise.all([
+    const [employees, prevSchedules, auditCountsRaw, routeTypes, wstOptions] = await Promise.all([
       // Employee info
       SymxEmployee.find(
         { transporterId: { $in: transporterIds } },
-        { _id: 1, transporterId: 1, firstName: 1, lastName: 1, type: 1, status: 1, ScheduleNotes: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1, hiredDate: 1 }
+        { _id: 1, transporterId: 1, firstName: 1, lastName: 1, type: 1, status: 1, ScheduleNotes: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1, hiredDate: 1, profileImage: 1, rate: 1 }
       ).lean(),
       // Previous week schedules (only need date, transporterId, status)
       prevYearWeek
@@ -137,9 +138,17 @@ export async function GET(req: NextRequest) {
         { $match: { yearWeek } },
         { $group: { _id: "$transporterId", count: { $sum: 1 } } },
       ]),
+      // Route types
+      RouteType.find({ isActive: true }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
+      // WST Options
+      SYMXWSTOption.find({ isActive: true }).lean(),
     ]);
 
+    const wstMap = new Map((wstOptions as any[]).map(w => [(w.wst || '').trim().toLowerCase(), w.revenue || 0]));
+
     const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp]));
+    const theoryHrsMap = new Map((routeTypes as any[]).map(rt => [(rt.name || '').trim().toLowerCase(), rt.theoryHrs || 0]));
+    const routeTypeGroupMap = new Map((routeTypes as any[]).map(rt => [(rt.name || '').trim().toLowerCase(), (rt.group || '').trim().toLowerCase()]));
 
     // Group schedules by transporter → days of week
     const grouped: Record<string, any> = {};
@@ -158,6 +167,7 @@ export async function GET(req: NextRequest) {
               status: emp.status || '',
               ScheduleNotes: emp.ScheduleNotes || '',
               hiredDate: emp.hiredDate || null,
+              profileImage: emp.profileImage || null,
             }
             : null,
           weekNote: '',
@@ -200,6 +210,47 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Compute Labor Cost Theory per day
+    // Compute Labor Cost Theory per day
+    const dailyLaborTheoryCost: Record<string, number> = {};
+    const dailyLaborTheoryCostBreakdown: Record<string, any[]> = {};
+    dates.forEach(d => {
+        dailyLaborTheoryCost[d] = 0;
+        dailyLaborTheoryCostBreakdown[d] = [];
+    });
+
+    schedules.forEach((s: any) => {
+        const statusStr = (s.status || "").trim().toLowerCase();
+        if (statusStr === "off") return; // Skip off days
+
+        const typeStr = (s.type || "").trim().toLowerCase();
+        const theoryHrs = theoryHrsMap.get(typeStr) || 0;
+        
+        if (theoryHrs > 0) {
+            const emp = employeeMap.get(s.transporterId);
+            const rate = emp?.rate ? Number(emp.rate) : 0;
+            if (rate > 0 && s.date) {
+                const dateStr = s.date instanceof Date ? s.date.toISOString().split("T")[0] : new Date(s.date).toISOString().split("T")[0];
+                if (dailyLaborTheoryCost[dateStr] !== undefined) {
+                    const regHrs = Math.min(theoryHrs, 8);
+                    const otHrs = Math.max(0, theoryHrs - 8);
+                    const regCost = regHrs * rate;
+                    const otCost = otHrs * (rate * 1.5);
+                    const cost = Math.round((regCost + otCost) * 100) / 100;
+                    
+                    dailyLaborTheoryCost[dateStr] += cost;
+                    dailyLaborTheoryCostBreakdown[dateStr].push({
+                        employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
+                        type: s.type || "",
+                        rate,
+                        theoryHrs,
+                        cost
+                    });
+                }
+            }
+        }
+    });
+
     // Compute previous week trailing consecutive "Scheduled" days
     const prevWeekTrailing: Record<string, number> = {};
     if (prevSchedules.length > 0) {
@@ -229,12 +280,182 @@ export async function GET(req: NextRequest) {
 
     // Fetch everyday records for these dates to prevent UI bouncing
     const everydayRecords: Record<string, any> = {};
+    const dailyLaborActualCost: Record<string, number> = {};
+    const dailyLaborActualCostBreakdown: Record<string, any[]> = {};
+    const dailyDriverActualCost: Record<string, number> = {};
+    const dailyOpsActualCost: Record<string, number> = {};
+    
+    // Revenue mappings
+    const dailyRevenue: Record<string, number> = {};
+    const dailyRevenueBreakdown: Record<string, any[]> = {};
+    
     if (dates.length > 0) {
-      const dbRecords = await SymxEveryday.find({ date: { $in: dates } }).lean();
+      const dateObjects = dates.map(d => new Date(d));
+      const dbRecords = await SymxEveryday.find({ date: { $in: dateObjects } }).lean();
       dbRecords.forEach((r: any) => {
-        everydayRecords[r.date] = { notes: r.notes || "", routesAssigned: r.routesAssigned || 0 };
+        if (!r.date) return;
+        const dStr = r.date instanceof Date ? r.date.toISOString().split("T")[0] : new Date(r.date).toISOString().split("T")[0];
+        everydayRecords[dStr] = { notes: r.notes || "", routesAssigned: r.routesAssigned || 0 };
+      });
+      dates.forEach(d => {
+          dailyLaborActualCost[d] = 0;
+          dailyLaborActualCostBreakdown[d] = [];
+          dailyDriverActualCost[d] = 0;
+          dailyOpsActualCost[d] = 0;
+          dailyRevenue[d] = 0;
+          dailyRevenueBreakdown[d] = [];
+      });
+      const routeRecords = await SYMXRoute.find(
+        { date: { $in: dateObjects } },
+        { date: 1, transporterId: 1, type: 1, wst: 1, wstDuration: 1, totalCost: 1, paycomInDay: 1, paycomOutLunch: 1, paycomInLunch: 1, paycomOutDay: 1, totalHours: 1 }
+      ).lean();
+
+      routeRecords.forEach((r: any) => {
+        if (!r.date) return;
+        const dStr = r.date instanceof Date ? r.date.toISOString().split("T")[0] : new Date(r.date).toISOString().split("T")[0];
+        
+        const parseTime = (timeStr: string) => {
+            if (!timeStr) return null;
+            const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?:\s?(AM|PM))?$/i);
+            if (!match) return null;
+            let hrs = parseInt(match[1]);
+            const mins = parseInt(match[2]);
+            const ampm = match[3] ? match[3].toUpperCase() : null;
+            if (ampm === "PM" && hrs < 12) hrs += 12;
+            if (ampm === "AM" && hrs === 12) hrs = 0;
+            return hrs * 60 + mins;
+        }
+
+        const durToHrs = (durRaw: any) => {
+            if (!durRaw) return 0;
+            const durStr = String(durRaw).trim();
+
+            // Match HH:MM:SS or HH:MM
+            const timeMatch = durStr.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+            if (timeMatch) {
+                const hours = parseInt(timeMatch[1], 10);
+                const minutes = parseInt(timeMatch[2], 10);
+                return hours + (minutes / 60);
+            }
+            
+            // Extract decimal formats like "11.32" or "10.00h" accurately
+            const floatMatch = durStr.match(/^(\d+(?:\.\d+)?)/);
+            if (floatMatch) {
+                const num = Number(floatMatch[1]);
+                if (!isNaN(num)) return num;
+            }
+
+            return 0;
+        }
+
+        const inDayM = parseTime(r.paycomInDay || "");
+        const outLunchM = parseTime(r.paycomOutLunch || "");
+        const inLunchM = parseTime(r.paycomInLunch || "");
+        const outDayM = parseTime(r.paycomOutDay || "");
+
+        let dynamicTotalMs = 0;
+        if (inDayM !== null && outDayM !== null) {
+            if (outLunchM !== null && inLunchM !== null) {
+                dynamicTotalMs = Math.max(0, (outDayM - inLunchM) + (outLunchM - inDayM));
+            } else {
+                dynamicTotalMs = Math.max(0, outDayM - inDayM);
+            }
+        }
+
+        let totalHrsDecimal = durToHrs(r.totalHours || "");
+        if (dynamicTotalMs > 0) {
+            totalHrsDecimal = dynamicTotalMs / 60;
+        }
+
+        const regHrs = totalHrsDecimal > 0 ? Math.min(totalHrsDecimal, 8) : 0;
+        const otHrs = totalHrsDecimal > 8 ? totalHrsDecimal - 8 : 0;
+
+        const emp = employeeMap.get(r.transporterId);
+        const rate = emp?.rate ? Number(emp.rate) : 0;
+        const regPay = Math.round(rate * regHrs * 100) / 100;
+        const otPay = Math.round(rate * 1.5 * otHrs * 100) / 100;
+        const actualCost = Math.round((regPay + otPay) * 100) / 100;
+
+        if (dailyLaborActualCost[dStr] !== undefined && actualCost > 0) {
+            dailyLaborActualCost[dStr] += actualCost;
+            
+            const groupName = routeTypeGroupMap.get((r.type || "").trim().toLowerCase()) || "";
+            if (groupName === "driver" || groupName === "drivers") {
+                dailyDriverActualCost[dStr] += actualCost;
+            } else if (groupName === "operations" || groupName === "operation" || groupName === "ops") {
+                dailyOpsActualCost[dStr] += actualCost;
+            }
+
+            dailyLaborActualCostBreakdown[dStr].push({
+                employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
+                type: r.type || "",
+                regHrs,
+                otHrs,
+                rate,
+                cost: actualCost
+            });
+        }
+        
+        // Revenue Evaluation
+        const wstVal = (r.wst || "").trim().toLowerCase();
+        const wstHourlyRate = wstMap.get(wstVal) || 0;
+        
+        const rawTotalHours = durToHrs(r.totalHours || "");
+
+        const generatedRevenue = Math.round((wstHourlyRate * rawTotalHours) * 100) / 100;
+        
+        if (generatedRevenue > 0 && dailyRevenue[dStr] !== undefined) {
+             dailyRevenue[dStr] += generatedRevenue;
+             dailyRevenueBreakdown[dStr].push({
+                employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
+                type: r.type || "",
+                wst: r.wst || "—",
+                hrs: rawTotalHours,
+                cost: generatedRevenue
+             });
+        }
       });
     }
+
+    const dailyDriverCostPct: Record<string, number> = {};
+    const dailyOpsCostPct: Record<string, number> = {};
+    const dailyLaborTheoryPct: Record<string, number> = {};
+    const dailyLaborActualPct: Record<string, number> = {};
+    const dailyLaborVarDol: Record<string, number> = {};
+    const dailyLaborVarPct: Record<string, number> = {};
+    
+    dates.forEach(d => {
+        const totalActual = dailyLaborActualCost[d] || 0;
+        const totalTheory = dailyLaborTheoryCost[d] || 0;
+        const rev = dailyRevenue[d] || 0;
+
+        // Labor Var $ = Labor Cost Theory - Labor Cost Actual
+        const laborVarDolRaw = totalTheory - totalActual;
+        dailyLaborVarDol[d] = Math.round(laborVarDolRaw * 100) / 100;
+
+        // Labor Var % = (Labor Var $ / Labor Cost Theory) * 100
+        if (totalTheory > 0) {
+            dailyLaborVarPct[d] = Math.round((laborVarDolRaw / totalTheory) * 100);
+        } else {
+            dailyLaborVarPct[d] = 0;
+        }
+
+        if (totalActual > 0) {
+            dailyDriverCostPct[d] = Math.round(((dailyDriverActualCost[d] || 0) / totalActual) * 100);
+            dailyOpsCostPct[d] = Math.round(((dailyOpsActualCost[d] || 0) / totalActual) * 100);
+        } else {
+            dailyDriverCostPct[d] = 0;
+            dailyOpsCostPct[d] = 0;
+        }
+
+        if (rev > 0) {
+            dailyLaborTheoryPct[d] = Math.round((totalTheory / rev) * 100);
+            dailyLaborActualPct[d] = Math.round((totalActual / rev) * 100);
+        } else {
+            dailyLaborTheoryPct[d] = 0;
+            dailyLaborActualPct[d] = 0;
+        }
+    });
 
     return NextResponse.json({
       yearWeek,
@@ -244,6 +465,20 @@ export async function GET(req: NextRequest) {
       prevWeekTrailing,
       auditCounts,
       everydayRecords,
+      dailyRevenue,
+      dailyRevenueBreakdown,
+      dailyLaborActualCost,
+      dailyLaborTheoryCost,
+      dailyLaborTheoryCostBreakdown,
+      dailyLaborActualCostBreakdown,
+      dailyDriverActualCost,
+      dailyOpsActualCost,
+      dailyDriverCostPct,
+      dailyOpsCostPct,
+      dailyLaborTheoryPct,
+      dailyLaborActualPct,
+      dailyLaborVarDol,
+      dailyLaborVarPct,
     });
   } catch (error: any) {
     console.error("Schedules API Error:", error);

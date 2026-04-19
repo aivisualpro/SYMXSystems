@@ -26,7 +26,7 @@ export interface ISymxEmployeeSchedule extends Document {
   weekDay: string;
   yearWeek: string; // Format: yyyy-Wxx
   date: Date;
-  status: 'pending' | 'sent' | 'delivered' | 'received';
+  status: string;
   type: string;
   subType?: string;
   trainingDay?: string;
@@ -51,7 +51,7 @@ const SymxEmployeeScheduleSchema: Schema = new Schema({
   weekDay: { type: String, required: true },
   yearWeek: { type: String, required: true },
   date: { type: Date, required: true },
-  status: { type: String, enum: ['pending', 'sent', 'delivered', 'received'], default: 'pending' },
+  status: { type: String, default: 'Off' },
   type: { type: String, default: '' },
   subType: { type: String, default: '' },
   trainingDay: { type: String, default: '' },

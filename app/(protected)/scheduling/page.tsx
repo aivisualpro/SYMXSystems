@@ -43,6 +43,7 @@ import {
   Trash2,
   Baby,
   BarChart3,
+  DollarSign,
   type LucideIcon,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
@@ -173,6 +174,7 @@ interface EmployeeSchedule {
     status: string;
     ScheduleNotes?: string;
     hiredDate?: string | Date;
+    profileImage?: string;
   } | null;
   weekNote: string;
   days: Record<number, DayData>;
@@ -184,6 +186,22 @@ interface WeekData {
   employees: EmployeeSchedule[];
   totalEmployees: number;
   prevWeekTrailing?: Record<string, number>;
+  auditCounts?: Record<string, number>;
+  everydayRecords?: Record<string, any>;
+  dailyLaborActualCost?: Record<string, number>;
+  dailyLaborTheoryCost?: Record<string, number>;
+  dailyLaborTheoryCostBreakdown?: Record<string, { employeeName: string; type: string; rate: number; theoryHrs: number; cost: number; }[]>;
+  dailyLaborActualCostBreakdown?: Record<string, { employeeName: string; type: string; regHrs: number; otHrs: number; rate: number; cost: number; }[]>;
+  dailyRevenue?: Record<string, number>;
+  dailyRevenueBreakdown?: Record<string, { employeeName: string; type: string; wst: string; hrs: number; cost: number; }[]>;
+  dailyDriverActualCost?: Record<string, number>;
+  dailyOpsActualCost?: Record<string, number>;
+  dailyDriverCostPct?: Record<string, number>;
+  dailyOpsCostPct?: Record<string, number>;
+  dailyLaborTheoryPct?: Record<string, number>;
+  dailyLaborActualPct?: Record<string, number>;
+  dailyLaborVarDol?: Record<string, number>;
+  dailyLaborVarPct?: Record<string, number>;
 }
 
 // ── Planning Row Data ──
@@ -552,6 +570,15 @@ function SchedulingPageContent() {
   const [kpiOpen, setKpiOpen] = useState(false);
   const [canViewKpi, setCanViewKpi] = useState(false);
   const kpiRowRef = useRef<HTMLTableRowElement>(null);
+
+  const [costModal, setCostModal] = useState<{ open: boolean; date: string; type: "theory" | "actual" | "revenue" | "formula"; metricLabel?: string; theoryData: any[]; actualData: any[]; revenueData: any[] }>({
+    open: false,
+    date: "",
+    type: "actual",
+    theoryData: [],
+    actualData: [],
+    revenueData: []
+  });
 
   useEffect(() => {
     fetch("/api/user/profile")
@@ -1503,7 +1530,15 @@ function SchedulingPageContent() {
                           if (b === "Operations") return 1;
                           return a.localeCompare(b);
                         })
-                        .map(([groupName, emps]) => (
+                        .map(([groupName, emps]) => {
+                          const isOps = groupName.toLowerCase().includes("operation");
+                          const isEmp = groupName.toLowerCase() === "employee";
+                          
+                          const Icon = isOps ? Wrench : isEmp ? Users : GraduationCap;
+                          const color = isOps ? "text-amber-500" : isEmp ? "text-emerald-500" : "text-sky-500";
+                          const bg = isOps ? "bg-amber-500/10" : isEmp ? "bg-emerald-500/10" : "bg-sky-500/10";
+                          
+                          return (
                           <Fragment key={`group-${groupName}`}>
                             {/* Group Header */}
                             <tr
@@ -1521,10 +1556,11 @@ function SchedulingPageContent() {
                                       collapsedGroups[groupName] && "-rotate-90"
                                     )}
                                   />
-                                  <span className="font-bold text-xs uppercase tracking-wider text-amber-500">
+                                  <Icon className={cn("h-3.5 w-3.5", color)} />
+                                  <span className={cn("font-bold text-xs uppercase tracking-wider", color)}>
                                     {groupName}
                                   </span>
-                                  <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-amber-500/10 text-amber-500">
+                                  <Badge variant="secondary" className={cn("text-[9px] h-4 px-1.5", bg, color)}>
                                     {emps.length}
                                   </Badge>
                                 </div>
@@ -1557,7 +1593,21 @@ function SchedulingPageContent() {
                                       className="border-b border-border/10 hover:bg-muted/20 transition-colors group"
                                     >
                                       <td className="px-1.5 sm:px-3 py-1 sm:py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors w-[130px] sm:w-[170px]">
-                                        <div className="flex items-center justify-between gap-1 sm:gap-1.5 w-full h-full pr-1">
+                                        <div className="flex items-center gap-1.5 sm:gap-2 w-full h-full pr-1">
+                                          {/* Avatar */}
+                                          {emp.employee?.profileImage ? (
+                                              <img
+                                                  src={emp.employee.profileImage}
+                                                  alt={emp.employee.name}
+                                                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover ring-1 ring-border shrink-0"
+                                              />
+                                          ) : (
+                                              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary/15 flex items-center justify-center ring-1 ring-primary/20 shrink-0">
+                                                  <span className="text-[8px] font-bold text-primary">
+                                                      {(emp.employee?.name || emp.transporterId).split(" ").map(n => n[0]).join("").slice(0, 2)}
+                                                  </span>
+                                              </div>
+                                          )}
                                           <span className="text-[10px] sm:text-xs font-normal truncate flex-1 min-w-0" title={emp.employee?.name || emp.transporterId}>
                                             {emp.employee?.name || emp.transporterId}
                                           </span>
@@ -1756,7 +1806,8 @@ function SchedulingPageContent() {
                                   );
                                 })}
                           </Fragment>
-                        ))}
+                          );
+                        })}
 
                       {/* ── KPI Group — inside same table, like employee type groups ── */}
                       {canViewKpi && weekData && (
@@ -1799,10 +1850,11 @@ function SchedulingPageContent() {
 
                           {/* KPI Metric Rows */}
                           {kpiOpen && [
+                            { label: "Revenue", color: "text-green-500", icon: DollarSign },
                             { label: "Driver %", color: "text-emerald-400", icon: Users },
                             { label: "Operations %", color: "text-blue-400", icon: Wrench },
-                            { label: "Labor Percentage Theory %", color: "text-amber-400", icon: BarChart3 },
-                            { label: "Labor Percentage Actual %", color: "text-orange-400", icon: BarChart3 },
+                            { label: "Labor Theory %", color: "text-amber-400", icon: BarChart3 },
+                            { label: "Labor Actual %", color: "text-orange-400", icon: BarChart3 },
                             { label: "Labor Cost Theory", color: "text-cyan-400", icon: CalendarDays },
                             { label: "Labor Cost Actual", color: "text-indigo-400", icon: CalendarDays },
                             { label: "Labor Var $", color: "text-rose-400", icon: AlertTriangle },
@@ -1812,17 +1864,106 @@ function SchedulingPageContent() {
                               key={metric.label}
                               className="border-b border-border/10 hover:bg-muted/20 transition-colors"
                             >
-                              <td className="px-3 sm:px-4 py-2 text-[12px] font-semibold whitespace-nowrap">
-                                <div className="flex items-center gap-2 pl-2">
-                                  <metric.icon className={cn("h-3.5 w-3.5", metric.color)} />
-                                  <span className="text-foreground">{metric.label}</span>
+                              <td className="px-1.5 sm:px-3 py-1 sm:py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors w-[130px] sm:w-[170px]">
+                                <div className="flex items-center gap-1.5 sm:gap-2 w-full h-full pr-1">
+                                  <metric.icon className={cn("w-5 h-5 sm:w-6 sm:h-6 p-1 shrink-0 bg-background/50 rounded-full", metric.color)} />
+                                  <span className="text-[10px] sm:text-xs font-semibold truncate flex-1 min-w-0" title={metric.label}>
+                                    {metric.label}
+                                  </span>
                                 </div>
                               </td>
-                              {(weekData.dates || []).map((date) => (
-                                <td key={date} className="text-center px-0.5 sm:px-1 py-2">
-                                  <span className="text-[12px] text-muted-foreground font-medium">—</span>
-                                </td>
-                              ))}
+                              {(weekData.dates || []).map((date) => {
+                                let val: string | number = "—";
+                                const isRevenue = metric.label === "Revenue";
+                                const isLaborActual = metric.label === "Labor Cost Actual";
+                                const isLaborTheory = metric.label === "Labor Cost Theory";
+                                const isDriverPct = metric.label === "Driver %";
+                                const isOperationsPct = metric.label === "Operations %";
+                                const isLaborTheoryPct = metric.label === "Labor Theory %";
+                                const isLaborActualPct = metric.label === "Labor Actual %";
+                                const isLaborVarDol = metric.label === "Labor Var $";
+                                const isLaborVarPct = metric.label === "Labor Var %";
+
+                                let customColorClass = "";
+
+                                if (isRevenue) {
+                                  const cost = weekData.dailyRevenue?.[date] || 0;
+                                  val = cost > 0 ? `$${cost.toFixed(2)}` : "—";
+                                } else if (isLaborActual) {
+                                  const cost = weekData.dailyLaborActualCost?.[date] || 0;
+                                  val = cost > 0 ? `$${cost.toFixed(2)}` : "—";
+                                } else if (isLaborTheory) {
+                                  const cost = weekData.dailyLaborTheoryCost?.[date] || 0;
+                                  val = cost > 0 ? `$${cost.toFixed(2)}` : "—";
+                                } else if (isDriverPct) {
+                                  const pct = weekData.dailyDriverCostPct?.[date] || 0;
+                                  val = pct > 0 ? `${pct}%` : "—";
+                                } else if (isOperationsPct) {
+                                  const pct = weekData.dailyOpsCostPct?.[date] || 0;
+                                  val = pct > 0 ? `${pct}%` : "—";
+                                } else if (isLaborTheoryPct) {
+                                  const pct = weekData.dailyLaborTheoryPct?.[date] || 0;
+                                  val = pct > 0 ? `${pct}%` : "—";
+                                } else if (isLaborActualPct) {
+                                  const pct = weekData.dailyLaborActualPct?.[date] || 0;
+                                  val = pct > 0 ? `${pct}%` : "—";
+                                } else if (isLaborVarDol) {
+                                  const cost = weekData.dailyLaborVarDol?.[date];
+                                  if (cost !== undefined && cost !== 0) {
+                                      const isPos = cost > 0;
+                                      customColorClass = isPos ? "text-emerald-500 font-bold" : "text-rose-500 font-bold";
+                                      val = cost < 0 ? `-$${Math.abs(cost).toFixed(2)}` : `$${cost.toFixed(2)}`;
+                                  } else if (cost === 0) {
+                                      val = "$0.00";
+                                  }
+                                } else if (isLaborVarPct) {
+                                  const pct = weekData.dailyLaborVarPct?.[date];
+                                  if (pct !== undefined && pct !== 0) {
+                                      const isPos = pct > 0;
+                                      customColorClass = isPos ? "text-emerald-500 font-bold" : "text-rose-500 font-bold";
+                                      val = `${pct}%`;
+                                  } else if (pct === 0) {
+                                      val = "0%";
+                                  }
+                                }
+
+                                const isActiveMetric = isLaborActual || isLaborTheory || isRevenue || isDriverPct || isOperationsPct || isLaborTheoryPct || isLaborActualPct || isLaborVarDol || isLaborVarPct;
+                                const isActiveClickable = isActiveMetric; // All metric rows are natively clickable to show their root calculation breakdown
+
+                                return (
+                                  <td key={date} className="text-center px-0.5 sm:px-1 py-1">
+                                    {isActiveMetric && val !== "—" ? (
+                                      <button
+                                        onClick={() => {
+                                          if (isActiveClickable) {
+                                            const isFormulaModal = ["Driver %", "Operations %", "Labor Theory %", "Labor Actual %", "Labor Var $", "Labor Var %"].includes(metric.label);
+                                            const modalType: "revenue" | "theory" | "actual" | "formula" = isFormulaModal ? "formula" : isRevenue ? "revenue" : (isLaborTheory || isLaborTheoryPct) ? "theory" : "actual";
+                                            setCostModal({
+                                              open: true,
+                                              date,
+                                              type: modalType,
+                                              metricLabel: metric.label,
+                                              theoryData: weekData.dailyLaborTheoryCostBreakdown?.[date] || [],
+                                              actualData: weekData.dailyLaborActualCostBreakdown?.[date] || [],
+                                              revenueData: weekData.dailyRevenueBreakdown?.[date] || []
+                                            });
+                                          }
+                                        }}
+                                        className={cn(
+                                          "text-[12px] font-bold px-2 py-1 transition-colors outline-none",
+                                          isActiveClickable && "cursor-pointer rounded-md hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring",
+                                          !isActiveClickable && "cursor-default",
+                                          customColorClass || metric.color
+                                        )}
+                                      >
+                                        {val}
+                                      </button>
+                                    ) : (
+                                      <span className={cn("text-[12px] font-medium transition-colors", val !== "—" ? (customColorClass || "text-muted-foreground") : "text-muted-foreground")}>{val}</span>
+                                    )}
+                                  </td>
+                                )
+                              })}
                               {/* Days column */}
                               <td className="text-center px-1 py-2"></td>
                               {/* Notes icon column */}
@@ -1844,6 +1985,236 @@ function SchedulingPageContent() {
           </>)}
         </div>
       </div>
+
+      {/* ── Cost Summary Modal ── */}
+      {costModal.open && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setCostModal({ ...costModal, open: false })} />
+          <div className="relative w-full max-w-2xl bg-card border border-border shadow-2xl rounded-xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+            {/* Header */}
+            <div className="shrink-0 px-5 py-4 border-b border-border bg-gradient-to-r from-blue-500/10 to-indigo-500/5 items-center justify-between flex">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/20 flex items-center justify-center ring-1 ring-blue-500/30">
+                  {costModal.type === "formula" ? <BarChart3 className="h-4 w-4 text-emerald-400" /> : costModal.type === "theory" ? <BarChart3 className="h-4 w-4 text-cyan-400" /> : costModal.type === "revenue" ? <DollarSign className="h-4 w-4 text-green-400" /> : <CalendarDays className="h-4 w-4 text-indigo-400" />}
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold flex items-center gap-2">
+                    {costModal.type === "formula" ? `${costModal.metricLabel} Summary` : costModal.type === "theory" ? "Labor Cost Theory Breakdown" : costModal.type === "revenue" ? "Daily Revenue Breakdown" : "Labor Cost Actual Breakdown"}
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-background border border-border text-muted-foreground">
+                      {new Date(costModal.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    </span>
+                  </h2>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">
+                    {costModal.type === "formula" ? "KPI Equation Logic" : costModal.type === "theory" ? costModal.theoryData.length : costModal.type === "revenue" ? costModal.revenueData.length : costModal.actualData.length} {costModal.type === "formula" ? "" : "Employee"}{(costModal.type !== "formula" && (costModal.type === "theory" ? costModal.theoryData : costModal.type === "revenue" ? costModal.revenueData : costModal.actualData).length !== 1) ? "s Contributors" : (costModal.type !== "formula" ? " Contributor" : "")}
+                  </p>
+                </div>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-black/10 dark:hover:bg-white/10" onClick={() => setCostModal({ ...costModal, open: false })}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto w-full max-h-[60vh]">
+              {costModal.type === "formula" ? (() => {
+                  if (!weekData) return null;
+                  let equationRaw = "";
+                  let equationValues = "";
+                  let finalResult = "";
+                  let finalColor = "text-foreground";
+
+                  const actualCost = weekData.dailyLaborActualCost?.[costModal.date] || 0;
+                  const theoryCost = weekData.dailyLaborTheoryCost?.[costModal.date] || 0;
+                  const revenue = weekData.dailyRevenue?.[costModal.date] || 0;
+
+                  if (costModal.metricLabel === "Driver %") {
+                      const driverCost = weekData.dailyDriverActualCost?.[costModal.date] || 0;
+                      equationRaw = "(Driver Actual Cost / Total Labor Actual) × 100";
+                      equationValues = `($${driverCost.toFixed(2)} / $${actualCost.toFixed(2)}) × 100`;
+                      finalResult = `${weekData.dailyDriverCostPct?.[costModal.date] || 0}%`;
+                      finalColor = "text-emerald-400";
+                  } else if (costModal.metricLabel === "Operations %") {
+                      const opsCost = weekData.dailyOpsActualCost?.[costModal.date] || 0;
+                      equationRaw = "(Operations Actual Cost / Total Labor Actual) × 100";
+                      equationValues = `($${opsCost.toFixed(2)} / $${actualCost.toFixed(2)}) × 100`;
+                      finalResult = `${weekData.dailyOpsCostPct?.[costModal.date] || 0}%`;
+                      finalColor = "text-blue-400";
+                  } else if (costModal.metricLabel === "Labor Theory %") {
+                      equationRaw = "(Labor Cost Theory / Revenue) × 100";
+                      equationValues = `($${theoryCost.toFixed(2)} / $${revenue.toFixed(2)}) × 100`;
+                      finalResult = `${weekData.dailyLaborTheoryPct?.[costModal.date] || 0}%`;
+                      finalColor = "text-amber-400";
+                  } else if (costModal.metricLabel === "Labor Actual %") {
+                      equationRaw = "(Labor Cost Actual / Revenue) × 100";
+                      equationValues = `($${actualCost.toFixed(2)} / $${revenue.toFixed(2)}) × 100`;
+                      finalResult = `${weekData.dailyLaborActualPct?.[costModal.date] || 0}%`;
+                      finalColor = "text-orange-400";
+                  } else if (costModal.metricLabel === "Labor Var $") {
+                      equationRaw = "Labor Cost Theory - Labor Cost Actual";
+                      equationValues = `$${theoryCost.toFixed(2)} - $${actualCost.toFixed(2)}`;
+                      const v = weekData.dailyLaborVarDol?.[costModal.date] || 0;
+                      finalResult = v < 0 ? `-$${Math.abs(v).toFixed(2)}` : `$${v.toFixed(2)}`;
+                      finalColor = v > 0 ? "text-emerald-500" : v < 0 ? "text-rose-500" : "text-foreground";
+                  } else if (costModal.metricLabel === "Labor Var %") {
+                      equationRaw = "(Labor Var $ / Labor Cost Theory) × 100";
+                      const vDol = weekData.dailyLaborVarDol?.[costModal.date] || 0;
+                      equationValues = `(${vDol < 0 ? "-" : ""}$${Math.abs(vDol).toFixed(2)} / $${theoryCost.toFixed(2)}) × 100`;
+                      const vPct = weekData.dailyLaborVarPct?.[costModal.date] || 0;
+                      finalResult = `${vPct}%`;
+                      finalColor = vPct > 0 ? "text-emerald-500" : vPct < 0 ? "text-rose-500" : "text-foreground";
+                  }
+
+                  return (
+                    <div className="p-8 flex flex-col items-center justify-center text-center space-y-6 w-full">
+                        <div className="space-y-2 w-full max-w-sm">
+                           <h4 className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 drop-shadow-sm">Metric Context</h4>
+                           <div className="bg-muted/30 rounded-xl p-4 border border-border/50 text-[13px] font-medium font-mono whitespace-nowrap shadow-sm text-foreground/80">
+                               {equationRaw}
+                           </div>
+                        </div>
+                        <div className="space-y-2 w-full max-w-sm">
+                           <h4 className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 drop-shadow-sm">Live Calculation</h4>
+                           <div className="bg-muted/30 rounded-xl p-4 border border-border/50 text-[13px] font-medium font-mono whitespace-nowrap shadow-sm text-blue-400/90">
+                               {equationValues}
+                           </div>
+                        </div>
+                        <div className="pt-6 pb-2 relative w-full flex justify-center">
+                           <div className={cn("text-[56px] font-black tracking-tight drop-shadow-xl leading-none scale-110", finalColor)}>
+                               {finalResult}
+                           </div>
+                        </div>
+                    </div>
+                  );
+              })() : (() => {
+                const data = costModal.type === "theory" ? costModal.theoryData : costModal.type === "revenue" ? costModal.revenueData : costModal.actualData;
+                if (data.length === 0) {
+                  return (
+                    <div className="py-12 flex flex-col items-center justify-center text-center opacity-70">
+                        <AlertTriangle className="h-10 w-10 text-muted-foreground mb-3" />
+                        <p className="text-sm font-medium">No contribution data available</p>
+                    </div>
+                  );
+                }
+
+                // Group data by type
+                const groupedData: Record<string, typeof data> = {};
+                data.forEach((row: any) => {
+                  const t = (row.type || "Untyped").trim();
+                  if (!groupedData[t]) groupedData[t] = [];
+                  groupedData[t].push(row);
+                });
+                const groupKeys = Object.keys(groupedData).sort();
+
+                return (
+                  <table className="w-full border-collapse text-left">
+                    <thead className="sticky top-0 bg-card z-10 shadow-sm before:absolute before:inset-0 before:border-b before:border-border/50">
+                      <tr>
+                        <th className="py-2.5 px-3 w-10 text-[10px] font-bold text-muted-foreground text-center">#</th>
+                        <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Employee Name</th>
+                        {costModal.type === "theory" ? (
+                          <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-right">Theory Hrs</th>
+                        ) : costModal.type === "revenue" ? (
+                          <>
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">WST Token</th>
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-right">Route Type</th>
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-right">Total Hrs</th>
+                          </>
+                        ) : (
+                          <>
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-right">Reg Hrs</th>
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-right">OT Hrs</th>
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-right">Rate / Hr</th>
+                          </>
+                        )}
+                        <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-right w-24">
+                          {costModal.type === "revenue" ? "Revenue" : "Cost"}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupKeys.map(key => {
+                        const items = groupedData[key].sort((a, b) => b.cost - a.cost);
+                        const subTotal = items.reduce((sum, r) => sum + r.cost, 0);
+                        return (
+                          <Fragment key={key}>
+                            {/* Group Header */}
+                            <tr className="bg-muted border-y border-border/50">
+                              <td colSpan={costModal.type === "theory" ? 4 : costModal.type === "revenue" ? 6 : 6} className="py-1.5 px-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                                <div className="flex items-center gap-2">
+                                  <span>{key === "" ? "Untyped" : key}</span>
+                                  <span className="text-[10px] bg-background border border-border px-1.5 py-0.5 rounded-full">{items.length}</span>
+                                </div>
+                              </td>
+                            </tr>
+                            {/* Group Rows */}
+                            {items.map((row, idx) => (
+                              <tr key={idx} className="border-b border-border/10 last:border-0 hover:bg-muted/30 transition-colors">
+                                <td className="py-2 px-3 text-xs font-medium text-muted-foreground text-center">{idx + 1}</td>
+                                <td className="py-2 px-3 text-[13px] font-bold whitespace-nowrap">{row.employeeName}</td>
+                                {costModal.type === "theory" ? (
+                                  <td className="py-2 px-3 text-[13px] font-medium text-right font-mono">{row.theoryHrs.toFixed(2)}h</td>
+                                ) : costModal.type === "revenue" ? (
+                                  <>
+                                    <td className="py-2 px-3 text-[11px] font-bold tracking-wider text-center"><Badge variant="outline" className="text-[10px] px-1.5 py-0 rounded">{row.wst}</Badge></td>
+                                    <td className="py-2 px-3 text-[11px] font-bold tracking-wider text-right text-muted-foreground">{row.type || "—"}</td>
+                                    <td className="py-2 px-3 text-[12px] font-medium text-right font-mono">{row.hrs ? row.hrs.toFixed(2) : "0.00"}h</td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td className="py-2 px-3 text-[13px] font-medium text-right font-mono">{row.regHrs.toFixed(2)}h</td>
+                                    <td className="py-2 px-3 text-[13px] font-medium text-right font-mono text-orange-400">{row.otHrs > 0 ? row.otHrs.toFixed(2) + "h" : "-"}</td>
+                                    <td className="py-2 px-3 text-[12px] font-medium text-right font-mono text-muted-foreground">${row.rate.toFixed(2)}</td>
+                                  </>
+                                )}
+                                <td className={cn(
+                                    "py-2 px-3 text-[13px] font-bold text-right font-mono tracking-tight",
+                                    costModal.type === 'theory' ? 'text-cyan-400' : costModal.type === "revenue" ? "text-green-400" : 'text-indigo-400'
+                                )}>
+                                  ${row.cost.toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                            {/* Subtotal */}
+                            <tr className="bg-muted/20 border-border/30">
+                              <td colSpan={costModal.type === "theory" ? 3 : costModal.type === "revenue" ? 5 : 5} className="py-2 px-3 text-[11px] font-bold text-right uppercase tracking-wider text-muted-foreground">
+                                Subtotal
+                              </td>
+                              <td className={cn(
+                                "py-2 px-3 text-[13px] font-bold text-right font-mono border-t border-border/30",
+                                costModal.type === 'theory' ? 'text-cyan-400/80' : costModal.type === "revenue" ? "text-green-500/80" : 'text-indigo-400/80'
+                              )}>
+                                ${subTotal.toFixed(2)}
+                              </td>
+                            </tr>
+                          </Fragment>
+                        );
+                      })}
+                      
+                      {/* Grand Total Row */}
+                      {(() => {
+                        const totalCost = data.reduce((sum, r) => sum + r.cost, 0);
+                        return (
+                          <tr className="bg-muted border-t-2 border-border">
+                            <td colSpan={costModal.type === "theory" ? 3 : costModal.type === "revenue" ? 5 : 5} className="py-3 px-3 text-xs font-black text-right uppercase tracking-wider text-foreground">
+                              Grand Total
+                            </td>
+                            <td className={cn(
+                                "py-3 px-3 text-[16px] font-black text-right font-mono",
+                                costModal.type === 'theory' ? 'text-cyan-400' : costModal.type === "revenue" ? "text-green-500" : 'text-indigo-400'
+                            )}>
+                              ${totalCost.toFixed(2)}
+                            </td>
+                          </tr>
+                        )
+                      })()}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Audit Log Slide-out Panel ── */}
       {showAuditPanel && (
