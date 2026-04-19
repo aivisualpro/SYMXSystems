@@ -127,6 +127,7 @@ const data = {
       url: "/scheduling",
       icon: IconCalendarTime,
       subModules: [
+        { name: "KPI", url: "/scheduling" },
         { name: "Messaging", url: "/scheduling/messaging" },
       ],
     },

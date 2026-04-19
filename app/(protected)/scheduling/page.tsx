@@ -42,6 +42,7 @@ import {
   UserPlus,
   Trash2,
   Baby,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
@@ -548,12 +549,33 @@ function SchedulingPageContent() {
 
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [deletingWeek, setDeletingWeek] = useState(false);
+  const [kpiOpen, setKpiOpen] = useState(false);
+  const [canViewKpi, setCanViewKpi] = useState(false);
 
   useEffect(() => {
     fetch("/api/user/profile")
       .then(res => res.json())
       .then(data => {
         if (data && data.email) setCurrentUserEmail(data.email.toLowerCase());
+      })
+      .catch(() => { });
+
+    // Check KPI view permission
+    fetch("/api/user/permissions")
+      .then(res => res.json())
+      .then(data => {
+        const perms = data.permissions || [];
+        if (data.role === "Super Admin") {
+          setCanViewKpi(true);
+          return;
+        }
+        const kpiPerm = perms.find((p: any) => p.module === "KPI");
+        if (kpiPerm && kpiPerm.actions?.view !== false) {
+          setCanViewKpi(true);
+        } else if (!kpiPerm) {
+          // Not in permissions array → allowed by default
+          setCanViewKpi(true);
+        }
       })
       .catch(() => { });
   }, []);
@@ -1363,8 +1385,10 @@ function SchedulingPageContent() {
                                 {/* 1. Ultra-sleek Date row */}
                                 <div className={cn(
                                   "flex items-center justify-between gap-1 w-full max-w-[128px] px-1.5 py-0.5 rounded-full border transition-colors",
-                                  isToday ? "bg-emerald-500 text-white border-emerald-400 shadow-sm" : "bg-blue-500 text-white border-blue-400 shadow-sm"
-                                )}>
+                                  isToday ? "text-white border-[#06923E] shadow-sm" : "bg-blue-500 text-white border-blue-400 shadow-sm"
+                                )}
+                                style={isToday ? { backgroundColor: "#06923E" } : undefined}
+                                >
                                   <div className="flex items-baseline gap-1">
                                     <span className={cn(
                                       "text-[10px] uppercase font-bold tracking-widest",
@@ -1732,6 +1756,76 @@ function SchedulingPageContent() {
                                 })}
                           </Fragment>
                         ))}
+
+                      {/* ── KPI Group — inside same table, like employee type groups ── */}
+                      {canViewKpi && weekData && (
+                        <Fragment>
+                          {/* KPI Group Header */}
+                          <tr
+                            className="border-b border-border/30 cursor-pointer hover:bg-muted/30 transition-colors"
+                            onClick={() => setKpiOpen(prev => !prev)}
+                          >
+                            <td
+                              colSpan={(weekData?.dates?.length || 7) + 4}
+                              className="px-3 py-2"
+                            >
+                              <div className="flex items-center gap-2">
+                                <ChevronDown
+                                  className={cn(
+                                    "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                                    !kpiOpen && "-rotate-90"
+                                  )}
+                                />
+                                <BarChart3 className="h-3.5 w-3.5 text-violet-400" />
+                                <span className="font-bold text-xs uppercase tracking-wider text-violet-400">
+                                  KPI
+                                </span>
+                                <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-violet-500/10 text-violet-400">
+                                  8
+                                </Badge>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* KPI Metric Rows */}
+                          {kpiOpen && [
+                            { label: "Driver %", color: "text-emerald-400", icon: Users },
+                            { label: "Operations %", color: "text-blue-400", icon: Wrench },
+                            { label: "Labor Percentage Theory %", color: "text-amber-400", icon: BarChart3 },
+                            { label: "Labor Percentage Actual %", color: "text-orange-400", icon: BarChart3 },
+                            { label: "Labor Cost Theory", color: "text-cyan-400", icon: CalendarDays },
+                            { label: "Labor Cost Actual", color: "text-indigo-400", icon: CalendarDays },
+                            { label: "Labor Var $", color: "text-rose-400", icon: AlertTriangle },
+                            { label: "Labor Var %", color: "text-purple-400", icon: AlertTriangle },
+                          ].map((metric) => (
+                            <tr
+                              key={metric.label}
+                              className="border-b border-border/10 hover:bg-muted/20 transition-colors"
+                            >
+                              <td className="px-3 sm:px-4 py-2 text-[12px] font-semibold whitespace-nowrap">
+                                <div className="flex items-center gap-2 pl-2">
+                                  <metric.icon className={cn("h-3.5 w-3.5", metric.color)} />
+                                  <span className="text-foreground">{metric.label}</span>
+                                </div>
+                              </td>
+                              {(weekData.dates || []).map((date) => (
+                                <td key={date} className="text-center px-0.5 sm:px-1 py-2">
+                                  <span className="text-[12px] text-muted-foreground font-medium">—</span>
+                                </td>
+                              ))}
+                              {/* Days column */}
+                              <td className="text-center px-1 py-2"></td>
+                              {/* Notes icon column */}
+                              <td className="hidden md:table-cell px-0 py-2"></td>
+                              {/* Notes column */}
+                              <td className="hidden md:table-cell px-2 py-2"></td>
+                              {/* Audit column */}
+                              <td className="text-center px-0.5 py-2"></td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      )}
+
                     </tbody>
                   </table>
                 </div>

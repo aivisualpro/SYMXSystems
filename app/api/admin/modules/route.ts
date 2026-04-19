@@ -5,7 +5,7 @@ import connectToDatabase from "@/lib/db";
 import SymxAppModule from "@/lib/models/SymxAppModule";
 
 // ── VERSION: bump this whenever DEFAULT_MODULES changes to force a DB reseed ──
-const MODULES_VERSION = 8;
+const MODULES_VERSION = 9;
 
 // Default modules — must match actual routes in /app/(protected)/
 const DEFAULT_MODULES = [
@@ -30,6 +30,7 @@ const DEFAULT_MODULES = [
   },
   {
     name: "Scheduling", url: "/scheduling", icon: "IconCalendarTime", order: 3, subModules: [
+      { name: "KPI", url: "/scheduling" },
       { name: "Messaging", url: "/scheduling/messaging" },
     ]
   },
