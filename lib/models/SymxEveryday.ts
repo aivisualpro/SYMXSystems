@@ -30,6 +30,8 @@ const SymxEverydaySchema: Schema = new Schema(
   }
 );
 
-export const SymxEveryday =
+const SymxEveryday =
   mongoose.models.SymxEveryday ||
   mongoose.model<ISymxEveryday>('SymxEveryday', SymxEverydaySchema);
+
+export default SymxEveryday;
