@@ -108,26 +108,6 @@ const data = {
       ]
     },
     {
-      name: "Fleet",
-      url: "/fleet",
-      icon: IconCar,
-      subModules: [
-        { name: "Overview", url: "/fleet" },
-        { name: "Vehicles", url: "/fleet/vehicles" },
-        { name: "Repairs", url: "/fleet/repairs" },
-        { name: "Inspections", url: "/fleet/inspections" },
-        { name: "Rental Agreements", url: "/fleet/rentals" },
-      ]
-    },
-    {
-      name: "Scheduling",
-      url: "/scheduling",
-      icon: IconCalendarTime,
-      subModules: [
-        { name: "Messaging", url: "/scheduling/messaging" },
-      ],
-    },
-    {
       name: "Dispatching",
       url: "/dispatching",
       icon: IconRoute,
@@ -143,6 +123,14 @@ const data = {
       ],
     },
     {
+      name: "Scheduling",
+      url: "/scheduling",
+      icon: IconCalendarTime,
+      subModules: [
+        { name: "Messaging", url: "/scheduling/messaging" },
+      ],
+    },
+    {
       name: "Everyday",
       url: "/everyday",
       icon: IconCalendarEvent,
@@ -153,6 +141,18 @@ const data = {
       url: "/load-out",
       icon: IconTruckDelivery,
       subModules: []
+    },
+    {
+      name: "Fleet",
+      url: "/fleet",
+      icon: IconCar,
+      subModules: [
+        { name: "Overview", url: "/fleet" },
+        { name: "Vehicles", url: "/fleet/vehicles" },
+        { name: "Repairs", url: "/fleet/repairs" },
+        { name: "Inspections", url: "/fleet/inspections" },
+        { name: "Rental Agreements", url: "/fleet/rentals" },
+      ]
     },
     {
       name: "HR",
