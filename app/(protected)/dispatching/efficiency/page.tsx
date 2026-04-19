@@ -1,4 +1,5 @@
 "use client";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../layout";
@@ -54,28 +55,7 @@ function toPacificDate(d: string | Date): string {
 }
 
 // ── Type Options (colored pills) ──
-const TYPE_OPTIONS = [
-    { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700" },
-    { label: "Open", icon: DoorOpen, bg: "bg-amber-400/80", text: "text-white", border: "border-amber-500/60" },
-    { label: "Close", icon: DoorClosed, bg: "bg-rose-400/80", text: "text-white", border: "border-rose-500/60" },
-    { label: "Off", icon: Coffee, bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" },
-    { label: "Call Out", icon: PhoneOff, bg: "bg-yellow-500", text: "text-white", border: "border-yellow-600" },
-    { label: "AMZ Training", icon: GraduationCap, bg: "bg-indigo-600", text: "text-white", border: "border-indigo-700" },
-    { label: "Fleet", icon: TruckIcon, bg: "bg-blue-600", text: "text-white", border: "border-blue-700" },
-    { label: "Request Off", icon: CalendarOff, bg: "bg-purple-600", text: "text-white", border: "border-purple-700" },
-    { label: "Trainer", icon: UserCheck, bg: "bg-teal-600", text: "text-white", border: "border-teal-700" },
-    { label: "Training OTR", icon: BookOpen, bg: "bg-violet-600", text: "text-white", border: "border-violet-700" },
-    { label: "Suspension", icon: Ban, bg: "bg-rose-700", text: "text-white", border: "border-rose-800" },
-    { label: "Modified Duty", icon: ShieldAlert, bg: "bg-amber-600", text: "text-white", border: "border-amber-700" },
-    { label: "Stand by", icon: Clock, bg: "bg-cyan-600", text: "text-white", border: "border-cyan-700" },
-];
-const TYPE_MAP = new Map(TYPE_OPTIONS.map(opt => [opt.label.toLowerCase(), opt]));
-const getTypeStyle = (value: string) => {
-    if (!value || value.trim() === "") return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" };
-    const opt = TYPE_MAP.get(value.trim().toLowerCase());
-    if (opt) return { bg: opt.bg, text: opt.text, border: opt.border };
-    return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
-};
+import { getTypeStyle, TYPE_OPTIONS, TYPE_MAP } from "@/lib/route-types";
 
 // ── Column Definitions ──
 const COLUMNS = [
@@ -168,6 +148,7 @@ interface RouteRow {
 type SortKey = typeof COLUMNS[number]["key"];
 
 export default function EfficiencyPage() {
+    const queryClient = useQueryClient();
     const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats, globalEditMode, setGlobalEditMode } = useDispatching();
 
     const [allRoutes, setAllRoutes] = useState<RouteRow[]>([]);
@@ -244,12 +225,30 @@ export default function EfficiencyPage() {
         setLoading(false);
     }, [rawRouteData, rawRouteDataLoading]);
 
+    // ── Helper: patch TanStack cache directly for instant cross-tab sync ──
+    const patchRouteCache = useCallback((routeId: string, updates: Record<string, any>) => {
+        const patchFn = (old: any) => {
+            if (!old?.routes) return old;
+            return {
+                ...old,
+                routes: old.routes.map((r: any) =>
+                    r._id === routeId ? { ...r, ...updates } : r
+                ),
+            };
+        };
+        queryClient.setQueryData(["dispatching", "routes", selectedWeek], patchFn);
+        if (selectedDate) {
+            queryClient.setQueryData(["dispatching", "routes", selectedWeek, selectedDate], patchFn);
+        }
+    }, [queryClient, selectedWeek, selectedDate]);
+
     // ── Save ──
     const handleSave = useCallback(async (routeId: string, field: string, value: string) => {
         const numericFields = new Set(["stopCount", "stopsPerHour", "stopsRescued", "driverEfficiency"]);
         const parsedValue = numericFields.has(field) ? (parseFloat(value) || 0) : value;
 
         setAllRoutes(prev => prev.map(r => r._id === routeId ? { ...r, [field]: parsedValue } : r));
+        patchRouteCache(routeId, { [field]: parsedValue });
         try {
             const res = await fetch("/api/dispatching/routes", {
                 method: "PUT",
@@ -259,10 +258,12 @@ export default function EfficiencyPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update");
             toast.success(`Updated ${field}`);
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch (err: any) {
             toast.error(err.message || "Failed to update");
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
-    }, []);
+    }, [queryClient, patchRouteCache]);
 
     // ── Quick Edit Save Handler ──
     const handleQuickEditSave = async () => {
@@ -278,6 +279,7 @@ export default function EfficiencyPage() {
         });
 
         setAllRoutes(prev => prev.map(r => r._id === routeId ? { ...r, ...updates } : r));
+        patchRouteCache(routeId, updates as Record<string, any>);
         setQuickEditRow(null);
 
         try {
@@ -288,8 +290,10 @@ export default function EfficiencyPage() {
             });
             if (!res.ok) throw new Error();
             toast.success(`Updated efficiency entry for ${quickEditRow.employeeName}`);
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch {
             toast.error("Failed to update efficiency entry");
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
     };
 
@@ -501,11 +505,11 @@ export default function EfficiencyPage() {
                             {displayRows.map((row) => (
                                 <div key={row._id} className="flex items-center gap-1 px-3 py-1.5 border-b border-border/20 hover:bg-muted/20 transition-colors group/row">
                                     <div className="w-[150px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold group-hover/row:bg-muted/20 transition-colors flex items-center gap-1.5 min-w-0 pr-2">
-                                        {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
-                                        {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                        {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
+                                        {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
                                         <span
                                             className="text-[11px] font-semibold truncate"
-                                            style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
+                                            style={{ color: getTypeStyle(row.type).colorHex || "inherit" }}
                                         >
                                             {row.employeeName}
                                         </span>

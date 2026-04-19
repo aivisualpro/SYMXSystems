@@ -1,4 +1,5 @@
 "use client";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../layout";
@@ -84,6 +85,7 @@ interface RouteRow {
 type SortKey = typeof COLUMNS[number]["key"];
 
 export default function OpeningPage() {
+    const queryClient = useQueryClient();
     const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats } = useDispatching();
 
     const [allRoutes, setAllRoutes] = useState<RouteRow[]>([]);
@@ -153,6 +155,7 @@ export default function OpeningPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update");
             toast.success(`Updated ${field}`);
+            queryClient.invalidateQueries({ queryKey: ["dispatching"] });
         } catch (err: any) {
             toast.error(err.message || "Failed to update");
         }

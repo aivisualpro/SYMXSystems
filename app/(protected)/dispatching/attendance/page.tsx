@@ -1,4 +1,5 @@
 "use client";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
@@ -57,32 +58,7 @@ function toPacificDate(d: string | Date): string {
 }
 
 // ── Type Options (reused from roster for colored pills) ──
-const TYPE_OPTIONS = [
-    { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700" },
-    { label: "Open", icon: DoorOpen, bg: "bg-amber-400/80", text: "text-white", border: "border-amber-500/60" },
-    { label: "Close", icon: DoorClosed, bg: "bg-rose-400/80", text: "text-white", border: "border-rose-500/60" },
-    { label: "Off", icon: Coffee, bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" },
-    { label: "Call Out", icon: PhoneOff, bg: "bg-yellow-500", text: "text-white", border: "border-yellow-600" },
-    { label: "AMZ Training", icon: GraduationCap, bg: "bg-indigo-600", text: "text-white", border: "border-indigo-700" },
-    { label: "Fleet", icon: TruckIcon, bg: "bg-blue-600", text: "text-white", border: "border-blue-700" },
-    { label: "Request Off", icon: CalendarOff, bg: "bg-purple-600", text: "text-white", border: "border-purple-700" },
-    { label: "Trainer", icon: UserCheck, bg: "bg-teal-600", text: "text-white", border: "border-teal-700" },
-    { label: "Training OTR", icon: BookOpen, bg: "bg-violet-600", text: "text-white", border: "border-violet-700" },
-    { label: "Suspension", icon: Ban, bg: "bg-rose-700", text: "text-white", border: "border-rose-800" },
-    { label: "Modified Duty", icon: ShieldAlert, bg: "bg-amber-600", text: "text-white", border: "border-amber-700" },
-    { label: "Stand by", icon: Clock, bg: "bg-cyan-600", text: "text-white", border: "border-cyan-700" },
-];
-
-const TYPE_MAP = new Map(TYPE_OPTIONS.map(opt => [opt.label.toLowerCase(), opt]));
-
-const getTypeStyle = (value: string) => {
-    if (!value || value.trim() === "") {
-        return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" };
-    }
-    const opt = TYPE_MAP.get(value.trim().toLowerCase());
-    if (opt) return { bg: opt.bg, text: opt.text, border: opt.border };
-    return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
-};
+import { getTypeStyle, TYPE_OPTIONS, TYPE_MAP } from "@/lib/route-types";
 
 // ── Column Definitions ──
 const COLUMNS = [
@@ -148,6 +124,7 @@ interface RouteRow {
 type SortKey = typeof COLUMNS[number]["key"];
 
 export default function AttendancePage() {
+    const queryClient = useQueryClient();
     const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats, rawRouteData, rawRouteDataLoading } = useDispatching();
 
     const mapData = useCallback((data: any): RouteRow[] => {
@@ -195,11 +172,29 @@ export default function AttendancePage() {
         setLoading(false);
     }, [rawRouteData, rawRouteDataLoading, mapData]);
 
+    // ── Helper: patch TanStack cache directly for instant cross-tab sync ──
+    const patchRouteCache = useCallback((routeId: string, updates: Record<string, any>) => {
+        const patchFn = (old: any) => {
+            if (!old?.routes) return old;
+            return {
+                ...old,
+                routes: old.routes.map((r: any) =>
+                    r._id === routeId ? { ...r, ...updates } : r
+                ),
+            };
+        };
+        queryClient.setQueryData(["dispatching", "routes", selectedWeek], patchFn);
+        if (selectedDate) {
+            queryClient.setQueryData(["dispatching", "routes", selectedWeek, selectedDate], patchFn);
+        }
+    }, [queryClient, selectedWeek, selectedDate]);
+
     // ── Handle inline edit save ──
     const handleSave = useCallback(async (routeId: string, field: string, value: string) => {
         setAllRoutes(prev => prev.map(r =>
             r._id === routeId ? { ...r, [field]: value } : r
         ));
+        patchRouteCache(routeId, { [field]: value });
         setEditingCell(null);
 
         try {
@@ -213,21 +208,23 @@ export default function AttendancePage() {
             });
             if (!res.ok) throw new Error("Failed to update");
             toast.success(`Updated ${field}`);
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch (err: any) {
             toast.error(err.message || "Failed to update");
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
-    }, []);
+    }, [queryClient, patchRouteCache]);
 
-    // ── Quick Mark Present/Absent (from Pending Card) ──
+    // ── Quick Mark Present (from Pending Card) ──
     const handleMarkPresent = async (row: RouteRow) => {
         const timeStr = new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit', hour12: false });
 
-        // Optimistic
         setAllRoutes(prev => prev.map(r =>
             r._id === row._id
                 ? { ...r, attendance: "Present", attendanceTime: timeStr }
                 : r
         ));
+        patchRouteCache(row._id, { attendance: "Present", attendanceTime: timeStr });
 
         try {
             const res = await fetch("/api/dispatching/routes", {
@@ -240,8 +237,10 @@ export default function AttendancePage() {
             });
             if (!res.ok) throw new Error();
             toast.success(`Marked ${row.employeeName} present`);
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch {
             toast.error(`Failed to mark present`);
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
     };
 
@@ -249,12 +248,12 @@ export default function AttendancePage() {
         e.stopPropagation();
         const timeStr = new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit', hour12: false });
 
-        // Optimistic
         setAllRoutes(prev => prev.map(r =>
             r._id === row._id
                 ? { ...r, attendance: "Absent", attendanceTime: timeStr }
                 : r
         ));
+        patchRouteCache(row._id, { attendance: "Absent", attendanceTime: timeStr });
 
         try {
             const res = await fetch("/api/dispatching/routes", {
@@ -267,8 +266,10 @@ export default function AttendancePage() {
             });
             if (!res.ok) throw new Error();
             toast.success(`Marked ${row.employeeName} absent`);
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch {
             toast.error(`Failed to mark absent`);
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
     };
 
@@ -504,10 +505,10 @@ export default function AttendancePage() {
                                     {/* Info */}
                                     <div className="flex-1 min-w-0 pr-6">
                                         <h3 className="text-sm font-bold truncate group-hover:text-primary transition-colors flex items-center gap-1.5"
-                                            style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
+                                            style={{ color: getTypeStyle(row.type).colorHex || "inherit" }}
                                         >
-                                            {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3.5 w-3.5 shrink-0" style={{ color: "#FE9EC7" }} />}
-                                            {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                            {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3.5 w-3.5 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
+                                            {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3.5 w-3.5 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
                                             {row.employeeName}
                                         </h3>
                                         <div className="flex items-center gap-2 mt-1 text-[10px] font-medium text-muted-foreground/80">
@@ -602,11 +603,11 @@ export default function AttendancePage() {
                                                 </span>
                                             </div>
                                         )}
-                                        {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
-                                        {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                        {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
+                                        {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
                                         <span
                                             className="text-[11px] font-bold truncate"
-                                            style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
+                                            style={{ color: getTypeStyle(row.type).colorHex || "inherit" }}
                                         >
                                             {row.employeeName}
                                         </span>

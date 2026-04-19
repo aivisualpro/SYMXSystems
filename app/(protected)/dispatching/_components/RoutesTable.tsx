@@ -9,40 +9,9 @@ import {
     Clock, CheckCircle2, X, type LucideIcon,
 } from "lucide-react";
 
-// ── Type system — mirrors dispatching/routes exactly ──
-interface TypeOption {
-    label: string;
-    icon: LucideIcon;
-    bg: string;
-    text: string;
-    border: string;
-    dotColor: string;
-}
-
-export const ROUTE_TYPE_OPTIONS: TypeOption[] = [
-    { label: "Route",         icon: Navigation,   bg: "bg-emerald-600",           text: "text-white",                          border: "border-emerald-700",  dotColor: "bg-emerald-500" },
-    { label: "Open",          icon: DoorOpen,      bg: "bg-amber-400/80",          text: "text-white",                          border: "border-amber-500/60", dotColor: "bg-amber-400" },
-    { label: "Close",         icon: DoorClosed,    bg: "bg-rose-400/80",           text: "text-white",                          border: "border-rose-500/60",  dotColor: "bg-rose-400" },
-    { label: "Off",           icon: Coffee,        bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600", dotColor: "bg-zinc-400" },
-    { label: "Call Out",      icon: PhoneOff,      bg: "bg-yellow-500",            text: "text-white",                          border: "border-yellow-600",   dotColor: "bg-yellow-500" },
-    { label: "AMZ Training",  icon: GraduationCap, bg: "bg-indigo-600",            text: "text-white",                          border: "border-indigo-700",   dotColor: "bg-indigo-500" },
-    { label: "Fleet",         icon: TruckIcon,     bg: "bg-blue-600",              text: "text-white",                          border: "border-blue-700",     dotColor: "bg-blue-500" },
-    { label: "Request Off",   icon: CalendarOff,   bg: "bg-purple-600",            text: "text-white",                          border: "border-purple-700",   dotColor: "bg-purple-500" },
-    { label: "Trainer",       icon: UserCheck,     bg: "bg-teal-600",              text: "text-white",                          border: "border-teal-700",     dotColor: "bg-teal-500" },
-    { label: "Training OTR",  icon: BookOpen,      bg: "bg-violet-600",            text: "text-white",                          border: "border-violet-700",   dotColor: "bg-violet-500" },
-    { label: "Suspension",    icon: Ban,           bg: "bg-rose-700",              text: "text-white",                          border: "border-rose-800",     dotColor: "bg-rose-600" },
-    { label: "Modified Duty", icon: ShieldAlert,   bg: "bg-amber-600",             text: "text-white",                          border: "border-amber-700",    dotColor: "bg-amber-500" },
-    { label: "Stand by",      icon: Clock,         bg: "bg-cyan-600",              text: "text-white",                          border: "border-cyan-700",     dotColor: "bg-cyan-500" },
-];
-
-export const ROUTE_TYPE_MAP = new Map(ROUTE_TYPE_OPTIONS.map(o => [o.label.toLowerCase(), o]));
-
-export function getRouteTypeStyle(value: string) {
-    if (!value?.trim()) return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" };
-    const opt = ROUTE_TYPE_MAP.get(value.trim().toLowerCase());
-    if (opt) return { bg: opt.bg, text: opt.text, border: opt.border };
-    return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
-}
+import { getTypeStyle, TYPE_MAP } from "@/lib/route-types";
+export const ROUTE_TYPE_MAP = TYPE_MAP;
+export const getRouteTypeStyle = getTypeStyle;
 
 // ── Column definition ──
 export interface RoutesTableColumn {
@@ -133,7 +102,9 @@ export function RoutesTable({
                                 </span>
                             </div>
                         )}
-                        <span className="text-[11px] font-medium whitespace-nowrap">{row.employeeName}</span>
+                        <span className="text-[11px] font-medium whitespace-nowrap" style={{ color: getRouteTypeStyle(row.type).colorHex || "inherit" }}>
+                            {row.employeeName}
+                        </span>
                     </div>
                 );
             case "type": {

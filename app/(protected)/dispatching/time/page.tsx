@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
 import { useDropdowns } from "@/lib/query/hooks/useShared";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
     Users,
     Loader2,
     ChevronUp,
     ChevronDown,
+    ChevronRight,
     Pencil,
     Check,
     X,
@@ -60,28 +62,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 // ── Type Options (colored pills) ──
-const TYPE_OPTIONS = [
-    { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700" },
-    { label: "Open", icon: DoorOpen, bg: "bg-amber-400/80", text: "text-white", border: "border-amber-500/60" },
-    { label: "Close", icon: DoorClosed, bg: "bg-rose-400/80", text: "text-white", border: "border-rose-500/60" },
-    { label: "Off", icon: Coffee, bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" },
-    { label: "Call Out", icon: PhoneOff, bg: "bg-yellow-500", text: "text-white", border: "border-yellow-600" },
-    { label: "AMZ Training", icon: GraduationCap, bg: "bg-indigo-600", text: "text-white", border: "border-indigo-700" },
-    { label: "Fleet", icon: TruckIcon, bg: "bg-blue-600", text: "text-white", border: "border-blue-700" },
-    { label: "Request Off", icon: CalendarOff, bg: "bg-purple-600", text: "text-white", border: "border-purple-700" },
-    { label: "Trainer", icon: UserCheck, bg: "bg-teal-600", text: "text-white", border: "border-teal-700" },
-    { label: "Training OTR", icon: BookOpen, bg: "bg-violet-600", text: "text-white", border: "border-violet-700" },
-    { label: "Suspension", icon: Ban, bg: "bg-rose-700", text: "text-white", border: "border-rose-800" },
-    { label: "Modified Duty", icon: ShieldAlert, bg: "bg-amber-600", text: "text-white", border: "border-amber-700" },
-    { label: "Stand by", icon: Clock, bg: "bg-cyan-600", text: "text-white", border: "border-cyan-700" },
-];
-const TYPE_MAP = new Map(TYPE_OPTIONS.map(opt => [opt.label.toLowerCase(), opt]));
-const getTypeStyle = (value: string) => {
-    if (!value || value.trim() === "") return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" };
-    const opt = TYPE_MAP.get(value.trim().toLowerCase());
-    if (opt) return { bg: opt.bg, text: opt.text, border: opt.border };
-    return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
-};
+import { getTypeStyle, TYPE_OPTIONS, TYPE_MAP, getContrastText } from "@/lib/route-types";
 
 // ── Attendance Options ──
 const ATTENDANCE_OPTIONS = [
@@ -100,7 +81,6 @@ const getAttendanceStyle = (value: string) => {
 const COLUMNS = [
     { key: "employee", label: "Employee", width: "flex-1 min-w-[100px] max-w-[150px]" },
     { key: "attendance", label: "Attendance", width: "w-[95px]" },
-    { key: "type", label: "Type", width: "w-[100px]" },
     { key: "routeNumber", label: "Route #", width: "w-[75px]" },
     { key: "paycomInDay", label: "In Day", width: "w-[70px]" },
     { key: "paycomOutLunch", label: "Out Lunch", width: "w-[75px]" },
@@ -116,7 +96,7 @@ const COLUMNS = [
     { key: "actions", label: "", width: "w-[40px]" },
 ] as const;
 
-const GRID_TEMPLATE = "minmax(100px, 150px) 95px 100px 75px 70px 75px 70px 70px 110px 75px 70px 65px 80px 80px 70px 40px";
+const GRID_TEMPLATE = "minmax(140px, 1fr) 95px 75px 70px 75px 70px 70px 110px 75px 70px 65px 80px 80px 70px 40px";
 
 // ── Editable fields ──
 const EDITABLE_FIELDS = new Set([
@@ -189,6 +169,10 @@ interface RouteRow {
 // ── Formatting Rules Helpers ──
 const parseSmartTime = (val: string): string => {
     if (!val) return "";
+    const lowerVal = val.toLowerCase().trim();
+    const isPM = lowerVal.includes('p');
+    const isAM = lowerVal.includes('a');
+    
     const d = val.replace(/\D/g, "");
     if (!d) return "";
 
@@ -207,6 +191,12 @@ const parseSmartTime = (val: string): string => {
 
     if (hours > 23) hours = 23;
     if (mins > 59) mins = 59;
+    
+    if (isPM && hours < 12) {
+        hours += 12;
+    } else if (isAM && hours === 12) {
+        hours = 0;
+    }
 
     return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 };
@@ -420,12 +410,15 @@ const getCellFormat = (row: RouteRow, field: string) => {
 type SortKey = typeof COLUMNS[number]["key"];
 
 export default function TimePage() {
+    const queryClient = useQueryClient();
     const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats, globalEditMode } = useDispatching();
 
     const [allRoutes, setAllRoutes] = useState<RouteRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [sortKey, setSortKey] = useState<SortKey>("employee");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+    const toggleGroup = (group: string) => { setCollapsedGroups(prev => ({ ...prev, [group]: !prev[group] })); };
 
     // ── Quick Edit Modal State ──
     const [quickEditRow, setQuickEditRow] = useState<RouteRow | null>(null);
@@ -482,9 +475,30 @@ export default function TimePage() {
         setLoading(false);
     }, [rawRouteData, rawRouteDataLoading]);
 
+    // ── Helper: patch TanStack cache directly for instant cross-tab sync ──
+    const patchRouteCache = useCallback((routeId: string, updates: Record<string, string>) => {
+        const patchFn = (old: any) => {
+            if (!old?.routes) return old;
+            return {
+                ...old,
+                routes: old.routes.map((r: any) =>
+                    r._id === routeId ? { ...r, ...updates } : r
+                ),
+            };
+        };
+        // Patch both the full-week and day-specific cache entries
+        queryClient.setQueryData(["dispatching", "routes", selectedWeek], patchFn);
+        if (selectedDate) {
+            queryClient.setQueryData(["dispatching", "routes", selectedWeek, selectedDate], patchFn);
+        }
+    }, [queryClient, selectedWeek, selectedDate]);
+
     // ── Save handler ──
     const handleSave = useCallback(async (routeId: string, field: string, value: string) => {
+        // 1. Optimistic local state update
         setAllRoutes(prev => prev.map(r => r._id === routeId ? { ...r, [field]: value } : r));
+        // 2. Optimistic TanStack cache update (instant cross-tab sync)
+        patchRouteCache(routeId, { [field]: value });
         try {
             const res = await fetch("/api/dispatching/routes", {
                 method: "PUT",
@@ -494,10 +508,14 @@ export default function TimePage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update");
             toast.success(`Updated ${field}`);
+            // 3. Background refetch for eventual consistency
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch (err: any) {
             toast.error(err.message || "Failed to update");
+            // Revert: refetch from server
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
-    }, []);
+    }, [queryClient, patchRouteCache]);
 
     // ── Quick Edit Save Handler ──
     const handleQuickEditSave = async () => {
@@ -505,8 +523,10 @@ export default function TimePage() {
         const updates = { ...quickEditForm };
         const routeId = quickEditRow._id;
 
-        // Optimistic update
+        // 1. Optimistic local state update
         setAllRoutes(prev => prev.map(r => r._id === routeId ? { ...r, ...updates } : r));
+        // 2. Optimistic TanStack cache update (instant cross-tab sync)
+        patchRouteCache(routeId, updates as Record<string, string>);
         setQuickEditRow(null);
 
         try {
@@ -517,8 +537,10 @@ export default function TimePage() {
             });
             if (!res.ok) throw new Error();
             toast.success(`Updated time entry for ${quickEditRow.employeeName}`);
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch {
             toast.error("Failed to update time entry");
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
     };
 
@@ -540,7 +562,7 @@ export default function TimePage() {
     };
 
     // ── Filter + sort ──
-    const { rows: displayRows, totalFiltered, totalForDate } = useMemo(() => {
+    const { groups, totalFiltered, totalForDate } = useMemo(() => {
         let dateFiltered = allRoutes;
         if (selectedDate) dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         const totalForDate = dateFiltered.length;
@@ -565,11 +587,40 @@ export default function TimePage() {
                 : String(bVal).localeCompare(String(aVal));
         });
 
-        return { rows: sorted, totalFiltered: sorted.length, totalForDate };
+        const typeGroups: Record<string, RouteRow[]> = {};
+        sorted.forEach(r => {
+            const typeKey = r.type || "Unassigned";
+            if (!typeGroups[typeKey]) typeGroups[typeKey] = [];
+            typeGroups[typeKey].push(r);
+        });
+
+        if (sortKey === "employee") {
+            Object.values(typeGroups).forEach(group => {
+                group.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+            });
+        }
+
+        const groupKeys = Object.keys(typeGroups).sort((a, b) => {
+            const aLower = a.toLowerCase();
+            const bLower = b.toLowerCase();
+            if (aLower === "route") return -1;
+            if (bLower === "route") return 1;
+            if (aLower === "off" || aLower === "unassigned" || aLower === "") return 1;
+            if (bLower === "off" || bLower === "unassigned" || bLower === "") return -1;
+            return a.localeCompare(b);
+        });
+
+        const groups = groupKeys.map(key => ({
+            type: key,
+            rows: typeGroups[key],
+            count: typeGroups[key].length,
+        }));
+
+        return { groups, totalFiltered: sorted.length, totalForDate };
     }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir]);
 
     // ── Push stats ──
-    useEffect(() => { setStats({ employeeCount: totalFiltered }); }, [totalFiltered, setStats]);
+    useEffect(() => { setStats({ employeeCount: totalFiltered, groupCount: groups.length }); }, [totalFiltered, groups.length, setStats]);
     useEffect(() => { return () => setStats({}); }, [setStats]);
 
     if (rawRouteData?.routes?.length > 0 && allRoutes.length === 0) {
@@ -654,10 +705,11 @@ export default function TimePage() {
             return (
                 <div className="relative w-full h-7">
                     <input
-                        defaultValue={value === 0 ? "" : String(value)}
+                        key={displayVal}
+                        defaultValue={displayVal === "—" ? "" : displayVal}
                         onChange={(e) => {
                             if (isTimeField) {
-                                e.target.value = e.target.value.replace(/[^\d:]/g, "");
+                                e.target.value = e.target.value.replace(/[^\d:ampAMP ]/g, "");
                             }
                         }}
                         onBlur={(e) => {
@@ -763,75 +815,114 @@ export default function TimePage() {
 
                     {/* Rows */}
                     <div>
-                        {displayRows.map((row) => (
-                            <div key={row._id} className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors group/row"
-                                style={{ gridTemplateColumns: GRID_TEMPLATE }}>
-                                {/* Employee (sticky) */}
-                                <div className="flex items-center gap-2 min-w-0 pr-2 sticky left-0 z-10 bg-card group-hover/row:bg-muted/20 transition-colors">
-                                    {row.profileImage ? (
-                                        <img src={row.profileImage} alt={row.employeeName} className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-border" />
-                                    ) : (
-                                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 ring-1 ring-primary/20">
-                                            <span className="text-[9px] font-bold text-primary">{row.employeeName.split(" ").map(n => n[0]).join("").slice(0, 2)}</span>
+                        {groups.map((group) => {
+                            const isCollapsed = collapsedGroups[group.type] ?? false;
+                            const typeOpt = TYPE_MAP.get(group.type.toLowerCase());
+                            const GroupIcon = typeOpt?.icon;
+                            const groupStyle = getTypeStyle(group.type);
+                            
+                            return (
+                                <React.Fragment key={group.type}>
+                                    {/* Group Header Row */}
+                                    <div
+                                        onClick={() => toggleGroup(group.type)}
+                                        className="cursor-pointer hover:bg-muted/60 transition-colors bg-muted/30 border-b border-border/30 px-3 py-1.5 flex items-center"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <ChevronRight className={cn(
+                                                "h-3 w-3 text-muted-foreground transition-transform",
+                                                !isCollapsed && "rotate-90"
+                                            )} />
+                                            <div className={cn(
+                                                "flex items-center gap-1 px-2 py-0.5 rounded text-[12px] font-semibold border shadow-sm",
+                                                !groupStyle.colorHex && groupStyle.bg,
+                                                !groupStyle.colorHex && groupStyle.text,
+                                                !groupStyle.colorHex && groupStyle.border
+                                            )} style={{
+                                                backgroundColor: groupStyle.colorHex || undefined,
+                                                color: groupStyle.colorHex ? getContrastText(groupStyle.colorHex) : undefined,
+                                                borderColor: groupStyle.colorHex ? 'transparent' : undefined
+                                            }}>
+                                                {GroupIcon && <GroupIcon className="h-3 w-3" />}
+                                                {group.type || "Unassigned"}
+                                            </div>
+                                            <span className="text-[12px] font-semibold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-full">
+                                                {group.count}
+                                            </span>
                                         </div>
-                                    )}
-                                    {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
-                                    {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
-                                    <span
-                                        className="text-xs font-semibold truncate hover:text-primary transition-colors cursor-pointer"
-                                        style={row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer" ? { color: "#FE9EC7" } : undefined}
-                                        onClick={() => {
-                                            setQuickEditRow(row);
-                                            setQuickEditForm({ ...row });
-                                        }}
-                                    >
-                                        {row.employeeName}
-                                    </span>
-                                </div>
-                                {/* Attendance */}
-                                {renderAttendance(row)}
-                                {/* Type */}
-                                {renderType(row)}
-                                {/* Route # */}
-                                {renderCell(row, "routeNumber", row.routeNumber)}
-                                {/* Paycom In Day */}
-                                {renderCell(row, "paycomInDay", row.paycomInDay)}
-                                {/* Paycom Out Lunch */}
-                                {renderCell(row, "paycomOutLunch", row.paycomOutLunch)}
-                                {/* Paycom In Lunch */}
-                                {renderCell(row, "paycomInLunch", row.paycomInLunch)}
-                                {/* Paycom Out Day */}
-                                {renderCell(row, "paycomOutDay", row.paycomOutDay)}
-                                {/* Punch Status */}
-                                {renderCell(row, "punchStatus", row.punchStatus)}
-                                {/* Attendance Time */}
-                                {renderCell(row, "attendanceTime", row.attendanceTime)}
-                                {/* Amazon Out Lunch */}
-                                {renderCell(row, "amazonOutLunch", row.amazonOutLunch)}
-                                {/* Amazon In Lunch */}
-                                {renderCell(row, "amazonInLunch", row.amazonInLunch)}
-                                {/* Amazon App Logout */}
-                                {renderCell(row, "amazonAppLogout", row.amazonAppLogout)}
-                                {/* Inspection Time */}
-                                {renderCell(row, "inspectionTime", row.inspectionTime)}
-                                {/* Total Hours */}
-                                {renderCell(row, "totalHours", computeTotalHours(row))}
-                                {/* Actions */}
-                                <div className="flex justify-end pr-1">
-                                    <button
-                                        onClick={() => {
-                                            setQuickEditRow(row);
-                                            setQuickEditForm({ ...row });
-                                        }}
-                                        className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground hover:bg-primary/15 hover:text-primary transition-colors"
-                                    >
-                                        <Pencil className="h-3 w-3" />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
+                                    </div>
+                                    
+                                    {/* Group Data Rows */}
+                                    {!isCollapsed && group.rows.map((row) => (
+                                        <div key={row._id} className="grid items-center gap-2 px-3 py-2 border-b border-border/20 hover:bg-muted/20 transition-colors group/row"
+                                            style={{ gridTemplateColumns: GRID_TEMPLATE }}>
+                                            {/* Employee (sticky) */}
+                                            <div className="flex items-center gap-2 min-w-0 pr-2 sticky left-0 z-10 bg-card group-hover/row:bg-muted/20 transition-colors">
+                                                {row.profileImage ? (
+                                                    <img src={row.profileImage} alt={row.employeeName} className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-border" />
+                                                ) : (
+                                                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 ring-1 ring-primary/20">
+                                                        <span className="text-[9px] font-bold text-primary">{row.employeeName.split(" ").map(n => n[0]).join("").slice(0, 2)}</span>
+                                                    </div>
+                                                )}
+                                                {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
+                                                {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
+                                                <span
+                                                    className="text-xs font-semibold truncate hover:text-primary transition-colors cursor-pointer"
+                                                    style={{ color: getTypeStyle(row.type).colorHex || "inherit" }}
+                                                    onClick={() => {
+                                                        setQuickEditRow(row);
+                                                        setQuickEditForm({ ...row });
+                                                    }}
+                                                >
+                                                    {row.employeeName}
+                                                </span>
+                                            </div>
+                                            {/* Attendance */}
+                                            {renderAttendance(row)}
+                                            {/* Route # */}
+                                            {renderCell(row, "routeNumber", row.routeNumber)}
+                                            {/* Paycom In Day */}
+                                            {renderCell(row, "paycomInDay", row.paycomInDay)}
+                                            {/* Paycom Out Lunch */}
+                                            {renderCell(row, "paycomOutLunch", row.paycomOutLunch)}
+                                            {/* Paycom In Lunch */}
+                                            {renderCell(row, "paycomInLunch", row.paycomInLunch)}
+                                            {/* Paycom Out Day */}
+                                            {renderCell(row, "paycomOutDay", row.paycomOutDay)}
+                                            {/* Punch Status */}
+                                            {renderCell(row, "punchStatus", row.punchStatus)}
+                                            {/* Attendance Time */}
+                                            {renderCell(row, "attendanceTime", row.attendanceTime)}
+                                            {/* Amazon Out Lunch */}
+                                            {renderCell(row, "amazonOutLunch", row.amazonOutLunch)}
+                                            {/* Amazon In Lunch */}
+                                            {renderCell(row, "amazonInLunch", row.amazonInLunch)}
+                                            {/* Amazon App Logout */}
+                                            {renderCell(row, "amazonAppLogout", row.amazonAppLogout)}
+                                            {/* Inspection Time */}
+                                            {renderCell(row, "inspectionTime", row.inspectionTime)}
+                                            {/* Total Hours */}
+                                            {renderCell(row, "totalHours", computeTotalHours(row))}
+                                            {/* Actions */}
+                                            <div className="flex justify-end pr-1">
+                                                <button
+                                                    onClick={() => {
+                                                        setQuickEditRow(row);
+                                                        setQuickEditForm({ ...row });
+                                                    }}
+                                                    className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground hover:bg-primary/15 hover:text-primary transition-colors"
+                                                >
+                                                    <Pencil className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </React.Fragment>
+                            );
+                        })}
 
-                        {displayRows.length === 0 && (
+                        {groups.length === 0 && (
                             <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
                                 No employees found for this date
                             </div>

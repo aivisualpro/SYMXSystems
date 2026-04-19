@@ -12,7 +12,7 @@ export function useDispatchingRoutes(yearWeek: string, date?: string) {
       if (!res.ok) throw new Error("Failed to fetch dispatching routes");
       return res.json();
     },
-    staleTime: 30_000,
+    staleTime: 2_000,
     enabled: !!yearWeek,
   });
 }
