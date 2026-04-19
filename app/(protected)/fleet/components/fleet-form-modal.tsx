@@ -340,7 +340,7 @@ function MultiPhotoUploadField({
 }
 
 export default function FleetFormModal() {
-  const { modalOpen, setModalOpen, modalType, formData, updateForm, handleSave, saving, editId, data } = useFleet();
+  const { modalOpen, setModalOpen, modalType, formData, updateForm, handleSave, saving, editId, data, handleDelete } = useFleet();
 
   // Load employees & vehicles for dropdowns
   const [employees, setEmployees] = useState<any[]>([]);
@@ -519,13 +519,17 @@ export default function FleetFormModal() {
 
   const title = formData.isCompletionMode
     ? "Repair Completion"
-    : `${editId ? "Edit" : "New"} ${modalType.charAt(0).toUpperCase() + modalType.slice(1)}`;
+    : editId 
+      ? `${modalType.charAt(0).toUpperCase() + modalType.slice(1)} Details`
+      : `New ${modalType.charAt(0).toUpperCase() + modalType.slice(1)}`;
 
   const isRepairCompletedButNoImages = 
     modalType === "repair" && 
     formData.currentStatus === "Completed" && 
     (!formData.completedImages || formData.completedImages.length === 0) &&
     !formData.imagesNotAvailable;
+    
+  const isRepairReadOnly = modalType === "repair" && !!editId && !formData.isCompletionMode;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/60 backdrop-blur-sm" onClick={() => setModalOpen(false)}>
@@ -611,25 +615,29 @@ export default function FleetFormModal() {
                   </div>
                 )}
                 <FormField label="Vehicle Name">
-                  <SearchableSelect
-                    value={formData.vehicleName || ""}
-                    placeholder="Search vehicle…"
-                    options={vehicles.map((v: any) => ({
-                      value: v.vehicleName || "",
-                      label: v.vehicleName || v.vin || "—",
-                      raw: v,
-                    }))}
-                    onChange={(val, raw) => {
-                      updateForm("vehicleName", val);
-                      if (raw?.vin) updateForm("vin", raw.vin);
-                      if (raw?.unitNumber) updateForm("unitNumber", raw.unitNumber);
-                    }}
-                  />
+                  {isRepairReadOnly ? (
+                    <input className={inputClass} value={formData.vehicleName || "—"} disabled />
+                  ) : (
+                    <SearchableSelect
+                      value={formData.vehicleName || ""}
+                      placeholder="Search vehicle…"
+                      options={vehicles.map((v: any) => ({
+                        value: v.vehicleName || "",
+                        label: v.vehicleName || v.vin || "—",
+                        raw: v,
+                      }))}
+                      onChange={(val, raw) => {
+                        updateForm("vehicleName", val);
+                        if (raw?.vin) updateForm("vin", raw.vin);
+                        if (raw?.unitNumber) updateForm("unitNumber", raw.unitNumber);
+                      }}
+                    />
+                  )}
                 </FormField>
-                <FormField label="Description"><textarea className={inputClass} rows={3} value={formData.description || ""} onChange={e => updateForm("description", e.target.value)} required /></FormField>
+                <FormField label="Description"><textarea className={inputClass} rows={3} value={formData.description || ""} onChange={e => updateForm("description", e.target.value)} required disabled={isRepairReadOnly} /></FormField>
                 <div className="grid grid-cols-2 gap-3">
                   <FormField label="Status">
-                    <select className={inputClass} value={formData.currentStatus || ""} onChange={e => updateForm("currentStatus", e.target.value)}
+                    <select className={inputClass} value={formData.currentStatus || ""} onChange={e => updateForm("currentStatus", e.target.value)} disabled={isRepairReadOnly}
                       style={repairStatuses.find(s => s.description === formData.currentStatus)?.color ? { borderLeftWidth: '3px', borderLeftColor: repairStatuses.find(s => s.description === formData.currentStatus)!.color } : {}}>
                       <option value="">Select status…</option>
                       {(repairStatuses.length > 0
@@ -638,7 +646,7 @@ export default function FleetFormModal() {
                       )}
                     </select>
                   </FormField>
-                  <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.estimatedDate ? formData.estimatedDate.split("T")[0] : ""} onChange={e => updateForm("estimatedDate", e.target.value)} /></FormField>
+                  <FormField label="Estimated Date"><input type="date" className={inputClass} value={formData.estimatedDate ? formData.estimatedDate.split("T")[0] : ""} onChange={e => updateForm("estimatedDate", e.target.value)} disabled={isRepairReadOnly} /></FormField>
                 </div>
                 <div className="pt-2 space-y-4">
                   <MultiPhotoUploadField 
@@ -887,6 +895,11 @@ export default function FleetFormModal() {
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setModalOpen(false)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button>
+              {editId && (
+                <button type="button" onClick={() => handleDelete(modalType, editId)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
+                  Delete
+                </button>
+              )}
               <button type="submit" disabled={saving || isRepairCompletedButNoImages} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {saving && <IconLoader2 size={14} className="animate-spin" />} Save
               </button>

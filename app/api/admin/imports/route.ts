@@ -14,7 +14,7 @@ import { processMisc } from "@/lib/imports/misc";
 
 const ImportPayloadSchema = z.object({
   type: z.string().min(1),
-  data: z.array(z.record(z.any())).min(1),
+  data: z.array(z.record(z.string(), z.unknown())).min(1),
   week: z.string().optional()
 });
 
