@@ -551,6 +551,7 @@ function SchedulingPageContent() {
   const [deletingWeek, setDeletingWeek] = useState(false);
   const [kpiOpen, setKpiOpen] = useState(false);
   const [canViewKpi, setCanViewKpi] = useState(false);
+  const kpiRowRef = useRef<HTMLTableRowElement>(null);
 
   useEffect(() => {
     fetch("/api/user/profile")
@@ -1762,8 +1763,17 @@ function SchedulingPageContent() {
                         <Fragment>
                           {/* KPI Group Header */}
                           <tr
+                            ref={kpiRowRef}
                             className="border-b border-border/30 cursor-pointer hover:bg-muted/30 transition-colors"
-                            onClick={() => setKpiOpen(prev => !prev)}
+                            onClick={() => {
+                              setKpiOpen(prev => {
+                                const next = !prev;
+                                if (next) {
+                                  setTimeout(() => kpiRowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+                                }
+                                return next;
+                              });
+                            }}
                           >
                             <td
                               colSpan={(weekData?.dates?.length || 7) + 4}
