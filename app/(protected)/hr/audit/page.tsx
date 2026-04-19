@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useHrAudit } from "@/lib/query/hooks/useHr";
 import {
   Search,
   FileWarning,
@@ -62,7 +62,7 @@ type SortField = "name" | "dlExpiration" | "issues";
 type SortDir = "asc" | "desc";
 
 export default function EmployeeAuditPage() {
-  const store = useDataStore();
+  const { data: queryAudit } = useHrAudit();
   const [employees, setEmployees] = useState<AuditEmployee[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -98,7 +98,7 @@ export default function EmployeeAuditPage() {
     const fetchAudit = async () => {
       try {
         if (employees.length === 0) setLoading(true);
-        const res = await fetch("/api/admin/employees?filter=audit&limit=9999&terminated=false");
+        const res = await fetch("/api/admin/employees?filter=audit&export=true&terminated=false&select=firstName,lastName,transporterId,dlExpiration,offerLetterFile,handbookFile,driversLicenseFile,i9File,drugTestFile,type,phoneNumber,profileImage,status");
         if (res.ok) {
           const data = await res.json();
           setEmployees(data.records || data || []);
@@ -112,13 +112,12 @@ export default function EmployeeAuditPage() {
     fetchAudit();
   }, []);
 
-  // ── Seed from store for instant load ──
-  const storeAudit = store.hrAudit as any;
+  // ── Seed from TanStack Query cache for instant load ──
   useEffect(() => {
-    if (Array.isArray(storeAudit) && storeAudit.length > 0 && employees.length === 0) {
-      setEmployees(storeAudit);
+    if (Array.isArray(queryAudit) && queryAudit.length > 0 && employees.length === 0) {
+      setEmployees(queryAudit);
     }
-  }, [storeAudit]);
+  }, [queryAudit]);
 
   const now = new Date();
 

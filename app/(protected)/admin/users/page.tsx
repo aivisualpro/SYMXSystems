@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import { useEffect, useState, useRef } from "react";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useAdminUsers } from "@/lib/query/hooks/useAdmin";
 import { SimpleDataTable } from "@/components/admin/simple-data-table";
 import { UserForm } from "@/components/admin/user-form";
 import { Button } from "@/components/ui/button";
@@ -67,7 +67,7 @@ function sortUsers(users: User[]): User[] {
 }
 
 export default function UsersPage() {
-  const store = useDataStore();
+  const { data: queryUsers, isLoading: queryUsersLoading } = useAdminUsers();
   const [data, setData] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -76,16 +76,14 @@ export default function UsersPage() {
 
   const router = useRouter();
 
-  // ── Read from store instantly ──
-  const storeUsers = store.admin?.users as User[] ?? [];
-
+  // ── Read from TanStack Query cache instantly ──
   useEffect(() => {
-    if (storeUsers.length > 0 && !hasSyncedFromStore.current) {
-      setData(sortUsers(storeUsers));
+    if (Array.isArray(queryUsers) && queryUsers.length > 0 && !hasSyncedFromStore.current) {
+      setData(sortUsers(queryUsers as User[]));
       hasSyncedFromStore.current = true;
       setLoading(false);
     }
-  }, [storeUsers]);
+  }, [queryUsers]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -102,11 +100,11 @@ export default function UsersPage() {
     }
   };
 
-  // Only fetch from API if store has nothing
+  // Only fetch from API if query cache has nothing
   useEffect(() => {
-    if (storeUsers.length === 0 && !store.initialized) return; // still loading
-    if (storeUsers.length === 0) fetchUsers(); // store loaded but empty — try API
-  }, [store.initialized]);
+    if (!queryUsers && queryUsersLoading) return; // still loading
+    if (!queryUsers || (Array.isArray(queryUsers) && queryUsers.length === 0)) fetchUsers();
+  }, [queryUsers, queryUsersLoading]);
 
   const handleSubmit = async (formData: Partial<User>) => {
     try {

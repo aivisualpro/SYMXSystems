@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useAdminRoles } from "@/lib/query/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -45,7 +45,7 @@ interface Role {
 }
 
 export default function RolesSettingsPage() {
-  const store = useDataStore();
+  const { data: queryRoles, isLoading: queryRolesLoading } = useAdminRoles();
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -56,16 +56,14 @@ export default function RolesSettingsPage() {
   const router = useRouter();
   const hasSyncedFromStore = useRef(false);
 
-  // ── Read from store instantly ──
-  const storeRoles = store.admin?.roles as Role[] ?? [];
-
+  // ── Read from TanStack Query cache instantly ──
   useEffect(() => {
-    if (storeRoles.length > 0 && !hasSyncedFromStore.current) {
-      setRoles(storeRoles);
+    if (Array.isArray(queryRoles) && queryRoles.length > 0 && !hasSyncedFromStore.current) {
+      setRoles(queryRoles as Role[]);
       hasSyncedFromStore.current = true;
       setLoading(false);
     }
-  }, [storeRoles]);
+  }, [queryRoles]);
 
   const fetchRoles = async () => {
     try {
@@ -83,9 +81,9 @@ export default function RolesSettingsPage() {
   };
 
   useEffect(() => {
-    if (storeRoles.length === 0 && !store.initialized) return;
-    if (storeRoles.length === 0) fetchRoles();
-  }, [store.initialized]);
+    if (!queryRoles && queryRolesLoading) return;
+    if (!queryRoles || (Array.isArray(queryRoles) && queryRoles.length === 0)) fetchRoles();
+  }, [queryRoles, queryRolesLoading]);
 
   useEffect(() => {
     setRightContent(

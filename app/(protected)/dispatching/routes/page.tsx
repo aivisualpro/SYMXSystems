@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useVehicles, useWst } from "@/lib/query/hooks/useShared";
+import { useUpdateRouteStatus } from "@/lib/query/hooks/useDispatching";
 import { cn } from "@/lib/utils";
 import { MessageStatusBadge } from "@/components/ui-elements/message-status-badge";
 import {
@@ -335,17 +336,17 @@ export default function RoutesPage() {
         { open: false, routeId: "", employeeName: "", profileImage: "" }
     );
 
-    const store = useDataStore();
+    const { data: storeVehicles } = useVehicles();
+    const { data: storeWstData } = useWst();
 
     // ── Hydrate active vehicles from DataStore ──
     const [vehicles, setVehicles] = useState<any[]>([]);
     useEffect(() => {
-        const storeVehicles = store.fleet?.vehicles;
         if (storeVehicles && Array.isArray(storeVehicles) && storeVehicles.length > 0) {
             const sortedVans = [...storeVehicles].sort((a: any, b: any) => String(a.vehicleName).localeCompare(String(b.vehicleName), undefined, { numeric: true, sensitivity: 'base' }));
             setVehicles(sortedVans);
         }
-    }, [store.fleet?.vehicles]);
+    }, [storeVehicles]);
 
     // ── Get available vans for a date ──
     const getAvailableVans = useCallback((dateStr: string, currentVan: string) => {
@@ -395,17 +396,16 @@ export default function RoutesPage() {
 
     // ── Hydrate WST revenue from DataStore ──
     useEffect(() => {
-        const wstData = store.admin?.wst;
-        if (wstData && Array.isArray(wstData) && wstData.length > 0) {
+        if (storeWstData && Array.isArray(storeWstData) && storeWstData.length > 0) {
             const map: Record<string, number> = {};
-            wstData.forEach((w: any) => {
+            storeWstData.forEach((w: any) => {
                 if (w.wst && w.isActive !== false) {
                     map[w.wst.toLowerCase()] = w.revenue || 0;
                 }
             });
             setWstRevenueMap(map);
         }
-    }, [store.admin?.wst]);
+    }, [storeWstData]);
 
     // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
     const { rawRouteData, rawRouteDataLoading } = useDispatching();
@@ -521,32 +521,41 @@ export default function RoutesPage() {
     }, [refreshRoutes]);
 
 
+    const { mutate: updateRouteStatus } = useUpdateRouteStatus();
+
     // ── Update Confirmation Status ──
-    const handleUpdateConfirmation = async (row: RouteRow, status: string, remarks: string = "") => {
-        try {
-            const dateStr = row.date && typeof row.date === 'string' ? row.date.split('T')[0] : "";
-            const res = await fetch("/api/dispatching/confirmation-status", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    transporterId: row.transporterId,
-                    scheduleDate: dateStr,
-                    yearWeek: selectedWeek,
-                    status,
-                    changeRemarks: remarks,
-                }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
-            
-            const label = status === "confirmed" ? "Confirmed" : status === "change_requested" ? "Change Requested" : "Pending";
-            toast.success(`${row.employeeName}: ${label}`);
-            
-            setAllRoutes(prev => prev.map(r => r._id === row._id ? { ...r, confirmationStatus: data.confirmation } : r));
-            refreshRoutes();
-        } catch (err: any) {
-            toast.error(err.message || "Failed to update status");
-        }
+    const handleUpdateConfirmation = (row: RouteRow, status: string, remarks: string = "") => {
+        const dateStr = row.date && typeof row.date === 'string' ? row.date.split('T')[0] : "";
+        const payload = {
+            transporterId: row.transporterId,
+            scheduleDate: dateStr,
+            yearWeek: selectedWeek,
+            status,
+            changeRemarks: remarks,
+        };
+
+        const label = status === "confirmed" ? "Confirmed" : status === "change_requested" ? "Change Requested" : "Pending";
+        
+        // Optimistically update local view explicitly for table rendering, since `allRoutes` is derived state
+        setAllRoutes(prev => prev.map(r => r._id === row._id ? { 
+            ...r, 
+            confirmationStatus: { 
+                ...r.confirmationStatus, 
+                status, 
+                changeRemarks: remarks, 
+                updatedAt: new Date().toISOString() 
+            } 
+        } as any : r));
+
+        updateRouteStatus({ payload }, {
+            onSuccess: (data) => {
+                toast.success(`${row.employeeName}: ${label}`);
+            },
+            onError: (err) => {
+                toast.error(err.message || "Failed to update status");
+                refreshRoutes(); // Revert local state loop on error
+            }
+        });
     };
 
     const submitRemarks = async () => {
@@ -875,13 +884,10 @@ export default function RoutesPage() {
 
 
 
-    // ── Empty / Loading States ──
-    if (routesLoading || loading) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
+
+
+    if (rawRouteData?.routes?.length > 0 && allRoutes.length === 0) {
+        return <div className="flex-1 opacity-0 pointer-events-none" />;
     }
 
     if (!routesGenerated || allRoutes.length === 0) {
@@ -1025,14 +1031,7 @@ export default function RoutesPage() {
                                                                     {row.employeeName}
                                                                 </span>
                                                                 {row.hiredDate && (Date.now() - new Date(row.hiredDate).getTime()) / 86400000 <= 30 && (
-                                                                    <TooltipProvider delayDuration={100}>
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger className="flex-shrink-0 cursor-default ml-auto">
-                                                                                <Baby className="h-4 w-4 text-pink-500 drop-shadow animate-baby-rock" />
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent>New Hire (Within 30 Days)</TooltipContent>
-                                                                        </Tooltip>
-                                                                    </TooltipProvider>
+                                                                    <Baby className="h-4 w-4 text-pink-500 drop-shadow ml-auto flex-shrink-0" />
                                                                 )}
                                                             </div>
                                                         </td>
@@ -1479,12 +1478,7 @@ export default function RoutesPage() {
                         </table>
                     </div>
 
-                    {/* Footer */}
-                    <div className="shrink-0 flex items-center justify-between p-2 border-t border-border/50 bg-muted/20">
-                        <span className="text-[10px] text-muted-foreground">
-                            {totalFiltered} of {totalForDate} employees
-                        </span>
-                    </div>
+
                 </div>
             </div>
 

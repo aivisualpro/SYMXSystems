@@ -1,9 +1,19 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import { getSession } from "@/lib/auth";
 
 export async function GET() {
+  try {
+    await requirePermission("HR", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const session = await getSession();
     if (!session?.role) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

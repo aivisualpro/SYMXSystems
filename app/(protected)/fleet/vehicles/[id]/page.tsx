@@ -16,6 +16,7 @@ import { DropdownOptionSelect } from "../../components/fleet-form-modal";
 import { ImageUpload } from "@/components/admin/image-upload";
 import { FileUpload } from "@/components/admin/file-upload";
 import * as LucideIcons from "lucide-react";
+import { FleetRepairsTable } from "../../components/fleet-repairs-table";
 
 /* ─── helpers ─────────────────────────────────────── */
 const fmtDate = (d: any) => {
@@ -196,7 +197,11 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
 
             {/* ── Tab Content ───────────────────────────────── */}
             {activeTab === "overview" && <OverviewTab v={v} masterPhoto={data.masterPhotoInspection} />}
-            {activeTab === "repairs" && <RepairsTab repairs={data.repairs} />}
+            {activeTab === "repairs" && (
+                <div className="h-[600px]">
+                    {v.vin ? <FleetRepairsTable vin={v.vin} isTab={true} /> : <NoData label="repair" />}
+                </div>
+            )}
             {activeTab === "inspections" && <InspectionsTab inspections={data.dailyInspections || []} />}
             {activeTab === "activity" && <ActivityTab logs={data.activityLogs} />}
             {activeTab === "rentals" && <RentalsTab vehicleId={id} rentals={data.rentalAgreements} onUpdate={(r) => setData({...data, rentalAgreements: r})} />}
@@ -348,49 +353,6 @@ function OverviewTab({ v, masterPhoto }: { v: any; masterPhoto: any }) {
                 )}
             </div>
         </>
-    );
-}
-
-/* ────────────────────────────────────────────────────
-   TAB: Repairs
-   ──────────────────────────────────────────────────── */
-function RepairsTab({ repairs }: { repairs: any[] }) {
-    if (!repairs?.length) return <NoData label="repair" />;
-    return (
-        <GlassCard className="p-4">
-            <div className="overflow-x-auto">
-                <table className="w-full">
-                    <thead className="sticky top-0 bg-card z-10">
-                        <tr className="border-b border-border">
-                            {["Description", "Status", "Unit #", "VIN", "Est. Date", "Duration", "Created", "Last Edit"].map((h) => (
-                                <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">{h}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {repairs.map((r: any) => (
-                            <tr key={r._id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                                <td className="px-3 py-2.5 text-xs text-foreground max-w-[250px] truncate" title={r.description}>{r.description || "—"}</td>
-                                <td className="px-3 py-2.5"><StatusBadge status={r.currentStatus} /></td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground">{r.unitNumber || "—"}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground font-mono">{r.vin || "—"}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.estimatedDate)}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground">{(() => {
-                                    const start = r.creationDate ? new Date(r.creationDate).getTime() : Date.now();
-                                    const end = (r.currentStatus === "Completed" && r.completionDate)
-                                      ? new Date(r.completionDate).getTime()
-                                      : Date.now();
-                                    const diffDays = Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
-                                    return diffDays > 0 ? `${diffDays}d` : <span className="text-[10px] uppercase font-semibold text-muted-foreground/60">Today</span>;
-                                })()}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.creationDate)}</td>
-                                <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.lastEditOn)}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </GlassCard>
     );
 }
 

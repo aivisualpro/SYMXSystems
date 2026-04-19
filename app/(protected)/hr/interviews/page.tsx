@@ -3,7 +3,8 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useHrInterviews } from "@/lib/query/hooks/useHr";
+import { useDropdowns } from "@/lib/query/hooks/useShared";
 import {
   Search,
   Loader2,
@@ -698,7 +699,8 @@ function InterviewNotesRenderer({
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function HRInterviewsPage() {
-  const store = useDataStore();
+  const { data: queryInterviews } = useHrInterviews();
+  const { data: queryDropdowns } = useDropdowns();
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -715,22 +717,20 @@ export default function HRInterviewsPage() {
   const [statusOptions, setStatusOptions] = useState<DropdownStatus[]>([]);
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
 
-  // ── Seed from store for instant load ──
-  const storeInterviews = store.hrInterviews as any;
+  // ── Seed from TanStack Query cache for instant load ──
   useEffect(() => {
-    if (Array.isArray(storeInterviews) && storeInterviews.length > 0 && interviews.length === 0) {
-      setInterviews(storeInterviews);
+    if (Array.isArray(queryInterviews) && queryInterviews.length > 0 && interviews.length === 0) {
+      setInterviews(queryInterviews);
     }
-  }, [storeInterviews]);
+  }, [queryInterviews]);
 
-  // ── Seed status options from store ──
-  const storeDropdowns = store.admin?.dropdowns as any[] ?? [];
+  // ── Seed status options from TanStack Query cache ──
   useEffect(() => {
-    if (Array.isArray(storeDropdowns) && storeDropdowns.length > 0 && statusOptions.length === 0) {
-      const opts = storeDropdowns.filter((d: any) => d.type === "interview status" && d.isActive);
+    if (Array.isArray(queryDropdowns) && queryDropdowns.length > 0 && statusOptions.length === 0) {
+      const opts = queryDropdowns.filter((d: any) => d.type === "interview status" && d.isActive);
       if (opts.length > 0) setStatusOptions(opts);
     }
-  }, [storeDropdowns]);
+  }, [queryDropdowns]);
 
   // ── Fetch interview status dropdown options ──
   useEffect(() => {

@@ -17,7 +17,7 @@ const SYMXSettingSchema = new Schema<ISYMXSetting>(
     { timestamps: true, collection: "SYMXSettings" }
 );
 
-SYMXSettingSchema.index({ key: 1 }, { unique: true });
+
 
 const SYMXSetting: Model<ISYMXSetting> =
     mongoose.models.SYMXSetting ||

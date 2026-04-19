@@ -15,34 +15,6 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
 
-    // TEMPORARY SYNC LOGIC
-    await SymxAppModule.deleteOne({ name: "Everyday after Dispatching" });
-    const existingMod = await SymxAppModule.findOne({ name: "Everyday" });
-    if (!existingMod) {
-         await SymxAppModule.create({ name: "Everyday", url: "/everyday", icon: "IconTarget", order: 5, subModules: [] });
-    }
-    
-    const roles = await SymxAppRole.find({});
-    for(const role of roles) {
-        let perms = role.permissions || [];
-        // Clean up old name
-        const hasOld = perms.some((p: any) => p.module === "Everyday after Dispatching");
-        if (hasOld) {
-            perms = perms.filter((p: any) => p.module !== "Everyday after Dispatching");
-        }
-        
-        if (!perms.find((p: any) => p.module === "Everyday")) {
-            perms.push({
-                module: "Everyday",
-                actions: { view: true, create: true, edit: true, delete: true, approve: true, download: true },
-                fieldScope: {}
-            });
-            await SymxAppRole.updateOne({ _id: role._id }, { $set: { permissions: perms } });
-        } else if (hasOld) {
-            await SymxAppRole.updateOne({ _id: role._id }, { $set: { permissions: perms } });
-        }
-    }
-    // END TEMPORARY SYNC LOGIC
 
     // ── Super Admin Bypass ──────────────────────────────────────────
     if (session.id === "super-admin") {

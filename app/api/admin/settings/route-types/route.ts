@@ -1,3 +1,4 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -5,6 +6,15 @@ import RouteType from "@/lib/models/RouteType";
 
 // GET — list all route types
 export async function GET() {
+  try {
+    await requirePermission("Admin", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
         const session = await getSession();
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -19,6 +29,15 @@ export async function GET() {
 
 // POST — create or update route type
 export async function POST(req: NextRequest) {
+  try {
+    await requirePermission("Admin", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
         const session = await getSession();
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -65,6 +84,15 @@ export async function POST(req: NextRequest) {
 
 // PATCH — bulk reorder
 export async function PATCH(req: NextRequest) {
+  try {
+    await requirePermission("Admin", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
         const session = await getSession();
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -93,6 +121,15 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE — remove a route type
 export async function DELETE(req: NextRequest) {
+  try {
+    await requirePermission("Admin", "delete");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
         const session = await getSession();
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

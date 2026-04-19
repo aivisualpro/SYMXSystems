@@ -3,7 +3,9 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useHrTickets } from "@/lib/query/hooks/useHr";
+import { useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query/keys";
 import {
   Search,
   Ticket,
@@ -242,6 +244,7 @@ function TicketDialog({
   const [holdReason, setHoldReason] = useState(ticket?.holdReason || "");
   const [managersEmail, setManagersEmail] = useState(ticket?.managersEmail || "");
   const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (open) {
@@ -272,6 +275,9 @@ function TicketDialog({
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("Save failed");
+
+      queryClient.invalidateQueries({ queryKey: qk.hr.tickets });
+      queryClient.invalidateQueries({ queryKey: qk.hr.dashboard });
 
       toast.success(ticket ? "Ticket updated" : "Ticket created");
       onSaved();
@@ -421,7 +427,7 @@ function TicketDialog({
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function HRTicketsPage() {
-  const store = useDataStore();
+  const { data: queryTickets } = useHrTickets();
   const [tickets, setTickets] = useState<HrTicket[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -432,6 +438,7 @@ export default function HRTicketsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { setRightContent } = useHeaderActions();
+  const queryClient = useQueryClient();
 
   // Dialog states
   const [showShare, setShowShare] = useState(false);
@@ -498,13 +505,12 @@ export default function HRTicketsPage() {
     fetchTickets().finally(() => setLoading(false));
   }, [fetchTickets]);
 
-  // ── Seed from store ──
-  const storeTickets = store.hrTickets as any;
+  // ── Seed from TanStack Query cache ──
   useEffect(() => {
-    if (Array.isArray(storeTickets) && storeTickets.length > 0 && tickets.length === 0) {
-      setTickets(storeTickets);
+    if (Array.isArray(queryTickets) && queryTickets.length > 0 && tickets.length === 0) {
+      setTickets(queryTickets);
     }
-  }, [storeTickets]);
+  }, [queryTickets]);
 
   // ── Import handler ──
   const handleImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -559,6 +565,9 @@ export default function HRTicketsPage() {
       });
       if (!res.ok) throw new Error("Update failed");
 
+      queryClient.invalidateQueries({ queryKey: qk.hr.tickets });
+      queryClient.invalidateQueries({ queryKey: qk.hr.dashboard });
+
       setTickets((prev) =>
         prev.map((t) => (t._id === ticketId ? { ...t, approveDeny: newStatus } : t))
       );
@@ -577,6 +586,10 @@ export default function HRTicketsPage() {
     try {
       const res = await fetch(`/api/admin/hr-tickets/${ticketId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
+
+      queryClient.invalidateQueries({ queryKey: qk.hr.tickets });
+      queryClient.invalidateQueries({ queryKey: qk.hr.dashboard });
+
       setTickets((prev) => prev.filter((t) => t._id !== ticketId));
       toast.success("Ticket deleted");
     } catch (err: any) {

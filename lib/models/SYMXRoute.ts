@@ -187,9 +187,10 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
 
 // Compound index for upsert + fast lookups
 SYMXRouteSchema.index({ transporterId: 1, date: 1 }, { unique: true });
-SYMXRouteSchema.index({ yearWeek: 1 });
+SYMXRouteSchema.index({ yearWeek: 1, transporterId: 1 });
 SYMXRouteSchema.index({ transporterId: 1, type: 1 });  // for routesCompleted aggregation
 SYMXRouteSchema.index({ van: 1 });                      // for vehicle name lookups
+SYMXRouteSchema.index({ date: 1 });                     // for daily filters
 
 const SYMXRoute: Model<ISYMXRoute> =
     mongoose.models.SYMXRoute ||

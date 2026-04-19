@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useHrDashboard, useHrClaimsKpi, useHrReimbursementsKpi, useHrInterviews, useHrTickets } from "@/lib/query/hooks/useHr";
 import { cn } from "@/lib/utils";
 import {
   Users,
@@ -140,7 +140,11 @@ function TypeChip({ label, count, color, onClick }: { label: string; count: numb
 
 
 export default function EmployeesDashboardPage() {
-  const store = useDataStore();
+  const { data: queryStats, isLoading: statsLoading } = useHrDashboard();
+  const { data: queryClaimsKpi } = useHrClaimsKpi();
+  const { data: queryReimbursementsKpi } = useHrReimbursementsKpi();
+  const { data: queryInterviews } = useHrInterviews();
+  const { data: queryTickets } = useHrTickets();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [incidentKpi, setIncidentKpi] = useState<any>(null);
@@ -148,22 +152,19 @@ export default function EmployeesDashboardPage() {
   const hasSyncedFromStore = useRef(false);
   const router = useRouter();
 
-  // ── Read from store instantly ──
-  const storeStats = store.hrStats;
-  const storeClaimsKpi = store.hrClaimsKpi;
-  const storeReimbursementsKpi = store.hrReimbursementsKpi;
-  const storeInterviews = store.hrInterviews;
-  const storeTickets = store.hrTickets;
+  // ── Read from TanStack Query cache instantly ──
+  const storeInterviews = queryInterviews;
+  const storeTickets = queryTickets;
 
   useEffect(() => {
-    if (storeStats && !hasSyncedFromStore.current) {
-      setStats(storeStats);
-      setIncidentKpi(storeClaimsKpi);
-      setReimbursementKpi(storeReimbursementsKpi);
+    if (queryStats && !hasSyncedFromStore.current) {
+      setStats(queryStats);
+      setIncidentKpi(queryClaimsKpi);
+      setReimbursementKpi(queryReimbursementsKpi);
       hasSyncedFromStore.current = true;
       setLoading(false);
     }
-  }, [storeStats, storeClaimsKpi, storeReimbursementsKpi]);
+  }, [queryStats, queryClaimsKpi, queryReimbursementsKpi]);
 
   const fetchData = async () => {
     try {
@@ -193,9 +194,9 @@ export default function EmployeesDashboardPage() {
   };
 
   useEffect(() => {
-    if (!storeStats && !store.initialized) return;
-    if (!storeStats) fetchData();
-  }, [store.initialized]);
+    if (!queryStats && statsLoading) return;
+    if (!queryStats) fetchData();
+  }, [queryStats, statsLoading]);
 
   const typeColors = [
     "bg-blue-500", "bg-emerald-500", "bg-purple-500", "bg-amber-500",

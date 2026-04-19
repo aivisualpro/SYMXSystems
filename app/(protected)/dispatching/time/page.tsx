@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useDropdowns } from "@/lib/query/hooks/useShared";
 import { cn } from "@/lib/utils";
 import {
     Users,
@@ -432,16 +432,16 @@ export default function TimePage() {
     const [quickEditForm, setQuickEditForm] = useState<Partial<RouteRow>>({});
     const [punchStatusOptions, setPunchStatusOptions] = useState<any[]>([]);
 
-    const store = useDataStore();
+    const { data: dropdownsData } = useDropdowns();
 
-    // ── Hydrate Punch Status Options from DataStore ──
+    // ── Hydrate Punch Status Options from TanStack Query ──
     useEffect(() => {
-        const dropdowns = store.admin?.dropdowns;
+        const dropdowns = dropdownsData;
         if (dropdowns && Array.isArray(dropdowns) && dropdowns.length > 0) {
             const punches = dropdowns.filter((d: any) => d.type?.toLowerCase() === "punch status" && d.isActive !== false);
             setPunchStatusOptions(punches);
         }
-    }, [store.admin?.dropdowns]);
+    }, [dropdownsData]);
 
     // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
     const { rawRouteData, rawRouteDataLoading } = useDispatching();
@@ -572,9 +572,8 @@ export default function TimePage() {
     useEffect(() => { setStats({ employeeCount: totalFiltered }); }, [totalFiltered, setStats]);
     useEffect(() => { return () => setStats({}); }, [setStats]);
 
-    // ── Loading / Empty ──
-    if (routesLoading || loading) {
-        return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    if (rawRouteData?.routes?.length > 0 && allRoutes.length === 0) {
+        return <div className="flex-1 opacity-0 pointer-events-none" />;
     }
 
     if (!routesGenerated || allRoutes.length === 0) {

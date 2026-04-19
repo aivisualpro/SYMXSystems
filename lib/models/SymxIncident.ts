@@ -33,7 +33,7 @@ export interface ISymxIncident extends Document {
 
 const SymxIncidentSchema = new Schema<ISymxIncident>(
   {
-    transporterId: { type: String, index: true },
+    transporterId: { type: String },
     employeeName: { type: String },
     employeeId: { type: Schema.Types.ObjectId, ref: "SymxEmployee" },
     reportedDate: { type: Date },

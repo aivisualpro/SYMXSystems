@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ActiveThemeProvider } from "@/components/active-theme";
 import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration";
+import { Providers } from "@/app/providers";
 
 import { Poppins } from "next/font/google";
 
@@ -93,7 +94,9 @@ export default async function RootLayout({
           enableColorScheme
         >
           <ActiveThemeProvider initialTheme={activeThemeValue}>
-            {children}
+            <Providers>
+              {children}
+            </Providers>
             <Toaster position="top-center" richColors />
             <ServiceWorkerRegistration />
           </ActiveThemeProvider>

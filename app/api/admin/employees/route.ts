@@ -1,3 +1,4 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
@@ -5,6 +6,15 @@ import SymxEmployee from '@/lib/models/SymxEmployee';
 import { getSession } from '@/lib/auth';
 
 export async function GET(req: Request) {
+  try {
+    await requirePermission("HR", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     await connectToDatabase();
     
@@ -18,9 +28,13 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const skip = parseInt(searchParams.get('skip') || '0', 10);
     const limitParams = searchParams.get('limit');
-    let limit = limitParams ? parseInt(limitParams, 10) : 0;
+    let limit = limitParams ? parseInt(limitParams, 10) : 50; // enforce pagination by default
+    const isExport = searchParams.get('export') === 'true'; // allows bypassing limit for exports
+    if (isExport) limit = 0; // 0 means no limit for exports, but MUST be explicitly requested
+    
     const search = searchParams.get('search') || '';
     const fetchTerminated = searchParams.get('terminated') === 'true';
+    const selectFields = searchParams.get('select');
 
     const filterStatus = searchParams.get('status');
     const filterType = searchParams.get('type');
@@ -142,26 +156,37 @@ export async function GET(req: Request) {
       query.status = "Active";
     }
 
-    if (limit > 0) {
-      // Return paginated object
+    if (limit > 0 || !isExport) {
+      // Return paginated object. Enforce default limit if not export.
+      const actualLimit = limit > 0 ? limit : 50;
       const totalCount = await SymxEmployee.countDocuments(query);
-      const employees = await SymxEmployee.find(query)
+      const queryBuilder = SymxEmployee.find(query)
         .sort({ firstName: 1, lastName: 1 })
         .skip(skip)
-        .limit(limit)
-        .lean();
+        .limit(actualLimit);
+        
+      if (selectFields) {
+        queryBuilder.select(selectFields.split(',').join(' '));
+      }
+      
+      const employees = await queryBuilder.lean();
 
       return NextResponse.json({
         records: employees,
         totalCount,
-        hasMore: skip + limit < totalCount
+        hasMore: skip + actualLimit < totalCount
       });
     }
 
-    // Backwards compatibility: fetch all
-    const employees = await SymxEmployee.find(query)
-      .sort({ firstName: 1, lastName: 1 })
-      .lean();
+    // Export path: full dataset (only if explicitly requested via export=true)
+    const queryBuilder = SymxEmployee.find(query)
+      .sort({ firstName: 1, lastName: 1 });
+      
+    if (selectFields) {
+      queryBuilder.select(selectFields.split(',').join(' '));
+    }
+    
+    const employees = await queryBuilder.lean();
 
     return NextResponse.json(employees);
   } catch (error) {
@@ -171,6 +196,15 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  try {
+    await requirePermission("HR", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     await connectToDatabase();
     const session = await getSession();

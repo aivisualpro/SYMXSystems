@@ -1,3 +1,4 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -6,6 +7,15 @@ import SymxInterview from "@/lib/models/SymxInterview";
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
+  try {
+    await requirePermission("HR", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     await connectToDatabase();
     const { id } = await params;
@@ -19,6 +29,15 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
+  try {
+    await requirePermission("HR", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     await connectToDatabase();
     const session = await getSession();
@@ -36,6 +55,15 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
+  try {
+    await requirePermission("HR", "delete");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     await connectToDatabase();
     const session = await getSession();

@@ -3,7 +3,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 export interface ISymxUser extends Document {
   name: string;
   email: string;
-  password?: string;
+  password: string;
   phone?: string;
   address?: string;
   AppRole: string;
@@ -20,7 +20,7 @@ export interface ISymxUser extends Document {
 const SymxUserSchema: Schema = new Schema({
   name: { type: String, required: true, index: true },
   email: { type: String, required: true, unique: true, index: true },
-  password: { type: String },
+  password: { type: String, required: true },
   phone: { type: String },
   address: { type: String },
   serialNo: { type: String, index: true },

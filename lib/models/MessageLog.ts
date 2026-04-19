@@ -58,6 +58,7 @@ const MessageLogSchema = new Schema<IMessageLog>(
 
 // Compound index for quick lookups by phone + type
 MessageLogSchema.index({ toNumber: 1, messageType: 1, sentAt: -1 });
+MessageLogSchema.index({ fromNumber: 1 });
 
 const MessageLog: Model<IMessageLog> =
     mongoose.models.MessageLog ||

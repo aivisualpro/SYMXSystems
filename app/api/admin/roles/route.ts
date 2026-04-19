@@ -1,3 +1,4 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
@@ -6,6 +7,15 @@ import SymxAppRole from "@/lib/models/SymxAppRole";
 import SymxUser from "@/lib/models/SymxUser";
 
 export async function GET(req: NextRequest) {
+  try {
+    await requirePermission("Admin", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     await connectToDatabase();
     // Sort items by name by default
@@ -30,6 +40,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
+    await requirePermission("Admin", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     await connectToDatabase();
     const body = await req.json();

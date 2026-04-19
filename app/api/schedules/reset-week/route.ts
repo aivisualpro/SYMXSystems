@@ -1,4 +1,6 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
@@ -7,6 +9,15 @@ import SYMXRoute from "@/lib/models/SYMXRoute";
 import SYMXRoutesInfo from "@/lib/models/SYMXRoutesInfo";
 
 export async function DELETE(req: NextRequest) {
+  try {
+    await requirePermission("Scheduling", "delete");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const session = await getSession();
     if (!session || session.email !== "adeel@symxlogistics.com") {
@@ -22,13 +33,22 @@ export async function DELETE(req: NextRequest) {
 
     await connectToDatabase();
 
-    // Perform deletions concurrently
-    const [schedulesRes, logsRes, routesRes, routeInfosRes] = await Promise.all([
-      SymxEmployeeSchedule.deleteMany({ yearWeek }),
-      ScheduleAuditLog.deleteMany({ yearWeek }),
-      SYMXRoute.deleteMany({ yearWeek }),
-      SYMXRoutesInfo.deleteMany({ yearWeek }),
-    ]);
+    const dbSession = await mongoose.startSession();
+    let schedulesRes: any = { deletedCount: 0 };
+    let logsRes: any = { deletedCount: 0 };
+    let routesRes: any = { deletedCount: 0 };
+    let routeInfosRes: any = { deletedCount: 0 };
+
+    try {
+      await dbSession.withTransaction(async () => {
+        schedulesRes = await SymxEmployeeSchedule.deleteMany({ yearWeek }, { session: dbSession });
+        logsRes = await ScheduleAuditLog.deleteMany({ yearWeek }, { session: dbSession });
+        routesRes = await SYMXRoute.deleteMany({ yearWeek }, { session: dbSession });
+        routeInfosRes = await SYMXRoutesInfo.deleteMany({ yearWeek }, { session: dbSession });
+      });
+    } finally {
+      await dbSession.endSession();
+    }
 
     return NextResponse.json({
       success: true,

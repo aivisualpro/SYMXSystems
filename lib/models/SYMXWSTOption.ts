@@ -19,7 +19,6 @@ const SYMXWSTOptionSchema = new Schema<ISYMXWSTOption>(
     { timestamps: true, collection: "SYMXWSTOptions" }
 );
 
-SYMXWSTOptionSchema.index({ wst: 1 }, { unique: true });
 
 const SYMXWSTOption: Model<ISYMXWSTOption> =
     mongoose.models.SYMXWSTOption ||

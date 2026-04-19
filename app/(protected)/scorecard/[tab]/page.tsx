@@ -1,6 +1,8 @@
 "use client";
+import { Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
-import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { Button } from "@/components/ui/button";
@@ -1006,10 +1008,18 @@ function EmployeePerformanceDashboardInner() {
 }
 
 // Wrap with Suspense for useSearchParams (required by Next.js App Router)
-export default function EmployeePerformanceDashboard() {
+function EmployeePerformanceDashboardContent() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
       <EmployeePerformanceDashboardInner />
+    </Suspense>
+  );
+}
+
+export default function EmployeePerformanceDashboard(props: any) {
+  return (
+    <Suspense fallback={<Skeleton className="h-full w-full min-h-[400px] rounded-xl" />}>
+      <EmployeePerformanceDashboardContent {...props} />
     </Suspense>
   );
 }

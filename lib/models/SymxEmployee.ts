@@ -130,6 +130,8 @@ const SymxEmployeeSchema: Schema = new Schema({
 
 // Compound index for messaging employees query (status: Active + phoneNumber exists)
 SymxEmployeeSchema.index({ status: 1, phoneNumber: 1 });
+SymxEmployeeSchema.index({ email: 1 });
+SymxEmployeeSchema.index({ phoneNumber: 1 });
 
 const SymxEmployee: Model<ISymxEmployee> = mongoose.models.SymxEmployee || mongoose.model<ISymxEmployee>('SymxEmployee', SymxEmployeeSchema);
 

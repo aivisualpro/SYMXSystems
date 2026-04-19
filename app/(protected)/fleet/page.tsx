@@ -26,7 +26,7 @@ const tooltipStyle: React.CSSProperties = {
 };
 
 export default function FleetOverviewPage() {
-  const { data, loading } = useFleet();
+  const { data, loading, openEditModal } = useFleet();
   const router = useRouter();
 
   if (loading) return <FleetLoading />;
@@ -168,7 +168,7 @@ export default function FleetOverviewPage() {
             ) : (
               <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
                 {openRepairs.map((r: any, i: number) => (
-                  <div key={r._id || i} onClick={() => router.push(`/fleet/repairs?highlight=${r._id}`)} className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors group cursor-pointer">
+                  <div key={r._id || i} onClick={() => openEditModal("repair", r)} className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors group cursor-pointer">
                     <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
                       <IconTool size={14} className="text-amber-500" />
                     </div>

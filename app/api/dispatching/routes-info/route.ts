@@ -1,3 +1,4 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -32,6 +33,15 @@ function emptyRow(date: string, rowIndex: number) {
 
 // GET: Fetch all 100 rows for a date + drivers from SYMXRoutes for date + wave time options
 export async function GET(req: NextRequest) {
+  try {
+    await requirePermission("Dispatching", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
         const session = await getSession();
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -148,6 +158,15 @@ export async function GET(req: NextRequest) {
 
 // POST: Bulk upsert rows — saves all changed rows in one call
 export async function POST(req: NextRequest) {
+  try {
+    await requirePermission("Dispatching", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
         const session = await getSession();
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -316,6 +335,15 @@ function buildRouteSyncFields(row: any): Record<string, any> {
 
 // PUT: Update a single cell/row instantly (for real-time cell editing)
 export async function PUT(req: NextRequest) {
+  try {
+    await requirePermission("Dispatching", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
         const session = await getSession();
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

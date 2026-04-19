@@ -1,3 +1,4 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -11,6 +12,15 @@ import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
  * Body: { transporterId, scheduleDate, yearWeek, status, changeRemarks? }
  */
 export async function PUT(req: NextRequest) {
+  try {
+    await requirePermission("Dispatching", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
         const session = await getSession();
         if (!session || !session.id) {

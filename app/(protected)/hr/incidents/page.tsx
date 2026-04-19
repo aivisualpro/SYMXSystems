@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Loader2, Plus, Shield, AlertTriangle, CheckCircle2, DollarSign, Trash2, Search, FileSpreadsheet, ArrowRight, CheckCircle, AlertCircle, RotateCw, FileUp, Table2, Upload, X, ExternalLink } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useHrClaims } from "@/lib/query/hooks/useHr";
 import Papa from "papaparse";
 
 interface ClaimRow {
@@ -89,7 +89,7 @@ interface EmployeeOption {
 }
 
 export default function IncidentsPage() {
-  const store = useDataStore();
+  const { data: queryClaims } = useHrClaims();
   const [data, setData] = useState<ClaimRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -105,7 +105,7 @@ export default function IncidentsPage() {
 
   // Fetch active employees for the dropdown
   useEffect(() => {
-    fetch("/api/admin/employees?terminated=false&limit=9999")
+    fetch("/api/admin/employees?terminated=false&export=true&select=firstName,lastName,transporterId,status")
       .then(res => res.json())
       .then(json => {
         const list = (json.employees || json || []).map((e: any) => ({
@@ -175,16 +175,15 @@ export default function IncidentsPage() {
 
   useEffect(() => { fetchData(true); }, [debouncedSearch]);
 
-  // ── Seed from store for instant load ──
-  const storeClaims = store.hrClaims as any;
+  // ── Seed from TanStack Query cache for instant load ──
   useEffect(() => {
-    if (!debouncedSearch && storeClaims?.records?.length > 0 && data.length === 0) {
-      setData(storeClaims.records);
-      setTotalCount(storeClaims.totalCount || storeClaims.records.length);
-      setHasMore(storeClaims.hasMore || false);
-      if (storeClaims.kpi) setKpis(storeClaims.kpi);
+    if (!debouncedSearch && queryClaims?.records?.length > 0 && data.length === 0) {
+      setData(queryClaims.records);
+      setTotalCount(queryClaims.totalCount || queryClaims.records.length);
+      setHasMore(queryClaims.hasMore || false);
+      if (queryClaims.kpi) setKpis(queryClaims.kpi);
     }
-  }, [storeClaims]);
+  }, [queryClaims]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;

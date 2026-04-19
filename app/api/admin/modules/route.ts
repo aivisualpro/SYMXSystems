@@ -1,3 +1,4 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -75,6 +76,15 @@ let _reseedInFlight: Promise<any[]> | null = null;
 // GET: Fetch all modules (ordered) — auto-seeds/reseeds when version changes
 export async function GET() {
   try {
+    await requirePermission("Admin", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
     const session = await getSession();
     if (!session || !session.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -116,6 +126,15 @@ export async function GET() {
 
 // POST: Seed/reseed modules — pass { force: true } to wipe and re-seed
 export async function POST(req: NextRequest) {
+  try {
+    await requirePermission("Admin", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const session = await getSession();
     if (!session || !session.id) {

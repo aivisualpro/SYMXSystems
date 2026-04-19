@@ -34,7 +34,8 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import RoutesInfoPanel from "../dispatching/_components/RoutesInfoPanel";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useDispatchingRoutes } from "@/lib/query/hooks/useDispatching";
+import { useQueryClient } from "@tanstack/react-query";
 import { generateRoutesPDF } from "@/lib/generate-routes-pdf";
 
 // ── Shared Tab Definitions ──
@@ -188,7 +189,8 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         return getWeekDates(selectedWeek);
     }, [selectedWeek]);
 
-    const store = useDataStore();
+    const { data: queryRouteData } = useDispatchingRoutes(selectedWeek);
+    const queryClient = useQueryClient();
 
     // ── Shared raw route data for all child tabs ──
     const [rawRouteData, setRawRouteData] = useState<any>(null);
@@ -203,15 +205,11 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         if (!selectedWeek) return;
         let cancelled = false;
 
-        // Try DataStore first for the default week (instant if available)
-        if (
-            store.initialized &&
-            store.dispatchingRoutes &&
-            store.dispatchingWeeks?.[0] === selectedWeek
-        ) {
-            setRawRouteData(store.dispatchingRoutes);
+        // Try TanStack Query cache first for the default week (instant if available)
+        if (queryRouteData && rawRouteWeekRef.current !== selectedWeek) {
+            setRawRouteData(queryRouteData);
             setRawRouteDataLoading(false);
-            setRoutesGenerated(!!(store.dispatchingRoutes?.routes?.length));
+            setRoutesGenerated(!!(queryRouteData?.routes?.length));
             setRoutesLoading(false);
             rawRouteWeekRef.current = selectedWeek;
             fullWeekLoadedRef.current = selectedWeek;
@@ -223,8 +221,6 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
             return;
         }
 
-        if (!store.initialized) return;
-
         // ── PHASE 1: Fetch only the selected date ──
         const targetDate = selectedDate || weekDates[0] || "";
         rawRouteWeekRef.current = selectedWeek;
@@ -232,11 +228,11 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         setRoutesLoading(true);
 
         const phase1Url = targetDate
-            ? `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&date=${encodeURIComponent(targetDate)}&cb=${Date.now()}`
-            : `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&cb=${Date.now()}`;
+            ? `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&date=${encodeURIComponent(targetDate)}`
+            : `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`;
 
         // Phase 1: Quick load (just 1 day)
-        fetch(phase1Url)
+        fetch(phase1Url, { cache: "no-store" })
             .then((r) => r.json())
             .then((dayData) => {
                 if (cancelled) return;
@@ -248,7 +244,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
 
                 // ── PHASE 2: Full week in background ──
                 if (targetDate) {
-                    fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&cb=${Date.now()}`)
+                    fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}`, { cache: "no-store" })
                         .then((r) => r.json())
                         .then((fullData) => {
                             if (cancelled) return;
@@ -271,7 +267,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
 
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedWeek, refreshKey, store.initialized, store.dispatchingRoutes]);
+    }, [selectedWeek, refreshKey, queryRouteData]);
 
     // Force re-fetch when routes are regenerated
     useEffect(() => {
@@ -282,9 +278,9 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     }, [refreshKey]);
 
     const refreshRoutes = useCallback(() => {
-        store.refresh("dispatching.routes");
+        queryClient.invalidateQueries({ queryKey: ["dispatching", "routes"] });
         setRefreshKey((k) => k + 1);
-    }, [store]);
+    }, [queryClient]);
 
     // ── Push title into global header ──
     const pageTitle = useMemo(() => {
@@ -387,7 +383,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                 )}
 
                 {/* ── Tab Content ── */}
-                <div className="flex-1 min-h-0 overflow-auto">
+                <div className={cn("flex-1 min-h-0 overflow-auto transition-opacity duration-200", rawRouteDataLoading && "opacity-50 pointer-events-none")}>
                     {children}
                 </div>
             </div>

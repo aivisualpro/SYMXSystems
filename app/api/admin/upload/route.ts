@@ -1,3 +1,4 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -9,6 +10,15 @@ cloudinary.config({
 });
 
 export async function POST(req: NextRequest) {
+  try {
+    await requirePermission("Admin", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   // 1. Verify credentials present
   if (
     !process.env.CLOUDINARY_CLOUD_NAME ||

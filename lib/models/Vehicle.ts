@@ -83,6 +83,7 @@ const VehicleSchema: Schema = new Schema({
 VehicleSchema.index({ ownership: 1 });
 VehicleSchema.index({ createdAt: -1 });
 VehicleSchema.index({ status: 1, vehicleName: 1 });
+VehicleSchema.index({ vehicleName: 1 });
 
 const Vehicle: Model<IVehicle> = mongoose.models.Vehicle || mongoose.model<IVehicle>('Vehicle', VehicleSchema);
 

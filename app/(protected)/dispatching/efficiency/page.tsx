@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../layout";
-import { useDataStore } from "@/hooks/use-data-store";
+
 import { cn } from "@/lib/utils";
 import {
     Users,
@@ -345,9 +345,8 @@ export default function EfficiencyPage() {
     useEffect(() => { setStats({ employeeCount: totalFiltered }); }, [totalFiltered, setStats]);
     useEffect(() => { return () => setStats({}); }, [setStats]);
 
-    // ── Loading / Empty ──
-    if (routesLoading || loading) {
-        return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    if (rawRouteData?.routes?.length > 0 && allRoutes.length === 0) {
+        return <div className="flex-1 opacity-0 pointer-events-none" />;
     }
 
     if (!routesGenerated || allRoutes.length === 0) {

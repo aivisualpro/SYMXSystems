@@ -47,6 +47,8 @@ import {
 import { toast } from "sonner";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { cn } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query/keys";
 
 // Hardcoded fallback — used only when the API hasn't responded yet
 const FALLBACK_MODULES: any[] = [
@@ -95,6 +97,7 @@ export default function RoleDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const roleId = params.id as string;
+  const queryClient = useQueryClient();
 
   const [role, setRole] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -288,6 +291,11 @@ export default function RoleDetailsPage() {
       });
 
       if (!res.ok) throw new Error("Failed to save role");
+
+      // Cross-page mutation invalidation
+      queryClient.invalidateQueries({ queryKey: qk.admin.roles });
+      queryClient.invalidateQueries({ queryKey: qk.admin.users });
+      queryClient.invalidateQueries({ queryKey: qk.permissions.current });
 
       toast.success("Role permissions updated successfully");
     } catch (error) {

@@ -140,6 +140,8 @@ export default function EverydayAfterDispatchingPage() {
     const [rescueMap, setRescueMap] = useState<Record<string, any>>({});
     const [isSavingRescue, setIsSavingRescue] = useState(false);
 
+    const [everydayRtsEnabled, setEverydayRtsEnabled] = useState(false);
+
     const [allEmployees, setAllEmployees] = useState<any[]>([]);
 
     useEffect(() => {
@@ -406,14 +408,15 @@ export default function EverydayAfterDispatchingPage() {
             })();
             const tomorrowWeek = getCurrentYearWeek(tomorrow);
 
-            const [routesRes, schedulesRes, rtsRes, rescueRes, tRoutesRes, tSchedulesRes, routeTypesRes] = await Promise.all([
+            const [routesRes, schedulesRes, rtsRes, rescueRes, tRoutesRes, tSchedulesRes, routeTypesRes, rtsSettingRes] = await Promise.all([
                 fetch(`/api/dispatching/routes?yearWeek=${selectedWeek}&date=${date}`),
                 fetch(`/api/everyday/schedules?dateStr=${date}&yearWeek=${selectedWeek}`),
                 fetch(`/api/everyday/rts?dateStr=${date}`),
                 fetch(`/api/everyday/rescue?dateStr=${date}`),
                 fetch(`/api/dispatching/routes?yearWeek=${tomorrowWeek}&date=${tomorrow}`),
                 fetch(`/api/everyday/schedules?dateStr=${tomorrow}&yearWeek=${tomorrowWeek}`),
-                fetch(`/api/admin/settings/route-types`)
+                fetch(`/api/admin/settings/route-types`),
+                fetch(`/api/admin/settings/general?key=everyday_logic_rts`)
             ]);
 
             let empMap: Record<string, any> = {};
@@ -493,6 +496,13 @@ export default function EverydayAfterDispatchingPage() {
                 setRouteTypeConfigs(map);
             } else {
                 setRouteTypeConfigs({});
+            }
+
+            if (rtsSettingRes && rtsSettingRes.ok) {
+                const settingData = await rtsSettingRes.json();
+                setEverydayRtsEnabled(settingData?.value === true || settingData?.value === "true");
+            } else {
+                setEverydayRtsEnabled(false);
             }
         } catch (error) {
             console.error(error);
@@ -836,7 +846,7 @@ export default function EverydayAfterDispatchingPage() {
                             columns={[
                                 { key: "employee", label: "Employee", minW: 120, sticky: true },
                                 { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 70, align: "center" },
-                                { key: "rts", label: <span className="font-semibold text-xs text-orange-600">RTS</span>, minW: 55, align: "center" },
+                                ...(everydayRtsEnabled ? [{ key: "rts", label: <span className="font-semibold text-xs text-orange-600">RTS</span>, minW: 55, align: "center" }] : []),
                                 { key: "rescue", label: <span className="font-semibold text-xs text-teal-600">Rescue</span>, minW: 65, align: "center" },
                                 { key: "routeNumber", label: <HeaderIcon title="Route Number" icon={Hash} className="h-[18px] w-[18px] text-rose-500" strokeWidth={1.5} />, minW: 55, align: "center" },
                                 { key: "routeDuration", label: <HeaderIcon title="Route Duration" icon={Timer} className="h-[18px] w-[18px] text-yellow-500" strokeWidth={1.5} />, minW: 45, align: "center" },
@@ -1200,63 +1210,65 @@ export default function EverydayAfterDispatchingPage() {
                     </Card>
 
                     {/* RTS */}
-                    <Card className="md:col-span-1 xl:col-auto xl:flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-[300px] auto-rows-max xl:min-h-0">
-                        <div className="py-2.5 px-3.5 border-b border-border/50 bg-muted/20 shrink-0">
-                            <h3 className="text-sm font-bold tracking-wide">RTS</h3>
-                        </div>
-                        <div className="flex-1 min-h-0 overflow-auto bg-background/40">
-                            {rtsEntries.length === 0 ? (
-                                <div className="flex h-full items-center justify-center p-4">
-                                    <span className="text-muted-foreground/50 text-xs font-medium uppercase tracking-wider">No records</span>
-                                </div>
-                            ) : (
-                                <table className="w-full text-xs text-left relative">
-                                    <thead className="bg-muted text-muted-foreground uppercase sticky top-0 z-10 border-b border-border/50 shadow-sm">
-                                        <tr>
-                                            <th className="font-semibold p-2.5 pl-3">Employee</th>
-                                            <th className="font-semibold p-2.5">TBA</th>
-                                            <th className="font-semibold p-2.5">Reason</th>
-                                            <th className="font-semibold p-2.5 pr-3 w-8"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border/40">
-                                        {rtsEntries.map((rts) => (
-                                            <tr key={rts._id} className="hover:bg-muted/20 transition-colors">
-                                                <td className="p-2 pl-3 font-normal text-foreground/90 whitespace-nowrap">
-                                                    <div className="flex items-center gap-2 max-w-[160px] xl:max-w-max">
-                                                        {rts.employeeImage ? (
-                                                            <img src={rts.employeeImage} alt={rts.employeeName} className="w-5 h-5 rounded-full object-cover shrink-0" />
-                                                        ) : (
-                                                            <div className="w-5 h-5 rounded-full bg-muted/60 text-muted-foreground flex items-center justify-center text-[9px] font-bold shrink-0 uppercase">
-                                                                {(rts.employeeName || "-").charAt(0)}
-                                                            </div>
-                                                        )}
-                                                        <span className="truncate">{rts.employeeName}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="p-2">
-                                                    <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-orange-500/10 text-orange-600 font-mono tracking-wider text-[10px] border border-orange-500/20">{rts.tba}</span>
-                                                </td>
-                                                <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rts.reason}>{rts.reason}</td>
-                                                <td className="p-2 pr-3 text-right">
-                                                    <button
-                                                        onClick={() => {
-                                                            const rObj = rts.routeObj || { _id: rts.originalRecord.routeId, transporterId: rts.originalRecord.transporterId, employeeName: rts.employeeName };
-                                                            openRTSModal(rObj, rts.originalRecord);
-                                                        }}
-                                                        className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center"
-                                                        title="Edit RTS"
-                                                    >
-                                                        <Edit2 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                </td>
+                    {everydayRtsEnabled && (
+                        <Card className="md:col-span-1 xl:col-auto xl:flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-[300px] auto-rows-max xl:min-h-0">
+                            <div className="py-2.5 px-3.5 border-b border-border/50 bg-muted/20 shrink-0">
+                                <h3 className="text-sm font-bold tracking-wide">RTS</h3>
+                            </div>
+                            <div className="flex-1 min-h-0 overflow-auto bg-background/40">
+                                {rtsEntries.length === 0 ? (
+                                    <div className="flex h-full items-center justify-center p-4">
+                                        <span className="text-muted-foreground/50 text-xs font-medium uppercase tracking-wider">No records</span>
+                                    </div>
+                                ) : (
+                                    <table className="w-full text-xs text-left relative">
+                                        <thead className="bg-muted text-muted-foreground uppercase sticky top-0 z-10 border-b border-border/50 shadow-sm">
+                                            <tr>
+                                                <th className="font-semibold p-2.5 pl-3">Employee</th>
+                                                <th className="font-semibold p-2.5">TBA</th>
+                                                <th className="font-semibold p-2.5">Reason</th>
+                                                <th className="font-semibold p-2.5 pr-3 w-8"></th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
-                        </div>
-                    </Card>
+                                        </thead>
+                                        <tbody className="divide-y divide-border/40">
+                                            {rtsEntries.map((rts) => (
+                                                <tr key={rts._id} className="hover:bg-muted/20 transition-colors">
+                                                    <td className="p-2 pl-3 font-normal text-foreground/90 whitespace-nowrap">
+                                                        <div className="flex items-center gap-2 max-w-[160px] xl:max-w-max">
+                                                            {rts.employeeImage ? (
+                                                                <img src={rts.employeeImage} alt={rts.employeeName} className="w-5 h-5 rounded-full object-cover shrink-0" />
+                                                            ) : (
+                                                                <div className="w-5 h-5 rounded-full bg-muted/60 text-muted-foreground flex items-center justify-center text-[9px] font-bold shrink-0 uppercase">
+                                                                    {(rts.employeeName || "-").charAt(0)}
+                                                                </div>
+                                                            )}
+                                                            <span className="truncate">{rts.employeeName}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2">
+                                                        <span className="inline-flex px-1.5 py-0.5 rounded-sm bg-orange-500/10 text-orange-600 font-mono tracking-wider text-[10px] border border-orange-500/20">{rts.tba}</span>
+                                                    </td>
+                                                    <td className="p-2 text-muted-foreground truncate max-w-[120px]" title={rts.reason}>{rts.reason}</td>
+                                                    <td className="p-2 pr-3 text-right">
+                                                        <button
+                                                            onClick={() => {
+                                                                const rObj = rts.routeObj || { _id: rts.originalRecord.routeId, transporterId: rts.originalRecord.transporterId, employeeName: rts.employeeName };
+                                                                openRTSModal(rObj, rts.originalRecord);
+                                                            }}
+                                                            className="p-1.5 hover:bg-muted/50 rounded-md transition-colors text-muted-foreground hover:text-foreground inline-flex items-center"
+                                                            title="Edit RTS"
+                                                        >
+                                                            <Edit2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        </Card>
+                    )}
                 </div>
             </div>
 

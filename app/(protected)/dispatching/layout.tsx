@@ -23,6 +23,8 @@ import {
     FileDown,
 } from "lucide-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { useSchedulingWeeks } from "@/lib/query/hooks/useSchedules";
+import { useDispatchingRoutes } from "@/lib/query/hooks/useDispatching";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,7 +36,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import RoutesInfoPanel from "./_components/RoutesInfoPanel";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useQueryClient } from "@tanstack/react-query";
 import { generateRoutesPDF } from "@/lib/generate-routes-pdf";
 
 // ── Shared Tab Definitions ──
@@ -162,6 +164,7 @@ function getCurrentYearWeek(): string {
 export default function DispatchingLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
+    const queryClient = useQueryClient();
     const { setLeftContent, setRightContent } = useHeaderActions();
 
     const searchParams = useSearchParams();
@@ -241,134 +244,43 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
             setSelectedDateState(weekDates[0]);
             updateURL(selectedWeek, weekDates[0]);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [weekDates]);
 
-    const store = useDataStore();
+    const { data: storeWeeksData } = useSchedulingWeeks();
 
-    // ── Hydrate weeks from global store for instant load ──
+    // ── Hydrate weeks from TanStack query for instant load ──
     const hydratedRef = React.useRef(false);
     React.useEffect(() => {
         if (hydratedRef.current) return;
-        if (store.initialized && store.dispatchingWeeks?.length) {
+        if (storeWeeksData && storeWeeksData.length > 0) {
             hydratedRef.current = true;
-            setWeeks(store.dispatchingWeeks);
-            const initWeek = pickDefaultWeek(store.dispatchingWeeks, urlWeek);
+            setWeeks(storeWeeksData);
+            const initWeek = pickDefaultWeek(storeWeeksData, urlWeek);
             setSelectedWeek(initWeek);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [store.initialized, store.dispatchingWeeks]);
-
-    // ── Fetch available weeks (fallback if store not ready) ──
-    useEffect(() => {
-        if (hydratedRef.current) return; // already hydrated from store
-        const fetchWeeks = async () => {
-            try {
-                const res = await fetch("/api/schedules?weeksList=true");
-                const data = await res.json();
-                if (data.weeks?.length) {
-                    setWeeks(data.weeks);
-                    const initWeek = pickDefaultWeek(data.weeks, urlWeek);
-                    setSelectedWeek(initWeek);
-                }
-            } catch {
-                toast.error("Failed to load available weeks");
-            }
-        };
-        fetchWeeks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [storeWeeksData]);
 
     // ── Shared raw route data for all child tabs ──
-    const [rawRouteData, setRawRouteData] = useState<any>(null);
-    const [rawRouteDataLoading, setRawRouteDataLoading] = useState(false);
-    const rawRouteWeekRef = React.useRef("");
-    const fullWeekLoadedRef = React.useRef("");
+    // Phase 1: Load the single day quickly
+    const { data: dayData, isLoading: dayLoading } = useDispatchingRoutes(
+        selectedWeek,
+        selectedDate || weekDates[0] || undefined
+    );
+    // Phase 2: Pre-fetch the whole week in the background
+    const { data: fullWeekData, isLoading: weekLoading } = useDispatchingRoutes(selectedWeek);
 
-    // ── Two-Phase Progressive Loading ──
-    // Phase 1: Fetch ONLY the selected date's routes (small, fast ~200ms)
-    // Phase 2: Fetch the FULL week in background, merge seamlessly
-    useEffect(() => {
-        if (!selectedWeek) return;
-        let cancelled = false;
+    const rawRouteData = fullWeekData || dayData || null;
+    const rawRouteDataLoading = dayLoading && weekLoading;
 
-        // Try DataStore first for the default week (instant if available)
-        if (
-            store.initialized &&
-            store.dispatchingRoutes &&
-            store.dispatchingWeeks?.[0] === selectedWeek
-        ) {
-            setRawRouteData(store.dispatchingRoutes);
-            setRawRouteDataLoading(false);
-            setRoutesGenerated(!!(store.dispatchingRoutes?.routes?.length));
-            setRoutesLoading(false);
-            rawRouteWeekRef.current = selectedWeek;
-            fullWeekLoadedRef.current = selectedWeek;
-            return;
+    React.useEffect(() => {
+        if (rawRouteData?.routes?.length) {
+            setRoutesGenerated(true);
+        } else if (rawRouteData !== null) {
+            setRoutesGenerated(false);
         }
+    }, [rawRouteData]);
 
-        // Already have full week cached? Skip.
-        if (fullWeekLoadedRef.current === selectedWeek && rawRouteData) {
-            return;
-        }
-
-        if (!store.initialized) return;
-
-        // ── PHASE 1: Fetch only the selected date ──
-        const targetDate = selectedDate || weekDates[0] || "";
-        rawRouteWeekRef.current = selectedWeek;
-        setRawRouteDataLoading(true);
-        setRoutesLoading(true);
-
-        const phase1Url = targetDate
-            ? `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&date=${encodeURIComponent(targetDate)}&cb=${Date.now()}`
-            : `/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&cb=${Date.now()}`;
-
-        // Phase 1: Quick load (just 1 day)
-        fetch(phase1Url)
-            .then((r) => r.json())
-            .then((dayData) => {
-                if (cancelled) return;
-                // Show the single day's data immediately
-                setRawRouteData(dayData);
-                setRoutesGenerated(!!(dayData?.routes?.length));
-                setRawRouteDataLoading(false);
-                setRoutesLoading(false);
-
-                // ── PHASE 2: Full week in background ──
-                if (targetDate) {
-                    fetch(`/api/dispatching/routes?yearWeek=${encodeURIComponent(selectedWeek)}&cb=${Date.now()}`)
-                        .then((r) => r.json())
-                        .then((fullData) => {
-                            if (cancelled) return;
-                            setRawRouteData(fullData);
-                            setRoutesGenerated(!!(fullData?.routes?.length));
-                            fullWeekLoadedRef.current = selectedWeek;
-                        })
-                        .catch(() => { /* silently fail — partial data already shown */ });
-                } else {
-                    fullWeekLoadedRef.current = selectedWeek;
-                }
-            })
-            .catch(() => {
-                if (!cancelled) {
-                    setRawRouteData(null);
-                    setRawRouteDataLoading(false);
-                    setRoutesLoading(false);
-                }
-            });
-
-        return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedWeek, refreshKey, store.initialized, store.dispatchingRoutes]);
-
-    // Force re-fetch when routes are regenerated
-    useEffect(() => {
-        if (refreshKey > 0) {
-            rawRouteWeekRef.current = ""; // invalidate cache
-            fullWeekLoadedRef.current = "";
-        }
-    }, [refreshKey]);
 
     // ── Generate routes for selected week ──
     const handleGenerateRoutes = useCallback(async () => {
@@ -390,6 +302,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
             }
             setRoutesGenerated(true);
             setRefreshKey((k) => k + 1);
+            queryClient.invalidateQueries({ queryKey: ["dispatching"] });
         } catch (err: any) {
             toast.error(err.message || "Failed to generate routes");
         } finally {
@@ -398,9 +311,9 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     }, [selectedWeek, routesGenerated]);
 
     const refreshRoutes = useCallback(() => {
-        store.refresh("dispatching.routes");
+        queryClient.invalidateQueries({ queryKey: ["dispatching"] });
         setRefreshKey((k) => k + 1);
-    }, [store]);
+    }, [queryClient]);
 
     // ── Push title into global header ──
     const pageTitle = useMemo(() => {
@@ -679,7 +592,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                 </div>
 
                 {/* ── Tab Content ── */}
-                <div className="flex-1 min-h-0 overflow-auto">
+                <div className={cn("flex-1 min-h-0 overflow-auto transition-opacity duration-200", rawRouteDataLoading && "opacity-50 pointer-events-none")}>
                     {children}
                 </div>
             </div>

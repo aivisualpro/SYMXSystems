@@ -1,4 +1,6 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
@@ -8,6 +10,29 @@ import SymxUser from "@/lib/models/SymxUser";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import RouteType from "@/lib/models/RouteType";
 import { SymxEveryday } from "@/lib/models/SymxEveryday";
+import { authorizeAction } from "@/lib/rbac";
+import { z } from "zod";
+import { validateBody, validateSearchParams } from "@/lib/validations";
+
+const schedulesQuerySchema = z.object({
+  yearWeek: z.string().optional().nullable(),
+  weeksList: z.enum(["true", "false"]).optional().nullable()
+});
+
+const updateScheduleSchema = z.object({
+  scheduleId: z.string().optional(),
+  type: z.string().optional(),
+  employeeId: z.string().optional(),
+  note: z.string().optional(),
+  startTime: z.string().optional(),
+  status: z.string().optional(),
+  transporterId: z.string().optional(),
+  employeeName: z.string().optional(),
+  oldNote: z.string().optional(),
+  date: z.string().optional(),
+  yearWeek: z.string().optional(),
+  weekDay: z.string().optional()
+});
 
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -35,14 +60,24 @@ const WEEKS_CACHE_TTL = 60 * 1000; // 1 minute
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    await requirePermission("Scheduling", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const auth = await authorizeAction("Scheduling", "view");
+    if (!auth.authorized) return auth.response;
+
+    const validation = validateSearchParams(schedulesQuerySchema, req);
+    if (!validation.success) {
+      return validation.response;
     }
 
-    const { searchParams } = new URL(req.url);
-    const yearWeek = searchParams.get("yearWeek");
-    const weeksList = searchParams.get("weeksList");
+    const { yearWeek, weeksList } = validation.data;
 
     await connectToDatabase();
 
@@ -221,17 +256,30 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    await requirePermission("Scheduling", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
     }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const auth = await authorizeAction("Scheduling", "edit");
+    if (!auth.authorized) return auth.response;
 
     await connectToDatabase();
 
     // Resolve performer name once for all audit entries in this request
-    const performer = await resolvePerformerName(session);
+    const performer = await resolvePerformerName(auth.session);
 
-    const body = await req.json();
+    const rawBody = await req.json();
+    const validation = validateBody(updateScheduleSchema, rawBody);
+    if (!validation.success) {
+      return validation.response;
+    }
+
+    const body = validation.data;
     const { scheduleId, type, employeeId, note, startTime, status } = body;
 
     // Update employee global note (ScheduleNotes)
@@ -280,7 +328,7 @@ export async function PATCH(req: NextRequest) {
         if (newType === "") {
           resolvedStatus = "Off";
         } else {
-          const typeMatch = await RouteType.findOne({ name: { $regex: new RegExp(`^${newType}$`, "i") } }).lean();
+          const typeMatch = await RouteType.findOne({ name: newType }).lean();
           if (typeMatch && (typeMatch as any).routeStatus) {
             resolvedStatus = (typeMatch as any).routeStatus;
           } else {
@@ -292,87 +340,97 @@ export async function PATCH(req: NextRequest) {
       }
       if (startTime !== undefined) updateFields.startTime = startTime;
 
-      const updated = await SymxEmployeeSchedule.findByIdAndUpdate(
-        scheduleId,
-        { $set: updateFields },
-        { new: true }
-      ).lean() as any;
+      const dbSession = await mongoose.startSession();
+      let updated: any = null;
+      try {
+        await dbSession.withTransaction(async () => {
+          updated = await SymxEmployeeSchedule.findByIdAndUpdate(
+            scheduleId,
+            { $set: updateFields },
+            { new: true, session: dbSession }
+          ).lean() as any;
 
-      if (!updated) {
-        return NextResponse.json({ error: "Schedule entry not found" }, { status: 404 });
-      }
+          if (!updated) {
+            throw new Error("Schedule entry not found");
+          }
 
-      // Audit log — type change
-      const oldType = existing?.type || "";
-      const typeChanged = oldType !== (type || "");
-      if (typeChanged) {
-        const dateObj = updated.date ? new Date(updated.date) : null;
-        const dayName = dateObj ? FULL_DAY_NAMES[dateObj.getUTCDay()] : "";
-        // Try to get employee name
-        const empName = body.employeeName || "";
-        // If startTime also changed as part of this type change, include it in the same log
-        const startTimeAlsoChanged = startTime !== undefined && existing?.startTime !== startTime;
-        await ScheduleAuditLog.create({
-          yearWeek: updated.yearWeek || "",
-          transporterId: updated.transporterId,
-          employeeName: empName,
-          action: "type_changed",
-          field: "type",
-          oldValue: oldType,
-          newValue: (type || "") + (startTimeAlsoChanged ? ` (${startTime})` : ""),
-          date: updated.date,
-          dayOfWeek: dayName,
-          performedBy: performer.email,
-          performedByName: performer.name,
+          // Audit log — type change
+          const oldType = existing?.type || "";
+          const typeChanged = oldType !== (type || "");
+          if (typeChanged) {
+            const dateObj = updated.date ? new Date(updated.date) : null;
+            const dayName = dateObj ? FULL_DAY_NAMES[dateObj.getUTCDay()] : "";
+            const empName = body.employeeName || "";
+            const startTimeAlsoChanged = startTime !== undefined && existing?.startTime !== startTime;
+            await ScheduleAuditLog.create([{
+              yearWeek: updated.yearWeek || "",
+              transporterId: updated.transporterId,
+              employeeName: empName,
+              action: "type_changed",
+              field: "type",
+              oldValue: oldType,
+              newValue: (type || "") + (startTimeAlsoChanged ? ` (${startTime})` : ""),
+              date: updated.date,
+              dayOfWeek: dayName,
+              performedBy: performer.email,
+              performedByName: performer.name,
+            }], { session: dbSession });
+          }
+
+          // Audit log — startTime change (only when type did NOT also change — avoids duplicate)
+          if (!typeChanged && startTime !== undefined && existing?.startTime !== startTime) {
+            const dateObj = updated.date ? new Date(updated.date) : null;
+            const dayName = dateObj ? FULL_DAY_NAMES[dateObj.getUTCDay()] : "";
+            await ScheduleAuditLog.create([{
+              yearWeek: updated.yearWeek || "",
+              transporterId: updated.transporterId,
+              employeeName: body.employeeName || "",
+              action: "start_time_changed",
+              field: "startTime",
+              oldValue: existing?.startTime || "",
+              newValue: startTime,
+              date: updated.date,
+              dayOfWeek: dayName,
+              performedBy: performer.email,
+              performedByName: performer.name,
+            }], { session: dbSession });
+          }
+
+          // Sync type/status to SYMXRoute (dispatching)
+          if (typeChanged || status !== undefined) {
+            const newTypeNorm = (updated.type || "").trim();
+            const isNowWorking = newTypeNorm !== "" && updated.status !== "Off";
+
+            if (isNowWorking) {
+              await SYMXRoute.updateOne(
+                { transporterId: updated.transporterId, date: updated.date },
+                {
+                  $set: {
+                    scheduleId: scheduleId,
+                    type: type || "",
+                    subType: updated.subType || "",
+                    weekDay: updated.weekDay || "",
+                    yearWeek: updated.yearWeek || "",
+                    van: updated.van || "",
+                  },
+                },
+                { upsert: true, session: dbSession }
+              );
+            } else {
+              await SYMXRoute.deleteOne(
+                { transporterId: updated.transporterId, date: updated.date },
+                { session: dbSession }
+              );
+            }
+          }
         });
-      }
-
-      // Audit log — startTime change (only when type did NOT also change — avoids duplicate)
-      if (!typeChanged && startTime !== undefined && existing?.startTime !== startTime) {
-        const dateObj = updated.date ? new Date(updated.date) : null;
-        const dayName = dateObj ? FULL_DAY_NAMES[dateObj.getUTCDay()] : "";
-        await ScheduleAuditLog.create({
-          yearWeek: updated.yearWeek || "",
-          transporterId: updated.transporterId,
-          employeeName: body.employeeName || "",
-          action: "start_time_changed",
-          field: "startTime",
-          oldValue: existing?.startTime || "",
-          newValue: startTime,
-          date: updated.date,
-          dayOfWeek: dayName,
-          performedBy: performer.email,
-          performedByName: performer.name,
-        });
-      }
-
-      // Sync type/status to SYMXRoute (dispatching)
-      if (typeChanged || status !== undefined) {
-        const newTypeNorm = (updated.type || "").trim();
-        const isNowWorking = newTypeNorm !== "" && updated.status !== "Off";
-
-        if (isNowWorking) {
-          // Working type → upsert a route record (create if it doesn't exist)
-          await SYMXRoute.updateOne(
-            { transporterId: updated.transporterId, date: updated.date },
-            {
-              $set: {
-                scheduleId: scheduleId,
-                type: type || "",
-                subType: updated.subType || "",
-                weekDay: updated.weekDay || "",
-                yearWeek: updated.yearWeek || "",
-                van: updated.van || "",
-              },
-            },
-            { upsert: true }
-          ).catch(() => { }); // silent
-        } else {
-          // Off/empty type → remove route record so it disappears from dispatching
-          await SYMXRoute.deleteOne(
-            { transporterId: updated.transporterId, date: updated.date }
-          ).catch(() => { }); // silent
+      } catch (e: any) {
+        if (e.message === "Schedule entry not found") {
+           return NextResponse.json({ error: "Schedule entry not found" }, { status: 404 });
         }
+        throw e;
+      } finally {
+        await dbSession.endSession();
       }
 
       return NextResponse.json({ success: true, schedule: updated });
@@ -387,7 +445,7 @@ export async function PATCH(req: NextRequest) {
         if (newType === "") {
             resolvedStatus = "Off";
         } else {
-            const typeMatch = await RouteType.findOne({ name: { $regex: new RegExp(`^${newType}$`, "i") } }).lean();
+            const typeMatch = await RouteType.findOne({ name: newType }).lean();
             if (typeMatch && (typeMatch as any).routeStatus) {
                 resolvedStatus = (typeMatch as any).routeStatus;
             } else {
@@ -397,64 +455,73 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
-      const created = await SymxEmployeeSchedule.findOneAndUpdate(
-        { transporterId, date: new Date(date) },
-        {
-          $set: {
-            type: newType,
-            yearWeek,
-            weekDay: weekDay || "",
-            status: resolvedStatus,
-            ...(startTime !== undefined ? { startTime } : {}),
-          },
-          $setOnInsert: {
-            transporterId,
-            date: new Date(date),
-          },
-        },
-        { upsert: true, new: true }
-      ).lean();
-
-      // Audit log — schedule created/updated
-      const dateObj = new Date(date);
-      const dayName = FULL_DAY_NAMES[dateObj.getUTCDay()] || weekDay || "";
-      await ScheduleAuditLog.create({
-        yearWeek,
-        transporterId,
-        employeeName: body.employeeName || "",
-        action: "schedule_created",
-        field: "type",
-        oldValue: "",
-        newValue: type || "",
-        date: new Date(date),
-        dayOfWeek: dayName,
-        performedBy: performer.email,
-        performedByName: performer.name,
-      });
-
-      // Sync to SYMXRoute — only create for working types
-      if (created && (created as any)._id) {
-        const newTypeNorm = (created.type || "").trim();
-        const isWorking = newTypeNorm !== "" && created.status !== "Off";
-
-        if (isWorking) {
-          await SYMXRoute.updateOne(
+      let created: any = null;
+      const dbSession = await mongoose.startSession();
+      try {
+        await dbSession.withTransaction(async () => {
+          created = await SymxEmployeeSchedule.findOneAndUpdate(
             { transporterId, date: new Date(date) },
             {
               $set: {
-                scheduleId: (created as any)._id,
-                type: type || "",
-                weekDay: weekDay || "",
+                type: newType,
                 yearWeek,
+                weekDay: weekDay || "",
+                status: resolvedStatus,
+                ...(startTime !== undefined ? { startTime } : {}),
+              },
+              $setOnInsert: {
+                transporterId,
+                date: new Date(date),
               },
             },
-            { upsert: true }
-          ).catch(() => { }); // silent
-        } else {
-          await SYMXRoute.deleteOne(
-            { transporterId, date: new Date(date) }
-          ).catch(() => { }); // silent
-        }
+            { upsert: true, new: true, session: dbSession }
+          ).lean();
+
+          // Audit log — schedule created/updated
+          const dateObj = new Date(date);
+          const dayName = FULL_DAY_NAMES[dateObj.getUTCDay()] || weekDay || "";
+          await ScheduleAuditLog.create([{
+            yearWeek,
+            transporterId,
+            employeeName: body.employeeName || "",
+            action: "schedule_created",
+            field: "type",
+            oldValue: "",
+            newValue: type || "",
+            date: new Date(date),
+            dayOfWeek: dayName,
+            performedBy: performer.email,
+            performedByName: performer.name,
+          }], { session: dbSession });
+
+          // Sync to SYMXRoute — only create for working types
+          if (created && (created as any)._id) {
+            const newTypeNorm = (created.type || "").trim();
+            const isWorking = newTypeNorm !== "" && created.status !== "Off";
+
+            if (isWorking) {
+              await SYMXRoute.updateOne(
+                { transporterId, date: new Date(date) },
+                {
+                  $set: {
+                    scheduleId: (created as any)._id,
+                    type: type || "",
+                    weekDay: weekDay || "",
+                    yearWeek,
+                  },
+                },
+                { upsert: true, session: dbSession }
+              );
+            } else {
+              await SYMXRoute.deleteOne(
+                { transporterId, date: new Date(date) },
+                { session: dbSession }
+              );
+            }
+          }
+        });
+      } finally {
+        await dbSession.endSession();
       }
 
       return NextResponse.json({ success: true, schedule: created });

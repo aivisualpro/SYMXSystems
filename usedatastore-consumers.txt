@@ -1,0 +1,95 @@
+============================================================
+  useDataStore Consumer Audit — 2026-04-18
+  Total unique files: 22 (excluding the source definition)
+============================================================
+
+──────────────────────────────────────────────
+ MODULE: fleet (2 files)
+──────────────────────────────────────────────
+app/(protected)/fleet/layout.tsx:7:   import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/fleet/layout.tsx:75:  const store = useDataStore();
+
+app/(protected)/fleet/components/fleet-repairs-table.tsx:14:  import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/fleet/components/fleet-repairs-table.tsx:260: const store = useDataStore();
+
+──────────────────────────────────────────────
+ MODULE: hr (7 files)
+──────────────────────────────────────────────
+app/(protected)/hr/page.tsx:5:            import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/hr/page.tsx:143:          const store = useDataStore();
+
+app/(protected)/hr/tickets/page.tsx:6:    import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/hr/tickets/page.tsx:430:  const store = useDataStore();
+
+app/(protected)/hr/terminations/page.tsx:15: import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/hr/terminations/page.tsx:18: const store = useDataStore();
+
+app/(protected)/hr/audit/page.tsx:7:      import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/hr/audit/page.tsx:65:     const store = useDataStore();
+
+app/(protected)/hr/timesheet/page.tsx:6:  import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/hr/timesheet/page.tsx:305: const store = useDataStore();
+
+app/(protected)/hr/interviews/page.tsx:6: import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/hr/interviews/page.tsx:701: const store = useDataStore();
+
+app/(protected)/hr/incidents/page.tsx:15: import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/hr/incidents/page.tsx:92: const store = useDataStore();
+
+app/(protected)/hr/reimbursement/page.tsx:26: import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/hr/reimbursement/page.tsx:68:  const store = useDataStore();
+
+──────────────────────────────────────────────
+ MODULE: dispatching (5 files — import only in 2)
+──────────────────────────────────────────────
+app/(protected)/dispatching/attendance/page.tsx:5:  import { useDataStore } from "@/hooks/use-data-store";
+  (import only — no invocation found in grep)
+
+app/(protected)/dispatching/efficiency/page.tsx:5:  import { useDataStore } from "@/hooks/use-data-store";
+  (import only — no invocation found in grep)
+
+app/(protected)/dispatching/roster/page.tsx:5:    import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/dispatching/roster/page.tsx:169:  const store = useDataStore();
+
+app/(protected)/dispatching/opening/page.tsx:5:   import { useDataStore } from "@/hooks/use-data-store";
+  (import only — no invocation found in grep)
+
+app/(protected)/dispatching/time/page.tsx:5:      import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/dispatching/time/page.tsx:435:    const store = useDataStore();
+
+app/(protected)/dispatching/closing/page.tsx:7:   import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/dispatching/closing/page.tsx:136: const store = useDataStore();
+
+──────────────────────────────────────────────
+ MODULE: admin (2 files)
+──────────────────────────────────────────────
+app/(protected)/owner/roles/page.tsx:5:   import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/owner/roles/page.tsx:48:  const store = useDataStore();
+
+app/(protected)/admin/users/page.tsx:6:   import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/admin/users/page.tsx:70:  const store = useDataStore();
+
+──────────────────────────────────────────────
+ MODULE: messaging (1 file)
+──────────────────────────────────────────────
+components/scheduling/messaging-panel.tsx:5:    import { useDataStore } from "@/hooks/use-data-store";
+components/scheduling/messaging-panel.tsx:1891: const store = useDataStore();
+
+──────────────────────────────────────────────
+ MODULE: other / load-out (2 files)
+──────────────────────────────────────────────
+app/(protected)/load-out/layout.tsx:37:   import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/load-out/layout.tsx:191:  const store = useDataStore();
+
+app/(protected)/load-out/page.tsx:5:      import { useDataStore } from "@/hooks/use-data-store";
+app/(protected)/load-out/page.tsx:315:    const store = useDataStore();
+
+──────────────────────────────────────────────
+ SOURCE (definition + initializer — to be deleted last)
+──────────────────────────────────────────────
+hooks/use-data-store.ts:6:    //  useDataStore — Global prefetch engine for SYMX Systems
+hooks/use-data-store.ts:563:  //  useDataStore() — The main hook
+hooks/use-data-store.ts:566:  export function useDataStore() {
+
+hooks/data-store-initializer.tsx:3:  import { useDataStore } from "./use-data-store";
+hooks/data-store-initializer.tsx:14: const { initialized, globalLoading, globalProgress } = useDataStore();

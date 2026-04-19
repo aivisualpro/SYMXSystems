@@ -1,4 +1,6 @@
 "use client";
+import { Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -109,7 +111,7 @@ function SkeletonRows({ count = 15 }: { count?: number }) {
 }
 
 /* ── Page ────────────────────────────────────────────────────────── */
-export default function FleetInspectionsPage() {
+function FleetInspectionsPageContent() {
   const { search, openEditModal, handleDelete, openCreateModal, inspectionsSeed, showStandardOnly } = useFleet();
   const { setLeftContent } = useHeaderActions();
   const router = useRouter();
@@ -382,5 +384,13 @@ export default function FleetInspectionsPage() {
       </div>
       <FleetFormModal />
     </>
+  );
+}
+
+export default function FleetInspectionsPage(props: any) {
+  return (
+    <Suspense fallback={<Skeleton className="h-full w-full min-h-[400px] rounded-xl" />}>
+      <FleetInspectionsPageContent {...props} />
+    </Suspense>
   );
 }

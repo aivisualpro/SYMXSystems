@@ -4,13 +4,16 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Loader2, Save, ChevronDown, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 const SETTING_KEY = "routes_completion_types";
+const RTS_SETTING_KEY = "everyday_logic_rts";
 
 export default function GeneralSettingsPage() {
     const [routeTypes, setRouteTypes] = useState<string[]>([]);
     const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+    const [rtsEnabled, setRtsEnabled] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [dirty, setDirty] = useState(false);
@@ -34,16 +37,19 @@ export default function GeneralSettingsPage() {
         Promise.all([
             fetch("/api/admin/settings/route-types").then(r => r.json()),
             fetch(`/api/admin/settings/general?key=${SETTING_KEY}`).then(r => r.json()),
+            fetch(`/api/admin/settings/general?key=${RTS_SETTING_KEY}`).then(r => r.json()),
         ])
-            .then(([types, setting]) => {
+            .then(([types, setting, rtsSetting]) => {
                 const names = Array.isArray(types) ? types.map((t: any) => t.name) : [];
                 setRouteTypes(names);
                 const saved = Array.isArray(setting?.value) ? setting.value : [];
                 setSelectedTypes(saved);
+                setRtsEnabled(rtsSetting?.value === true || rtsSetting?.value === "true");
             })
             .catch(() => {
                 setRouteTypes([]);
                 setSelectedTypes([]);
+                setRtsEnabled(false);
             })
             .finally(() => setLoading(false));
     }, []);
@@ -82,6 +88,27 @@ export default function GeneralSettingsPage() {
             toast.error(err.message || "Failed to save");
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleSaveRTS = async (checked: boolean) => {
+        setRtsEnabled(checked);
+        try {
+            const res = await fetch("/api/admin/settings/general", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    key: RTS_SETTING_KEY,
+                    value: checked,
+                    description: "Toggle RTS logic display in everyday",
+                }),
+            });
+            if (!res.ok) throw new Error("Failed to save RTS setting");
+            toast.success("Everyday Logic saved");
+        } catch (err: any) {
+            toast.error(err.message || "Failed to save RTS setting");
+            // Revert state if failed
+            setRtsEnabled(!checked);
         }
     };
 
@@ -176,6 +203,29 @@ export default function GeneralSettingsPage() {
                             })}
                         </div>
                     )}
+                </div>
+            </div>
+            
+            {/* Everyday Logic */}
+            <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-sm font-bold">Everyday Logic</h3>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Toggle RTS column and card visibility in Everyday modules
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between px-3 py-3 rounded-lg border border-border bg-background">
+                    <div className="flex flex-col">
+                        <span className="text-sm font-semibold">RTS</span>
+                        <span className="text-[11px] text-muted-foreground">Show RTS column and stats in the Routes Overview</span>
+                    </div>
+                    <Switch
+                        checked={rtsEnabled}
+                        onCheckedChange={handleSaveRTS}
+                    />
                 </div>
             </div>
         </div>

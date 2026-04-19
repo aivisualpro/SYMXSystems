@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useEmployeesList } from "@/lib/query/hooks/useHr";
 import {
   Calendar,
   FileText,
@@ -302,7 +302,7 @@ async function generateTimesheetPDF(
  * ──────────────────────────────────────────────────────────────────────────── */
 
 export default function TimesheetPage() {
-  const store = useDataStore();
+  const { data: queryEmployees } = useEmployeesList();
   const weekPairs = generateWeekPairs();
   const [selectedPairId, setSelectedPairId] = useState(getCurrentPairId());
   const [generating, setGenerating] = useState<"timesheet" | "blank" | null>(null);
@@ -310,11 +310,10 @@ export default function TimesheetPage() {
   const [loading, setLoading] = useState(false);
   const { setRightContent } = useHeaderActions();
 
-  // Seed from store
-  const storeEmployees = store.employees as any;
+  // Seed from TanStack Query cache
   useEffect(() => {
-    if (storeEmployees?.records?.length > 0 && employees.length === 0) {
-      const active = storeEmployees.records
+    if (Array.isArray(queryEmployees) && queryEmployees.length > 0 && employees.length === 0) {
+      const active = queryEmployees
         .filter((e: any) => e.status === "Active")
         .sort((a: any, b: any) => {
           const na = `${a.firstName || ""} ${a.lastName || ""}`.trim().toLowerCase();
@@ -323,14 +322,14 @@ export default function TimesheetPage() {
         });
       setEmployees(active);
     }
-  }, [storeEmployees]);
+  }, [queryEmployees]);
 
   // Also fetch fresh data
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch("/api/admin/employees?terminated=false&limit=9999");
+        const res = await fetch("/api/admin/employees?terminated=false&export=true&select=firstName,lastName,status");
         if (res.ok) {
           const data = await res.json();
           const list = (data.records || data || [])

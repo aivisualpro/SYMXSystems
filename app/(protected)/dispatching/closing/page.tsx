@@ -1,8 +1,10 @@
 "use client";
+import { Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useVehicles } from "@/lib/query/hooks/useShared";
 import { cn } from "@/lib/utils";
 import {
     Loader2,
@@ -101,7 +103,7 @@ interface RouteRow {
 
 type SortKey = typeof COLUMNS[number]["key"];
 
-export default function ClosingPage() {
+function ClosingPageContent() {
     const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats, refreshRoutes } = useDispatching();
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -131,7 +133,7 @@ export default function ClosingPage() {
         }
     }, [searchParams, router]);
 
-    const store = useDataStore();
+    const { data: fleetVehicles } = useVehicles();
 
     // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
     const { rawRouteData, rawRouteDataLoading } = useDispatching();
@@ -165,11 +167,11 @@ export default function ClosingPage() {
         });
         setAllRoutes(rows);
 
-        // Hydrate vehicles from store
-        if (store.fleet.vehicles && Array.isArray(store.fleet.vehicles)) {
+        // Hydrate vehicles from TanStack Query
+        if (fleetVehicles && Array.isArray(fleetVehicles)) {
             const dict: Record<string, string> = {};
             const nameDict: Record<string, string> = {};
-            store.fleet.vehicles.forEach((v: any) => {
+            fleetVehicles.forEach((v: any) => {
                 if (v.unitNumber) {
                     dict[v.unitNumber] = v.vin;
                     if (v.vehicleName) nameDict[v.unitNumber] = v.vehicleName;
@@ -183,7 +185,7 @@ export default function ClosingPage() {
             setVehicleNamesMap(nameDict);
         }
         setLoading(false);
-    }, [rawRouteData, rawRouteDataLoading, store.fleet.vehicles]);
+    }, [rawRouteData, rawRouteDataLoading, fleetVehicles]);
 
     // ── Sort handler ──
     const handleSort = (key: SortKey) => {
@@ -243,13 +245,10 @@ export default function ClosingPage() {
         return () => setStats({});
     }, [totalFiltered, setStats]);
 
-    // ── Loading / Empty states ──
-    if (routesLoading || (loading && allRoutes.length === 0)) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
+
+
+    if (rawRouteData?.routes?.length > 0 && allRoutes.length === 0) {
+        return <div className="flex-1 opacity-0 pointer-events-none" />;
     }
 
     if (!routesGenerated || allRoutes.length === 0) {
@@ -506,4 +505,12 @@ export default function ClosingPage() {
             />
         </div>
     );
+}
+
+export default function ClosingPage(props: any) {
+  return (
+    <Suspense fallback={<Skeleton className="h-full w-full min-h-[400px] rounded-xl" />}>
+      <ClosingPageContent {...props} />
+    </Suspense>
+  );
 }

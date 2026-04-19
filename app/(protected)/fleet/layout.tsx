@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useFleetDashboard, useFleetVehicles, useFleetRepairs, useFleetInspections, useFleetRentals } from "@/lib/query/hooks/useFleet";
 import { sidebarCache } from "@/components/app-sidebar";
 import {
   IconChartDonut, IconCar, IconTool, IconClipboardCheck,
@@ -72,7 +72,11 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { setRightContent, setLeftContent } = useHeaderActions();
-  const store = useDataStore();
+  const { data: queryDashboard } = useFleetDashboard();
+  const { data: queryVehicles } = useFleetVehicles();
+  const { data: queryRepairs } = useFleetRepairs();
+  const { data: queryInspections } = useFleetInspections();
+  const { data: queryRentals } = useFleetRentals();
 
   const [data, setData] = useState<FleetData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -137,22 +141,19 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
     }
   }, [isOnRestrictedPage, visibleTabs, router]);
 
-  // ── Hydrate from global data store for instant load ──
+  // ── Hydrate from TanStack Query cache for instant load ──
   const hydratedRef = useRef(false);
   useEffect(() => {
     if (hydratedRef.current) return;
-    if (store.initialized && store.fleet.dashboard) {
+    if (queryDashboard) {
       hydratedRef.current = true;
-      // Use prefetched data — instant, zero loading
-      setData({ ...store.fleet.dashboard, vehicles: store.fleet.vehicles || [] });
-      const rep = store.fleet.repairs;
-      if (rep) setRepairsSeed({ data: rep.data ?? [], total: rep.total ?? 0, hasMore: rep.hasMore ?? false, fetchedAt: Date.now() });
-      const ins = store.fleet.inspections;
-      if (ins) setInspectionsSeed({ data: ins.data ?? [], total: ins.total ?? 0, hasMore: ins.hasMore ?? false, fetchedAt: Date.now() });
-      if (store.fleet.rentals?.length) setRentalsSeed(store.fleet.rentals);
+      setData({ ...queryDashboard, vehicles: queryVehicles || [] });
+      if (queryRepairs) setRepairsSeed({ data: queryRepairs.data ?? [], total: queryRepairs.total ?? 0, hasMore: queryRepairs.hasMore ?? false, fetchedAt: Date.now() });
+      if (queryInspections) setInspectionsSeed({ data: queryInspections.data ?? [], total: queryInspections.total ?? 0, hasMore: queryInspections.hasMore ?? false, fetchedAt: Date.now() });
+      if (Array.isArray(queryRentals) && queryRentals.length) setRentalsSeed(queryRentals);
       setLoading(false);
     }
-  }, [store.initialized, store.fleet]);
+  }, [queryDashboard, queryVehicles, queryRepairs, queryInspections, queryRentals]);
 
   const fetchData = useCallback(async () => {
     try {

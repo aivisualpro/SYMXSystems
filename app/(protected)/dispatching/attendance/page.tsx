@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
-import { useDataStore } from "@/hooks/use-data-store";
+
 import { cn } from "@/lib/utils";
 import {
     Users,
@@ -148,29 +148,12 @@ interface RouteRow {
 type SortKey = typeof COLUMNS[number]["key"];
 
 export default function AttendancePage() {
-    const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats } = useDispatching();
+    const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats, rawRouteData, rawRouteDataLoading } = useDispatching();
 
-    const [allRoutes, setAllRoutes] = useState<RouteRow[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [sortKey, setSortKey] = useState<SortKey>("employee");
-    const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
-    // ── Inline editing state (for Done table) ──
-    const [editingCell, setEditingCell] = useState<{ rowId: string; field: string } | null>(null);
-    const [editValue, setEditValue] = useState("");
-
-    // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
-    const { rawRouteData, rawRouteDataLoading } = useDispatching();
-
-    useEffect(() => {
-        if (rawRouteDataLoading) { setLoading(true); return; }
-        if (!rawRouteData || !rawRouteData.routes || rawRouteData.routes.length === 0) {
-            setAllRoutes([]);
-            setLoading(false);
-            return;
-        }
-        const rows: RouteRow[] = rawRouteData.routes.map((rec: any) => {
-            const emp = rawRouteData.employees?.[rec.transporterId];
+    const mapData = useCallback((data: any): RouteRow[] => {
+        if (!data || !data.routes || data.routes.length === 0) return [];
+        return data.routes.map((rec: any) => {
+            const emp = data.employees?.[rec.transporterId];
             return {
                 _id: rec._id,
                 transporterId: rec.transporterId,
@@ -190,9 +173,27 @@ export default function AttendancePage() {
                 profileImage: emp?.profileImage || "",
             };
         });
-        setAllRoutes(rows);
+    }, []);
+
+    const [allRoutes, setAllRoutes] = useState<RouteRow[]>(() => mapData(rawRouteData));
+    const [loading, setLoading] = useState(false);
+    const [sortKey, setSortKey] = useState<SortKey>("employee");
+    const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+    // ── Inline editing state (for Done table) ──
+    const [editingCell, setEditingCell] = useState<{ rowId: string; field: string } | null>(null);
+    const [editValue, setEditValue] = useState("");
+
+    useEffect(() => {
+        if (rawRouteDataLoading) { setLoading(true); return; }
+        if (!rawRouteData || !rawRouteData.routes || rawRouteData.routes.length === 0) {
+            setAllRoutes([]);
+            setLoading(false);
+            return;
+        }
+        setAllRoutes(mapData(rawRouteData));
         setLoading(false);
-    }, [rawRouteData, rawRouteDataLoading]);
+    }, [rawRouteData, rawRouteDataLoading, mapData]);
 
     // ── Handle inline edit save ──
     const handleSave = useCallback(async (routeId: string, field: string, value: string) => {
@@ -327,14 +328,7 @@ export default function AttendancePage() {
         return () => setStats({});
     }, [totalFiltered, setStats]);
 
-    // ── Loading / Empty states ──
-    if (routesLoading || loading) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
-    }
+
 
     if (!routesGenerated || allRoutes.length === 0) {
         return (

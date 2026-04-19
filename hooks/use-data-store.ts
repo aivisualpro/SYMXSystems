@@ -194,7 +194,7 @@ const DATASETS: DatasetConfig[] = [
   },
   {
     key: "hr.audit",
-    url: "/api/admin/employees?filter=audit&limit=9999&terminated=false",
+    url: "/api/admin/employees?filter=audit&export=true&terminated=false&select=firstName,lastName,transporterId,dlExpiration,offerLetterFile,handbookFile,driversLicenseFile,i9File,drugTestFile,type,phoneNumber,profileImage,status",
     priority: "deferred",
     transform: (raw: any) => (Array.isArray(raw) ? raw : raw?.records ?? []),
     ttl: DEFAULT_TTL,
@@ -363,10 +363,8 @@ async function _fetchDataset(config: DatasetConfig, force = false): Promise<void
 
     try {
       let resolvedUrl = typeof url === "function" ? url() : url;
-      if (force) {
-        resolvedUrl += resolvedUrl.includes("?") ? `&cb=${Date.now()}` : `?cb=${Date.now()}`;
-      }
-      const res = await fetch(resolvedUrl);
+      const fetchOpts: RequestInit = force ? { cache: "no-store", headers: { 'Cache-Control': 'no-cache' } } : {};
+      const res = await fetch(resolvedUrl, fetchOpts);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const raw = await res.json();
       const data = transform ? transform(raw) : raw;
@@ -431,27 +429,38 @@ async function _prefetchAll(force = false): Promise<void> {
     initialized: true,
   });
 
-  // ── Phase 2: Deferred datasets (silent background) ──
-  // Small delay to let the UI paint before firing heavy requests
+  // ── Phase 2 & 3 Classification (Active vs Inactive) ──
+  // Small delay to let the UI paint before firing background requests
   await new Promise((r) => setTimeout(r, 100));
 
-  const deferredPromises = deferredDatasets.map(async (config) => {
-    await _fetchDataset(config, force);
-  });
-
-  await Promise.allSettled(deferredPromises);
-
-  // ── Phase 3: Week-dependent datasets (silent background) ──
   const weeks = _state.datasets["scheduling.weeks"]?.data as string[] | null;
   const firstWeek = weeks?.[0];
+  const phase3Configs = firstWeek ? _getPhase3Datasets(firstWeek) : [];
 
-  if (firstWeek) {
-    const phase3Datasets = _getPhase3Datasets(firstWeek);
-    const phase3Promises = phase3Datasets.map(async (config) => {
-      await _fetchDataset(config, force);
-    });
-    await Promise.allSettled(phase3Promises);
-  }
+  const allBackground = [...deferredDatasets, ...phase3Configs];
+  
+  // "Useful Soon" - Datasets for the currently active tab
+  const activeBackground = allBackground.filter(c => _isDatasetActive(c.key));
+  // "Not Needed Immediately" - Everything else
+  const inactiveBackground = allBackground.filter(c => !_isDatasetActive(c.key));
+
+  // ── Phase 2: Active Modules (Useful Soon) ──
+  // Fetch these concurrently since they are needed immediately after shell paint
+  const activePromises = activeBackground.map(config => _fetchDataset(config, force));
+  await Promise.allSettled(activePromises);
+
+  // ── Phase 3: Background Trickle (Not Needed Immediately) ──
+  // Wait 1.5 seconds for UI and active data to fully settle, then load the rest one-by-one
+  // This preserves instant UX cache-warming without crushing network bandwidth
+  setTimeout(async () => {
+    for (const config of inactiveBackground) {
+      if (typeof window !== "undefined") {
+        await _fetchDataset(config, force);
+        // Small pause between each request to yield thread and preserve browser responsiveness
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+  }, 1500);
 }
 
 /** Refresh a single dataset by key */
@@ -476,20 +485,50 @@ async function _refreshAll(): Promise<void> {
 
 let _refreshTimer: ReturnType<typeof setInterval> | null = null;
 
+function _isDatasetActive(key: string): boolean {
+  if (typeof window === "undefined") return true; 
+  const path = window.location.pathname;
+
+  // Globally needed datasets are always active
+  if (key.startsWith("admin.") || key.startsWith("auth.")) return true;
+
+  // Otherwise, only poll if the dataset belongs to the current active module tab
+  if (path.includes("/scheduling") && key.startsWith("scheduling")) return true;
+  if (path.includes("/fleet") && key.startsWith("fleet")) return true;
+  if (path.includes("/hr") && key.startsWith("hr")) return true;
+  if (path.includes("/dispatching") && key.startsWith("dispatching")) return true;
+  if (path.includes("/safety") && key.startsWith("safety")) return true;
+
+  return false;
+}
+
 function _startAutoRefresh() {
   if (_refreshTimer) return;
   _refreshTimer = setInterval(() => {
-    // Background refresh stale datasets — don't show loading
+    // 1. Skip completely if the browser tab itself is not visible
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      return; 
+    }
+    
+    // 2. Shut off loop if no components are listening
+    if (_listeners.size === 0) {
+      _stopAutoRefresh();
+      return;
+    }
+
     [...DATASETS, ..._getPhase3DatasetsFromCache()]
       .filter((d) => d.enabled !== false)
       .forEach((config) => {
+        // 3. Skip polling for inactive routes/tabs
+        if (!_isDatasetActive(config.key)) return;
+
         const state = _state.datasets[config.key];
         const ttl = config.ttl ?? DEFAULT_TTL;
         if (state?.fetchedAt && Date.now() - state.fetchedAt >= ttl) {
           _fetchDataset(config, true);
         }
       });
-  }, 60_000); // check every minute
+  }, 60_000);
 }
 
 function _stopAutoRefresh() {
@@ -510,6 +549,7 @@ function _attachFocusListener() {
   window.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       DATASETS.filter((d) => d.enabled !== false && d.refetchOnFocus !== false).forEach((config) => {
+        if (!_isDatasetActive(config.key)) return; // Don't focus-refresh inactive routes
         const state = _state.datasets[config.key];
         if (state?.fetchedAt && Date.now() - state.fetchedAt >= FOCUS_STALE_THRESHOLD) {
           _fetchDataset(config, true); // silent background refresh
@@ -547,7 +587,9 @@ export function useDataStore() {
     _attachFocusListener();
 
     return () => {
-      _stopAutoRefresh();
+      if (_listeners.size === 0) {
+        _stopAutoRefresh();
+      }
     };
   }, []);
 

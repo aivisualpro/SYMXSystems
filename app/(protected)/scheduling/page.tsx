@@ -1,4 +1,6 @@
 "use client";
+import { Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -11,14 +13,11 @@ import {
   Users,
   TruckIcon,
   Search,
-  Filter,
   AlertTriangle,
   CheckCircle2,
   Clock,
-  XCircle,
   Minus,
   ChevronDown,
-  MapPin,
   DoorOpen,
   DoorClosed,
   PhoneOff,
@@ -62,15 +61,16 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import { useSchedulingWeeks, useWeekSchedules, useUpdateSchedule } from "@/lib/query/hooks/useSchedules";
+import { useDropdowns } from "@/lib/query/hooks/useShared";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import MessagingPanel, { type ActiveTabInfo, SUB_TABS } from "@/components/scheduling/messaging-panel";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useQueryClient } from "@tanstack/react-query";
+
 // ── Type Options with Icons & Colors ──
 interface TypeOption {
   label: string;
@@ -241,7 +241,7 @@ function countWorkingDays(emp: EmployeeSchedule): number {
   let count = 0;
   for (let d = 0; d < 7; d++) {
     const day = emp.days[d];
-    if (isWorkingDay(day)) {
+    if (day && (day.status || "").trim().toLowerCase() === "scheduled") {
       count++;
     }
   }
@@ -470,9 +470,10 @@ function RouteAssignedPopover({ date, value, onSave }: { date: string, value: nu
   );
 }
 
-export default function SchedulingPage() {
+function SchedulingPageContent() {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
   // ── Read initial week from URL ──
@@ -518,7 +519,6 @@ export default function SchedulingPage() {
   const [selectedWeek, setSelectedWeekState] = useState<string>(urlWeek);
   const [weekData, setWeekData] = useState<WeekData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadingData, setLoadingData] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -668,41 +668,32 @@ export default function SchedulingPage() {
     }
   }, [generatingWeek]);
 
-  const store = useDataStore();
+  const { data: storeWeeksData, isLoading: isLoadingWeeks } = useSchedulingWeeks();
+  const { data: storeRouteTypes } = useDropdowns();
 
-  // Mark as mounted on client to avoid hydration mismatch
+  // Mark as mounted
   useEffect(() => {
     setMounted(true);
-    // Hydrate route type configs from global store if available
-    if (store.initialized && store.admin.routeTypes && Object.keys(store.admin.routeTypes).length > 0) {
-      setRouteTypeConfigs(store.admin.routeTypes);
-      setRouteTypesList(store.admin.routeTypesList || []);
-    } else {
-      // Fallback: Fetch route type configs for auto-filling startTime
-      fetch("/api/admin/settings/route-types")
-        .then(res => res.json())
-        .then((types: any[]) => {
-          const map: Record<string, { color: string; startTime: string; routeStatus: string }> = {};
-          types.forEach((t: any) => { map[t.name.toLowerCase()] = { color: t.color, startTime: t.startTime || "", routeStatus: t.routeStatus || "Scheduled" }; });
-          setRouteTypeConfigs(map);
-          setRouteTypesList(types);
-        })
-        .catch(() => { });
-    }
 
-    // Fetch initial notes counts globally for all employees
+    // Fallback: Fetch route type configs
+    fetch("/api/admin/settings/route-types")
+      .then(res => res.json())
+      .then((types: any[]) => {
+        const map: Record<string, { color: string; startTime: string; routeStatus: string }> = {};
+        types.forEach((t: any) => { map[t.name.toLowerCase()] = { color: t.color, startTime: t.startTime || "", routeStatus: t.routeStatus || "Scheduled" }; });
+        setRouteTypeConfigs(map);
+        setRouteTypesList(types);
+      })
+      .catch(() => { });
+
     fetch("/api/schedules/notes?getCounts=true")
       .then(res => res.json())
       .then(data => {
-        if (data.counts) {
-          setNoteCounts(data.counts);
-        }
+        if (data.counts) setNoteCounts(data.counts);
       })
       .catch(() => { });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Pick best default week: URL > current > closest ≤ current > latest */
   const pickDefaultWeek = useCallback((availableWeeks: string[], urlW: string) => {
     const currentWeek = getCurrentYearWeek();
     if (urlW && availableWeeks.includes(urlW)) return urlW;
@@ -728,157 +719,71 @@ export default function SchedulingPage() {
 
         return {
           ...fallback,
-          label: rt.name, // Ensure exact casing from DB used for dropdown label
+          label: rt.name,
           colorHex: rt.color,
           icon: DBIcon || fallback.icon,
         };
       });
   }, [routeTypesList]);
 
-  // Hydrate weeks from global store for instant load
-  const hydratedWeeksRef = useRef(false);
+  // Sync weeks from TanStack Query
   useEffect(() => {
-    if (hydratedWeeksRef.current) return;
-    if (store.initialized && store.schedulingWeeks?.length) {
-      hydratedWeeksRef.current = true;
-      setWeeks(store.schedulingWeeks);
-      setSelectedWeek(pickDefaultWeek(store.schedulingWeeks, urlWeek));
+    if (storeWeeksData && storeWeeksData.length > 0) {
+      setWeeks(storeWeeksData);
+      if (!selectedWeek) {
+        setSelectedWeek(pickDefaultWeek(storeWeeksData, urlWeek));
+      }
       setLoading(false);
     }
-  }, [store.initialized, store.schedulingWeeks]);
+  }, [storeWeeksData]);
 
-  // Fetch available weeks (fallback if store not ready)
+  // Fetch available weeks (fallback removed since TanStack query handles it)
   useEffect(() => {
-    if (!mounted) return;
-    if (hydratedWeeksRef.current) return; // already hydrated from store
-    setLoading(true);
-    const fetchWeeks = async () => {
-      try {
-        const res = await fetch("/api/schedules?weeksList=true");
-        const data = await res.json();
-        if (data.weeks?.length) {
-          setWeeks(data.weeks);
-          setSelectedWeek(pickDefaultWeek(data.weeks, urlWeek));
-        }
-      } catch (err) {
-        toast.error("Failed to load available weeks");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchWeeks();
-  }, [mounted]);
+    if (!mounted || isLoadingWeeks) return;
+    if (!storeWeeksData || storeWeeksData.length === 0) {
+      setLoading(false);
+    }
+  }, [mounted, isLoadingWeeks, storeWeeksData]);
+
+  const { data: storeWeekData, isLoading: loadingData, refetch: refetchWeekData } = useWeekSchedules(selectedWeek);
+  const { mutate: updateSchedule } = useUpdateSchedule();
+
+  // Sync Tanstack Query data to local state
+  useEffect(() => {
+    if (storeWeekData) {
+      setWeekData(storeWeekData);
+      if (storeWeekData.auditCounts) setAuditCounts(storeWeekData.auditCounts);
+      if (storeWeekData.everydayRecords) setEverydayRecords(storeWeekData.everydayRecords);
+    }
+  }, [storeWeekData]);
 
   // Track which weeks have been auto-synced to avoid redundant generate calls
   const syncedWeeksRef = useRef<Set<string>>(new Set());
 
-  // Hydrate first week's data from global store if available
-  const hydratedWeekDataRef = useRef(false);
-
-  // Fetch week data + audit counts (bundled) + auto-sync missing employees (once per week)
+  // Auto-sync missing employees (once per week per session)
   useEffect(() => {
-    if (!selectedWeek) return;
+    if (!selectedWeek || !storeWeekData) return;
+
     let cancelled = false;
-
-    // Try hydrating from global store for the first/default week
-    if (
-      !hydratedWeekDataRef.current &&
-      store.initialized &&
-      store.schedulingWeekData &&
-      store.schedulingWeeks?.[0] === selectedWeek
-    ) {
-      hydratedWeekDataRef.current = true;
-      setWeekData(store.schedulingWeekData);
-      if (store.schedulingWeekData.auditCounts) {
-        setAuditCounts(store.schedulingWeekData.auditCounts);
-      }
-      if (store.schedulingWeekData.everydayRecords) {
-        setEverydayRecords(store.schedulingWeekData.everydayRecords);
-      }
-      setLoadingData(false);
-
-      // Still run background sync
-      if (!syncedWeeksRef.current.has(selectedWeek)) {
-        syncedWeeksRef.current.add(selectedWeek);
-        fetch("/api/schedules/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ yearWeek: selectedWeek }),
+    if (!syncedWeeksRef.current.has(selectedWeek)) {
+      syncedWeeksRef.current.add(selectedWeek);
+      fetch("/api/schedules/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yearWeek: selectedWeek }),
+      })
+        .then(r => r.json())
+        .then(syncData => {
+          if (cancelled) return;
+          if (syncData.created > 0) {
+            toast.success(`Synced ${syncData.missingEmployees} new employee(s) — ${syncData.created} records added`);
+            refetchWeekData();
+          }
         })
-          .then(r => r.json())
-          .then(syncData => {
-            if (cancelled) return;
-            if (syncData.created > 0) {
-              toast.success(`Synced ${syncData.missingEmployees} new employee(s) — ${syncData.created} records added`);
-              fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`)
-                .then(r => r.json())
-                .then(refetchData => {
-                  if (cancelled) return;
-                  setWeekData(refetchData);
-                  if (refetchData.auditCounts) {
-                    setAuditCounts(refetchData.auditCounts);
-                  }
-                });
-            }
-          })
-          .catch(() => { });
-      }
-      return () => { cancelled = true; };
+        .catch(() => { });
     }
-
-    const fetchData = async () => {
-      setLoadingData(true);
-      try {
-        const res = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`);
-        const data = await res.json();
-        if (cancelled) return;
-        setWeekData(data);
-        // Use audit counts and everyday records from the bundled response
-        if (data.auditCounts) {
-          setAuditCounts(data.auditCounts);
-        }
-        if (data.everydayRecords) {
-          setEverydayRecords(data.everydayRecords);
-        }
-
-        // Auto-sync only once per week per session
-        if (!syncedWeeksRef.current.has(selectedWeek)) {
-          syncedWeeksRef.current.add(selectedWeek);
-          // Run sync in background — don't block the UI
-          fetch("/api/schedules/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ yearWeek: selectedWeek }),
-          })
-            .then(r => r.json())
-            .then(syncData => {
-              if (cancelled) return;
-              if (syncData.created > 0) {
-                toast.success(`Synced ${syncData.missingEmployees} new employee(s) — ${syncData.created} records added`);
-                // Refetch to show the new records
-                fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}`)
-                  .then(r => r.json())
-                  .then(refetchData => {
-                    if (cancelled) return;
-                    setWeekData(refetchData);
-                    if (refetchData.auditCounts) {
-                      setAuditCounts(refetchData.auditCounts);
-                    }
-                  });
-              }
-            })
-            .catch(() => { });
-        }
-      } catch (err) {
-        if (!cancelled) toast.error("Failed to load schedule data");
-      } finally {
-        if (!cancelled) setLoadingData(false);
-      }
-    };
-    fetchData();
-
     return () => { cancelled = true; };
-  }, [selectedWeek]);
+  }, [selectedWeek, storeWeekData, refetchWeekData]);
 
   const navigateWeek = useCallback((direction: number) => {
     const idx = weeks.indexOf(selectedWeek);
@@ -1139,95 +1044,52 @@ export default function SchedulingPage() {
   }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek, weekData?.totalEmployees, warningCounts, averageDays, currentUserEmail, deletingWeek]);
 
   // Handle type change via dropdown
-  const handleTypeChange = useCallback(async (
+  const handleTypeChange = useCallback((
     scheduleId: string | undefined,
     newType: string,
     transporterId: string,
     dayIdx: number,
     employeeName?: string
   ) => {
-    // Optimistic update
-    const isWorking = !NON_WORKING_TYPES.has(newType.trim().toLowerCase()); // kept for legacy fallbacks if needed
+    const isWorking = !NON_WORKING_TYPES.has(newType.trim().toLowerCase());
     const routeConfig = routeTypeConfigs[newType.trim().toLowerCase()];
     const defaultStartTime = routeConfig?.startTime || "";
     const newRouteStatus = routeConfig?.routeStatus || (isWorking ? "Scheduled" : "Off");
 
-    setWeekData(prev => {
-      if (!prev) return prev;
-      const updated = { ...prev };
-      updated.employees = updated.employees.map(emp => {
-        if (emp.transporterId !== transporterId) return emp;
-        return {
-          ...emp,
-          days: {
-            ...emp.days,
-            [dayIdx]: {
-              ...(emp.days[dayIdx] || {}),
-              type: newType,
-              status: newRouteStatus,
-              startTime: defaultStartTime,
-            } as DayData,
-          },
-        };
-      });
-      return updated;
+    const payload: Record<string, any> = { 
+      type: newType, 
+      startTime: defaultStartTime, 
+      status: newRouteStatus,
+      transporterId,
+      dayIdx,
+      yearWeek: selectedWeek
+    };
+
+    if (employeeName) payload.employeeName = employeeName;
+    if (scheduleId) {
+      payload.scheduleId = scheduleId;
+    } else {
+      const dateStr = weekData?.dates?.[dayIdx];
+      if (!dateStr || !selectedWeek) {
+        toast.error("Cannot determine date for this day");
+        return;
+      }
+      payload.date = dateStr;
+      payload.weekDay = FULL_DAY_NAMES[dayIdx];
+    }
+
+    updateSchedule({ payload }, {
+      onSuccess: () => {
+        toast.success(`Type updated to ${newType}`);
+        setMessagingRefreshKey(prev => prev + 1);
+        setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
+      },
+      onError: (err) => {
+        toast.error(err.message || "Failed to update type");
+      }
     });
 
-    try {
-      // Build payload — include creation fields when no scheduleId
-      const payload: Record<string, string> = { type: newType, startTime: defaultStartTime, status: newRouteStatus };
-      if (employeeName) payload.employeeName = employeeName;
-      if (scheduleId) {
-        payload.scheduleId = scheduleId;
-      } else {
-        // Need to create a new entry — compute the date from weekData.dates
-        const dateStr = weekData?.dates?.[dayIdx];
-        if (!dateStr || !selectedWeek) {
-          toast.error("Cannot determine date for this day");
-          return;
-        }
-        payload.transporterId = transporterId;
-        payload.date = dateStr;
-        payload.yearWeek = selectedWeek;
-        payload.weekDay = FULL_DAY_NAMES[dayIdx];
-      }
-
-      const res = await fetch("/api/schedules", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to update");
-      }
-      toast.success(`Type updated to ${newType}`);
-
-      // Invalidate dispatching routes globally so it's fresh when navigating away
-      store.refresh("dispatching.routes");
-
-      // Force messaging panel to instantly re-fetch in the background
-      setMessagingRefreshKey(prev => prev + 1);
-
-      // Update audit count for this employee
-      setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
-
-      // Refetch to get the new _id if we created a new entry
-      if (!scheduleId) {
-        const refetchRes = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}&t=${Date.now()}`);
-        const refetchData = await refetchRes.json();
-        setWeekData(refetchData);
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update type");
-      // Revert on error — refetch with cache buster
-      if (selectedWeek) {
-        const res = await fetch(`/api/schedules?yearWeek=${encodeURIComponent(selectedWeek)}&t=${Date.now()}`);
-        const data = await res.json();
-        setWeekData(data);
-      }
-    }
-  }, [selectedWeek, weekData]);
+  }, [selectedWeek, weekData, updateSchedule]);
 
   // Handle note save — optimistic update
   const handleNoteSaved = useCallback((transporterId: string, newNote: string, employeeName?: string, oldNote?: string) => {
@@ -1511,22 +1373,24 @@ export default function SchedulingPage() {
                                 {/* 2. Ultra-compressed Stats Row */}
                                 {planningData.length > 0 && (
                                   <Tooltip>
-                                    <TooltipTrigger className="flex items-center justify-evenly w-full max-w-[128px] px-1 py-1 bg-zinc-100 dark:bg-zinc-950/50 rounded-lg border border-black/5 dark:border-white/5 shadow-inner backdrop-blur-sm mt-0.5 cursor-default hover:opacity-90 transition-opacity gap-0.5">
-                                      <div className="flex items-center gap-0.5">
-                                        <Users className="h-2.5 w-2.5 text-emerald-500" />
-                                        <span className="text-[11px] font-bold text-foreground leading-none">{planningData[0].values[i]}</span>
-                                      </div>
-                                      <div className="flex items-center gap-0.5">
-                                        <Clock className="h-2.5 w-2.5 text-cyan-500" />
-                                        <span className="text-[11px] font-bold text-foreground leading-none">{planningData[1].values[i]}</span>
-                                      </div>
-                                      <div className="flex items-center gap-0.5">
-                                        <Wrench className="h-2.5 w-2.5 text-orange-500" />
-                                        <span className="text-[11px] font-bold text-foreground leading-none">{planningData[3].values[i]}</span>
-                                      </div>
-                                      <div className={cn("flex items-center gap-0.5", planningData[4].values[i] < 0 && "text-red-500")}>
-                                        <UserPlus className={cn("h-2.5 w-2.5 text-purple-500", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat inline-block")} />
-                                        <span className={cn("text-[11px] font-bold text-foreground leading-none", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat drop-shadow-[0_0_6px_rgba(239,68,68,0.8)] inline-block")}>{planningData[4].values[i]}</span>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center justify-evenly w-full max-w-[140px] px-1 py-1 bg-zinc-100 dark:bg-zinc-950/50 rounded-lg border border-black/5 dark:border-white/5 shadow-inner backdrop-blur-sm mt-0.5 cursor-default hover:opacity-90 transition-opacity gap-0.5">
+                                        <div className="flex items-center gap-0.5 pointer-events-none">
+                                          <Users className="h-2.5 w-2.5 text-emerald-500" />
+                                          <span className="text-[13px] font-bold text-foreground leading-none">{planningData[0].values[i]}</span>
+                                        </div>
+                                        <div className="flex items-center gap-0.5 pointer-events-none">
+                                          <Clock className="h-2.5 w-2.5 text-cyan-500" />
+                                          <span className="text-[13px] font-bold text-foreground leading-none">{planningData[1].values[i]}</span>
+                                        </div>
+                                        <div className="flex items-center gap-0.5 pointer-events-none">
+                                          <Wrench className="h-2.5 w-2.5 text-orange-500" />
+                                          <span className="text-[13px] font-bold text-foreground leading-none">{planningData[3].values[i]}</span>
+                                        </div>
+                                        <div className={cn("flex items-center gap-0.5 pointer-events-none", planningData[4].values[i] < 0 && "text-red-500")}>
+                                          <UserPlus className={cn("h-2.5 w-2.5 text-purple-500", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat inline-block")} />
+                                          <span className={cn("text-[13px] font-bold text-foreground leading-none", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat drop-shadow-[0_0_6px_rgba(239,68,68,0.8)] inline-block")}>{planningData[4].values[i]}</span>
+                                        </div>
                                       </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="bottom" className="w-[200px] p-0 bg-popover text-popover-foreground border shadow-xl rounded-xl [&>svg]:hidden">
@@ -1656,14 +1520,7 @@ export default function SchedulingPage() {
                                             {emp.employee?.name || emp.transporterId}
                                           </span>
                                           {isNewHire && (
-                                            <TooltipProvider delayDuration={100}>
-                                              <Tooltip>
-                                                <TooltipTrigger className="flex-shrink-0 cursor-default">
-                                                  <Baby className="h-4 w-4 text-pink-500 drop-shadow animate-baby-rock ml-auto" />
-                                                </TooltipTrigger>
-                                                <TooltipContent>New Hire (Within 30 Days)</TooltipContent>
-                                              </Tooltip>
-                                            </TooltipProvider>
+                                            <Baby className="h-4 w-4 text-pink-500 drop-shadow ml-auto flex-shrink-0" />
                                           )}
                                         </div>
                                       </td>
@@ -1682,91 +1539,32 @@ export default function SchedulingPage() {
                                         return (
                                           <td key={dayIdx} className="text-center px-0.5 sm:px-1 py-0.5 sm:py-1">
                                             <DropdownMenu>
-                                              <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                  <DropdownMenuTrigger asChild>
-                                                    <div
-                                                      className={cn(
-                                                        "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
-                                                        !matchedOpt?.colorHex && style.bg,
-                                                        !matchedOpt?.colorHex && style.text,
-                                                        !matchedOpt?.colorHex && style.border,
-                                                        "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
-                                                      )}
-                                                      style={matchedOpt?.colorHex ? { backgroundColor: matchedOpt.colorHex, color: "#fff", borderColor: matchedOpt.colorHex } : undefined}
-                                                    >
-                                                      {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
-                                                      <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
-                                                      {warning && (
-                                                        <span className={cn(
-                                                          "flex items-center justify-center h-4 min-w-[16px] rounded-full text-[9px] font-bold text-white leading-none px-1 ml-0.5 shrink-0",
-                                                          warning.type === 'danger'
-                                                            ? "bg-red-500 animate-pulse"
-                                                            : "bg-orange-400"
-                                                        )}>
-                                                          {warning.consecutive}
-                                                        </span>
-                                                      )}
-                                                    </div>
-                                                  </DropdownMenuTrigger>
-                                                </TooltipTrigger>
-                                                <TooltipContent
-                                                  side="top"
-                                                  className="max-w-[300px] text-xs space-y-1 bg-popover text-popover-foreground border shadow-xl pointer-events-none [&>svg]:hidden"
-                                                >
-                                                  <p className="font-semibold">{emp.employee?.name || emp.transporterId}</p>
-                                                  <p className="text-muted-foreground">
-                                                    {day?.weekDay || FULL_DAY_NAMES[dayIdx]} — {day?.date ? formatDate(day.date) : ""}
-                                                  </p>
-                                                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 pt-1 border-t border-border/50">
-                                                    <span className="text-muted-foreground">Status:</span>
-                                                    <span className="font-medium">{status}</span>
-                                                    {type && (
-                                                      <>
-                                                        <span className="text-muted-foreground">Type:</span>
-                                                        <span>{type}</span>
-                                                      </>
-                                                    )}
-                                                    {day?.subType && (
-                                                      <>
-                                                        <span className="text-muted-foreground">Sub Type:</span>
-                                                        <span>{day.subType}</span>
-                                                      </>
-                                                    )}
-                                                    {startTime && (
-                                                      <>
-                                                        <span className="text-muted-foreground">Start:</span>
-                                                        <span>{startTime}</span>
-                                                      </>
-                                                    )}
-                                                    {van && (
-                                                      <>
-                                                        <span className="text-muted-foreground">Van:</span>
-                                                        <span>{van}</span>
-                                                      </>
-                                                    )}
-                                                    {day?.dayBeforeConfirmation === "true" && (
-                                                      <div className="col-span-2 flex items-center justify-end gap-1.5 mt-0.5 pt-0.5 border-t border-border/10">
-                                                        <span className="text-emerald-500 font-bold">Confirmed</span>
-                                                        <LucideIcons.ThumbsUp className="h-3 w-3 text-emerald-500" />
-                                                      </div>
-                                                    )}
-
-                                                  </div>
-                                                  {warning && (
-                                                    <div className={cn(
-                                                      "mt-1 pt-1 border-t flex items-center gap-1.5 font-semibold text-[11px]",
-                                                      warning.type === 'danger' ? "text-red-400 border-red-500/30" : "text-amber-400 border-amber-500/30"
-                                                    )}>
-                                                      <AlertTriangle className="h-3.5 w-3.5" />
-                                                      {warning.type === 'danger'
-                                                        ? `${warning.consecutive} consecutive work days!`
-                                                        : `${warning.consecutive} consecutive work days`
-                                                      }
-                                                    </div>
+                                              <DropdownMenuTrigger asChild>
+                                                <div
+                                                  title={`${emp.employee?.name || emp.transporterId}\n${day?.weekDay || FULL_DAY_NAMES[dayIdx]} — ${day?.date ? formatDate(day.date) : ""}\nStatus: ${status}${type ? `\nType: ${type}` : ""}${day?.subType ? `\nSub Type: ${day.subType}` : ""}${startTime ? `\nStart: ${startTime}` : ""}${van ? `\nVan: ${van}` : ""}${day?.dayBeforeConfirmation === "true" ? `\nCONFIRMED` : ""}${warning ? `\n⚠️ ${warning.consecutive} consecutive work days` : ""}`}
+                                                  className={cn(
+                                                    "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
+                                                    !matchedOpt?.colorHex && style.bg,
+                                                    !matchedOpt?.colorHex && style.text,
+                                                    !matchedOpt?.colorHex && style.border,
+                                                    "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
                                                   )}
-                                                </TooltipContent>
-                                              </Tooltip>
+                                                  style={matchedOpt?.colorHex ? { backgroundColor: matchedOpt.colorHex, color: "#fff", borderColor: matchedOpt.colorHex } : undefined}
+                                                >
+                                                  {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
+                                                  <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
+                                                  {warning && (
+                                                    <span className={cn(
+                                                      "flex items-center justify-center h-4 min-w-[16px] rounded-full text-[9px] font-bold text-white leading-none px-1 ml-0.5 shrink-0",
+                                                      warning.type === 'danger'
+                                                        ? "bg-red-500 animate-pulse"
+                                                        : "bg-orange-400"
+                                                    )}>
+                                                      {warning.consecutive}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </DropdownMenuTrigger>
                                               <DropdownMenuContent
                                                 align="start"
                                                 side="bottom"
@@ -2040,3 +1838,11 @@ export default function SchedulingPage() {
 }
 
 
+
+export default function SchedulingPage(props: any) {
+  return (
+    <Suspense fallback={<Skeleton className="h-full w-full min-h-[400px] rounded-xl" />}>
+      <SchedulingPageContent {...props} />
+    </Suspense>
+  );
+}

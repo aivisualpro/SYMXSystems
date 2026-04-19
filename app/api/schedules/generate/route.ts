@@ -1,4 +1,6 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxEmployee from "@/lib/models/SymxEmployee";
@@ -52,6 +54,15 @@ function getNextYearWeek(yearWeek: string): string {
  * - Idempotent: calling twice is safe, existing data is never touched
  */
 export async function POST(req: NextRequest) {
+  try {
+    await requirePermission("Scheduling", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
         const session = await getSession();
         if (!session) {
@@ -137,14 +148,21 @@ export async function POST(req: NextRequest) {
             }))
         );
 
-        await SymxEmployeeSchedule.insertMany(records, { ordered: false });
+        const dbSession = await mongoose.startSession();
+        try {
+            await dbSession.withTransaction(async () => {
+                await SymxEmployeeSchedule.insertMany(records, { session: dbSession });
 
-        // Register the week in available weeks
-        await SymxAvailableWeek.updateOne(
-            { week: yearWeek },
-            { $set: { week: yearWeek } },
-            { upsert: true }
-        );
+                // Register the week in available weeks
+                await SymxAvailableWeek.updateOne(
+                    { week: yearWeek },
+                    { $set: { week: yearWeek } },
+                    { upsert: true, session: dbSession }
+                );
+            });
+        } finally {
+            await dbSession.endSession();
+        }
 
         return NextResponse.json({
             success: true,

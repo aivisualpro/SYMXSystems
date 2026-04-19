@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query/keys";
 import { MessageStatusBadge, LiveIndicator } from "@/components/ui-elements/message-status-badge";
 import {
   Loader2,
@@ -1888,7 +1889,7 @@ export default function MessagingPanel({
       .catch(() => {});
   }, []);
 
-  const store = useDataStore();
+  const queryClient = useQueryClient();
 
   // ── Compute week dates for date pills ──
   const weekDates = useMemo(() => {
@@ -1926,7 +1927,7 @@ export default function MessagingPanel({
     }
   }, []);
 
-  // Hydrate from global store for the first week
+  // Hydrate from TanStack Query cache for the first week
   const hydratedMessagingRef = useRef(false);
   const fetchedWeekRef = useRef<string>("");
   const activeWeekRef = useRef<string>("");
@@ -1938,16 +1939,15 @@ export default function MessagingPanel({
     const effectWeek = selectedWeek;
     const isDefaultWeek = weeks?.[0] === selectedWeek;
 
-    // ── Try hydrating from store (instant load) ──
-    if (isDefaultWeek && store.initialized && !hydratedMessagingRef.current) {
-      const storeEmployees = store.messagingEmployees;
+    // ── Try hydrating from TanStack Query cache (instant load) ──
+    if (isDefaultWeek && !hydratedMessagingRef.current) {
       const hydrated: Record<string, EmployeeRecipient[]> = {};
       const stillLoading = new Set<string>();
 
       for (const tab of SUB_TABS) {
-        const data = storeEmployees[tab.id as keyof typeof storeEmployees];
-        if (data && Array.isArray(data)) {
-          hydrated[tab.id] = data;
+        const cachedData = queryClient.getQueryData(qk.messaging.employees(tab.id, selectedWeek));
+        if (cachedData && Array.isArray(cachedData)) {
+          hydrated[tab.id] = cachedData;
         } else {
           stillLoading.add(tab.id);
         }
@@ -1959,7 +1959,7 @@ export default function MessagingPanel({
         setEmployeesByTab(hydrated);
         setLoadingTabs(stillLoading);
 
-        // Fetch any tabs not covered by global store
+        // Fetch any tabs not covered by cache
         for (const tabId of stillLoading) {
           fetchTabEmployees(tabId, selectedWeek).then((emps) => {
             if (activeWeekRef.current !== effectWeek) return;
@@ -1981,10 +1981,7 @@ export default function MessagingPanel({
         (fetchedWeekRef as any).lastRefresh = refreshTrigger;
     }
 
-    // ── If default week but store not ready yet, wait for it ──
-    if (isDefaultWeek && !store.initialized) {
-      return;
-    }
+
 
     // ── Skip if we already fetched/hydrated this week (unless forced) ──
     if (!forced && fetchedWeekRef.current === selectedWeek) return;
@@ -2024,7 +2021,7 @@ export default function MessagingPanel({
 
     return () => clearTimeout(bgTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedWeek, store.initialized, fetchTabEmployees, refreshTrigger]); // re-run when store initializes or refreshed
+  }, [selectedWeek, fetchTabEmployees, refreshTrigger]); // re-run when week changes or refreshed
 
   // ── Report active tab info to parent ──────────────────────────────────────
   const activeTabConfig = SUB_TABS.find(t => t.id === resolvedTab) || SUB_TABS[0];

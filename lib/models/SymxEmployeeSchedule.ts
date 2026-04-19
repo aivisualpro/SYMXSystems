@@ -26,7 +26,7 @@ export interface ISymxEmployeeSchedule extends Document {
   weekDay: string;
   yearWeek: string; // Format: yyyy-Wxx
   date: Date;
-  status: string;
+  status: 'pending' | 'sent' | 'delivered' | 'received';
   type: string;
   subType?: string;
   trainingDay?: string;
@@ -46,12 +46,12 @@ export interface ISymxEmployeeSchedule extends Document {
 }
 
 const SymxEmployeeScheduleSchema: Schema = new Schema({
-  transporterId: { type: String, required: true, index: true },
+  transporterId: { type: String, required: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'SymxEmployee' },
   weekDay: { type: String, required: true },
   yearWeek: { type: String, required: true },
   date: { type: Date, required: true },
-  status: { type: String, default: '' },
+  status: { type: String, enum: ['pending', 'sent', 'delivered', 'received'], default: 'pending' },
   type: { type: String, default: '' },
   subType: { type: String, default: '' },
   trainingDay: { type: String, default: '' },
@@ -74,6 +74,8 @@ const SymxEmployeeScheduleSchema: Schema = new Schema({
 SymxEmployeeScheduleSchema.index({ transporterId: 1, date: 1 }, { unique: true });
 // Index for week queries
 SymxEmployeeScheduleSchema.index({ yearWeek: 1 });
+SymxEmployeeScheduleSchema.index({ date: 1 });
+SymxEmployeeScheduleSchema.index({ status: 1 });
 
 const SymxEmployeeSchedule: Model<ISymxEmployeeSchedule> =
   mongoose.models.SymxEmployeeSchedule ||

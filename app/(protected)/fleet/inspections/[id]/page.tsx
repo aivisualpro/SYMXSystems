@@ -1,4 +1,6 @@
 "use client";
+import { Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
@@ -178,7 +180,7 @@ function BentoPhoto({ url, label, onClick, className = "" }: { url?: string; lab
 /* ══════════════════════════════════════════════════════════════════
    Main page — Apple-style Bento Grid
    ══════════════════════════════════════════════════════════════════ */
-export default function InspectionDetailPage() {
+function InspectionDetailPageContent() {
     const params = useParams();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -855,4 +857,12 @@ export default function InspectionDetailPage() {
             <FleetFormModal />
         </>
     );
+}
+
+export default function InspectionDetailPage(props: any) {
+  return (
+    <Suspense fallback={<Skeleton className="h-full w-full min-h-[400px] rounded-xl" />}>
+      <InspectionDetailPageContent {...props} />
+    </Suspense>
+  );
 }

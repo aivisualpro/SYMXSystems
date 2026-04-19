@@ -12,10 +12,10 @@ import { Search, User, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useHrTerminations } from "@/lib/query/hooks/useHr";
 
 export default function TerminationsPage() {
-  const store = useDataStore();
+  const { data: queryTerminations } = useHrTerminations();
   const [data, setData] = useState<ISymxEmployee[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -38,15 +38,14 @@ export default function TerminationsPage() {
     };
   }, [searchQuery]);
 
-  // ── Seed from store for instant load ──
-  const storeTerminations = store.hrTerminations as any;
+  // ── Seed from TanStack Query cache for instant load ──
   useEffect(() => {
-    if (!debouncedSearch && storeTerminations?.records?.length > 0 && data.length === 0) {
-      setData(storeTerminations.records);
-      setTotalCount(storeTerminations.totalCount || storeTerminations.records.length);
-      setHasMore(storeTerminations.hasMore || false);
+    if (!debouncedSearch && queryTerminations && queryTerminations.records && queryTerminations.records.length > 0 && data.length === 0) {
+      setData(queryTerminations.records);
+      setTotalCount(queryTerminations.totalCount || queryTerminations.records.length);
+      setHasMore(queryTerminations.hasMore || false);
     }
-  }, [storeTerminations]);
+  }, [queryTerminations, debouncedSearch, data.length]);
 
   const fetchTerminated = async (reset = true) => {
     const skip = reset ? 0 : data.length;

@@ -1,5 +1,6 @@
-
 "use client";
+import { Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import * as React from "react";
 import { useEffect, useState, useMemo } from "react";
@@ -34,7 +35,10 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { useSearchParams } from "next/navigation";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useEmployeesList, useUpdateEmployee, useCreateEmployee } from "@/lib/query/hooks/useEmployees";
+import { useDropdowns, useVehicles } from "@/lib/query/hooks/useShared";
+import { useQueryClient } from "@tanstack/react-query";
+
 
 // ── Schedule Type Option from dropdowns ──
 interface ScheduleTypeOption {
@@ -56,9 +60,24 @@ function isLightColor(hex: string): boolean {
   return luminance > 0.6;
 }
 
-export default function EmployeesPage() {
-  const store = useDataStore();
-  const [data, setData] = useState<ISymxEmployee[]>([]);
+function EmployeesPageContent() {
+  const queryClient = useQueryClient();
+  const { data: storeDropdowns = [], isLoading: isLoadingDropdowns } = useDropdowns();
+  const { data: storeVehicles = [], isLoading: isLoadingVehicles } = useVehicles();
+  const { mutateAsync: updateEmployee } = useUpdateEmployee();
+  const { mutateAsync: createEmployee } = useCreateEmployee();
+
+  const searchParams = useSearchParams();
+  const hasUrlFilters = searchParams.get('status') || searchParams.get('type') || searchParams.get('filter') || searchParams.get('hourlyStatus');
+  const needsApiCall = !!searchParams.get('search') || !!hasUrlFilters;
+
+  const [data, setData] = useState<ISymxEmployee[]>(() => {
+    if (!needsApiCall && store.employees?.records?.length > 0) {
+      return store.employees.records;
+    }
+    return [];
+  });
+  
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -73,12 +92,10 @@ export default function EmployeesPage() {
   const [fetchedFromApi, setFetchedFromApi] = useState(false);
   const PAGE_SIZE = 50;
   const router = useRouter();
-  const searchParams = useSearchParams();
-
   // ── Read from store (instant, no loading) ──
-  const storeEmployees = store.employees as any;
-  const storeVehicles = store.fleet?.vehicles as any[] ?? [];
-  const storeDropdowns = store.admin?.dropdowns as any[] ?? [];
+  
+  
+  
 
   // Vehicle names from store
   const vehicleNames = useMemo(() => {
@@ -103,36 +120,26 @@ export default function EmployeesPage() {
     return map;
   }, [scheduleTypes]);
 
-  // Check if any filters/search are active (requires API call)
-  const hasUrlFilters = searchParams.get('status') || searchParams.get('type') || searchParams.get('filter') || searchParams.get('hourlyStatus');
-  const needsApiCall = !!debouncedSearch || !!hasUrlFilters;
-
   // ── Sync from store when no filters are active ──
   useEffect(() => {
-    if (!needsApiCall && storeEmployees?.records?.length > 0 && !fetchedFromApi) {
-      setData(storeEmployees.records);
-      setTotalCount(storeEmployees.totalCount || storeEmployees.records.length);
+    if (!needsApiCall && false > 0 && !fetchedFromApi) {
+      setData([]);
+      setTotalCount(storeEmployees.totalCount || [].length);
       setHasMore(storeEmployees.hasMore || false);
       setLoading(false);
     }
   }, [storeEmployees, needsApiCall, fetchedFromApi]);
 
   // ── Show loading only if store has no data yet AND no API call is pending ──
-  const isInitialLoading = !needsApiCall && (!storeEmployees?.records || storeEmployees.records.length === 0) && !store.initialized;
+  const isInitialLoading = isLoadingDropdowns || isLoadingVehicles;
 
   // Inline update helper
   const updateEmployeeField = async (id: string, field: string, value: string) => {
     try {
-      // Optimistic update
       setData(prev => prev.map(emp =>
         String(emp._id) === id ? { ...emp, [field]: value } as any : emp
       ));
-      const res = await fetch(`/api/admin/employees/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
-      });
-      if (!res.ok) throw new Error();
+      await updateEmployee({ id, data: { [field]: value } });
     } catch {
       toast.error("Failed to update");
       fetchEmployees(true);
@@ -220,15 +227,10 @@ export default function EmployeesPage() {
         : "/api/admin/employees";
       const method = editingItem?._id ? "PUT" : "POST";
 
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to save employee");
+      if (editingItem?._id) {
+        await updateEmployee({ id: editingItem._id, data: formData });
+      } else {
+        await createEmployee(formData);
       }
 
       toast.success(editingItem?._id ? "Employee updated successfully" : "Employee created successfully");
@@ -249,8 +251,9 @@ export default function EmployeesPage() {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete employee");
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
       toast.success("Employee deleted successfully");
-      fetchEmployees();
+      fetchEmployees(true);
     } catch (error) {
       toast.error("Failed to delete employee");
     }
@@ -972,5 +975,13 @@ export default function EmployeesPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function EmployeesPage(props: any) {
+  return (
+    <Suspense fallback={<Skeleton className="h-full w-full min-h-[400px] rounded-xl" />}>
+      <EmployeesPageContent {...props} />
+    </Suspense>
   );
 }

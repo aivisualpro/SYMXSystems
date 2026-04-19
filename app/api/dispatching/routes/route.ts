@@ -1,4 +1,6 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SYMXRoute from "@/lib/models/SYMXRoute";
@@ -11,6 +13,25 @@ import SymxUser from "@/lib/models/SymxUser";
 import Vehicle from "@/lib/models/Vehicle";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import RouteType from "@/lib/models/RouteType";
+import { z } from "zod";
+import { validateBody, validateSearchParams } from "@/lib/validations";
+import { authorizeAction } from "@/lib/rbac";
+
+const routesQuerySchema = z.object({
+    yearWeek: z.string().min(1),
+    date: z.string().optional().nullable(),
+    checkOnly: z.enum(["true", "false"]).optional().nullable()
+});
+
+const generateRoutesSchema = z.object({
+    yearWeek: z.string().min(1),
+    regenerate: z.boolean().optional()
+});
+
+const updateRouteSchema = z.object({
+    routeId: z.string().min(1),
+    updates: z.record(z.string(), z.any())
+});
 
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -35,32 +56,37 @@ async function resolvePerformerName(session: any): Promise<{ email: string; name
 
 // GET: Fetch routes for a yearWeek (with employee name enrichment + audit counts)
 export async function GET(req: NextRequest) {
+  try {
+    await requirePermission("Dispatching", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
-        const session = await getSession();
-        if (!session) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const auth = await authorizeAction("Dispatching", "view");
+        if (!auth.authorized) return auth.response;
+
+        const validation = validateSearchParams(routesQuerySchema, req);
+        if (!validation.success) {
+            return validation.response;
         }
 
-        const { searchParams } = new URL(req.url);
-        const yearWeek = searchParams.get("yearWeek");
-        const date = searchParams.get("date"); // optional: filter by specific date
-
-        if (!yearWeek) {
-            return NextResponse.json({ error: "yearWeek is required" }, { status: 400 });
-        }
+        const { yearWeek, date, checkOnly } = validation.data;
 
         await connectToDatabase();
 
         // Fast path: layout just needs to know if routes exist (no full data fetch)
-        const checkOnly = searchParams.get("checkOnly") === "true";
-        if (checkOnly) {
+        if (checkOnly === "true") {
             const count = await SYMXRoute.countDocuments({ yearWeek });
             return NextResponse.json({ routesGenerated: count > 0 });
         }
 
         // Fetch types configured as "Off" to exclude them from dispatching
-        const offTypesConfigs = await RouteType.find({ routeStatus: { $regex: /^off$/i } }, { name: 1 }).lean();
-        const offTypes = offTypesConfigs.map((rt: any) => new RegExp(`^${rt.name.trim()}$`, "i"));
+        const offTypesConfigs = await RouteType.find({ routeStatus: { $in: ["off", "Off", "OFF", "oFF"] } }, { name: 1 }).lean();
+        const offTypes = offTypesConfigs.map((rt: any) => rt.name.trim()); // exact match
 
         // Build query — exclude empty types and types mapped to "Off" status
         const query: any = { yearWeek };
@@ -94,18 +120,15 @@ export async function GET(req: NextRequest) {
             : [];
         const routeCountMatch: any = { transporterId: { $in: transporterIds } };
         if (completionTypes.length > 0) {
-            routeCountMatch.type = { $in: completionTypes.map(t => new RegExp(`^${t}$`, "i")) };
+            routeCountMatch.type = { $in: completionTypes };
         } else {
             routeCountMatch.type = { $ne: "" };
         }
 
-        // Build regex array for case-insensitive and whitespace-safe SymxEmployee matching
-        const transporterRegexes = transporterIds.map(id => new RegExp(`^\\s*${id}\\s*$`, "i"));
-
-        // ── PHASE 2: ALL enrichment queries in parallel ──
+        // Use exact match since IDs are normalized, avoiding expensive dynamic map of 150 regexes
         const [employees, routeCountsByDate, auditCountsRaw, vehicleDocs, confirmationDocs] = await Promise.all([
             SymxEmployee.find(
-                { transporterId: { $in: transporterRegexes } },
+                { transporterId: { $in: transporterIds } },
                 { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, profileImage: 1, routesComp: 1, rate: 1, hiredDate: 1 }
             ).lean(),
             SYMXRoute.aggregate([
@@ -221,18 +244,26 @@ export async function GET(req: NextRequest) {
 
 // POST: Generate route records for a yearWeek (from scheduled employees)
 export async function POST(req: NextRequest) {
+  try {
+    await requirePermission("Dispatching", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
-        const session = await getSession();
-        if (!session) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const auth = await authorizeAction("Dispatching", "create");
+        if (!auth.authorized) return auth.response;
 
-        const body = await req.json();
-        const { yearWeek, regenerate } = body;
-
-        if (!yearWeek) {
-            return NextResponse.json({ error: "yearWeek is required" }, { status: 400 });
+        const rawBody = await req.json();
+        const validation = validateBody(generateRoutesSchema, rawBody);
+        if (!validation.success) {
+            return validation.response;
         }
+        
+        const { yearWeek, regenerate } = validation.data;
 
         await connectToDatabase();
 
@@ -419,7 +450,7 @@ async function autoAssignVans(yearWeek: string) {
         {
             yearWeek,
             van: { $in: ["", null] },
-            type: { $regex: new RegExp(`^(${ELIGIBLE_TYPES.join("|")})$`, "i") },
+            type: { $in: ELIGIBLE_TYPES },
         },
         { _id: 1, transporterId: 1, date: 1, routeSize: 1, type: 1, van: 1 }
     ).lean() as any[];
@@ -586,20 +617,30 @@ async function autoAssignVans(yearWeek: string) {
 
 // PUT: Update a single route record (+ sync type back to schedule + audit log)
 export async function PUT(req: NextRequest) {
+  try {
+    await requirePermission("Dispatching", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
-        const body = await req.json();
-        console.log(`[PUT /api/dispatching/routes] Received PUT request`, body);
-
-        const session = await getSession();
-        if (!session) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const rawBody = await req.json();
+        console.log(`[PUT /api/dispatching/routes] Received PUT request`, rawBody);
+        
+        const validation = validateBody(updateRouteSchema, rawBody);
+        if (!validation.success) {
+            return validation.response;
         }
 
-        const { routeId, updates } = body;
+        const auth = await authorizeAction("Dispatching", "edit");
+        if (!auth.authorized) return auth.response;
+        
+        const session = auth.session;
 
-        if (!routeId || !updates) {
-            return NextResponse.json({ error: "routeId and updates are required" }, { status: 400 });
-        }
+        const { routeId, updates } = validation.data;
 
         await connectToDatabase();
 
@@ -628,60 +669,71 @@ export async function PUT(req: NextRequest) {
             updates.dashcam = "";
         }
 
-        const updated = await SYMXRoute.findByIdAndUpdate(
-            routeId,
-            { $set: updates },
-            { new: true, lean: true }
-        ) as any;
+        const dbSession = await mongoose.startSession();
+        let updated: any = null;
 
-        // If type was changed, sync it back to the schedule + create audit log
-        if (updates.type !== undefined && existing.type !== updates.type) {
-            const isWorking = !["off", ""].includes((updates.type || "").trim().toLowerCase());
-            const scheduleUpdates: Record<string, any> = {
-                type: updates.type,
-                status: isWorking ? "Scheduled" : "Off",
-            };
-            if (updates.subType !== undefined) scheduleUpdates.subType = updates.subType;
+        try {
+            await dbSession.withTransaction(async () => {
+                updated = await SYMXRoute.findByIdAndUpdate(
+                    routeId,
+                    { $set: updates },
+                    { new: true, lean: true, session: dbSession }
+                ) as any;
 
-            // Sync to schedule
-            if (existing.scheduleId) {
-                await SymxEmployeeSchedule.findByIdAndUpdate(
-                    existing.scheduleId,
-                    { $set: scheduleUpdates }
-                );
-            }
+                // If type was changed, sync it back to the schedule + create audit log
+                if (updates.type !== undefined && existing.type !== updates.type) {
+                    const isWorking = !["off", ""].includes((updates.type || "").trim().toLowerCase());
+                    const scheduleUpdates: Record<string, any> = {
+                        type: updates.type,
+                        status: isWorking ? "Scheduled" : "Off",
+                    };
+                    if (updates.subType !== undefined) scheduleUpdates.subType = updates.subType;
 
-            // Resolve performer name and employee name
-            const performer = await resolvePerformerName(session);
+                    // Sync to schedule
+                    if (existing.scheduleId) {
+                        await SymxEmployeeSchedule.findByIdAndUpdate(
+                            existing.scheduleId,
+                            { $set: scheduleUpdates },
+                            { session: dbSession }
+                        );
+                    }
 
-            // Look up employee name
-            let employeeName = "";
-            try {
-                const emp = await SymxEmployee.findOne(
-                    { transporterId: existing.transporterId },
-                    { firstName: 1, lastName: 1 }
-                ).lean() as any;
-                if (emp) employeeName = `${emp.firstName} ${emp.lastName}`.toUpperCase();
-            } catch { }
+                    // Resolve performer name and employee name
+                    const performer = await resolvePerformerName(session);
 
-            // Get day info
-            const dateObj = existing.date ? new Date(existing.date) : null;
-            const dayName = dateObj ? FULL_DAY_NAMES[dateObj.getUTCDay()] : "";
+                    // Look up employee name
+                    let employeeName = "";
+                    try {
+                        const emp = await SymxEmployee.findOne(
+                            { transporterId: existing.transporterId },
+                            { firstName: 1, lastName: 1 },
+                            { session: dbSession }
+                        ).lean() as any;
+                        if (emp) employeeName = `${emp.firstName} ${emp.lastName}`.toUpperCase();
+                    } catch { }
 
-            // Create audit log
-            await ScheduleAuditLog.create({
-                yearWeek: existing.yearWeek || "",
-                transporterId: existing.transporterId,
-                employeeName,
-                action: "type_changed",
-                field: "type",
-                oldValue: existing.type || "",
-                newValue: updates.type || "",
-                date: existing.date,
-                dayOfWeek: dayName,
-                performedBy: performer.email,
-                performedByName: performer.name,
+                    // Get day info
+                    const dateObj = existing.date ? new Date(existing.date) : null;
+                    const dayName = dateObj ? FULL_DAY_NAMES[dateObj.getUTCDay()] : "";
+
+                    // Create audit log
+                    await ScheduleAuditLog.create([{
+                        yearWeek: existing.yearWeek || "",
+                        transporterId: existing.transporterId,
+                        employeeName,
+                        action: "type_changed",
+                        field: "type",
+                        oldValue: existing.type || "",
+                        newValue: updates.type || "",
+                        date: existing.date,
+                        dayOfWeek: dayName,
+                        performedBy: performer.email,
+                        performedByName: performer.name,
+                    }], { session: dbSession });
+                }
             });
+        } finally {
+            await dbSession.endSession();
         }
 
         return NextResponse.json({ route: updated });

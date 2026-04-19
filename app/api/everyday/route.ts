@@ -1,10 +1,24 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import { SymxEveryday } from "@/lib/models/SymxEveryday";
+import { authorizeAction } from "@/lib/rbac";
 
 
 export async function GET(req: NextRequest) {
+  try {
+    await requirePermission("Everyday", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
+        const auth = await authorizeAction("Everyday", "view");
+        if (!auth.authorized) return auth.response;
+
         await connectToDatabase();
         const url = new URL(req.url);
 
@@ -33,7 +47,19 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
+    await requirePermission("Everyday", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
+        const auth = await authorizeAction("Everyday", "edit");
+        if (!auth.authorized) return auth.response;
+
         await connectToDatabase();
         const body = await req.json();
         const { date, notes, routesAssigned } = body;

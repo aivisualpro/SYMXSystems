@@ -1,3 +1,4 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -5,6 +6,15 @@ import SymxScoreCardRemarks from "@/lib/models/SymxScoreCardRemarks";
 
 // GET — Fetch remarks for a specific driver + week, or all signature statuses for a week
 export async function GET(req: NextRequest) {
+  try {
+    await requirePermission("Scorecard", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -43,6 +53,15 @@ export async function GET(req: NextRequest) {
 
 // PUT — Upsert remarks for a specific driver + week
 export async function PUT(req: NextRequest) {
+  try {
+    await requirePermission("Scorecard", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

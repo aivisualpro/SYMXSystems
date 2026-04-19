@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   User, 
@@ -41,6 +41,8 @@ import { format, startOfWeek, addDays } from "date-fns";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import { EmployeeScorecard } from "@/components/hr/employee-scorecard";
+import { useEmployeeDetail, useUpdateEmployee } from "@/lib/query/hooks/useEmployees";
+import { useVehicles } from "@/lib/query/hooks/useShared";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -146,64 +148,36 @@ const PerformanceMetric = ({ label, value, icon: Icon, accent, trend, progressCo
 export default function EmployeeDetailPage(props: PageProps) {
   const params = use(props.params);
   const router = useRouter();
-  const [employee, setEmployee] = useState<ISymxEmployee | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { setLeftContent, setRightContent } = useHeaderActions();
-  const [vehicleNames, setVehicleNames] = useState<string[]>([]);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
-  // Fetch vehicle names for van dropdowns
-  useEffect(() => {
-    fetch("/api/fleet?section=vehicles")
-      .then(r => r.json())
-      .then((data: any) => {
-        const vehicles = data?.vehicles || [];
-        const names = vehicles
-          .map((v: any) => v.vehicleName)
-          .filter(Boolean)
-          .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
-        setVehicleNames(names);
-      })
-      .catch(() => {});
-  }, []);
+  const { data: employee, isLoading: loading } = useEmployeeDetail(params.id);
+  const { data: storeVehicles = [] } = useVehicles();
+  const { mutateAsync: updateEmployee } = useUpdateEmployee();
+
+  const vehicleNames = useMemo(() => {
+    return storeVehicles
+      .map((v: any) => v.vehicleName)
+      .filter(Boolean)
+      .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [storeVehicles]);
 
   const handleVanChange = async (field: string, value: string) => {
     if (!employee) return;
-    const oldEmployee = employee;
-    const updatedEmployee = { ...employee, [field]: value };
-    setEmployee(updatedEmployee as ISymxEmployee);
     try {
-      const response = await fetch(`/api/admin/employees/${employee._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
-      });
-      if (!response.ok) throw new Error("Failed to update van");
-      toast.success(`Van updated`);
+      await updateEmployee({ id: String(employee._id), data: { [field]: value } });
+      toast.success("Van updated");
     } catch (error) {
-      setEmployee(oldEmployee);
       toast.error("Failed to update van");
     }
   };
 
   const handleStatusChange = async (dayKey: string, newStatus: string) => {
     if (!employee) return;
-    
-    const oldEmployee = employee;
-    const updatedEmployee = { ...employee, [dayKey]: newStatus };
-    setEmployee(updatedEmployee as ISymxEmployee);
-    
     try {
-      const response = await fetch(`/api/admin/employees/${employee._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [dayKey]: newStatus }),
-      });
-      
-      if (!response.ok) throw new Error("Failed to update availability");
+      await updateEmployee({ id: String(employee._id), data: { [dayKey]: newStatus } });
       toast.success(`${dayKey.charAt(0).toUpperCase() + dayKey.slice(1)} updated`);
     } catch (error) {
-      setEmployee(oldEmployee);
       toast.error("Failed to update availability");
     }
   };
@@ -232,26 +206,6 @@ export default function EmployeeDetailPage(props: PageProps) {
       setRightContent(null);
     };
   }, [employee, setLeftContent, setRightContent]);
-
-  useEffect(() => {
-    const fetchEmployee = async () => {
-      try {
-        const response = await fetch(`/api/admin/employees/${params.id}`);
-        if (response.ok) {
-          const data = await response.json();
-          setEmployee(data);
-        } else {
-          toast.error("Employee not found");
-          router.push("/hr");
-        }
-      } catch (error) {
-        toast.error("Error fetching employee details");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchEmployee();
-  }, [params.id, router]);
 
   if (loading) {
     return (
@@ -504,7 +458,7 @@ export default function EmployeeDetailPage(props: PageProps) {
                                    >
                                      — None —
                                    </DropdownMenuItem>
-                                   {vehicleNames.map(name => (
+                                   {vehicleNames.map((name: string) => (
                                      <DropdownMenuItem
                                        key={name}
                                        onClick={() => handleVanChange(field, name)}
@@ -695,17 +649,9 @@ export default function EmployeeDetailPage(props: PageProps) {
             initialData={{ ...employee, _id: String(employee._id) }} 
             onSubmit={async (data) => {
               try {
-                const res = await fetch(`/api/admin/employees/${employee._id}`, {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(data),
-                });
-                if (res.ok) {
-                  const updated = await res.json();
-                  setEmployee(updated);
-                  setIsEditDialogOpen(false);
-                  toast.success("Profile updated successfully");
-                }
+                await updateEmployee({ id: String(employee._id), data });
+                setIsEditDialogOpen(false);
+                toast.success("Profile updated successfully");
               } catch (e) {
                 toast.error("Failed to update profile");
               }

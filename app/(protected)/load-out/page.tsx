@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "./layout";
-import { useDataStore } from "@/hooks/use-data-store";
+import { useVehicles, useWst } from "@/lib/query/hooks/useShared";
 import { cn } from "@/lib/utils";
 import { MessageStatusBadge } from "@/components/ui-elements/message-status-badge";
 import {
@@ -312,17 +312,17 @@ export default function RoutesPage() {
         { open: false, routeId: "", employeeName: "", profileImage: "" }
     );
 
-    const store = useDataStore();
+    const { data: queryVehicles } = useVehicles();
+    const { data: queryWst } = useWst();
 
-    // ── Hydrate active vehicles from DataStore ──
+    // ── Hydrate active vehicles from TanStack Query cache ──
     const [vehicles, setVehicles] = useState<any[]>([]);
     useEffect(() => {
-        const storeVehicles = store.fleet?.vehicles;
-        if (storeVehicles && Array.isArray(storeVehicles) && storeVehicles.length > 0) {
-            const sortedVans = [...storeVehicles].sort((a: any, b: any) => String(a.vehicleName).localeCompare(String(b.vehicleName), undefined, { numeric: true, sensitivity: 'base' }));
+        if (queryVehicles && Array.isArray(queryVehicles) && queryVehicles.length > 0) {
+            const sortedVans = [...queryVehicles].sort((a: any, b: any) => String(a.vehicleName).localeCompare(String(b.vehicleName), undefined, { numeric: true, sensitivity: 'base' }));
             setVehicles(sortedVans);
         }
-    }, [store.fleet?.vehicles]);
+    }, [queryVehicles]);
 
     // ── Get available vans for a date ──
     const getAvailableVans = useCallback((dateStr: string, currentVan: string) => {
@@ -370,19 +370,18 @@ export default function RoutesPage() {
         }
     }, [vehicles, refreshRoutes]);
 
-    // ── Hydrate WST revenue from DataStore ──
+    // ── Hydrate WST revenue from TanStack Query cache ──
     useEffect(() => {
-        const wstData = store.admin?.wst;
-        if (wstData && Array.isArray(wstData) && wstData.length > 0) {
+        if (queryWst && Array.isArray(queryWst) && queryWst.length > 0) {
             const map: Record<string, number> = {};
-            wstData.forEach((w: any) => {
+            queryWst.forEach((w: any) => {
                 if (w.wst && w.isActive !== false) {
                     map[w.wst.toLowerCase()] = w.revenue || 0;
                 }
             });
             setWstRevenueMap(map);
         }
-    }, [store.admin?.wst]);
+    }, [queryWst]);
 
     // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
     const { rawRouteData, rawRouteDataLoading } = useDispatching();
@@ -898,13 +897,10 @@ export default function RoutesPage() {
 
 
 
-    // ── Empty / Loading States ──
-    if (routesLoading || loading) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
+
+
+    if (rawRouteData?.routes?.length > 0 && allRoutes.length === 0) {
+        return <div className="flex-1 opacity-0 pointer-events-none" />;
     }
 
     if (!routesGenerated || allRoutes.length === 0) {
@@ -1040,14 +1036,7 @@ export default function RoutesPage() {
                                                                     {row.employeeName}
                                                                 </span>
                                                                 {row.hiredDate && (Date.now() - new Date(row.hiredDate).getTime()) / 86400000 <= 30 && (
-                                                                    <TooltipProvider delayDuration={100}>
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger className="flex-shrink-0 cursor-default ml-auto">
-                                                                                <Baby className="h-4 w-4 text-pink-500 drop-shadow animate-baby-rock" />
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent>New Hire (Within 30 Days)</TooltipContent>
-                                                                        </Tooltip>
-                                                                    </TooltipProvider>
+                                                                    <Baby className="h-4 w-4 text-pink-500 drop-shadow ml-auto flex-shrink-0" />
                                                                 )}
                                                             </div>
                                                         </td>
@@ -1196,12 +1185,7 @@ export default function RoutesPage() {
                         </table>
                     </div>
 
-                    {/* Footer */}
-                    <div className="shrink-0 flex items-center justify-between p-2 border-t border-border/50 bg-muted/20">
-                        <span className="text-[10px] text-muted-foreground">
-                            {totalFiltered} of {totalForDate} employees
-                        </span>
-                    </div>
+
                 </div>
             </div>
 

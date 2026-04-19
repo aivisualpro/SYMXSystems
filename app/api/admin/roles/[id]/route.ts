@@ -1,3 +1,4 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";

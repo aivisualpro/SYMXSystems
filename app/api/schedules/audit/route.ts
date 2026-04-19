@@ -1,3 +1,4 @@
+import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -22,6 +23,15 @@ async function resolvePerformerName(session: any): Promise<{ email: string; name
 
 // GET — Fetch audit logs for a given yearWeek
 export async function GET(req: NextRequest) {
+  try {
+    await requirePermission("Scheduling", "view");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
         const session = await getSession();
         if (!session) {
@@ -90,6 +100,15 @@ export async function GET(req: NextRequest) {
 
 // POST — Create a new audit log entry
 export async function POST(req: NextRequest) {
+  try {
+    await requirePermission("Scheduling", "edit");
+  } catch (e: any) {
+    if (e.name === "ForbiddenError") {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
     try {
         const session = await getSession();
         if (!session) {
