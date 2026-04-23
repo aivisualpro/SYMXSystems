@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════
-// SYMX Route Fetch — Popup Controller V.1.0.3
+// SYMX Route Fetch — Popup Controller V.1.0.4
 // ══════════════════════════════════════════════════════════════
 
 const SYNC_TARGET = "https://symx-systems.vercel.app";
@@ -46,7 +46,7 @@ async function init() {
 
   // Check current tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  
+
   if (!tab?.url?.includes("logistics.amazon.com")) {
     statusDot.className = "status-dot disconnected";
     return;
@@ -57,18 +57,18 @@ async function init() {
   // Get page info from content script
   try {
     const response = await chrome.tabs.sendMessage(tab.id, { type: "GET_PAGE_INFO" });
-    
+
     if (response?.isAmazonLogistics) {
       // Show date info
       if (response.selectedDay) {
         pageInfoSection.style.display = "";
         const d = new Date(response.selectedDay + "T12:00:00Z");
-        dateValue.textContent = d.toLocaleDateString("en-US", { 
-          weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" 
+        dateValue.textContent = d.toLocaleDateString("en-US", {
+          weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC"
         });
         currentDate = response.selectedDay;
       }
-      
+
       routesSection.style.display = "";
       actionsSection.style.display = "";
 
@@ -131,8 +131,8 @@ function loadFromStorage() {
       if (result.scrapedDate) {
         pageInfoSection.style.display = "";
         const d = new Date(result.scrapedDate + "T12:00:00Z");
-        dateValue.textContent = d.toLocaleDateString("en-US", { 
-          weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" 
+        dateValue.textContent = d.toLocaleDateString("en-US", {
+          weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC"
         });
       }
     }
@@ -145,7 +145,7 @@ function renderRoutes(routes, isFiltered = false) {
     // Show search bar if we have routes
     searchBar.style.display = routes.length > 0 ? "" : "none";
   }
-  
+
   if (routes.length === 0) {
     if (isFiltered) {
       routeList.innerHTML = `<div class="empty-state"><p>No matching routes</p></div>`;
@@ -176,7 +176,7 @@ function renderRoutes(routes, isFiltered = false) {
     const pkgs = parseInt(route.packageCount) || 0;
     const statusClass = getStatusClass(route.status);
     const statusLabel = getStatusLabel(route.status);
-    
+
     html += `
       <div class="route-item" data-route-idx="${origIdx >= 0 ? origIdx : idx}">
         <span class="route-code">${route.routeCode || "—"}</span>
@@ -228,11 +228,11 @@ function openRouteDetail(route, idx) {
   if (!route) return;
 
   const raw = route._raw || route;
-  
+
   // Set header
   detailRouteCode.textContent = route.routeCode || `Route #${idx + 1}`;
   detailDriver.textContent = route.transporterName || route.transporterId || "—";
-  
+
   const statusLabel = getStatusLabel(route.status);
   const statusClass = getStatusClass(route.status);
   if (statusLabel) {
@@ -257,7 +257,7 @@ function closeRouteDetail() {
 function populateSummaryTab(route, raw) {
   const tab = document.getElementById("tab-summary");
   const rdp = raw.routeDeliveryProgress || {};
-  
+
   const fields = [
     { label: "Route ID", value: raw.routeId },
     { label: "Route Code", value: raw.routeCode || route.routeCode },
@@ -611,8 +611,8 @@ function formatDetailValue(val) {
     if (val > 1577836800000) {
       try {
         const d = new Date(val);
-        return d.toLocaleString("en-US", { 
-          month: "short", day: "numeric", 
+        return d.toLocaleString("en-US", {
+          month: "short", day: "numeric",
           hour: "numeric", minute: "2-digit",
           hour12: true
         });

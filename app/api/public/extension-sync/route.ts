@@ -183,6 +183,21 @@ export async function POST(req: NextRequest) {
             }
         });
 
+        // ── Fetch existing SYMXRoutesInfo records for this date to preserve rowIndex ──
+        const existingInfoRows = await SYMXRoutesInfo.find(
+            { date: dateObj },
+            { rowIndex: 1, routeNumber: 1, transporterId: 1 }
+        ).sort({ rowIndex: -1 }).lean() as any[];
+
+        const infoRouteMap = new Map<string, number>();
+        const infoTransporterMap = new Map<string, number>();
+        existingInfoRows.forEach((r: any) => {
+            if (r.routeNumber) infoRouteMap.set(r.routeNumber.toLowerCase(), r.rowIndex);
+            if (r.transporterId) infoTransporterMap.set(r.transporterId, r.rowIndex);
+        });
+
+        let nextRowIndex = existingInfoRows.length > 0 ? existingInfoRows[0].rowIndex + 1 : 0;
+
         // ── Transform and upsert into SYMXRoutesInfo ──
         let matched = 0;
         const ops: any[] = [];
@@ -236,31 +251,59 @@ export async function POST(req: NextRequest) {
                resolvedPlannedFirstStop = subtractMinutes(plannedStartRaw, 0);
             }
 
+            // ── Determine rowIndex to prevent duplicates ──
+            let rowIndex = index; // fallback
+            const lowerRouteCode = routeCode.toLowerCase();
+            const rawTransporterId = route.transporterId || raw.transporterIdFromRms || "";
+
+            if (routeCode && infoRouteMap.has(lowerRouteCode)) {
+                rowIndex = infoRouteMap.get(lowerRouteCode)!;
+            } else if (transporterId && infoTransporterMap.has(transporterId)) {
+                rowIndex = infoTransporterMap.get(transporterId)!;
+            } else if (rawTransporterId && infoTransporterMap.has(rawTransporterId)) {
+                rowIndex = infoTransporterMap.get(rawTransporterId)!;
+            } else {
+                rowIndex = nextRowIndex++;
+                if (routeCode) infoRouteMap.set(lowerRouteCode, rowIndex);
+                if (transporterId) infoTransporterMap.set(transporterId, rowIndex);
+                if (rawTransporterId) infoTransporterMap.set(rawTransporterId, rowIndex);
+            }
+
             // Parse route data into SYMX format
             const row: Record<string, any> = {
                 date: dateObj,
-                rowIndex: index,
+                rowIndex,
                 routeNumber: routeCode,
                 stopCount: String(resolvedStopCount),
                 packageCount: String(resolvedPackageCount),
                 routeDuration: parseAmazonDuration(route.routeDuration || raw.routeDuration || raw.duration),
                 waveTime: parseAmazonTime(resolvedWaveTime),
-                pad: "", // Will be set manually
-                wst: "", // Will be set manually
-                wstDuration: "",
-                bags: "",
-                ov: "",
-                stagingLocation: "",
                 // Store the Amazon transporterId directly (e.g. "A1K8M27DOUL0PC")
-                transporterId: route.transporterId || raw.transporterIdFromRms || "",
+                transporterId: rawTransporterId,
                 rawSummary: raw,  // Store full Amazon route-summaries JSON
             };
+
+            const serviceTypeName = route.serviceTypeName || raw.serviceTypeName;
+            if (serviceTypeName) row.wst = serviceTypeName;
+
+            const blockDuration = route.blockDurationInMinutes || raw.blockDurationInMinutes;
+            if (blockDuration !== undefined) row.wstDuration = String(blockDuration);
 
             // Upsert into RoutesInfo by date + rowIndex
             ops.push({
                 updateOne: {
-                    filter: { date: dateObj, rowIndex: index },
-                    update: { $set: row },
+                    filter: { date: dateObj, rowIndex },
+                    update: { 
+                        $set: row,
+                        $setOnInsert: {
+                            pad: "",
+                            bags: "",
+                            ov: "",
+                            stagingLocation: "",
+                            ...(!row.wst ? { wst: "" } : {}),
+                            ...(!row.wstDuration ? { wstDuration: "" } : {})
+                        }
+                    },
                     upsert: true,
                 },
             });
@@ -283,6 +326,12 @@ export async function POST(req: NextRequest) {
                 if (route.outboundStem) syncFields.actualOutboundStem = parseAmazonTime(route.outboundStem);
                 if (route.stopsPerHour) syncFields.stopsPerHour = parseFloat(route.stopsPerHour) || 0;
                 if (resolvedPlannedFirstStop) syncFields.plannedFirstStop = resolvedPlannedFirstStop;
+
+                if (serviceTypeName) syncFields.wst = serviceTypeName;
+                if (blockDuration !== undefined) syncFields.wstDuration = Number(blockDuration) || 0;
+
+                const scheduleEnd = route.scheduleEndTime || raw.scheduleEndTime;
+                if (scheduleEnd) syncFields.amazonAppLogout = parseAmazonTime(scheduleEnd);
 
                 syncOps.push({
                     updateOne: {
