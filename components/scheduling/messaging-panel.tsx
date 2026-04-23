@@ -197,13 +197,27 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
   const tomorrowPacific = getTomorrowPacific();
 
   if (tabId === "shift" || tabId === "route-itinerary") {
-    // Shift notification or Route Itinerary → use TODAY's schedule (Pacific)
+    // Shift notification or Route Itinerary → use TODAY's Route schedule (Pacific)
     const todayShift = emp.schedules?.find(
-      (s) => s.date?.startsWith(todayPacific) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
+      (s) => {
+        if (!s.date?.startsWith(todayPacific) || !s.type) return false;
+        const t = s.type.toLowerCase().trim();
+        if (t !== "route") return false;
+        return true;
+      }
     );
     if (todayShift) targetShift = todayShift;
-  } else if (tabId === "future-shift" || tabId === "off-tomorrow") {
-    // Future shift / off-tomorrow → use TOMORROW's schedule (Pacific)
+  } else if (tabId === "future-shift") {
+    // Future shift → use TOMORROW's Route schedule (Pacific)
+    const tomorrowShift = emp.schedules?.find(
+      (s) => {
+        if (!s.date?.startsWith(tomorrowPacific) || !s.type) return false;
+        return s.type.toLowerCase().trim() === "route";
+      }
+    );
+    if (tomorrowShift) targetShift = tomorrowShift;
+  } else if (tabId === "off-tomorrow") {
+    // Off-tomorrow → use TOMORROW's any working schedule (Pacific)
     const tomorrowShift = emp.schedules?.find(
       (s) => s.date?.startsWith(tomorrowPacific) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
     );
@@ -622,6 +636,7 @@ function MessagingSubTab({
   templatesLoaded,
   showOffToday,
   onSelectionReport,
+  onEligibleReport,
 }: {
   tab: SubTab;
   weeks: string[];
@@ -642,6 +657,7 @@ function MessagingSubTab({
   templatesLoaded: boolean;
   showOffToday?: boolean;
   onSelectionReport?: (count: number) => void;
+  onEligibleReport?: (count: number) => void;
 }) {
   // Use prefetched data from parent — stable reference to avoid infinite re-renders
   const EMPTY: EmployeeRecipient[] = useMemo(() => [], []);
@@ -984,6 +1000,10 @@ function MessagingSubTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIds.size]);
 
+  useEffect(() => {
+    onEligibleReport?.(filteredEmployees.length);
+  }, [filteredEmployees.length, onEligibleReport]);
+
   // Toggle select
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -1033,14 +1053,26 @@ function MessagingSubTab({
       // Determine the correct schedule date based on tab context
       let targetScheduleDate: string | undefined;
 
-      if (tab.id === "shift") {
-        // Shift notification → use TODAY's schedule (Pacific)
+      if (tab.id === "shift" || tab.id === "route-itinerary") {
+        // Shift / Route Itinerary → use TODAY's Route schedule (Pacific)
         const todayShift = emp.schedules?.find(
-          (s) => s.date?.startsWith(todayPST) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
+          (s) => {
+            if (!s.date?.startsWith(todayPST) || !s.type) return false;
+            return s.type.toLowerCase().trim() === "route";
+          }
         );
         targetScheduleDate = todayShift?.date || undefined;
-      } else if (tab.id === "future-shift" || tab.id === "off-tomorrow") {
-        // Future shift / off-tomorrow → use TOMORROW's schedule (Pacific)
+      } else if (tab.id === "future-shift") {
+        // Future shift → use TOMORROW's Route schedule (Pacific)
+        const tomorrowShift = emp.schedules?.find(
+          (s) => {
+            if (!s.date?.startsWith(tomorrowPST) || !s.type) return false;
+            return s.type.toLowerCase().trim() === "route";
+          }
+        );
+        targetScheduleDate = tomorrowShift?.date || undefined;
+      } else if (tab.id === "off-tomorrow") {
+        // Off-tomorrow → use TOMORROW's any working schedule (Pacific)
         const tomorrowShift = emp.schedules?.find(
           (s) => s.date?.startsWith(tomorrowPST) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
         );
@@ -1190,12 +1222,25 @@ function MessagingSubTab({
               filteredEmployees.map((emp) => {
                 const isSelected = selectedIds.has(emp._id);
 
+                // Determine target date and whether to enforce "Route" type based on tab
+                const todayStr = getTodayPacific();
+                const tomorrowStr = getTomorrowPacific();
                 const nextShift = emp.schedules?.find(
-                  (s) =>
-                    s.type &&
-                    !["off", "close", "request off", ""].includes(
-                      s.type.toLowerCase().trim()
-                    )
+                  (s) => {
+                    const t = s.type?.toLowerCase().trim() || "";
+                    if (!t || ["off", "close", "request off"].includes(t)) return false;
+                    // Date-scope by tab
+                    if (tab.id === "shift" || tab.id === "route-itinerary") {
+                      const d = new Date(s.date).toISOString().split("T")[0];
+                      if (d !== todayStr) return false;
+                      if (t !== "route") return false;
+                    } else if (tab.id === "future-shift") {
+                      const d = new Date(s.date).toISOString().split("T")[0];
+                      if (d !== tomorrowStr) return false;
+                      if (t !== "route") return false;
+                    }
+                    return true;
+                  }
                 );
 
                 const sendResult = sendResults?.find(
@@ -1341,46 +1386,7 @@ function MessagingSubTab({
             )}
           </div>
 
-          {/* List Footer */}
-          <div className="flex items-center justify-between p-2.5 border-t border-border/50 bg-muted/20">
-            <span className="text-[11px] text-muted-foreground">
-              {selectedCount} of {filteredEmployees.length} selected
-            </span>
-            <div className="flex items-center gap-2">
-              {isPolling && <LiveIndicator />}
-              {/* Show live confirmed/changed counts */}
-              {Object.keys(liveStatuses).length > 0 && (() => {
-                const confirmed = Object.values(liveStatuses).filter(s => s.status === "confirmed").length;
-                const changed = Object.values(liveStatuses).filter(s => s.status === "change_requested").length;
-                return (
-                  <>
-                    {confirmed > 0 && (
-                      <span className="text-[10px] text-emerald-500 font-semibold">
-                        {confirmed} confirmed
-                      </span>
-                    )}
-                    {changed > 0 && (
-                      <span className="text-[10px] text-amber-500 font-semibold">
-                        {changed} change req
-                      </span>
-                    )}
-                  </>
-                );
-              })()}
-              {sendResults && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-emerald-500 font-medium">
-                    {sendResults.filter((r) => r.success).length} sent
-                  </span>
-                  {sendResults.some((r) => !r.success) && (
-                    <span className="text-[10px] text-red-500 font-medium">
-                      {sendResults.filter((r) => !r.success).length} failed
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          {/* List Footer removed as per user request */}
         </div>
 
         {/* ── Right: Preview & Compose ── */}
@@ -2025,7 +2031,7 @@ export default function MessagingPanel({
 
   // ── Report active tab info to parent ──────────────────────────────────────
   const activeTabConfig = SUB_TABS.find(t => t.id === resolvedTab) || SUB_TABS[0];
-  const activeEligibleCount = employeesByTab[resolvedTab]?.length ?? 0;
+  const [activeEligibleCount, setActiveEligibleCount] = useState(0);
   const activeLoading = loadingTabs.has(resolvedTab);
   const [activeSelectedCount, setActiveSelectedCount] = useState(0);
 
@@ -2196,6 +2202,7 @@ export default function MessagingPanel({
                   templatesLoaded={templatesLoaded}
                   showOffToday={showOffToday}
                   onSelectionReport={setActiveSelectedCount}
+                  onEligibleReport={setActiveEligibleCount}
                 />
               </div>
             );

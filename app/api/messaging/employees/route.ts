@@ -213,23 +213,25 @@ export async function GET(req: NextRequest) {
     let filtered = enrichedEmployees;
 
     if (filter === "future-shift") {
-      // Employees with future scheduled shifts (relative to Pacific today)
-      const todayPacificDate = new Date(getTodayPacific() + "T00:00:00.000Z");
+      // Employees on Route specifically TOMORROW (Pacific Time)
+      const tomorrowStr = getTomorrowPacific();
       filtered = enrichedEmployees.filter((emp: any) =>
         emp.schedules.some(
           (s: any) =>
-            new Date(s.date) > todayPacificDate &&
+            toPacificDate(s.date) === tomorrowStr &&
             s.type &&
-            !["off", "close", "request off", ""].includes(s.type.toLowerCase().trim())
+            s.type.toLowerCase().trim() === "route"
         )
       );
     } else if (filter === "shift") {
-      // Employees with any shift this week
+      // Employees on Route specifically TODAY (Pacific Time)
+      const todayStr = getTodayPacific();
       filtered = enrichedEmployees.filter((emp: any) =>
         emp.schedules.some(
           (s: any) =>
+            toPacificDate(s.date) === todayStr &&
             s.type &&
-            !["off", "close", "request off", ""].includes(s.type.toLowerCase().trim())
+            s.type.toLowerCase().trim() === "route"
         )
       );
     } else if (filter === "off-tomorrow") {
@@ -267,10 +269,14 @@ export async function GET(req: NextRequest) {
         )
       );
     } else if (filter === "route-itinerary") {
-      // Employees with route type schedules
+      // Employees on Route specifically TODAY (Pacific Time)
+      const todayStr = getTodayPacific();
       filtered = enrichedEmployees.filter((emp: any) =>
         emp.schedules.some(
-          (s: any) => s.type && s.type.toLowerCase().trim() === "route"
+          (s: any) =>
+            toPacificDate(s.date) === todayStr &&
+            s.type &&
+            s.type.toLowerCase().trim() === "route"
         )
       );
     } else if (filter === "flyer") {

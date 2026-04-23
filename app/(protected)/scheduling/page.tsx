@@ -1018,7 +1018,7 @@ function SchedulingPageContent() {
           <>
             <Badge variant="secondary" className="text-[11px] h-6 px-2 gap-1.5 hidden sm:inline-flex">
               <Users className="h-3.5 w-3.5" />
-              {activeTabInfo.loading ? "..." : activeTabInfo.eligibleCount} eligible
+              {activeTabInfo.selectedCount} of {activeTabInfo.loading ? "..." : activeTabInfo.eligibleCount} selected
             </Badge>
             <Button
               variant="ghost"
