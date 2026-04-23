@@ -9,11 +9,13 @@ import { toast } from "sonner";
 
 const SETTING_KEY = "routes_completion_types";
 const RTS_SETTING_KEY = "everyday_logic_rts";
+const ATTENDANCE_SETTING_KEY = "everyday_logic_attendance";
 
 export default function GeneralSettingsPage() {
     const [routeTypes, setRouteTypes] = useState<string[]>([]);
     const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
     const [rtsEnabled, setRtsEnabled] = useState(false);
+    const [attendanceEnabled, setAttendanceEnabled] = useState(true);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [dirty, setDirty] = useState(false);
@@ -38,18 +40,22 @@ export default function GeneralSettingsPage() {
             fetch("/api/admin/settings/route-types").then(r => r.json()),
             fetch(`/api/admin/settings/general?key=${SETTING_KEY}`).then(r => r.json()),
             fetch(`/api/admin/settings/general?key=${RTS_SETTING_KEY}`).then(r => r.json()),
+            fetch(`/api/admin/settings/general?key=${ATTENDANCE_SETTING_KEY}`).then(r => r.json()),
         ])
-            .then(([types, setting, rtsSetting]) => {
+            .then(([types, setting, rtsSetting, attendanceSetting]) => {
                 const names = Array.isArray(types) ? types.map((t: any) => t.name) : [];
                 setRouteTypes(names);
                 const saved = Array.isArray(setting?.value) ? setting.value : [];
                 setSelectedTypes(saved);
                 setRtsEnabled(rtsSetting?.value === true || rtsSetting?.value === "true");
+                // Default attendance to true if no setting saved yet
+                setAttendanceEnabled(attendanceSetting?.value === false || attendanceSetting?.value === "false" ? false : true);
             })
             .catch(() => {
                 setRouteTypes([]);
                 setSelectedTypes([]);
                 setRtsEnabled(false);
+                setAttendanceEnabled(true);
             })
             .finally(() => setLoading(false));
     }, []);
@@ -107,8 +113,27 @@ export default function GeneralSettingsPage() {
             toast.success("Everyday Logic saved");
         } catch (err: any) {
             toast.error(err.message || "Failed to save RTS setting");
-            // Revert state if failed
             setRtsEnabled(!checked);
+        }
+    };
+
+    const handleSaveAttendance = async (checked: boolean) => {
+        setAttendanceEnabled(checked);
+        try {
+            const res = await fetch("/api/admin/settings/general", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    key: ATTENDANCE_SETTING_KEY,
+                    value: checked,
+                    description: "Show/hide Attendance Tracker column in Routes Overview",
+                }),
+            });
+            if (!res.ok) throw new Error("Failed to save Attendance setting");
+            toast.success("Everyday Logic saved");
+        } catch (err: any) {
+            toast.error(err.message || "Failed to save Attendance setting");
+            setAttendanceEnabled(!checked);
         }
     };
 
@@ -225,6 +250,17 @@ export default function GeneralSettingsPage() {
                     <Switch
                         checked={rtsEnabled}
                         onCheckedChange={handleSaveRTS}
+                    />
+                </div>
+
+                <div className="flex items-center justify-between px-3 py-3 rounded-lg border border-border bg-background">
+                    <div className="flex flex-col">
+                        <span className="text-sm font-semibold">Attendance Tracker</span>
+                        <span className="text-[11px] text-muted-foreground">Show or hide the Attendance Tracker column in Routes Overview</span>
+                    </div>
+                    <Switch
+                        checked={attendanceEnabled}
+                        onCheckedChange={handleSaveAttendance}
                     />
                 </div>
             </div>

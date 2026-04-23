@@ -110,6 +110,17 @@ const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const BUSINESS_TZ = "America/Los_Angeles";
 
+/** Format a raw phone number to (XXX) XXX-XXXX display format. */
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  // Strip leading country code "1" if 11 digits
+  const local = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  if (local.length === 10) {
+    return `(${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}`;
+  }
+  return raw; // fallback: return as-is if not a standard US number
+}
+
 function getTodayPacific(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
 }
@@ -1184,7 +1195,12 @@ function MessagingSubTab({
         <div className="rounded-xl border border-border/50 bg-card flex flex-col overflow-hidden">
           {/* Table Header */}
           <div className="border-b border-border/50 bg-muted/30 sticky top-0 z-10">
-            <div className="grid grid-cols-[40px_1fr_100px_120px_120px] items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+            <div className={cn(
+              "grid items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold",
+              tab.id === "week-schedule"
+                ? "grid-cols-[40px_1fr_100px_120px]"
+                : "grid-cols-[40px_1fr_100px_120px_120px]"
+            )}>
               <div className="flex items-center justify-center">
                 <Checkbox
                   checked={
@@ -1199,9 +1215,9 @@ function MessagingSubTab({
                 />
               </div>
               <span>Name</span>
-              <span>Client Type</span>
+              <span>Type</span>
               <span>Phone</span>
-              <span>Schedule Type</span>
+              {tab.id !== "week-schedule" && <span>Schedule Type</span>}
             </div>
           </div>
 
@@ -1262,7 +1278,10 @@ function MessagingSubTab({
                   <div
                     key={emp._id}
                     className={cn(
-                      "grid grid-cols-[40px_1fr_100px_120px_120px] items-center gap-2 px-3 py-2 border-b border-border/20 cursor-pointer transition-all duration-500 hover:bg-muted/30",
+                      "grid items-center gap-2 px-3 py-2 border-b border-border/20 cursor-pointer transition-all duration-500 hover:bg-muted/30",
+                      tab.id === "week-schedule"
+                        ? "grid-cols-[40px_1fr_100px_120px]"
+                        : "grid-cols-[40px_1fr_100px_120px_120px]",
                       isSelected &&
                       "bg-primary/5 border-l-2 border-l-primary",
                       isLiveHighlight && liveStatus?.status === "confirmed" && "bg-emerald-500/8 border-l-2 border-l-emerald-500",
@@ -1343,11 +1362,11 @@ function MessagingSubTab({
 
                     {/* Phone */}
                     <span className="text-[11px] text-muted-foreground truncate">
-                      {emp.phoneNumber}
+                      {formatPhone(emp.phoneNumber)}
                     </span>
 
-                    {/* Schedule Type */}
-                    {nextShift ? (() => {
+                    {/* Schedule Type — hidden on week-schedule tab */}
+                    {tab.id !== "week-schedule" && nextShift ? (() => {
                       const typeKey = nextShift.type.toLowerCase().trim();
                       const color = routeTypeMap[typeKey] || "#10b981"; // dynamic pull from DB
                       
@@ -1473,7 +1492,7 @@ function MessagingSubTab({
                             {emp.name}
                           </span>
                           <span className="text-[9px] text-muted-foreground">
-                            {emp.phoneNumber}
+                            {formatPhone(emp.phoneNumber)}
                           </span>
                         </div>
                         <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">

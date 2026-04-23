@@ -9,7 +9,7 @@ import {
     Clock, CheckCircle2, X, type LucideIcon,
 } from "lucide-react";
 
-import { getTypeStyle, TYPE_MAP } from "@/lib/route-types";
+import { getTypeStyle, TYPE_MAP, getContrastText } from "@/lib/route-types";
 export const ROUTE_TYPE_MAP = TYPE_MAP;
 export const getRouteTypeStyle = getTypeStyle;
 
@@ -18,6 +18,7 @@ export interface RoutesTableColumn {
     key: string;
     label: React.ReactNode;
     minW?: number;
+    className?: string;
     sticky?: boolean;
     align?: "left" | "center" | "right";
 }
@@ -88,7 +89,7 @@ export function RoutesTable({
         switch (key) {
             case "employee":
                 return (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full pr-1">
                         {row.profileImage ? (
                             <img
                                 src={row.profileImage}
@@ -102,7 +103,11 @@ export function RoutesTable({
                                 </span>
                             </div>
                         )}
-                        <span className="text-[11px] font-medium whitespace-nowrap" style={{ color: getRouteTypeStyle(row.type).colorHex || "inherit" }}>
+                        <span 
+                            className="text-[13px] font-bold truncate flex-1 min-w-0" 
+                            title={row.employeeName}
+                            style={{ color: getRouteTypeStyle(row.type).colorHex || "inherit" }}
+                        >
                             {row.employeeName}
                         </span>
                     </div>
@@ -111,7 +116,19 @@ export function RoutesTable({
                 const s = getRouteTypeStyle(row.type);
                 const Ico = ROUTE_TYPE_MAP.get((row.type || "").toLowerCase())?.icon;
                 return (
-                    <div className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border", s.bg, s.text, s.border)}>
+                    <div 
+                        className={cn(
+                            "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border shadow-sm",
+                            !s.colorHex && s.bg,
+                            !s.colorHex && s.text,
+                            !s.colorHex && s.border
+                        )}
+                        style={{
+                            backgroundColor: s.colorHex || undefined,
+                            color: s.colorHex ? getContrastText(s.colorHex) : undefined,
+                            borderColor: s.colorHex ? 'transparent' : undefined
+                        }}
+                    >
                         {Ico && <Ico className="h-3 w-3" />}
                         {row.type || "—"}
                     </div>
@@ -132,24 +149,24 @@ export function RoutesTable({
                     </button>
                 );
             case "phone":
-                return <span className="text-[11px] font-semibold whitespace-nowrap">{row.phone || "—"}</span>;
+                return <span className="text-[13px] font-semibold whitespace-nowrap">{row.phone || "—"}</span>;
             case "deliveryCompletionTime":
-                return <span className="text-[11px] font-semibold whitespace-nowrap">{row.deliveryCompletionTime || "—"}</span>;
+                return <span className="text-[13px] font-semibold whitespace-nowrap">{row.deliveryCompletionTime || "—"}</span>;
             case "routeNumber":
-                return <span className="text-[11px] font-semibold whitespace-nowrap">{row.routeNumber || "—"}</span>;
+                return <span className="text-[13px] font-semibold whitespace-nowrap">{row.routeNumber || "—"}</span>;
             case "routeDuration":
-                return <span className="text-[11px] font-semibold whitespace-nowrap">{row.routeDuration || "—"}</span>;
+                return <span className="text-[13px] font-semibold whitespace-nowrap">{row.routeDuration || "—"}</span>;
             case "stopCount":
-                return <span className="text-[11px] font-semibold whitespace-nowrap">{row.stopCount ?? 0}</span>;
+                return <span className="text-[13px] font-semibold whitespace-nowrap">{row.stopCount ?? 0}</span>;
             case "packageCount":
-                return <span className="text-[11px] font-semibold whitespace-nowrap">{row.packageCount ?? 0}</span>;
+                return <span className="text-[13px] font-semibold whitespace-nowrap">{row.packageCount ?? 0}</span>;
             case "van":
-                return <span className="text-[11px] font-semibold whitespace-nowrap text-primary">{row.van || "—"}</span>;
+                return <span className="text-[13px] font-semibold whitespace-nowrap text-primary">{row.van || "—"}</span>;
             case "attendance":
-                return <span className="text-[11px] font-semibold whitespace-nowrap">{row.attendance || "—"}</span>;
+                return <span className="text-[13px] font-semibold whitespace-nowrap">{row.attendance || "—"}</span>;
             default: {
                 const val = row[key];
-                return <span className="text-[11px] font-semibold whitespace-nowrap">{val ?? "—"}</span>;
+                return <span className="text-[13px] font-semibold whitespace-nowrap">{val ?? "—"}</span>;
             }
         }
     };
@@ -173,7 +190,8 @@ export function RoutesTable({
                                     className={cn(
                                         "px-2 py-2 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold cursor-pointer hover:text-foreground transition-colors select-none whitespace-nowrap",
                                         col.align === "center" ? "text-center" : col.align === "right" ? "text-right" : "text-left",
-                                        col.sticky && "sticky left-0 z-30 bg-muted"
+                                        col.sticky && "sticky left-0 z-30 bg-muted",
+                                        col.className
                                     )}
                                     style={{ minWidth: col.minW ?? 80 }}
                                 >
@@ -225,10 +243,19 @@ export function RoutesTable({
                                                         "h-3 w-3 text-muted-foreground transition-transform",
                                                         !isCollapsed && "rotate-90"
                                                     )} />
-                                                    <div className={cn(
-                                                        "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border",
-                                                        gs.bg, gs.text, gs.border
-                                                    )}>
+                                                    <div 
+                                                        className={cn(
+                                                            "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border shadow-sm",
+                                                            !gs.colorHex && gs.bg,
+                                                            !gs.colorHex && gs.text,
+                                                            !gs.colorHex && gs.border
+                                                        )}
+                                                        style={{
+                                                            backgroundColor: gs.colorHex || undefined,
+                                                            color: gs.colorHex ? getContrastText(gs.colorHex) : undefined,
+                                                            borderColor: gs.colorHex ? 'transparent' : undefined
+                                                        }}
+                                                    >
                                                         {GroupIcon && <GroupIcon className="h-3 w-3" />}
                                                         {group.type || "Unassigned"}
                                                     </div>
@@ -257,7 +284,8 @@ export function RoutesTable({
                                                             col.sticky && "sticky left-0 z-[5] bg-card group-hover/row:bg-muted/30 transition-colors",
                                                             (col.key === "dayBeforeConfirmation" || col.key === "conf" || col.align === "center") && "text-center",
                                                             col.align === "right" && "text-right",
-                                                            col.align === "left" && "text-left"
+                                                            col.align === "left" && "text-left",
+                                                            col.className
                                                         )}
                                                     >
                                                         {renderCell

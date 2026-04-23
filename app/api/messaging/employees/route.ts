@@ -260,12 +260,11 @@ export async function GET(req: NextRequest) {
         return isOffToday && isWorkingTomorrow;
       });
     } else if (filter === "week-schedule") {
-      // Only employees with at least one working day this week
+      // Employees with at least one day this week where status = "Scheduled"
+      // This matches the scheduling grid's day-count logic exactly
       filtered = enrichedEmployees.filter((emp: any) =>
         emp.schedules.some(
-          (s: any) =>
-            s.type &&
-            !["off", "close", "request off", ""].includes(s.type.toLowerCase().trim())
+          (s: any) => (s.status || "").trim().toLowerCase() === "scheduled"
         )
       );
     } else if (filter === "route-itinerary") {

@@ -911,6 +911,14 @@ function SchedulingPageContent() {
     return (totalDays / validEmps.length).toFixed(1);
   }, [weekData]);
 
+  // Employees with at least 1 day where status = "Scheduled" this week
+  const workingEmps = useMemo(() => {
+    if (!weekData?.employees) return 0;
+    return weekData.employees.filter(emp =>
+      Object.values(emp.days).some((d: DayData) => (d.status || "").trim().toLowerCase() === "scheduled")
+    ).length;
+  }, [weekData]);
+
   // Push title into left
   useEffect(() => {
     setLeftContent(
@@ -937,7 +945,7 @@ function SchedulingPageContent() {
           <div className="flex items-center gap-1.5 mr-2">
             <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-zinc-100 dark:bg-zinc-950 border border-primary/20 text-[11px] font-semibold text-primary select-none">
               <Users className="h-3.5 w-3.5" />
-              {totalEmps}
+              {workingEmps} / {totalEmps}
             </div>
             <TooltipProvider delayDuration={200}>
               <Tooltip>
@@ -1108,7 +1116,7 @@ function SchedulingPageContent() {
       </div>
     );
     return () => setRightContent(null);
-  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek, weekData?.totalEmployees, warningCounts, averageDays, currentUserEmail, deletingWeek]);
+  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek, weekData?.totalEmployees, workingEmps, warningCounts, averageDays, currentUserEmail, deletingWeek]);
 
   // Handle type change via dropdown
   const handleTypeChange = useCallback((
@@ -1439,8 +1447,10 @@ function SchedulingPageContent() {
                                   )}
                                 </div>
 
-                                {/* 2. Ultra-compressed Stats Row */}
+                                {/* 2. Ultra-compressed Stats Row — uses its own TooltipProvider so hovering into
+                                    the content keeps it alive, independent of the main disableHoverableContent provider */}
                                 {planningData.length > 0 && (
+                                  <TooltipProvider delayDuration={0}>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <div className="flex items-center justify-evenly w-full max-w-[140px] px-1 py-1 bg-zinc-100 dark:bg-zinc-950/50 rounded-lg border border-black/5 dark:border-white/5 shadow-inner backdrop-blur-sm mt-0.5 cursor-default hover:opacity-90 transition-opacity gap-0.5">
@@ -1462,7 +1472,7 @@ function SchedulingPageContent() {
                                         </div>
                                       </div>
                                     </TooltipTrigger>
-                                    <TooltipContent side="bottom" className="w-[200px] p-0 bg-popover text-popover-foreground border shadow-xl rounded-xl [&>svg]:hidden">
+                                    <TooltipContent side="bottom" sideOffset={4} className="w-[200px] p-0 bg-popover text-popover-foreground border shadow-xl rounded-xl [&>svg]:hidden">
                                       <div className="font-semibold px-3 py-2 border-b border-border/40 bg-muted/40 text-xs">
                                         Daily Planning Metrics
                                       </div>
@@ -1505,6 +1515,7 @@ function SchedulingPageContent() {
                                       </div>
                                     </TooltipContent>
                                   </Tooltip>
+                                  </TooltipProvider>
                                 )}
                               </div>
                             </th>

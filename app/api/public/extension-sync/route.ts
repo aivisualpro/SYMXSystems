@@ -56,6 +56,17 @@ function parseAmazonDuration(dur: any): string {
 // Helper: Parse Amazon time to "H:MM AM/PM" format
 function parseAmazonTime(time: any): string {
     if (!time) return "";
+    
+    // Handle epoch milliseconds
+    if (typeof time === "number" && time > 1000000000000) {
+        return new Date(time).toLocaleString("en-US", {
+            timeZone: "America/Los_Angeles",
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+        });
+    }
+    
     if (typeof time === "string") {
         // Already formatted
         if (/^\d{1,2}:\d{2}\s*(AM|PM)$/i.test(time)) return time;
@@ -318,7 +329,7 @@ export async function POST(req: NextRequest) {
                 };
 
                 // Add time fields if available
-                if (route.waveTime) syncFields.waveTime = parseAmazonTime(route.waveTime);
+                if (resolvedWaveTime || route.waveTime) syncFields.waveTime = parseAmazonTime(resolvedWaveTime || route.waveTime);
                 if (route.departureTime) syncFields.actualDepartureTime = parseAmazonTime(route.departureTime);
                 if (route.firstStopTime) syncFields.actualFirstStop = parseAmazonTime(route.firstStopTime);
                 if (route.lastStopTime) syncFields.actualLastStop = parseAmazonTime(route.lastStopTime);

@@ -151,6 +151,7 @@ export default function EverydayAfterDispatchingPage() {
     const [isSavingRescue, setIsSavingRescue] = useState(false);
 
     const [everydayRtsEnabled, setEverydayRtsEnabled] = useState(false);
+    const [everydayAttendanceEnabled, setEverydayAttendanceEnabled] = useState(true);
 
     const [allEmployees, setAllEmployees] = useState<any[]>([]);
 
@@ -337,13 +338,13 @@ export default function EverydayAfterDispatchingPage() {
 
     const handleEndDay = useCallback(async () => {
         if (!date) return;
-        
+
         const missingRecords: { transporterId: string; employeeName: string; type: string; routeNumber: string }[] = [];
-        
+
         routes.forEach(r => {
             const typeLower = (r.type || "").toLowerCase();
             const config = routeTypeConfigs[typeLower];
-            
+
             // Only enforce working executed routes (Scheduled) and logically ignore 'Off', 'Call Out', etc.
             if (config && config.routeStatus?.toLowerCase() === "scheduled") {
                 if (!r.totalHours || String(r.totalHours).trim() === "") {
@@ -370,7 +371,7 @@ export default function EverydayAfterDispatchingPage() {
                 body: JSON.stringify({ date, endDay: true })
             });
             if (!res.ok) throw new Error("Failed to end day");
-            
+
             toast.success("Day ended successfully");
             setEndDay(true);
         } catch (error) {
@@ -402,7 +403,7 @@ export default function EverydayAfterDispatchingPage() {
 
         setRightContent(
             <div className="flex items-center gap-1.5 sm:gap-2">
-                <Button 
+                <Button
                     variant={endDay ? "default" : "secondary"}
                     className={cn("h-8 text-[11px] sm:text-xs font-bold mr-1 sm:mr-3 transition-colors", endDay ? "bg-emerald-600 hover:bg-emerald-700 text-white opacity-100 cursor-default ring-1 ring-emerald-500/50" : "hover:bg-muted text-muted-foreground")}
                     disabled={endDay || endDayLoading || loading}
@@ -561,7 +562,7 @@ export default function EverydayAfterDispatchingPage() {
             })();
             const tomorrowWeek = getCurrentYearWeek(tomorrow);
 
-            const [routesRes, schedulesRes, rtsRes, rescueRes, tRoutesRes, tSchedulesRes, routeTypesRes, rtsSettingRes] = await Promise.all([
+            const [routesRes, schedulesRes, rtsRes, rescueRes, tRoutesRes, tSchedulesRes, routeTypesRes, rtsSettingRes, attendanceSettingRes] = await Promise.all([
                 fetch(`/api/dispatching/routes?yearWeek=${selectedWeek}&date=${date}`),
                 fetch(`/api/everyday/schedules?dateStr=${date}&yearWeek=${selectedWeek}`),
                 fetch(`/api/everyday/rts?dateStr=${date}`),
@@ -569,7 +570,8 @@ export default function EverydayAfterDispatchingPage() {
                 fetch(`/api/dispatching/routes?yearWeek=${tomorrowWeek}&date=${tomorrow}`),
                 fetch(`/api/everyday/schedules?dateStr=${tomorrow}&yearWeek=${tomorrowWeek}`),
                 fetch(`/api/admin/settings/route-types`),
-                fetch(`/api/admin/settings/general?key=everyday_logic_rts`)
+                fetch(`/api/admin/settings/general?key=everyday_logic_rts`),
+                fetch(`/api/admin/settings/general?key=everyday_logic_attendance`),
             ]);
 
             let empMap: Record<string, any> = {};
@@ -656,6 +658,14 @@ export default function EverydayAfterDispatchingPage() {
                 setEverydayRtsEnabled(settingData?.value === true || settingData?.value === "true");
             } else {
                 setEverydayRtsEnabled(false);
+            }
+
+            if (attendanceSettingRes && attendanceSettingRes.ok) {
+                const attData = await attendanceSettingRes.json();
+                // Default true; only false when explicitly set to false
+                setEverydayAttendanceEnabled(attData?.value === false || attData?.value === "false" ? false : true);
+            } else {
+                setEverydayAttendanceEnabled(true);
             }
         } catch (error) {
             console.error(error);
@@ -1032,7 +1042,7 @@ export default function EverydayAfterDispatchingPage() {
                             groups={groupedRoutes}
                             loading={loading}
                             columns={[
-                                { key: "employee", label: "Employee", minW: 120, sticky: true },
+                                { key: "employee", label: "Employee", minW: 100, className: "w-[180px] max-w-[180px]", sticky: true },
                                 { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 70, align: "center" },
                                 ...(everydayRtsEnabled ? [{ key: "rts", label: <span className="font-semibold text-xs text-orange-600">RTS</span>, minW: 55, align: "center" as const }] : []),
                                 { key: "rescue", label: <span className="font-semibold text-xs text-teal-600">Rescue</span>, minW: 65, align: "center" },
@@ -1041,7 +1051,7 @@ export default function EverydayAfterDispatchingPage() {
                                 { key: "stopCount", label: <HeaderIcon title="Total Stops" icon={MapPin} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 40, align: "center" },
                                 { key: "packageCount", label: <HeaderIcon title="Total Packages" icon={Package} className="h-[18px] w-[18px] text-orange-500" strokeWidth={1.5} />, minW: 40, align: "center" },
                                 { key: "van", label: <HeaderIcon title="Van Number" icon={TruckIcon} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 40, align: "center" },
-                                { key: "attendance", label: <HeaderIcon title="Attendance Tracker" icon={UserCheck} className="h-[18px] w-[18px] text-purple-500" strokeWidth={1.5} />, minW: 40, align: "center" },
+                                ...(everydayAttendanceEnabled ? [{ key: "attendance", label: <HeaderIcon title="Attendance Tracker" icon={UserCheck} className="h-[18px] w-[18px] text-purple-500" strokeWidth={1.5} />, minW: 40, align: "center" as const }] : []),
                             ]}
                             renderCell={(key, row) => {
                                 if (key === "dayBeforeConfirmation") {
@@ -1160,7 +1170,7 @@ export default function EverydayAfterDispatchingPage() {
                             groups={groupedTomorrowRoutes}
                             loading={loading}
                             columns={[
-                                { key: "employee", label: "Employee", minW: 100, sticky: true },
+                                { key: "employee", label: "Employee", minW: 100, className: "w-[180px] max-w-[180px]", sticky: true },
                                 { key: "dayBeforeConfirmation", label: <HeaderIcon title="Day Before Confirmation" icon={ThumbsUp} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 46, align: "center" },
                                 { key: "phone", label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 105, align: "center" },
                             ]}
