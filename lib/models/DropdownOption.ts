@@ -8,6 +8,7 @@ export interface IDropdownOption extends Document {
     image?: string;
     color?: string;
     icon?: string;
+    defaultPad?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -20,6 +21,7 @@ const DropdownOptionSchema: Schema = new Schema({
     image: { type: String, default: '' },
     color: { type: String, default: '' },
     icon: { type: String, default: '' },
+    defaultPad: { type: String, default: '' },
 }, { timestamps: true, collection: 'SYMXDropdownOptions' });
 
 // Compound unique: same description + type can't exist twice

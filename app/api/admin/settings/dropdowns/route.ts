@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
         const body = await req.json();
-        const { _id, description, type, isActive, sortOrder, image, color, icon } = body;
+        const { _id, description, type, isActive, sortOrder, image, color, icon, defaultPad } = body;
 
         if (!description?.trim()) {
             return NextResponse.json({ error: "Description is required" }, { status: 400 });
@@ -69,7 +69,8 @@ export async function POST(req: NextRequest) {
                     sortOrder: sortOrder ?? 0,
                     image: image ?? '',
                     color: color ?? '',
-                    icon: icon ?? ''
+                    icon: icon ?? '',
+                    defaultPad: defaultPad ?? '',
                 },
                 { new: true }
             ).lean();
@@ -83,7 +84,8 @@ export async function POST(req: NextRequest) {
                 sortOrder: sortOrder ?? 0,
                 image: image ?? '',
                 color: color ?? '',
-                icon: icon ?? ''
+                icon: icon ?? '',
+                defaultPad: defaultPad ?? '',
             });
             return NextResponse.json(option.toJSON());
         }

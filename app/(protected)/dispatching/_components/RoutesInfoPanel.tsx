@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useDispatching } from "../layout";
+import { Trash2, ArrowUpDown } from "lucide-react";
 
 // ── Column definitions for the spreadsheet ──
 interface ColumnDef {
@@ -41,7 +42,7 @@ const COLUMNS: ColumnDef[] = [
     { key: "bags", label: "Bags", width: 60, type: "text" },
     { key: "ov", label: "OV", width: 55, type: "text" },
     { key: "stagingLocation", label: "Staging", width: 85, type: "text" },
-    { key: "actions", label: "Raw", width: 40, readOnly: true, type: "index" }
+    { key: "actions", label: "", width: 40, readOnly: true, type: "index" }
 ];
 
 const EDITABLE_COLUMNS = COLUMNS.filter(c => !c.readOnly);
@@ -98,6 +99,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
     const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
     const [editingCell, setEditingCell] = useState<{ row: number; col: number } | null>(null);
     const [editValue, setEditValue] = useState("");
+    const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" }>({ key: "routeNumber", direction: "asc" });
 
     // Dropdown state
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -213,11 +215,22 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             .then(r => r.json())
             .then(data => {
                 if (cancelled) return;
-                setRows(data.rows || []);
+                let fetchedRows = data.rows || [];
+                // Sort initial rows
+                fetchedRows.sort((a: any, b: any) => {
+                    const aVal = String(a["routeNumber"] || "");
+                    const bVal = String(b["routeNumber"] || "");
+                    if (!aVal && bVal) return 1;
+                    if (aVal && !bVal) return -1;
+                    return aVal.localeCompare(bVal, undefined, { numeric: true });
+                });
+                
+                setRows(fetchedRows);
                 setEmployees(data.employees || []);
                 setWaveTimeOptions(data.waveTimeOptions || []);
                 setPadOptions(data.padOptions || []);
                 setWstOptions(data.wstOptions || []);
+                setSortConfig({ key: "routeNumber", direction: "asc" });
                 setDirtyRows(new Set());
                 setActiveCell(null);
                 setEditingCell(null);
@@ -227,6 +240,30 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
 
         return () => { cancelled = true; };
     }, [open, date]);
+
+    // ── Sort function ──
+    const handleSort = (key: string) => {
+        if (key === "rowNum" || key === "actions") return;
+        setSortConfig(prev => {
+            const direction = prev.key === key && prev.direction === "asc" ? "desc" : "asc";
+            setRows(currentRows => {
+                return [...currentRows].sort((a: any, b: any) => {
+                    const aVal = String(a[key] || "");
+                    const bVal = String(b[key] || "");
+                    if (!aVal && bVal) return 1;
+                    if (aVal && !bVal) return -1;
+                    
+                    if (direction === "asc") {
+                        return aVal.localeCompare(bVal, undefined, { numeric: true });
+                    } else {
+                        return bVal.localeCompare(aVal, undefined, { numeric: true });
+                    }
+                });
+            });
+            return { key, direction };
+        });
+        setActiveCell(null);
+    };
 
     // ── Save a single cell via PUT ──
     const saveCell = useCallback(async (rowIndex: number, field: string, value: string) => {
@@ -250,7 +287,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         }
         setSaving(true);
         try {
-            const changedRows = rows.filter((_, i) => dirtyRows.has(i));
+            const changedRows = rows.filter(r => dirtyRows.has(r.rowIndex));
             const res = await fetch("/api/dispatching/routes-info", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -268,17 +305,78 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         }
     }, [rows, dirtyRows, date, refreshRoutes]);
 
+    // ── Delete a row ──
+    const deleteRow = useCallback(async (visualRowIndex: number) => {
+        const row = rows[visualRowIndex];
+        if (!row || row.rowIndex === undefined) return;
+        
+        try {
+            const res = await fetch(`/api/dispatching/routes-info?date=${encodeURIComponent(date)}&rowIndex=${row.rowIndex}`, {
+                method: "DELETE",
+            });
+            if (!res.ok) throw new Error("Failed to clear row");
+            
+            setRows(prev => {
+                const updated = [...prev];
+                updated[visualRowIndex] = {
+                    ...updated[visualRowIndex],
+                    routeNumber: "",
+                    stopCount: "",
+                    packageCount: "",
+                    routeDuration: "",
+                    waveTime: "",
+                    pad: "",
+                    wst: "",
+                    wstDuration: "",
+                    bags: "",
+                    ov: "",
+                    stagingLocation: "",
+                    transporterId: "",
+                    rawSummary: null,
+                };
+                
+                if (sortConfig) {
+                    updated.sort((a: any, b: any) => {
+                        const aVal = String(a[sortConfig.key] || "");
+                        const bVal = String(b[sortConfig.key] || "");
+                        if (!aVal && bVal) return 1;
+                        if (aVal && !bVal) return -1;
+                        if (sortConfig.direction === "asc") {
+                            return aVal.localeCompare(bVal, undefined, { numeric: true });
+                        } else {
+                            return bVal.localeCompare(aVal, undefined, { numeric: true });
+                        }
+                    });
+                }
+                
+                return updated;
+            });
+            setDirtyRows(prev => {
+                const n = new Set(prev);
+                n.delete(row.rowIndex);
+                return n;
+            });
+            toast.success("Row cleared");
+            refreshRoutes();
+        } catch (err: any) {
+            toast.error(err.message || "Failed to delete");
+        }
+    }, [rows, date, refreshRoutes, sortConfig]);
+
     // ── Cell update ──
-    const updateCell = useCallback((rowIndex: number, field: string, value: string) => {
+    const updateCell = useCallback((visualIndex: number, field: string, value: string) => {
+        const actualRowIndex = rows[visualIndex]?.rowIndex;
+        if (actualRowIndex === undefined) return;
+
         setRows(prev => {
             const updated = [...prev];
-            (updated[rowIndex] as any)[field] = value;
+            (updated[visualIndex] as any)[field] = value;
             return updated;
         });
-        setDirtyRows(prev => new Set(prev).add(rowIndex));
+        setDirtyRows(prev => new Set(prev).add(actualRowIndex));
         // Auto-save individual cell
-        saveCell(rowIndex, field, value);
-    }, [saveCell]);
+        saveCell(actualRowIndex, field, value);
+    }, [rows, saveCell]);
 
     // Ref to break circular dep between moveForward <-> startEditing
     const startEditingRef = useRef<(row: number, col: number) => void>(() => { });
@@ -321,11 +419,25 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
     }, []);
 
     // ── Select a dropdown value (generic for both driver and wave time) ──
-    const selectDropdownValue = useCallback((value: string) => {
+    const selectDropdownValue = useCallback(async (value: string) => {
         if (editingCell) {
             const column = EDITABLE_COLUMNS[editingCell.col];
             if (column) {
                 updateCell(editingCell.row, column.key, value);
+                
+                // Auto-populate PAD logic if waveTime is selected
+                if (column.key === "waveTime" && value) {
+                    try {
+                        const res = await fetch(`/api/admin/settings/dropdowns?type=wave time`);
+                        const json = await res.json();
+                        const waveOpt = json.find((o: any) => o.description === value);
+                        if (waveOpt && waveOpt.defaultPad) {
+                            updateCell(editingCell.row, "pad", waveOpt.defaultPad);
+                        }
+                    } catch (e) {
+                        console.error("Failed to auto-populate default PAD");
+                    }
+                }
             }
             // Auto-advance to next cell after selection
             const fromRow = editingCell.row;
@@ -501,6 +613,9 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             for (let ri = 0; ri < pasteRows.length; ri++) {
                 const targetRow = activeCell.row + ri;
                 if (targetRow >= TOTAL_ROWS) break;
+                
+                const actualRowIndex = updated[targetRow]?.rowIndex;
+                if (actualRowIndex === undefined) continue;
 
                 const pasteCols = pasteRows[ri].split("\t");
                 for (let ci = 0; ci < pasteCols.length; ci++) {
@@ -510,9 +625,9 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                     const column = EDITABLE_COLUMNS[targetCol];
                     if (column && column.type === "text") {
                         (updated[targetRow] as any)[column.key] = pasteCols[ci].trim();
-                        newDirty.add(targetRow);
+                        newDirty.add(actualRowIndex);
                         // Auto-save each pasted cell
-                        saveCell(targetRow, column.key, pasteCols[ci].trim());
+                        saveCell(actualRowIndex, column.key, pasteCols[ci].trim());
                     }
                 }
             }
@@ -775,22 +890,29 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                         {formattedDate}
                                     </span>
                                 </h2>
+                                <span className="text-[10px] text-muted-foreground">
+                                    {TOTAL_ROWS} rows
+                                </span>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
                             {dirtyRows.size > 0 && (
-                                <Button
-                                    size="sm"
-                                    className="h-8 gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25"
-                                    onClick={saveAll}
-                                    disabled={saving}
-                                >
-                                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                                    {saving ? "Saving..." : "Save All"}
-                                </Button>
+                                <span className="flex items-center gap-1 text-[10px] text-primary mr-2">
+                                    <AlertCircle className="h-3 w-3" />
+                                    {dirtyRows.size} unsaved
+                                </span>
                             )}
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={onClose}>
-                                <X className="h-4 w-4" />
+                            <Button
+                                size="sm"
+                                className="h-8 gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25"
+                                onClick={saveAll}
+                                disabled={saving || dirtyRows.size === 0}
+                            >
+                                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                {saving ? "Saving..." : "Save All"}
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-8 px-4 text-xs font-semibold" onClick={onClose}>
+                                Close
                             </Button>
                         </div>
                     </div>
@@ -827,10 +949,23 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                     {COLUMNS.map((col) => (
                                         <th
                                             key={col.key}
-                                            className="text-[9px] sm:text-[10px] uppercase tracking-wider font-semibold text-muted-foreground px-1.5 py-2 text-left border-r border-border last:border-r-0 whitespace-nowrap select-none"
+                                            className={cn(
+                                                "text-[9px] sm:text-[10px] uppercase tracking-wider font-semibold px-1.5 py-2 text-left border-r border-border last:border-r-0 whitespace-nowrap select-none",
+                                                col.key !== "rowNum" && col.key !== "actions" ? "cursor-pointer hover:bg-muted/60" : "",
+                                                sortConfig?.key === col.key ? "text-foreground" : "text-muted-foreground"
+                                            )}
                                             style={{ width: col.width, minWidth: col.width, maxWidth: col.width }}
+                                            onClick={() => handleSort(col.key)}
                                         >
-                                            {col.label}
+                                            <div className="flex items-center justify-between">
+                                                {col.label}
+                                                {col.key !== "rowNum" && col.key !== "actions" && (
+                                                    <ArrowUpDown className={cn(
+                                                        "h-2.5 w-2.5 ml-1 transition-opacity",
+                                                        sortConfig?.key === col.key ? "opacity-100" : "opacity-30"
+                                                    )} />
+                                                )}
+                                            </div>
                                         </th>
                                     ))}
                                 </tr>
@@ -839,12 +974,12 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                             {/* Data rows */}
                             <tbody>
                                 {rows.map((row, rowIdx) => {
-                                    const isDirty = dirtyRows.has(rowIdx);
+                                    const isDirty = dirtyRows.has(row.rowIndex);
                                     const hasData = row.routeNumber || row.stopCount || row.packageCount || row.transporterId;
 
                                     return (
                                         <tr
-                                            key={rowIdx}
+                                            key={row.rowIndex}
                                             className={cn(
                                                 "group transition-colors border-b border-border",
                                                 hasData
@@ -858,11 +993,13 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                                 className="text-[10px] text-muted-foreground text-center px-1 py-0 border-r border-border select-none font-mono"
                                                 style={{ width: 40, minWidth: 40 }}
                                             >
-                                                <span className={cn(
-                                                    isDirty && "text-primary font-bold"
-                                                )}>
-                                                    {rowIdx + 1}
-                                                </span>
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <span className={cn(
+                                                        isDirty && "text-primary font-bold"
+                                                    )}>
+                                                        {rowIdx + 1}
+                                                    </span>
+                                                </div>
                                             </td>
 
                                             {/* Editable cells */}
@@ -939,19 +1076,32 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                                 );
                                             })}
 
-                                            {/* Raw Summary Button */}
+                                            {/* Actions Button */}
                                             <td className="px-1 py-0 border-border border-r last:border-r-0 select-none text-center" style={{ width: 40, minWidth: 40 }}>
-                                                {row.rawSummary && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                                                        onClick={() => setRawSummaryOpen({ open: true, data: row.rawSummary, routeNumber: row.routeNumber || `Row ${rowIdx + 1}` })}
-                                                        title="View Raw Summary"
-                                                    >
-                                                        <FileJson className="h-3.5 w-3.5" />
-                                                    </Button>
-                                                )}
+                                                <div className="flex items-center justify-center gap-0.5">
+                                                    {row.rawSummary && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                                            onClick={() => setRawSummaryOpen({ open: true, data: row.rawSummary, routeNumber: row.routeNumber || `Row ${row.rowIndex + 1}` })}
+                                                            title="View Raw Summary"
+                                                        >
+                                                            <FileJson className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    )}
+                                                    {hasData && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                                            onClick={() => deleteRow(rowIdx)}
+                                                            title="Clear Row"
+                                                        >
+                                                            <Trash2 className="h-3 w-3" />
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -960,40 +1110,6 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                         </table>
                     </div>
                 )}
-
-                {/* ── Footer ── */}
-                <div className="shrink-0 border-t border-border bg-muted/80 px-4 sm:px-6 py-2 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <span className="text-[10px] text-muted-foreground">
-                            {TOTAL_ROWS} rows · {formattedDate}
-                        </span>
-                        {dirtyRows.size > 0 && (
-                            <span className="flex items-center gap-1 text-[10px] text-primary">
-                                <AlertCircle className="h-3 w-3" />
-                                {dirtyRows.size} unsaved change{dirtyRows.size !== 1 ? "s" : ""}
-                            </span>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[10px]"
-                            onClick={onClose}
-                        >
-                            Close
-                        </Button>
-                        <Button
-                            size="sm"
-                            className="h-7 text-[10px] gap-1 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20"
-                            onClick={saveAll}
-                            disabled={saving || dirtyRows.size === 0}
-                        >
-                            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                            Save All
-                        </Button>
-                    </div>
-                </div>
             </div>
 
             {/* ── Raw JSON Modal ── */}

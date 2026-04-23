@@ -1042,16 +1042,16 @@ export default function EverydayAfterDispatchingPage() {
                             groups={groupedRoutes}
                             loading={loading}
                             columns={[
-                                { key: "employee", label: "Employee", minW: 100, className: "w-[180px] max-w-[180px]", sticky: true },
-                                { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 70, align: "center" },
-                                ...(everydayRtsEnabled ? [{ key: "rts", label: <span className="font-semibold text-xs text-orange-600">RTS</span>, minW: 55, align: "center" as const }] : []),
-                                { key: "rescue", label: <span className="font-semibold text-xs text-teal-600">Rescue</span>, minW: 65, align: "center" },
-                                { key: "routeNumber", label: <HeaderIcon title="Route Number" icon={Hash} className="h-[18px] w-[18px] text-rose-500" strokeWidth={1.5} />, minW: 55, align: "center" },
-                                { key: "routeDuration", label: <HeaderIcon title="Route Duration" icon={Timer} className="h-[18px] w-[18px] text-yellow-500" strokeWidth={1.5} />, minW: 45, align: "center" },
-                                { key: "stopCount", label: <HeaderIcon title="Total Stops" icon={MapPin} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 40, align: "center" },
-                                { key: "packageCount", label: <HeaderIcon title="Total Packages" icon={Package} className="h-[18px] w-[18px] text-orange-500" strokeWidth={1.5} />, minW: 40, align: "center" },
-                                { key: "van", label: <HeaderIcon title="Van Number" icon={TruckIcon} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 40, align: "center" },
-                                ...(everydayAttendanceEnabled ? [{ key: "attendance", label: <HeaderIcon title="Attendance Tracker" icon={UserCheck} className="h-[18px] w-[18px] text-purple-500" strokeWidth={1.5} />, minW: 40, align: "center" as const }] : []),
+                                { key: "employee", label: "Employee", minW: 100, className: "w-[220px] max-w-[220px]", sticky: true },
+                                { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 70, className: "w-[70px] max-w-[70px] !px-1", align: "center" },
+                                ...(everydayRtsEnabled ? [{ key: "rts", label: <span className="font-semibold text-xs text-orange-600">RTS</span>, minW: 55, className: "w-[55px] max-w-[55px] !px-1", align: "center" as const }] : []),
+                                { key: "rescue", label: <span className="font-semibold text-xs text-teal-600">Rescue</span>, minW: 65, className: "w-[65px] max-w-[65px] !px-1", align: "center" },
+                                { key: "routeNumber", label: <HeaderIcon title="Route Number" icon={Hash} className="h-[18px] w-[18px] text-rose-500" strokeWidth={1.5} />, minW: 45, className: "w-[45px] max-w-[45px] !px-1", align: "center" },
+                                { key: "routeDuration", label: <HeaderIcon title="Route Duration" icon={Timer} className="h-[18px] w-[18px] text-yellow-500" strokeWidth={1.5} />, minW: 40, className: "w-[40px] max-w-[40px] !px-1", align: "center" },
+                                { key: "stopCount", label: <HeaderIcon title="Total Stops" icon={MapPin} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 40, className: "w-[40px] max-w-[40px] !px-1", align: "center" },
+                                { key: "packageCount", label: <HeaderIcon title="Total Packages" icon={Package} className="h-[18px] w-[18px] text-orange-500" strokeWidth={1.5} />, minW: 40, className: "w-[40px] max-w-[40px] !px-1", align: "center" },
+                                { key: "van", label: <HeaderIcon title="Van Number" icon={TruckIcon} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 35, className: "w-[35px] max-w-[35px] !px-1", align: "center" },
+                                ...(everydayAttendanceEnabled ? [{ key: "attendance", label: <HeaderIcon title="Attendance Tracker" icon={UserCheck} className="h-[18px] w-[18px] text-purple-500" strokeWidth={1.5} />, minW: 40, className: "w-[40px] max-w-[40px] !px-1", align: "center" as const }] : []),
                             ]}
                             renderCell={(key, row) => {
                                 if (key === "dayBeforeConfirmation") {
@@ -1170,7 +1170,7 @@ export default function EverydayAfterDispatchingPage() {
                             groups={groupedTomorrowRoutes}
                             loading={loading}
                             columns={[
-                                { key: "employee", label: "Employee", minW: 100, className: "w-[180px] max-w-[180px]", sticky: true },
+                                { key: "employee", label: "Employee", minW: 100, className: "w-[220px] max-w-[220px]", sticky: true },
                                 { key: "dayBeforeConfirmation", label: <HeaderIcon title="Day Before Confirmation" icon={ThumbsUp} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 46, align: "center" },
                                 { key: "phone", label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 105, align: "center" },
                             ]}

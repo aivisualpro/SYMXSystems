@@ -451,3 +451,62 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ error: error.message || "Failed to update" }, { status: 500 });
     }
 }
+
+// DELETE: Remove a single RoutesInfo row and clear route info from the driver's SYMXRoute
+export async function DELETE(req: NextRequest) {
+    try {
+        await requirePermission("Dispatching", "edit");
+    } catch (e: any) {
+        if (e.name === "ForbiddenError") {
+            return NextResponse.json({ error: e.message }, { status: 403 });
+        }
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+        const session = await getSession();
+        if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+        const { searchParams } = new URL(req.url);
+        const date = searchParams.get("date");
+        const rowIndexRaw = searchParams.get("rowIndex");
+
+        if (!date || rowIndexRaw === null) {
+            return NextResponse.json({ error: "date and rowIndex are required" }, { status: 400 });
+        }
+
+        const rowIndex = parseInt(rowIndexRaw, 10);
+        await connectToDatabase();
+        const dateObj = new Date(date);
+
+        // Fetch the row before deleting to know if we need to clear a driver's route info
+        const existingRow = await SYMXRoutesInfo.findOne({ date: dateObj, rowIndex }).lean() as any;
+
+        if (existingRow) {
+            await SYMXRoutesInfo.deleteOne({ _id: existingRow._id });
+
+            // If it had a driver, check if they still have another row, otherwise clear their SYMXRoute fields
+            if (existingRow.transporterId && existingRow.transporterId.trim() !== "") {
+                const oldTid = existingRow.transporterId;
+                const otherRow = await SYMXRoutesInfo.findOne({
+                    date: dateObj,
+                    transporterId: oldTid,
+                }).lean();
+
+                if (!otherRow) {
+                    await SYMXRoute.updateOne(
+                        { transporterId: oldTid, date: dateObj },
+                        { $set: blankRouteInfoForRoute() }
+                    );
+                    console.log(`[RoutesInfo DELETE] Cleared route info from driver ${oldTid}`);
+                }
+            }
+        }
+
+        return NextResponse.json({ ok: true });
+    } catch (error: any) {
+        console.error("Error deleting routes info row:", error);
+        return NextResponse.json({ error: error.message || "Failed to delete" }, { status: 500 });
+    }
+}
+

@@ -157,18 +157,18 @@ type ColumnDef = { key: string; label: string; minW: number; sticky: boolean; al
 const COLUMNS: ColumnDef[] = [
     { key: "employee", label: "Employee", minW: 140, sticky: true },
     { key: "confirmationStatus", label: "Conf Status", minW: 100, sticky: false },
-    { key: "wst", label: "WST", minW: 50, sticky: false },
     { key: "routeNumber", label: "Route #", minW: 60, sticky: false },
     { key: "van", label: "Van", minW: 58, sticky: false },
     { key: "bags", label: "Bags", minW: 40, sticky: false },
     { key: "ov", label: "OV", minW: 36, sticky: false },
-    { key: "serviceType", label: "Service", minW: 64, sticky: false },
     { key: "dashcam", label: "Dashcam", minW: 64, sticky: false },
     { key: "stopCount", label: "Stops", minW: 46, sticky: false },
     { key: "packageCount", label: "Pkgs", minW: 44, sticky: false },
     { key: "routeDuration", label: "Dur", minW: 48, sticky: false },
     { key: "waveTime", label: "Wave", minW: 56, sticky: false },
     { key: "pad", label: "PAD", minW: 42, sticky: false },
+    { key: "wst", label: "WST", minW: 50, sticky: false },
+    { key: "serviceType", label: "Service", minW: 64, sticky: false },
     { key: "routesCompleted", label: "Routes", minW: 50, sticky: false },
     { key: "routeSize", label: "Rt Size", minW: 56, sticky: false },
     { key: "wstDuration", label: "WST Dur", minW: 52, sticky: false },
@@ -286,6 +286,18 @@ export default function RoutesPage() {
     const [wstRevenueMap, setWstRevenueMap] = useState<Record<string, number>>({});
     const [routeCountsByDate, setRouteCountsByDate] = useState<Record<string, Record<string, number>>>({});
     const [initialRoutesComp, setInitialRoutesComp] = useState<Record<string, number>>({});
+    const [dispatchingDetailsEnabled, setDispatchingDetailsEnabled] = useState(true);
+
+    useEffect(() => {
+        fetch("/api/admin/settings/general?key=dispatching_logic_details")
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.value !== undefined) {
+                    setDispatchingDetailsEnabled(data.value === true || data.value === "true");
+                }
+            })
+            .catch(() => {});
+    }, []);
 
 
     // Audit panel state
@@ -1040,16 +1052,7 @@ export default function RoutesPage() {
                                                 return (
                                                     <tr
                                                         key={row._id}
-                                                        className="border-b border-border/20 hover:bg-muted/30 transition-colors group/row cursor-pointer"
-                                                        onClick={(e) => {
-                                                            setTypeMenu({
-                                                                open: true,
-                                                                routeId: row._id,
-                                                                transporterId: row.transporterId,
-                                                                x: e.clientX,
-                                                                y: e.clientY
-                                                            });
-                                                        }}
+                                                        className="border-b border-border/20 hover:bg-muted/30 transition-colors group/row"
                                                     >
                                                         {/* 1. Employee */}
                                                         <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card w-[200px]")}>
@@ -1057,12 +1060,22 @@ export default function RoutesPage() {
                                                                 className="flex items-center gap-2 w-full pr-1 cursor-pointer hover:bg-muted/80 rounded-md p-1 -m-1 transition-colors"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    setDetailModal({
-                                                                        open: true,
-                                                                        routeId: row._id,
-                                                                        employeeName: row.employeeName,
-                                                                        profileImage: row.profileImage,
-                                                                    });
+                                                                    if (dispatchingDetailsEnabled) {
+                                                                        setDetailModal({
+                                                                            open: true,
+                                                                            routeId: row._id,
+                                                                            employeeName: row.employeeName,
+                                                                            profileImage: row.profileImage,
+                                                                        });
+                                                                    } else {
+                                                                        setTypeMenu({
+                                                                            open: true,
+                                                                            routeId: row._id,
+                                                                            transporterId: row.transporterId,
+                                                                            x: e.clientX,
+                                                                            y: e.clientY
+                                                                        });
+                                                                    }
                                                                 }}
                                                             >
                                                                 {/* Avatar */}

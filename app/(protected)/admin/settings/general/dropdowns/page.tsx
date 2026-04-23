@@ -20,6 +20,7 @@ interface DropdownRow {
     image?: string;
     color?: string;
     icon?: string;
+    defaultPad?: string;
     isNew?: boolean;
     isEditing?: boolean;
 }
@@ -327,19 +328,21 @@ export function IconPicker({ value, onChange, disabled }: { value: string, onCha
 
 // ── Add Option Modal ──
 function AddOptionModal({
-    open, onClose, onSave, defaultType, saving
+    open, onClose, onSave, defaultType, saving, padOptions
 }: {
     open: boolean;
     onClose: () => void;
     onSave: (data: Omit<DropdownRow, '_id' | 'isNew' | 'isEditing'>) => void;
     defaultType: string;
     saving: boolean;
+    padOptions: string[];
 }) {
     const [description, setDescription] = useState("");
     const [type, setType] = useState(defaultType);
     const [color, setColor] = useState("");
     const [icon, setIcon] = useState("");
     const [image, setImage] = useState("");
+    const [defaultPad, setDefaultPad] = useState("");
     const [isActive, setIsActive] = useState(true);
 
     // Reset when opening
@@ -350,6 +353,7 @@ function AddOptionModal({
             setColor("");
             setIcon("");
             setImage("");
+            setDefaultPad("");
             setIsActive(true);
         }
     }, [open, defaultType]);
@@ -454,15 +458,37 @@ function AddOptionModal({
                         </div>
                     </div>
 
-                    {/* Image URL */}
-                    <div className="space-y-1.5">
-                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Image URL</label>
-                        <Input
-                            value={image}
-                            onChange={e => setImage(e.target.value)}
-                            placeholder="https://..."
-                            className="h-9 text-[11px] bg-background/50"
-                        />
+                    {/* Default PAD & Image URL */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Default PAD</label>
+                            {type === "wave time" ? (
+                                <select
+                                    value={defaultPad}
+                                    onChange={e => setDefaultPad(e.target.value)}
+                                    className="h-9 w-full rounded-md border border-input bg-background/50 px-3 py-1 text-[11px] shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                >
+                                    <option value="">None</option>
+                                    {padOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                </select>
+                            ) : (
+                                <Input
+                                    value=""
+                                    placeholder="N/A (wave time only)"
+                                    disabled
+                                    className="h-9 text-[11px] bg-background/50 opacity-50 cursor-not-allowed"
+                                />
+                            )}
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Image URL</label>
+                            <Input
+                                value={image}
+                                onChange={e => setImage(e.target.value)}
+                                placeholder="https://..."
+                                className="h-9 text-[11px] bg-background/50"
+                            />
+                        </div>
                     </div>
 
                     {/* Active toggle */}
@@ -494,7 +520,7 @@ function AddOptionModal({
                     <Button
                         size="sm"
                         disabled={!canSave || saving}
-                        onClick={() => onSave({ description, type, isActive, sortOrder: 0, image, color, icon })}
+                        onClick={() => onSave({ description, type, isActive, sortOrder: 0, image, color, icon, defaultPad })}
                         className="gap-1.5 min-w-[100px] bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-white shadow-sm"
                     >
                         {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
@@ -550,6 +576,7 @@ export default function DropdownsPage() {
                     image: data.image,
                     color: data.color,
                     icon: data.icon,
+                    defaultPad: data.defaultPad,
                 }),
             });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
@@ -586,7 +613,8 @@ export default function DropdownsPage() {
                     sortOrder: row.sortOrder,
                     image: row.image,
                     color: row.color,
-                    icon: row.icon
+                    icon: row.icon,
+                    defaultPad: row.defaultPad
                 }),
             });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
@@ -639,6 +667,10 @@ export default function DropdownsPage() {
         return result;
     }, [rows, selectedType, searchQuery]);
 
+    const padOptions = useMemo(() => {
+        return rows.filter(r => r.type === "pad").map(r => r.description).sort();
+    }, [rows]);
+
     // Global row index lookup (for save/delete which use original array index)
     const getGlobalIndex = (filteredIdx: number) => {
         const row = filteredRows[filteredIdx];
@@ -658,6 +690,7 @@ export default function DropdownsPage() {
                 onSave={handleAddSave}
                 defaultType={selectedType !== "all" ? selectedType : ""}
                 saving={saving === "new-modal"}
+                padOptions={padOptions}
             />
 
             {/* ── Sub-sidebar: Type filter ── */}
@@ -769,11 +802,12 @@ export default function DropdownsPage() {
                         <thead>
                             <tr className="bg-muted/50 border-b border-border">
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[50px]">#</th>
-                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[250px]">Description</th>
-                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[180px]">Type</th>
-                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Image</th>
-                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Color</th>
-                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Icon</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[220px]">Description</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Type</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[100px]">Default PAD</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Image</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Color</th>
+                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Icon</th>
                                 <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[80px]">Active</th>
                                 <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[100px]">Actions</th>
                             </tr>
@@ -810,6 +844,21 @@ export default function DropdownsPage() {
                                                 className="h-8 text-sm font-mono"
                                                 disabled={!row.isEditing && !row.isNew}
                                             />
+                                        </td>
+                                        <td className="px-4 py-2">
+                                            {row.type === "wave time" ? (
+                                                <select
+                                                    value={row.defaultPad || ""}
+                                                    onChange={(e) => updateField(globalIdx, "defaultPad", e.target.value)}
+                                                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                                    disabled={!row.isEditing && !row.isNew}
+                                                >
+                                                    <option value="">None</option>
+                                                    {padOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                </select>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground/50 italic px-2">N/A</span>
+                                            )}
                                         </td>
                                         <td className="px-4 py-2">
                                             <Input

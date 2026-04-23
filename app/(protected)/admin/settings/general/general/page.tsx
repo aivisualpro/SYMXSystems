@@ -10,12 +10,14 @@ import { toast } from "sonner";
 const SETTING_KEY = "routes_completion_types";
 const RTS_SETTING_KEY = "everyday_logic_rts";
 const ATTENDANCE_SETTING_KEY = "everyday_logic_attendance";
+const DISPATCHING_DETAILS_SETTING_KEY = "dispatching_logic_details";
 
 export default function GeneralSettingsPage() {
     const [routeTypes, setRouteTypes] = useState<string[]>([]);
     const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
     const [rtsEnabled, setRtsEnabled] = useState(false);
     const [attendanceEnabled, setAttendanceEnabled] = useState(true);
+    const [dispatchingDetailsEnabled, setDispatchingDetailsEnabled] = useState(true);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [dirty, setDirty] = useState(false);
@@ -41,8 +43,9 @@ export default function GeneralSettingsPage() {
             fetch(`/api/admin/settings/general?key=${SETTING_KEY}`).then(r => r.json()),
             fetch(`/api/admin/settings/general?key=${RTS_SETTING_KEY}`).then(r => r.json()),
             fetch(`/api/admin/settings/general?key=${ATTENDANCE_SETTING_KEY}`).then(r => r.json()),
+            fetch(`/api/admin/settings/general?key=${DISPATCHING_DETAILS_SETTING_KEY}`).then(r => r.json()),
         ])
-            .then(([types, setting, rtsSetting, attendanceSetting]) => {
+            .then(([types, setting, rtsSetting, attendanceSetting, dispatchingSetting]) => {
                 const names = Array.isArray(types) ? types.map((t: any) => t.name) : [];
                 setRouteTypes(names);
                 const saved = Array.isArray(setting?.value) ? setting.value : [];
@@ -50,12 +53,14 @@ export default function GeneralSettingsPage() {
                 setRtsEnabled(rtsSetting?.value === true || rtsSetting?.value === "true");
                 // Default attendance to true if no setting saved yet
                 setAttendanceEnabled(attendanceSetting?.value === false || attendanceSetting?.value === "false" ? false : true);
+                setDispatchingDetailsEnabled(dispatchingSetting?.value === false || dispatchingSetting?.value === "false" ? false : true);
             })
             .catch(() => {
                 setRouteTypes([]);
                 setSelectedTypes([]);
                 setRtsEnabled(false);
                 setAttendanceEnabled(true);
+                setDispatchingDetailsEnabled(true);
             })
             .finally(() => setLoading(false));
     }, []);
@@ -134,6 +139,26 @@ export default function GeneralSettingsPage() {
         } catch (err: any) {
             toast.error(err.message || "Failed to save Attendance setting");
             setAttendanceEnabled(!checked);
+        }
+    };
+
+    const handleSaveDispatching = async (checked: boolean) => {
+        setDispatchingDetailsEnabled(checked);
+        try {
+            const res = await fetch("/api/admin/settings/general", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    key: DISPATCHING_DETAILS_SETTING_KEY,
+                    value: checked,
+                    description: "Toggle Employee Details popup on click in Dispatching Routes",
+                }),
+            });
+            if (!res.ok) throw new Error("Failed to save Dispatching Logic");
+            toast.success("Dispatching Logic saved");
+        } catch (err: any) {
+            toast.error(err.message || "Failed to save Dispatching Logic");
+            setDispatchingDetailsEnabled(!checked);
         }
     };
 
@@ -261,6 +286,29 @@ export default function GeneralSettingsPage() {
                     <Switch
                         checked={attendanceEnabled}
                         onCheckedChange={handleSaveAttendance}
+                    />
+                </div>
+            </div>
+
+            {/* Dispatching Logic */}
+            <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-sm font-bold">Dispatching Logic</h3>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Toggle interactive elements in the Dispatching module
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between px-3 py-3 rounded-lg border border-border bg-background">
+                    <div className="flex flex-col">
+                        <span className="text-sm font-semibold">Employee Details Popup</span>
+                        <span className="text-[11px] text-muted-foreground">Show detailed profile popup when clicking an employee's name in Dispatching Routes</span>
+                    </div>
+                    <Switch
+                        checked={dispatchingDetailsEnabled}
+                        onCheckedChange={handleSaveDispatching}
                     />
                 </div>
             </div>
