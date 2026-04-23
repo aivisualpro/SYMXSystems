@@ -77,15 +77,6 @@ let _reseedInFlight: Promise<any[]> | null = null;
 // GET: Fetch all modules (ordered) — auto-seeds/reseeds when version changes
 export async function GET() {
   try {
-    await requirePermission("Admin", "view");
-  } catch (e: any) {
-    if (e.name === "ForbiddenError") {
-      return NextResponse.json({ error: e.message }, { status: 403 });
-    }
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  try {
     const session = await getSession();
     if (!session || !session.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

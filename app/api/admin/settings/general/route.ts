@@ -6,15 +6,6 @@ import SYMXSetting from "@/lib/models/SYMXSetting";
 
 // GET — fetch a setting by key (or all settings)
 export async function GET(req: NextRequest) {
-  try {
-    await requirePermission("Admin", "view");
-  } catch (e: any) {
-    if (e.name === "ForbiddenError") {
-      return NextResponse.json({ error: e.message }, { status: 403 });
-    }
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
     try {
         const session = await getSession();
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

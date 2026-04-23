@@ -6,15 +6,6 @@ import RouteType from "@/lib/models/RouteType";
 
 // GET — list all route types
 export async function GET() {
-  try {
-    await requirePermission("Admin", "view");
-  } catch (e: any) {
-    if (e.name === "ForbiddenError") {
-      return NextResponse.json({ error: e.message }, { status: 403 });
-    }
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
     try {
         const session = await getSession();
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,4 +1,4 @@
-import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
+import { getSession } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -11,11 +11,11 @@ cloudinary.config({
 
 export async function POST(req: NextRequest) {
   try {
-    await requirePermission("Admin", "edit");
-  } catch (e: any) {
-    if (e.name === "ForbiddenError") {
-      return NextResponse.json({ error: e.message }, { status: 403 });
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+  } catch (e: any) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
