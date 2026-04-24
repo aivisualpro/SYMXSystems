@@ -69,6 +69,7 @@ interface RowData {
 interface Employee {
     transporterId: string;
     name: string;
+    isScheduled?: boolean;
 }
 
 interface RoutesInfoPanelProps {
@@ -118,8 +119,8 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
 
     // Employee lookup map
     const employeeMap = useMemo(() => {
-        const m = new Map<string, string>();
-        employees.forEach(e => m.set(e.transporterId, e.name));
+        const m = new Map<string, Employee>();
+        employees.forEach(e => m.set(e.transporterId, e));
         return m;
     }, [employees]);
 
@@ -874,7 +875,8 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
     const getDropdownDisplayValue = useCallback((col: ColumnDef, value: string) => {
         if (!value) return "";
         if (col.dropdownKind === "driver") {
-            return employeeMap.get(value) || value;
+            const emp = employeeMap.get(value);
+            return emp ? emp.name : value;
         }
         return value; // waveTime, pad, wst are stored as display strings
     }, [employeeMap]);
@@ -1074,7 +1076,12 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                                             // Display value
                                                             <div className="h-[26px] flex items-center px-0.5 min-w-0">
                                                                 {col.type === "dropdown" && cellValue ? (
-                                                                    <span className="text-[11px] truncate font-medium text-primary">
+                                                                    <span className={cn(
+                                                                        "text-[11px] truncate font-medium rounded-sm px-1 py-0.5 w-full",
+                                                                        col.dropdownKind === "driver" && employeeMap.has(cellValue) && !employeeMap.get(cellValue)?.isScheduled
+                                                                            ? "bg-red-500 text-white" 
+                                                                            : "text-primary"
+                                                                    )}>
                                                                         {getDropdownDisplayValue(col, cellValue)}
                                                                     </span>
                                                                 ) : (

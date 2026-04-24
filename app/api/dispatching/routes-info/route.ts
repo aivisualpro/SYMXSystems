@@ -88,15 +88,17 @@ export async function GET(req: NextRequest) {
         ]);
 
         // Get unique transporter IDs from routes on this date
-        const transporterIds = [...new Set(routeDrivers.map((r: any) => r.transporterId))];
-        const validTransporterSet = new Set(transporterIds);
+        const scheduledTransporterIds = [...new Set(routeDrivers.map((r: any) => r.transporterId))];
+        const scheduledSet = new Set(scheduledTransporterIds);
 
         // Build a map of saved rows by rowIndex
         const savedMap: Record<number, any> = {};
+        const allInfoTransporters = new Set<string>();
+
         saved.forEach((r: any) => {
             const rawTid = (r.transporterId || "").trim();
-            // Clear transporterId if this driver is no longer scheduled on this day
-            const validTid = validTransporterSet.has(rawTid) ? rawTid : "";
+            // We NO LONGER clear the transporterId. We keep it to show it in RED if unscheduled.
+            if (rawTid) allInfoTransporters.add(rawTid);
 
             savedMap[r.rowIndex] = {
                 _id: r._id.toString(),
@@ -113,7 +115,7 @@ export async function GET(req: NextRequest) {
                 bags: r.bags || "",
                 ov: r.ov || "",
                 stagingLocation: r.stagingLocation || "",
-                transporterId: validTid,
+                transporterId: rawTid,
                 rawSummary: r.rawSummary || null,
             };
         });
@@ -124,11 +126,15 @@ export async function GET(req: NextRequest) {
             rows.push(savedMap[i] || emptyRow(date, i));
         }
 
+        // Combine scheduled drivers and any extra drivers found in the saved info
+        scheduledSet.forEach(t => allInfoTransporters.add(t));
+        const combinedTransporterIds = [...allInfoTransporters];
+
         // Enrich with employee names
-        let drivers: { transporterId: string; name: string }[] = [];
-        if (transporterIds.length > 0) {
+        let drivers: { transporterId: string; name: string; isScheduled: boolean }[] = [];
+        if (combinedTransporterIds.length > 0) {
             const employees = await SymxEmployee.find(
-                { transporterId: { $in: transporterIds } },
+                { transporterId: { $in: combinedTransporterIds } },
                 { transporterId: 1, firstName: 1, lastName: 1 }
             ).lean();
 
@@ -137,9 +143,10 @@ export async function GET(req: NextRequest) {
                 empMap.set(e.transporterId, `${e.firstName} ${e.lastName}`.trim());
             });
 
-            drivers = transporterIds.map(tid => ({
+            drivers = combinedTransporterIds.map(tid => ({
                 transporterId: tid,
                 name: empMap.get(tid) || tid,
+                isScheduled: scheduledSet.has(tid),
             }));
             drivers.sort((a, b) => a.name.localeCompare(b.name));
         }
