@@ -140,6 +140,7 @@ export default function LoginPage() {
                 height={80}
                 className="relative object-contain transition-transform duration-700 hover:scale-[1.03] animate-logo-reveal drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]"
                 priority
+                style={{ width: "auto", height: "auto" }}
               />
               {/* Shimmer overlay */}
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-logo-shimmer pointer-events-none" />

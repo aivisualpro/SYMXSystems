@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════
-// SYMX Route Scraper — Content Script (MAIN world) V.1.0.4
+// SYMX Route Scraper — Content Script (MAIN world) V.1.0.5
 // Intercepts Amazon Logistics API responses to capture route data
 // Captures the FULL raw JSON from route-summaries for SYMXRoutesInfo
 // Communicates with extension via window.postMessage bridge
@@ -511,6 +511,6 @@
   }, 1000);
 
   console.log(
-    "[SYMX Route Fetch] Content script loaded (MAIN world) v1.0.4 — intercepting route data..."
+    "[SYMX Route Fetch] Content script loaded (MAIN world) v1.0.5 — intercepting route data..."
   );
 })();

@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════
-// SYMX Route Fetch — Popup Controller V.1.0.4
+// SYMX Route Fetch — Popup Controller V.1.0.5
 // ══════════════════════════════════════════════════════════════
 
 const SYNC_TARGET = "https://symx-systems.vercel.app";
@@ -425,6 +425,9 @@ function populateRawTab(raw) {
 
   tab.innerHTML = `
     <div class="raw-json-toolbar">
+      <div class="raw-json-search">
+        <input type="text" id="rawSearchInput" placeholder="Search JSON..." autocomplete="off">
+      </div>
       <button class="raw-copy-btn" id="rawCopyBtn" title="Copy JSON">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
@@ -433,8 +436,33 @@ function populateRawTab(raw) {
         <span>Copy</span>
       </button>
     </div>
-    <pre class="raw-json-block"><code>${escapeHtml(jsonStr)}</code></pre>
+    <pre class="raw-json-block"><code id="rawJsonCode">${escapeHtml(jsonStr)}</code></pre>
   `;
+
+  document.getElementById("rawSearchInput").addEventListener("input", (e) => {
+    const q = e.target.value;
+    const rawJsonCode = document.getElementById("rawJsonCode");
+    if (!q) {
+      rawJsonCode.innerHTML = escapeHtml(jsonStr);
+      return;
+    }
+    
+    try {
+      const regex = new RegExp("(" + q.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + ")", "gi");
+      const parts = jsonStr.split(regex);
+      let html = "";
+      for (let i = 0; i < parts.length; i++) {
+        if (i % 2 === 1) {
+           html += `<mark style="background:#fcd34d;color:#000;border-radius:2px;padding:0 2px;">${escapeHtml(parts[i])}</mark>`;
+        } else {
+           html += escapeHtml(parts[i]);
+        }
+      }
+      rawJsonCode.innerHTML = html;
+    } catch (err) {
+      rawJsonCode.innerHTML = escapeHtml(jsonStr);
+    }
+  });
 
   document.getElementById("rawCopyBtn").addEventListener("click", () => {
     navigator.clipboard.writeText(jsonStr).then(() => {

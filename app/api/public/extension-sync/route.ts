@@ -289,16 +289,29 @@ export async function POST(req: NextRequest) {
                 packageCount: String(resolvedPackageCount),
                 routeDuration: parseAmazonDuration(route.routeDuration || raw.routeDuration || raw.duration),
                 waveTime: parseAmazonTime(resolvedWaveTime),
-                // Store the Amazon transporterId directly (e.g. "A1K8M27DOUL0PC")
-                transporterId: rawTransporterId,
+                // Store the matched SYMX transporterId (fallback to raw Amazon ID if not matched)
+                transporterId: transporterId || rawTransporterId,
                 rawSummary: raw,  // Store full Amazon route-summaries JSON
             };
 
+            const WST_MAPPING: Record<string, string> = {
+                "Standard Parcel - Extra Large Van - US": "SP XL",
+                "Standard Parcel - Large Van - Recycle": "Standard Parcel",
+                "Standard Parcel - Step Van - US": "Standard Parcel",
+                "Nursery Route Level 1": "Nursery Route L1",
+                "Nursery Route Level 2": "Nursery Route L2",
+                "Nursery Route Level 3": "Nursery Route L3"
+            };
+
             const serviceTypeName = route.serviceTypeName || raw.serviceTypeName;
-            if (serviceTypeName) row.wst = serviceTypeName;
+            if (serviceTypeName) {
+                row.wst = WST_MAPPING[serviceTypeName] || serviceTypeName;
+            }
 
             const blockDuration = route.blockDurationInMinutes || raw.blockDurationInMinutes;
-            if (blockDuration !== undefined) row.wstDuration = String(blockDuration);
+            if (blockDuration !== undefined) {
+                row.wstDuration = String(Number(blockDuration) / 60);
+            }
 
             // Upsert into RoutesInfo by date + rowIndex
             ops.push({
@@ -338,8 +351,8 @@ export async function POST(req: NextRequest) {
                 if (route.stopsPerHour) syncFields.stopsPerHour = parseFloat(route.stopsPerHour) || 0;
                 if (resolvedPlannedFirstStop) syncFields.plannedFirstStop = resolvedPlannedFirstStop;
 
-                if (serviceTypeName) syncFields.wst = serviceTypeName;
-                if (blockDuration !== undefined) syncFields.wstDuration = Number(blockDuration) || 0;
+                if (serviceTypeName) syncFields.wst = WST_MAPPING[serviceTypeName] || serviceTypeName;
+                if (blockDuration !== undefined) syncFields.wstDuration = Number(blockDuration) / 60;
 
                 const scheduleEnd = route.scheduleEndTime || raw.scheduleEndTime;
                 if (scheduleEnd) syncFields.amazonAppLogout = parseAmazonTime(scheduleEnd);

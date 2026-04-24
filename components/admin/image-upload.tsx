@@ -109,9 +109,10 @@ export function ImageUpload({
                   <X className={compact ? "h-3 w-3" : "h-4 w-4"} />
                 </Button>
               </div>
-              <a href={url} target="_blank" rel="noopener noreferrer" className={compact ? "block w-full h-full cursor-pointer hover:opacity-80 transition-opacity" : ""}>
+              <a href={url} target="_blank" rel="noopener noreferrer" className={compact ? "relative block w-full h-full cursor-pointer hover:opacity-80 transition-opacity" : "relative block w-full h-full"}>
                 <Image
                   fill
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   className={compact ? "object-contain bg-white" : "object-contain bg-white"}
                   alt="Image"
                   src={url}

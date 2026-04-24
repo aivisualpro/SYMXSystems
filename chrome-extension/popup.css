@@ -1066,8 +1066,30 @@ body::-webkit-scrollbar-track {
 /* ── Raw JSON ── */
 .raw-json-toolbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 8px;
+}
+
+.raw-json-search {
+  flex: 1;
+  margin-right: 12px;
+}
+
+.raw-json-search input {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-bright);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 10px;
+  outline: none;
+}
+
+.raw-json-search input:focus {
+  border-color: var(--accent);
 }
 
 .raw-copy-btn {

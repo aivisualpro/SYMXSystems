@@ -61,6 +61,9 @@ self.addEventListener('fetch', (event) => {
   // Skip browser extension requests
   if (!url.protocol.startsWith('http')) return;
 
+  // Skip Next.js RSC requests
+  if (request.headers.has('RSC')) return;
+
   // Skip Webpack HMR and dev requests
   if (
     url.pathname.includes('/_next/webpack-hmr') ||

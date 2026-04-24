@@ -94,6 +94,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         data: null,
         routeNumber: ""
     });
+    const [rawJsonSearch, setRawJsonSearch] = useState("");
 
     // Active cell state
     const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
@@ -1115,20 +1116,45 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             {/* ── Raw JSON Modal ── */}
             {rawSummaryOpen.open && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setRawSummaryOpen({ open: false, data: null, routeNumber: "" })} />
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setRawSummaryOpen({ open: false, data: null, routeNumber: "" }); setRawJsonSearch(""); }} />
                     <div className="relative w-full max-w-2xl bg-card border border-border rounded-xl shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
                             <h3 className="font-semibold flex items-center gap-2">
                                 <FileJson className="h-4 w-4 text-primary" />
                                 Raw JSON <span className="text-muted-foreground font-normal">({rawSummaryOpen.routeNumber})</span>
                             </h3>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setRawSummaryOpen({ open: false, data: null, routeNumber: "" })}>
-                                <X className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-2">
+                                <div className="relative">
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                    <input
+                                        type="text"
+                                        value={rawJsonSearch}
+                                        onChange={e => setRawJsonSearch(e.target.value)}
+                                        placeholder="Search JSON..."
+                                        className="h-8 pl-8 pr-3 text-xs bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary w-48"
+                                    />
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => { setRawSummaryOpen({ open: false, data: null, routeNumber: "" }); setRawJsonSearch(""); }}>
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
                         <div className="flex-1 overflow-auto p-4 bg-muted/10 text-[11px] sm:text-[12px]">
                             <pre className="font-mono text-foreground whitespace-pre-wrap word-break-all">
-                                {JSON.stringify(rawSummaryOpen.data, null, 2)}
+                                {(() => {
+                                    if (!rawSummaryOpen.data) return "";
+                                    const str = JSON.stringify(rawSummaryOpen.data, null, 2);
+                                    if (!rawJsonSearch) return str;
+                                    try {
+                                        const regex = new RegExp(`(${rawJsonSearch.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')})`, 'gi');
+                                        const parts = str.split(regex);
+                                        return parts.map((part, i) =>
+                                            regex.test(part) ? <mark key={i} className="bg-yellow-400 text-black rounded-sm px-0.5">{part}</mark> : part
+                                        );
+                                    } catch {
+                                        return str;
+                                    }
+                                })()}
                             </pre>
                         </div>
                     </div>
