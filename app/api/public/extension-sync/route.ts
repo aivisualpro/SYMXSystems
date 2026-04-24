@@ -399,7 +399,7 @@ export async function POST(req: NextRequest) {
                 };
 
                 // Add time fields if available
-                if (resolvedWaveTime || route.waveTime) syncFields.waveTime = parseAmazonTime(resolvedWaveTime || route.waveTime);
+                if (matchedWaveTime) syncFields.waveTime = matchedWaveTime;
                 if (route.departureTime) syncFields.actualDepartureTime = parseAmazonTime(route.departureTime);
                 if (route.firstStopTime) syncFields.actualFirstStop = parseAmazonTime(route.firstStopTime);
                 if (route.lastStopTime) syncFields.actualLastStop = parseAmazonTime(route.lastStopTime);
@@ -410,7 +410,7 @@ export async function POST(req: NextRequest) {
 
                 if (serviceTypeName) syncFields.wst = WST_MAPPING[serviceTypeName] || serviceTypeName;
                 if (blockDuration !== undefined) syncFields.wstDuration = Number(blockDuration) / 60;
-                if (row.pad) syncFields.pad = row.pad;
+                if (matchedPad) syncFields.pad = matchedPad;
 
                 const scheduleEnd = route.scheduleEndTime || raw.scheduleEndTime;
                 if (scheduleEnd) syncFields.amazonAppLogout = parseAmazonTime(scheduleEnd);
