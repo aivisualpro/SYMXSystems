@@ -18,31 +18,35 @@ import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
  * ══════════════════════════════════════════════════════════════
  */
 
-// Helper: format seconds to H:MM:SS
+// Helper: format seconds to H:MM
 function fmtDurSecs(totalSecs: number | null): string {
     if (totalSecs === null || isNaN(totalSecs as number) || totalSecs <= 0) return "";
     const abs = Math.abs(Math.round(totalSecs));
     const h = Math.floor(abs / 3600);
     const m = Math.floor((abs % 3600) / 60);
-    const s = abs % 60;
-    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+    return `${h}:${m.toString().padStart(2, "0")}`;
 }
 
-// Helper: Parse Amazon's routeDuration (in SECONDS) to "H:MM:SS"
+// Helper: Parse Amazon's routeDuration (in SECONDS) to "H:MM"
 function parseAmazonDuration(dur: any): string {
     if (!dur) return "";
     
-    // Already in H:MM or H:MM:SS format
-    if (typeof dur === "string" && /^\d{1,2}:\d{2}(:\d{2})?$/.test(dur)) return dur;
+    // Already in H:MM format
+    if (typeof dur === "string" && /^\d{1,2}:\d{2}$/.test(dur)) return dur;
+    
+    // If it's H:MM:SS, strip the seconds
+    if (typeof dur === "string" && /^\d{1,2}:\d{2}:\d{2}$/.test(dur)) {
+        return dur.substring(0, dur.lastIndexOf(":"));
+    }
     
     // "8h 30m" or "8h30m" format
     if (typeof dur === "string") {
         const match = dur.match(/(\d+)h\s*(\d+)m/i);
-        if (match) return `${match[1]}:${match[2].padStart(2, "0")}:00`;
+        if (match) return `${match[1]}:${match[2].padStart(2, "0")}`;
         
         // Just hours: "8h"
         const hMatch = dur.match(/(\d+)h/i);
-        if (hMatch) return `${hMatch[1]}:00:00`;
+        if (hMatch) return `${hMatch[1]}:00`;
         
         // Just minutes: "30m"
         const mMatch = dur.match(/(\d+)m/i);

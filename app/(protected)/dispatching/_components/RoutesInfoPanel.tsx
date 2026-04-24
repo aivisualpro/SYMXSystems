@@ -108,6 +108,9 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
     const [dropdownSearch, setDropdownSearch] = useState("");
     const [dropdownHighlightedIndex, setDropdownHighlightedIndex] = useState(0);
 
+    // Header search state
+    const [driverSearch, setDriverSearch] = useState("");
+
     // Refs
     const gridRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -913,6 +916,24 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                <input
+                                    type="text"
+                                    placeholder="Search driver..."
+                                    value={driverSearch}
+                                    onChange={(e) => setDriverSearch(e.target.value)}
+                                    className="h-8 w-40 sm:w-56 rounded-md border border-input bg-background pl-8 pr-3 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                />
+                                {driverSearch && (
+                                    <button
+                                        onClick={() => setDriverSearch("")}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                )}
+                            </div>
                             {dirtyRows.size > 0 && (
                                 <span className="flex items-center gap-1 text-[10px] text-primary mr-2">
                                     <AlertCircle className="h-3 w-3" />
@@ -993,6 +1014,9 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                 {rows.map((row, rowIdx) => {
                                     const isDirty = dirtyRows.has(row.rowIndex);
                                     const hasData = row.routeNumber || row.stopCount || row.packageCount || row.transporterId;
+                                    
+                                    const driverName = (row.transporterId && employeeMap.get(row.transporterId)?.name) || row.transporterId || "";
+                                    const isHidden = driverSearch && !driverName.toLowerCase().includes(driverSearch.toLowerCase());
 
                                     return (
                                         <tr
@@ -1002,7 +1026,8 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                                 hasData
                                                     ? "bg-card hover:bg-muted/40"
                                                     : "bg-muted/20 hover:bg-muted/40",
-                                                isDirty && "bg-primary/10"
+                                                isDirty && "bg-primary/10",
+                                                isHidden && "hidden"
                                             )}
                                         >
                                             {/* Row number */}
@@ -1089,7 +1114,9 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                                                         "text-[11px] truncate",
                                                                         cellValue ? "text-foreground" : "text-transparent"
                                                                     )}>
-                                                                        {cellValue || "—"}
+                                                                        {col.key === "routeDuration" && typeof cellValue === "string" && /^\d{1,2}:\d{2}:\d{2}$/.test(cellValue) 
+                                                                            ? cellValue.substring(0, cellValue.lastIndexOf(":")) 
+                                                                            : (cellValue || "—")}
                                                                     </span>
                                                                 )}
                                                             </div>
