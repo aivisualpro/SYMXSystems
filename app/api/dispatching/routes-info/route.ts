@@ -318,6 +318,14 @@ function blankRouteInfoForRoute(): Record<string, any> {
         bags: "",
         ov: "",
         stagingLocation: "",
+        actualDepartureTime: "",
+        actualFirstStop: "",
+        actualLastStop: "",
+        deliveryCompletionTime: "",
+        actualOutboundStem: "",
+        amazonAppLogout: "",
+        stopsPerHour: 0,
+        plannedFirstStop: "",
     };
 }
 

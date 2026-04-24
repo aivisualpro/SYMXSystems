@@ -3,6 +3,7 @@ import connectToDatabase from "@/lib/db";
 import SYMXRoutesInfo from "@/lib/models/SYMXRoutesInfo";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
+import DropdownOption from "@/lib/models/DropdownOption";
 
 /**
  * ══════════════════════════════════════════════════════════════
@@ -200,6 +201,15 @@ export async function POST(req: NextRequest) {
             { rowIndex: 1, routeNumber: 1, transporterId: 1 }
         ).sort({ rowIndex: -1 }).lean() as any[];
 
+        // ── Fetch wave time options to map default PAD ──
+        const waveTimeOpts = await DropdownOption.find({ type: "wave time", isActive: true }).lean();
+        const waveTimeToPadMap = new Map<string, string>();
+        waveTimeOpts.forEach((opt: any) => {
+            if (opt.description && opt.defaultPad) {
+                waveTimeToPadMap.set(opt.description, opt.defaultPad);
+            }
+        });
+
         const infoRouteMap = new Map<string, number>();
         const infoTransporterMap = new Map<string, number>();
         existingInfoRows.forEach((r: any) => {
@@ -294,6 +304,11 @@ export async function POST(req: NextRequest) {
                 rawSummary: raw,  // Store full Amazon route-summaries JSON
             };
 
+            // ── Assign default pad based on wave time ──
+            if (row.waveTime && waveTimeToPadMap.has(row.waveTime)) {
+                row.pad = waveTimeToPadMap.get(row.waveTime);
+            }
+
             const WST_MAPPING: Record<string, string> = {
                 "Standard Parcel - Extra Large Van - US": "SP XL",
                 "Standard Parcel - Large Van - Recycle": "Standard Parcel",
@@ -353,6 +368,7 @@ export async function POST(req: NextRequest) {
 
                 if (serviceTypeName) syncFields.wst = WST_MAPPING[serviceTypeName] || serviceTypeName;
                 if (blockDuration !== undefined) syncFields.wstDuration = Number(blockDuration) / 60;
+                if (row.pad) syncFields.pad = row.pad;
 
                 const scheduleEnd = route.scheduleEndTime || raw.scheduleEndTime;
                 if (scheduleEnd) syncFields.amazonAppLogout = parseAmazonTime(scheduleEnd);

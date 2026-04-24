@@ -459,6 +459,11 @@ function populateRawTab(raw) {
         }
       }
       rawJsonCode.innerHTML = html;
+      
+      const firstMark = rawJsonCode.querySelector("mark");
+      if (firstMark) {
+        firstMark.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
     } catch (err) {
       rawJsonCode.innerHTML = escapeHtml(jsonStr);
     }

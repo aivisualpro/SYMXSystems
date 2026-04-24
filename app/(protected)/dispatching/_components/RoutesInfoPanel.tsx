@@ -662,6 +662,19 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         return () => document.removeEventListener("mousedown", handle);
     }, [dropdownOpen, cancelEdit]);
 
+    // ── Scroll to search result in Raw JSON ──
+    useEffect(() => {
+        if (rawSummaryOpen.open && rawJsonSearch) {
+            const timer = setTimeout(() => {
+                const mark = document.querySelector(".raw-json-modal-content mark");
+                if (mark) {
+                    mark.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+            }, 50);
+            return () => clearTimeout(timer);
+        }
+    }, [rawJsonSearch, rawSummaryOpen.open, rawSummaryOpen.data]);
+
 
     const formattedDate = useMemo(() => {
         if (!date) return "";
@@ -1139,7 +1152,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                 </Button>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-auto p-4 bg-muted/10 text-[11px] sm:text-[12px]">
+                        <div className="flex-1 overflow-auto p-4 bg-muted/10 text-[11px] sm:text-[12px] raw-json-modal-content">
                             <pre className="font-mono text-foreground whitespace-pre-wrap word-break-all">
                                 {(() => {
                                     if (!rawSummaryOpen.data) return "";
