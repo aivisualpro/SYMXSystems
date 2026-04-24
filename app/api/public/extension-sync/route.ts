@@ -4,6 +4,7 @@ import SYMXRoutesInfo from "@/lib/models/SYMXRoutesInfo";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import DropdownOption from "@/lib/models/DropdownOption";
+import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
 
 /**
  * ══════════════════════════════════════════════════════════════
@@ -230,6 +231,15 @@ export async function POST(req: NextRequest) {
             }
         });
 
+        // ── Fetch WST options to map Amazon serviceTypeName → WST ──
+        const wstOpts = await SYMXWSTOption.find({ isActive: true }).lean();
+        const amazonServiceTypeToWst = new Map<string, string>();
+        wstOpts.forEach((opt: any) => {
+            if (opt.amazonServiceType && opt.wst) {
+                amazonServiceTypeToWst.set(opt.amazonServiceType.trim(), opt.wst.trim());
+            }
+        });
+
         const infoRouteMap = new Map<string, number>();
         const infoTransporterMap = new Map<string, number>();
         existingInfoRows.forEach((r: any) => {
@@ -352,23 +362,18 @@ export async function POST(req: NextRequest) {
                 rawSummary: raw,  // Store full Amazon route-summaries JSON
             };
 
-            const WST_MAPPING: Record<string, string> = {
-                "Standard Parcel - Extra Large Van - US": "SP XL",
-                "Standard Parcel - Large Van - Recycle": "Standard Parcel",
-                "Standard Parcel - Step Van - US": "Standard Parcel",
-                "Nursery Route Level 1": "Nursery Route L1",
-                "Nursery Route Level 2": "Nursery Route L2",
-                "Nursery Route Level 3": "Nursery Route L3"
-            };
-
+            // ── Map Amazon serviceTypeName to internal WST via DB config ──
             const serviceTypeName = route.serviceTypeName || raw.serviceTypeName;
             if (serviceTypeName) {
-                row.wst = WST_MAPPING[serviceTypeName] || serviceTypeName;
+                const mappedWst = amazonServiceTypeToWst.get(serviceTypeName.trim());
+                row.wst = mappedWst || serviceTypeName;
             }
 
+            // ── Convert blockDurationInMinutes to hours for wstDuration ──
             const blockDuration = route.blockDurationInMinutes || raw.blockDurationInMinutes;
-            if (blockDuration !== undefined) {
-                row.wstDuration = String(Number(blockDuration) / 60);
+            if (blockDuration !== undefined && blockDuration !== null) {
+                const hours = Number(blockDuration) / 60;
+                row.wstDuration = String(hours);
             }
 
             // Upsert into RoutesInfo by date + rowIndex
@@ -408,8 +413,8 @@ export async function POST(req: NextRequest) {
                 if (route.stopsPerHour) syncFields.stopsPerHour = parseFloat(route.stopsPerHour) || 0;
                 if (resolvedPlannedFirstStop) syncFields.plannedFirstStop = resolvedPlannedFirstStop;
 
-                if (serviceTypeName) syncFields.wst = WST_MAPPING[serviceTypeName] || serviceTypeName;
-                if (blockDuration !== undefined) syncFields.wstDuration = Number(blockDuration) / 60;
+                if (row.wst) syncFields.wst = row.wst;
+                if (row.wstDuration) syncFields.wstDuration = Number(row.wstDuration) || 0;
                 if (matchedPad) syncFields.pad = matchedPad;
 
                 const scheduleEnd = route.scheduleEndTime || raw.scheduleEndTime;

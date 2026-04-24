@@ -22,6 +22,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn, formatPhoneNumber } from "@/lib/utils";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSeparator,
+    DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import { getTypeStyle as getRouteTypeStyleLib, TYPE_OPTIONS as ROUTE_TYPE_OPTIONS_LIB, TYPE_MAP as ROUTE_TYPE_MAP_LIB, getContrastText } from "@/lib/route-types";
 import { generateRoutesPDF } from "@/lib/generate-routes-pdf";
 import { RoutesTable, type RoutesTableRow } from "@/app/(protected)/dispatching/_components/RoutesTable";
 
@@ -776,6 +785,33 @@ export default function EverydayAfterDispatchingPage() {
         }
     };
 
+    // ── Route type change for Roster Plan ──
+    const [rosterTypeMenu, setRosterTypeMenu] = useState<{ routeId: string; transporterId: string } | null>(null);
+
+    const handleRosterTypeChange = useCallback(async (routeId: string, newType: string, transporterId: string) => {
+        // Update tomorrow routes locally
+        setTomorrowRoutes(prev => prev.map(r =>
+            r._id === routeId ? { ...r, type: newType } : r
+        ));
+
+        try {
+            const res = await fetch("/api/dispatching/routes", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ routeId, updates: { type: newType } }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to update");
+            toast.success(`Type updated to ${newType}`);
+        } catch (err: any) {
+            toast.error(err.message || "Failed to update type");
+            // Revert on error
+            setTomorrowRoutes(prev => prev.map(r =>
+                r._id === routeId ? { ...r, type: r.type } : r
+            ));
+        }
+    }, []);
+
     const groupedRoutes = useMemo(() => {
         const map: Record<string, RoutesTableRow[]> = {};
         routes.forEach(r => {
@@ -1175,6 +1211,60 @@ export default function EverydayAfterDispatchingPage() {
                                 { key: "phone", label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 105, align: "center" },
                             ]}
                             renderCell={(key, row) => {
+                                if (key === "employee") {
+                                    const ts = getRouteTypeStyleLib(row.type);
+                                    return (
+                                        <div className="flex items-center gap-2 min-w-0 w-full">
+                                            {row.profileImage ? (
+                                                <img src={row.profileImage} alt={row.employeeName} className="w-6 h-6 rounded-full object-cover ring-1 ring-border shrink-0" />
+                                            ) : (
+                                                <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center ring-1 ring-primary/20 shrink-0">
+                                                    <span className="text-[8px] font-bold text-primary">
+                                                        {row.employeeName?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <button
+                                                        className="text-[13px] font-bold truncate flex-1 min-w-0 text-left hover:underline cursor-pointer focus:outline-none"
+                                                        style={{ color: ts.colorHex || "inherit" }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        {row.employeeName}
+                                                    </button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="start" className="min-w-[200px] max-h-[350px] overflow-y-auto">
+                                                    <DropdownMenuLabel className="text-[12px] text-muted-foreground uppercase tracking-wider">
+                                                        Set Route Type
+                                                    </DropdownMenuLabel>
+                                                    <DropdownMenuSeparator />
+                                                    {ROUTE_TYPE_OPTIONS_LIB.map((opt) => {
+                                                        const isSelected = row.type?.toLowerCase() === opt.label.toLowerCase();
+                                                        const Ico = opt.icon;
+                                                        return (
+                                                            <DropdownMenuItem
+                                                                key={opt.label}
+                                                                className="gap-2 cursor-pointer"
+                                                                disabled={isSelected}
+                                                                onClick={() => handleRosterTypeChange(row._id, opt.label, row.transporterId)}
+                                                            >
+                                                                <div
+                                                                    className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                                                                    style={{ backgroundColor: opt.colorHex || undefined }}
+                                                                >
+                                                                    <Ico className="h-2.5 w-2.5" style={{ color: getContrastText(opt.colorHex) }} />
+                                                                </div>
+                                                                <span className="text-xs font-medium flex-1">{opt.label}</span>
+                                                                {isSelected && <Check className="h-3 w-3 ml-auto text-primary" />}
+                                                            </DropdownMenuItem>
+                                                        );
+                                                    })}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
+                                    );
+                                }
                                 if (key === "phone") {
                                     const val = row.phone;
                                     return (

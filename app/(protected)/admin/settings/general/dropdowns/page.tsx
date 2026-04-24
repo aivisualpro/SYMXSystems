@@ -458,7 +458,7 @@ function AddOptionModal({
                         </div>
                     </div>
 
-                    {/* Default PAD & Image URL */}
+                    {/* Default PAD & Amazon Service Type */}
                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1.5">
                             <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Default PAD</label>
@@ -480,6 +480,10 @@ function AddOptionModal({
                                 />
                             )}
                         </div>
+                    </div>
+
+                    {/* Image URL */}
+                    <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1.5">
                             <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Image URL</label>
                             <Input
@@ -614,7 +618,7 @@ export default function DropdownsPage() {
                     image: row.image,
                     color: row.color,
                     icon: row.icon,
-                    defaultPad: row.defaultPad
+                    defaultPad: row.defaultPad,
                 }),
             });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
@@ -814,7 +818,7 @@ export default function DropdownsPage() {
                         </thead>
                         <tbody>
                             {filteredRows.length === 0 && (
-                                <tr><td colSpan={8} className="text-center text-sm text-muted-foreground py-8">
+                                <tr><td colSpan={9} className="text-center text-sm text-muted-foreground py-8">
                                     {selectedType === "all"
                                         ? 'No dropdown options configured. Click "Add Option" to get started.'
                                         : `No options for type "${selectedType}".`

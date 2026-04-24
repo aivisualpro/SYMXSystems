@@ -12,6 +12,7 @@ interface WSTRow {
     _id?: string;
     wst: string;
     revenue: number;
+    amazonServiceType: string;
     isActive: boolean;
     sortOrder: number;
     isNew?: boolean;
@@ -42,6 +43,7 @@ export default function WSTPage() {
         setRows(prev => [...prev, {
             wst: "",
             revenue: 0,
+            amazonServiceType: "",
             isActive: true,
             sortOrder: prev.length,
             isNew: true,
@@ -64,7 +66,7 @@ export default function WSTPage() {
             const res = await fetch("/api/admin/settings/wst", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ _id: row._id, wst: row.wst, revenue: row.revenue, isActive: row.isActive, sortOrder: row.sortOrder }),
+                body: JSON.stringify({ _id: row._id, wst: row.wst, revenue: row.revenue, amazonServiceType: row.amazonServiceType, isActive: row.isActive, sortOrder: row.sortOrder }),
             });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
             const saved = await res.json();
@@ -117,7 +119,8 @@ export default function WSTPage() {
                     <thead>
                         <tr className="bg-muted/50 border-b border-border">
                             <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[50px]">#</th>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5">WST</th>
+                            <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[200px]">WST</th>
+                            <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[400px]">Amazon Service Type</th>
                             <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[150px]">Revenue ($)</th>
                             <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[80px]">Active</th>
                             <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Actions</th>
@@ -125,7 +128,7 @@ export default function WSTPage() {
                     </thead>
                     <tbody>
                         {rows.length === 0 && (
-                            <tr><td colSpan={5} className="text-center text-sm text-muted-foreground py-8">No WST options configured. Click &quot;Add WST&quot; to get started.</td></tr>
+                            <tr><td colSpan={6} className="text-center text-sm text-muted-foreground py-8">No WST options configured. Click &quot;Add WST&quot; to get started.</td></tr>
                         )}
                         {rows.map((row, idx) => {
                             const isSaving = saving === (row._id || `new-${idx}`);
@@ -138,6 +141,15 @@ export default function WSTPage() {
                                             onChange={(e) => updateField(idx, "wst", e.target.value)}
                                             placeholder="e.g. WST-A, WST-B..."
                                             className="h-8 text-sm"
+                                            disabled={!row.isEditing && !row.isNew}
+                                        />
+                                    </td>
+                                    <td className="px-4 py-2">
+                                        <Input
+                                            value={row.amazonServiceType || ""}
+                                            onChange={(e) => updateField(idx, "amazonServiceType", e.target.value)}
+                                            placeholder="e.g. Standard Parcel - Large Van..."
+                                            className="h-8 text-[11px]"
                                             disabled={!row.isEditing && !row.isNew}
                                         />
                                     </td>

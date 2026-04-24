@@ -3,6 +3,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 export interface ISYMXWSTOption extends Document {
     wst: string;
     revenue: number;
+    amazonServiceType: string;
     isActive: boolean;
     sortOrder: number;
     createdAt: Date;
@@ -13,6 +14,7 @@ const SYMXWSTOptionSchema = new Schema<ISYMXWSTOption>(
     {
         wst: { type: String, required: true, unique: true },
         revenue: { type: Number, default: 0 },
+        amazonServiceType: { type: String, default: '' },
         isActive: { type: Boolean, default: true },
         sortOrder: { type: Number, default: 0 },
     },

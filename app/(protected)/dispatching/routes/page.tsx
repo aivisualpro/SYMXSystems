@@ -157,18 +157,18 @@ type ColumnDef = { key: string; label: string; minW: number; sticky: boolean; al
 const COLUMNS: ColumnDef[] = [
     { key: "employee", label: "Employee", minW: 140, sticky: true },
     { key: "confirmationStatus", label: "Conf Status", minW: 100, sticky: false },
+    { key: "wst", label: "WST", minW: 50, sticky: false },
     { key: "routeNumber", label: "Route #", minW: 60, sticky: false },
-    { key: "van", label: "Van", minW: 58, sticky: false },
+    { key: "van", label: "Van", minW: 58, sticky: false, align: "left" },
     { key: "bags", label: "Bags", minW: 40, sticky: false },
     { key: "ov", label: "OV", minW: 36, sticky: false },
-    { key: "dashcam", label: "Dashcam", minW: 64, sticky: false },
+    { key: "serviceType", label: "Service", minW: 64, sticky: false },
     { key: "stopCount", label: "Stops", minW: 46, sticky: false },
     { key: "packageCount", label: "Pkgs", minW: 44, sticky: false },
     { key: "routeDuration", label: "Dur", minW: 48, sticky: false },
     { key: "waveTime", label: "Wave", minW: 56, sticky: false },
     { key: "pad", label: "PAD", minW: 42, sticky: false },
-    { key: "wst", label: "WST", minW: 50, sticky: false },
-    { key: "serviceType", label: "Service", minW: 64, sticky: false },
+    { key: "dashcam", label: "Dashcam", minW: 64, sticky: false },
     { key: "routesCompleted", label: "Routes", minW: 50, sticky: false },
     { key: "routeSize", label: "Rt Size", minW: 56, sticky: false },
     { key: "wstDuration", label: "WST Dur", minW: 52, sticky: false },
@@ -1184,7 +1184,7 @@ export default function RoutesPage() {
                                                         <td className="px-2 py-1.5">{renderCell(row, "routeNumber", row.routeNumber)}</td>
 
                                                         {/* 5. Van */}
-                                                        <td className="px-2 py-1.5 align-middle" onClick={(e) => e.stopPropagation()}>
+                                                        <td className="px-2 py-1.5 align-middle text-left" onClick={(e) => e.stopPropagation()}>
                                                             <DropdownMenu>
                                                                 <DropdownMenuTrigger asChild>
                                                                     <button className="cursor-pointer hover:bg-muted/50 rounded py-0.5 px-1 -ml-1 transition-colors focus:outline-none flex items-center gap-1 w-full text-left group">
@@ -1244,7 +1244,22 @@ export default function RoutesPage() {
                                                             </span>
                                                         </td>
 
-                                                        {/* 9. Dashcam (auto from Van) */}
+                                                        {/* 9. Stops */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "stopCount", row.stopCount)}</td>
+
+                                                        {/* 10. Packages */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "packageCount", row.packageCount)}</td>
+
+                                                        {/* 11. Duration */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "routeDuration", row.routeDuration)}</td>
+
+                                                        {/* 12. Wave Time */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "waveTime", row.waveTime)}</td>
+
+                                                        {/* 13. PAD */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "pad", row.pad)}</td>
+
+                                                        {/* 14. Dashcam (auto from Van) — now after PAD */}
                                                         <td className="px-2 py-1.5 align-middle text-center">
                                                             {(() => {
                                                                 if (!row.dashcam || row.dashcam.toLowerCase() === "none") {
@@ -1271,22 +1286,6 @@ export default function RoutesPage() {
                                                                 );
                                                             })()}
                                                         </td>
-
-
-                                                        {/* 12. Stops */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "stopCount", row.stopCount)}</td>
-
-                                                        {/* 13. Packages */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "packageCount", row.packageCount)}</td>
-
-                                                        {/* 14. Duration */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "routeDuration", row.routeDuration)}</td>
-
-                                                        {/* 15. Wave Time */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "waveTime", row.waveTime)}</td>
-
-                                                        {/* 16. PAD */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "pad", row.pad)}</td>
 
                                                         {/* 10. Routes Completed */}
                                                         <td className="px-2 py-1.5">

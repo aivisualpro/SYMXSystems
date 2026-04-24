@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
         const body = await req.json();
-        const { _id, wst, revenue, isActive, sortOrder } = body;
+        const { _id, wst, revenue, isActive, sortOrder, amazonServiceType } = body;
 
         if (!wst?.trim()) {
             return NextResponse.json({ error: "WST is required" }, { status: 400 });
@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
                 {
                     wst: wst.trim(),
                     revenue: parseFloat(revenue) || 0,
+                    amazonServiceType: amazonServiceType ?? '',
                     isActive: isActive ?? true,
                     sortOrder: sortOrder ?? 0,
                 },
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest) {
             const option = await SYMXWSTOption.create({
                 wst: wst.trim(),
                 revenue: parseFloat(revenue) || 0,
+                amazonServiceType: amazonServiceType ?? '',
                 isActive: isActive ?? true,
                 sortOrder: sortOrder ?? 0,
             });
