@@ -69,7 +69,8 @@ function EmployeesPageContent() {
 
   const searchParams = useSearchParams();
   const hasUrlFilters = searchParams.get('status') || searchParams.get('type') || searchParams.get('filter') || searchParams.get('hourlyStatus');
-  const needsApiCall = !!searchParams.get('search') || !!hasUrlFilters;
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const needsApiCall = !!debouncedSearch || !!searchParams.get('search') || !!hasUrlFilters;
 
   const { data: storeEmployees = { records: [], totalCount: 0, hasMore: false }, isLoading: isLoadingEmployees } = useEmployeesList();
 
@@ -89,7 +90,6 @@ function EmployeesPageContent() {
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const [fetchedFromApi, setFetchedFromApi] = useState(false);
   const PAGE_SIZE = 50;

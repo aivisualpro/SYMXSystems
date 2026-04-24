@@ -280,19 +280,20 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         }
     }, [date, refreshRoutes]);
 
-    // ── Save all dirty rows ──
+    // ── Save all rows (to refresh SYMXRoutes) ──
     const saveAll = useCallback(async () => {
-        if (dirtyRows.size === 0) {
-            toast.info("No changes to save");
-            return;
-        }
         setSaving(true);
         try {
-            const changedRows = rows.filter(r => dirtyRows.has(r.rowIndex));
+            // Send all rows that actually have some identifying data
+            const activeRows = rows.filter(r => r.routeNumber || r.transporterId || dirtyRows.has(r.rowIndex));
+            if (activeRows.length === 0) {
+                toast.info("No active rows to save");
+                return;
+            }
             const res = await fetch("/api/dispatching/routes-info", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ date, rows: changedRows }),
+                body: JSON.stringify({ date, rows: activeRows }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);

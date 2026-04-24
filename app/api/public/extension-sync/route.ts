@@ -370,10 +370,25 @@ export async function POST(req: NextRequest) {
             }
 
             // ── Convert blockDurationInMinutes to hours for wstDuration ──
-            const blockDuration = route.blockDurationInMinutes || raw.blockDurationInMinutes;
-            if (blockDuration !== undefined && blockDuration !== null) {
+            let blockDuration = route.blockDurationInMinutes;
+            if (blockDuration === undefined || blockDuration === null || blockDuration === "") {
+                blockDuration = raw?.blockDurationInMinutes;
+            }
+            if (blockDuration === undefined || blockDuration === null || blockDuration === "") {
+                // Sometime raw is nested or stringified
+                if (typeof raw === "string") {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        blockDuration = parsed.blockDurationInMinutes;
+                    } catch (e) {}
+                }
+            }
+
+            if (blockDuration !== undefined && blockDuration !== null && blockDuration !== "") {
                 const hours = Number(blockDuration) / 60;
                 row.wstDuration = String(hours);
+                // Also assign to the route object so syncFields mapping can catch it
+                route.wstDuration = hours;
             }
 
             // Upsert into RoutesInfo by date + rowIndex

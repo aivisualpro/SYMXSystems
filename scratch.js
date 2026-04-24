@@ -1,16 +1,15 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
+mongoose.connect(process.env.MONGODB_URI || "mongodb+srv://admin:Ld4j1LndlY30T4iP@cluster0.b73x01z.mongodb.net/symx?retryWrites=true&w=majority&appName=Cluster0");
 
-async function run() {
-  await mongoose.connect(process.env.MONGODB_URI || "mongodb+srv://symx-admin:bNWe7iX9O9k9H2n0@cluster0.a1kio9k.mongodb.net/symx-systems?retryWrites=true&w=majority");
+const SYMXRoute = mongoose.model("SYMXRoute", new mongoose.Schema({}, { strict: false }));
+const SYMXRoutesInfo = mongoose.model("SYMXRoutesInfo", new mongoose.Schema({}, { strict: false }), "SYMXRoutesInfo");
+
+async function check() {
+  const routesInfo = await SYMXRoutesInfo.find({ date: new Date("2026-04-23") }).limit(1).lean();
+  console.log("RoutesInfo:", routesInfo[0]?.wstDuration, routesInfo[0]?.routeNumber);
   
-  const RouteTypeSchema = new mongoose.Schema({
-      name: String, color: String, startTime: String, icon: String
-  }, { collection: 'SYMXRouteTypes' });
-  const RouteType = mongoose.model('RouteType', RouteTypeSchema);
-  
-  const types = await RouteType.find().lean();
-  console.log(JSON.stringify(types, null, 2));
-  
-  mongoose.disconnect();
+  const route = await SYMXRoute.find({ routeNumber: routesInfo[0]?.routeNumber }).limit(1).lean();
+  console.log("Route:", route[0]?.wstDuration, route[0]?.routeNumber);
+  process.exit(0);
 }
-run().catch(console.error);
+check();
