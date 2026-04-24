@@ -923,7 +923,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                 size="sm"
                                 className="h-8 gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25"
                                 onClick={saveAll}
-                                disabled={saving || dirtyRows.size === 0}
+                                disabled={saving}
                             >
                                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                                 {saving ? "Saving..." : "Save All"}

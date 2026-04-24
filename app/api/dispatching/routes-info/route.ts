@@ -286,7 +286,7 @@ export async function POST(req: NextRequest) {
                             waveTime: row.waveTime || "",
                             pad: row.pad || "",
                             wst: row.wst || "",
-                            wstDuration: row.wstDuration ? parseInt(row.wstDuration) || 0 : 0,
+                            wstDuration: row.wstDuration ? parseFloat(row.wstDuration) || 0 : 0,
                             bags: row.bags || "",
                             ov: row.ov || "",
                             stagingLocation: row.stagingLocation || "",
@@ -446,9 +446,11 @@ export async function PUT(req: NextRequest) {
         // ── NON-DRIVER FIELD — sync to SYMXRoute if a driver is linked ──
         if (row?.transporterId && row.transporterId.trim() !== "") {
             if (ROUTE_INFO_FIELDS.includes(field)) {
-                const syncValue = (field === "stopCount" || field === "packageCount" || field === "wstDuration")
+                const syncValue = (field === "stopCount" || field === "packageCount")
                     ? parseInt(value) || 0
-                    : value || "";
+                    : field === "wstDuration" 
+                        ? parseFloat(value) || 0 
+                        : value || "";
                 try {
                     await SYMXRoute.updateOne(
                         { transporterId: row.transporterId, date: dateObj },

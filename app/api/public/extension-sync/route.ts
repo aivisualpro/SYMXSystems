@@ -369,18 +369,26 @@ export async function POST(req: NextRequest) {
                 row.wst = mappedWst || serviceTypeName;
             }
 
-            // ── Convert blockDurationInMinutes to hours for wstDuration ──
-            let blockDuration = route.blockDurationInMinutes;
+            // ── Deep search for blockDurationInMinutes anywhere in the payload ──
+            const findKeyDeep = (obj: any, targetKey: string): any => {
+                if (!obj || typeof obj !== 'object') return undefined;
+                if (targetKey in obj) return obj[targetKey];
+                for (const key in obj) {
+                    const found = findKeyDeep(obj[key], targetKey);
+                    if (found !== undefined) return found;
+                }
+                return undefined;
+            };
+
+            let blockDuration = findKeyDeep(route, "blockDurationInMinutes");
             if (blockDuration === undefined || blockDuration === null || blockDuration === "") {
-                blockDuration = raw?.blockDurationInMinutes;
-            }
-            if (blockDuration === undefined || blockDuration === null || blockDuration === "") {
-                // Sometime raw is nested or stringified
                 if (typeof raw === "string") {
                     try {
                         const parsed = JSON.parse(raw);
-                        blockDuration = parsed.blockDurationInMinutes;
+                        blockDuration = findKeyDeep(parsed, "blockDurationInMinutes");
                     } catch (e) {}
+                } else {
+                    blockDuration = findKeyDeep(raw, "blockDurationInMinutes");
                 }
             }
 
