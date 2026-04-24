@@ -137,6 +137,20 @@ function subtractMinutes(time: any, mins: number): string {
     return "";
 }
 
+// Helper: convert a time string like "10:40 AM" or "11:00AM" to minutes since midnight
+// Returns -1 if parsing fails
+function timeToMinutes(time: string): number {
+    if (!time) return -1;
+    const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) return -1;
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const ampm = match[3].toUpperCase();
+    if (ampm === "PM" && h !== 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    return h * 60 + m;
+}
+
 export async function POST(req: NextRequest) {
     // Add CORS headers to all responses
     const corsHeaders = {
@@ -203,10 +217,16 @@ export async function POST(req: NextRequest) {
 
         // ── Fetch wave time options to map default PAD ──
         const waveTimeOpts = await DropdownOption.find({ type: "wave time", isActive: true }).lean();
-        const waveTimeToPadMap = new Map<string, string>();
+        // Build both exact-match and fuzzy-match structures
+        const waveTimePadEntries: { description: string; defaultPad: string; minutes: number }[] = [];
         waveTimeOpts.forEach((opt: any) => {
-            if (opt.description && opt.defaultPad) {
-                waveTimeToPadMap.set(opt.description, opt.defaultPad);
+            if (opt.description) {
+                const mins = timeToMinutes(opt.description);
+                waveTimePadEntries.push({
+                    description: opt.description,
+                    defaultPad: opt.defaultPad || "",
+                    minutes: mins,
+                });
             }
         });
 
@@ -291,6 +311,33 @@ export async function POST(req: NextRequest) {
             }
 
             // Parse route data into SYMX format
+            const parsedWaveTime = parseAmazonTime(resolvedWaveTime);
+
+            // ── Match waveTime to nearest dropdown option & get default PAD ──
+            let matchedWaveTime = parsedWaveTime;
+            let matchedPad = "";
+            if (parsedWaveTime && waveTimePadEntries.length > 0) {
+                const inputMins = timeToMinutes(parsedWaveTime);
+                if (inputMins >= 0) {
+                    // Find the closest wave time option (within 30 min tolerance)
+                    let bestMatch: typeof waveTimePadEntries[0] | null = null;
+                    let bestDiff = Infinity;
+                    for (const entry of waveTimePadEntries) {
+                        if (entry.minutes < 0) continue;
+                        const diff = Math.abs(entry.minutes - inputMins);
+                        if (diff < bestDiff) {
+                            bestDiff = diff;
+                            bestMatch = entry;
+                        }
+                    }
+                    // Only match if within 30 minutes
+                    if (bestMatch && bestDiff <= 30) {
+                        matchedWaveTime = bestMatch.description;
+                        matchedPad = bestMatch.defaultPad;
+                    }
+                }
+            }
+
             const row: Record<string, any> = {
                 date: dateObj,
                 rowIndex,
@@ -298,16 +345,12 @@ export async function POST(req: NextRequest) {
                 stopCount: String(resolvedStopCount),
                 packageCount: String(resolvedPackageCount),
                 routeDuration: parseAmazonDuration(route.routeDuration || raw.routeDuration || raw.duration),
-                waveTime: parseAmazonTime(resolvedWaveTime),
+                waveTime: matchedWaveTime,
+                pad: matchedPad,
                 // Store the matched SYMX transporterId (fallback to raw Amazon ID if not matched)
                 transporterId: transporterId || rawTransporterId,
                 rawSummary: raw,  // Store full Amazon route-summaries JSON
             };
-
-            // ── Assign default pad based on wave time ──
-            if (row.waveTime && waveTimeToPadMap.has(row.waveTime)) {
-                row.pad = waveTimeToPadMap.get(row.waveTime);
-            }
 
             const WST_MAPPING: Record<string, string> = {
                 "Standard Parcel - Extra Large Van - US": "SP XL",
@@ -335,7 +378,6 @@ export async function POST(req: NextRequest) {
                     update: { 
                         $set: row,
                         $setOnInsert: {
-                            pad: "",
                             bags: "",
                             ov: "",
                             stagingLocation: "",
