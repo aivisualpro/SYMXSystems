@@ -56,3 +56,32 @@ export const getTypeStyle = (value?: string): { bg: string; text: string; border
     if (opt) return { bg: opt.bg, text: opt.text, border: opt.border, colorHex: opt.colorHex };
     return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
 };
+
+import * as LucideIcons from "lucide-react";
+
+export function formatRouteTypes(routeTypesList: any[] | undefined) {
+    if (!routeTypesList || !Array.isArray(routeTypesList)) return [];
+    return routeTypesList
+      .filter((rt: any) => rt.isActive !== false) // Only show active types in dropdowns
+      .map((rt: any) => {
+        const DBIcon = rt.icon && (LucideIcons as any)[rt.icon] ? (LucideIcons as any)[rt.icon] : Navigation;
+        
+        return {
+          label: rt.name,
+          colorHex: rt.color || "#6B7280",
+          icon: DBIcon,
+          bg: "",
+          text: "",
+          border: ""
+        };
+      });
+}
+
+export const getDynamicTypeStyle = (value: string | undefined, dynamicOptions: any[]) => {
+    if (!value || value.trim() === "") {
+        return { colorHex: "#686D76" };
+    }
+    const matchedOpt = dynamicOptions.find((opt: any) => opt.label.toLowerCase() === value.trim().toLowerCase());
+    if (matchedOpt) return { colorHex: matchedOpt.colorHex };
+    return { colorHex: "#6B7280" }; // Default fallback for unknown
+};

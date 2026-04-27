@@ -249,13 +249,14 @@ export async function GET(req: NextRequest) {
 
         const isOffToday =
           !todaySchedule ||
-          !todaySchedule.type ||
-          ["off", "close", "request off", ""].includes(todaySchedule.type.toLowerCase().trim());
+          (todaySchedule.status && todaySchedule.status.toLowerCase().trim() === "off") ||
+          (!todaySchedule.status && todaySchedule.type && ["off", "close", "request off", ""].includes(todaySchedule.type.toLowerCase().trim())) ||
+          (!todaySchedule.status && !todaySchedule.type);
 
         const isWorkingTomorrow =
           tomorrowSchedule &&
-          tomorrowSchedule.type &&
-          !["off", "close", "request off", ""].includes(tomorrowSchedule.type.toLowerCase().trim());
+          ((tomorrowSchedule.status && tomorrowSchedule.status.toLowerCase().trim() === "scheduled") ||
+           (tomorrowSchedule.type && tomorrowSchedule.type.toLowerCase().trim() === "route"));
 
         return isOffToday && isWorkingTomorrow;
       });

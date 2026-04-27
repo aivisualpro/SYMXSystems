@@ -65,7 +65,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSchedulingWeeks, useWeekSchedules, useUpdateSchedule } from "@/lib/query/hooks/useSchedules";
-import { useDropdowns } from "@/lib/query/hooks/useShared";
+import { useDropdowns, useRouteTypes } from "@/lib/query/hooks/useShared";
+import { formatRouteTypes, getDynamicTypeStyle, getContrastText } from "@/lib/route-types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
@@ -73,60 +74,6 @@ import { useHeaderActions } from "@/components/providers/header-actions-provider
 import MessagingPanel, { type ActiveTabInfo, SUB_TABS } from "@/components/scheduling/messaging-panel";
 import { useQueryClient } from "@tanstack/react-query";
 
-// ── Type Options with Icons & Colors ──
-interface TypeOption {
-  label: string;
-  icon: LucideIcon;
-  bg: string;
-  text: string;
-  border: string;
-  dotColor: string;
-  colorHex?: string;
-}
-
-// Ensure contrasting text color based on hex
-const getContrastText = (hex: string) => {
-  if (!hex) return "#ffffff";
-  const cleanHex = hex.replace("#", "");
-  const r = parseInt(cleanHex.substring(0, 2), 16);
-  const g = parseInt(cleanHex.substring(2, 4), 16);
-  const b = parseInt(cleanHex.substring(4, 6), 16);
-  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-  return yiq >= 128 ? "#000000" : "#ffffff";
-};
-
-const TYPE_OPTIONS: TypeOption[] = [
-  { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700", dotColor: "bg-emerald-500", colorHex: "#06923E" },
-  { label: "Off", icon: Coffee, bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-600 dark:text-zinc-300", border: "border-zinc-200 dark:border-zinc-600", dotColor: "bg-zinc-400", colorHex: "#686D76" },
-  { label: "Open", icon: DoorOpen, bg: "bg-amber-400/80", text: "text-white", border: "border-amber-500/60", dotColor: "bg-amber-400", colorHex: "#FF8383" },
-  { label: "Close", icon: DoorClosed, bg: "bg-rose-400/80", text: "text-white", border: "border-rose-500/60", dotColor: "bg-rose-400", colorHex: "#F9B2D7" },
-  { label: "Rescue", icon: AlertTriangle, bg: "bg-blue-400", text: "text-white", border: "border-blue-500", dotColor: "bg-blue-400", colorHex: "#7DAACB" },
-  { label: "Call Out", icon: PhoneOff, bg: "bg-yellow-500", text: "text-white", border: "border-yellow-600", dotColor: "bg-yellow-500", colorHex: "#E52020" },
-  { label: "AMZ Training", icon: GraduationCap, bg: "bg-indigo-600", text: "text-white", border: "border-indigo-700", dotColor: "bg-indigo-500", colorHex: "#8F0177" },
-  { label: "Reduction", icon: Minus, bg: "bg-purple-800", text: "text-white", border: "border-purple-900", dotColor: "bg-purple-800", colorHex: "#281C59" },
-  { label: "C0", icon: Clock, bg: "bg-orange-500", text: "text-white", border: "border-orange-600", dotColor: "bg-orange-500", colorHex: "#FF8B5A" },
-  { label: "Trainer", icon: UserCheck, bg: "bg-teal-600", text: "text-white", border: "border-teal-700", dotColor: "bg-teal-500", colorHex: "#D8D365" },
-  { label: "Training OTR", icon: BookOpen, bg: "bg-violet-600", text: "text-white", border: "border-violet-700", dotColor: "bg-violet-500", colorHex: "#DDA853" },
-  { label: "Crash", icon: AlertTriangle, bg: "bg-red-500", text: "text-white", border: "border-red-600", dotColor: "bg-red-500", colorHex: "#0D92F4" },
-  { label: "Fleet", icon: TruckIcon, bg: "bg-blue-600", text: "text-white", border: "border-blue-700", dotColor: "bg-blue-500", colorHex: "#27548A" },
-  { label: "Pending ECP", icon: Clock, bg: "bg-fuchsia-800", text: "text-white", border: "border-fuchsia-900", dotColor: "bg-fuchsia-800", colorHex: "#5D1C6A" },
-  { label: "Suspension", icon: Ban, bg: "bg-rose-700", text: "text-white", border: "border-rose-800", dotColor: "bg-rose-600", colorHex: "#313E17" },
-  { label: "Modified Duty", icon: ShieldAlert, bg: "bg-amber-600", text: "text-white", border: "border-amber-700", dotColor: "bg-amber-500", colorHex: "#4D4646" },
-  { label: "Stand by", icon: Clock, bg: "bg-cyan-600", text: "text-white", border: "border-cyan-700", dotColor: "bg-cyan-500", colorHex: "#F29727" },
-  { label: "Request Off", icon: CalendarOff, bg: "bg-purple-600", text: "text-white", border: "border-purple-700", dotColor: "bg-purple-500", colorHex: "#9AA6B2" },
-  { label: "TCO", icon: DoorOpen, bg: "bg-pink-600", text: "text-white", border: "border-pink-700", dotColor: "bg-pink-600", colorHex: "#CA6180" }
-];
-
-const TYPE_MAP = new Map(TYPE_OPTIONS.map(opt => [opt.label.toLowerCase(), opt]));
-
-const getTypeStyle = (value: string): { bg: string; text: string; border: string; colorHex?: string } => {
-  if (!value || value.trim() === "") {
-    return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-600 dark:text-zinc-300", border: "border-zinc-200 dark:border-zinc-600", colorHex: "#686D76" };
-  }
-  const opt = TYPE_MAP.get(value.trim().toLowerCase());
-  if (opt) return { bg: opt.bg, text: opt.text, border: opt.border, colorHex: opt.colorHex };
-  return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
-};
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -736,7 +683,8 @@ function SchedulingPageContent() {
   }, [generatingWeek]);
 
   const { data: storeWeeksData, isLoading: isLoadingWeeks } = useSchedulingWeeks();
-  const { data: storeRouteTypes } = useDropdowns();
+  const { data: dropdownsData } = useDropdowns();
+  const { data: storeRouteTypes } = useRouteTypes();
 
   // Mark as mounted
   useEffect(() => {
@@ -770,28 +718,8 @@ function SchedulingPageContent() {
   }, []);
 
   const dynamicTypeOptions = useMemo(() => {
-    if (!routeTypesList || routeTypesList.length === 0) return TYPE_OPTIONS;
-    return routeTypesList
-      .filter((rt: any) => rt.isActive !== false) // Only show active types in dropdowns
-      .map((rt: any) => {
-        const fallback = TYPE_MAP.get(rt.name.toLowerCase()) || {
-          label: rt.name,
-          icon: Navigation,
-          bg: "bg-emerald-600",
-          text: "text-white",
-          border: "border-emerald-700",
-          dotColor: "bg-emerald-500"
-        };
-        const DBIcon = rt.icon ? (LucideIcons as any)[rt.icon] : null;
-
-        return {
-          ...fallback,
-          label: rt.name,
-          colorHex: rt.color,
-          icon: DBIcon || fallback.icon,
-        };
-      });
-  }, [routeTypesList]);
+    return formatRouteTypes(storeRouteTypes || routeTypesList);
+  }, [storeRouteTypes, routeTypesList]);
 
   // Sync weeks from TanStack Query
   useEffect(() => {
@@ -1634,7 +1562,7 @@ function SchedulingPageContent() {
                                         const startTime = day?.startTime || "";
                                         const type = day?.type || "";
                                         const displayValue = type || status || "";
-                                        const style = getTypeStyle(displayValue);
+                                        const style = getDynamicTypeStyle(displayValue, dynamicTypeOptions);
                                         const matchedOpt = dynamicTypeOptions.find(opt => opt.label.toLowerCase() === displayValue.toLowerCase());
                                         const CellIcon = matchedOpt?.icon;
                                         const warning = consecutiveWarnings.get(dayIdx);
@@ -1648,12 +1576,10 @@ function SchedulingPageContent() {
                                                     <div
                                                       className={cn(
                                                         "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
-                                                        !matchedOpt?.colorHex && style.bg,
-                                                        !matchedOpt?.colorHex && style.text,
-                                                        !matchedOpt?.colorHex && style.border,
+                                                        
                                                         "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
                                                       )}
-                                                      style={matchedOpt?.colorHex ? { backgroundColor: matchedOpt.colorHex, color: getContrastText(matchedOpt.colorHex), borderColor: matchedOpt.colorHex } : undefined}
+                                                      style={{ backgroundColor: matchedOpt?.colorHex || style.colorHex, color: getContrastText(matchedOpt?.colorHex || style.colorHex), borderColor: matchedOpt?.colorHex || style.colorHex }}
                                                     >
                                                       {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
                                                       <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
@@ -1716,11 +1642,11 @@ function SchedulingPageContent() {
                                                         onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name)}
                                                       >
                                                         <div
-                                                          className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", !opt.colorHex && opt.bg)}
+                                                          className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", "")}
                                                           style={opt.colorHex ? { backgroundColor: opt.colorHex } : undefined}
                                                         >
                                                           <Icon
-                                                            className={cn("h-3 w-3", !opt.colorHex && opt.text)}
+                                                            className={cn("h-3 w-3", "")}
                                                             style={opt.colorHex ? { color: getContrastText(opt.colorHex) } : undefined}
                                                           />
                                                         </div>
@@ -2300,7 +2226,7 @@ function SchedulingPageContent() {
                       return (
                         <div key={log._id || i} className="relative pl-10 py-2 group">
                           {/* Timeline dot */}
-                          <div className={`absolute left-1.5 top-3.5 w-5 h-5 rounded-full ring-1 flex items-center justify-center ${config.bg}`}>
+                          <div className={`absolute left-1.5 top-3.5 w-5 h-5 rounded-full ring-1 flex items-center justify-center ${config.color || ""}`}>
                             <ActionIcon className={`h-2.5 w-2.5 ${config.color}`} />
                           </div>
 

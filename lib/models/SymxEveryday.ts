@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface ISymxEveryday extends Document {
   date: string;
   notes: string;
+  attachments: string[];
   routesAssigned: number;
   endDay: boolean;
   createdAt: Date;
@@ -19,6 +20,10 @@ const SymxEverydaySchema: Schema = new Schema(
     notes: {
       type: String,
       default: '',
+    },
+    attachments: {
+      type: [String],
+      default: [],
     },
     routesAssigned: {
       type: Number,

@@ -37,3 +37,16 @@ export function useWst() {
     staleTime: Infinity,
   })
 }
+
+export function useRouteTypes() {
+  return useQuery({
+    queryKey: ['admin', 'routeTypes'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/settings/route-types')
+      if (!res.ok) throw new Error('Failed to fetch route types')
+      return res.json()
+    },
+    staleTime: 5 * 60_000,
+  })
+}
+

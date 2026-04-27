@@ -139,7 +139,10 @@ function durToHrs(t: string): number {
 /** Strip trailing seconds (":00" or ":SS") from time strings like "6:30:00" → "6:30" */
 function stripSec(v: string): string {
     if (!v) return v;
-    return v.replace(/:\d{2}$/, "");
+    if ((v.match(/:/g) || []).length === 2) {
+        return v.replace(/:\d{2}$/, "");
+    }
+    return v;
 }
 
 /** Business timezone — all date comparisons use Pacific Time */
@@ -155,22 +158,20 @@ function toPacificDate(d: string | Date): string {
 // ── Column Definitions ──
 type ColumnDef = { key: string; label: string; minW: number; sticky: boolean; align?: "left" | "center" | "right" };
 const COLUMNS: ColumnDef[] = [
-    { key: "employee", label: "Employee", minW: 140, sticky: true },
+    { key: "employee", label: "Employee", minW: 110, sticky: true },
     { key: "confirmationStatus", label: "Conf Status", minW: 100, sticky: false },
-    { key: "wst", label: "WST", minW: 50, sticky: false },
     { key: "routeNumber", label: "Route #", minW: 60, sticky: false },
     { key: "van", label: "Van", minW: 58, sticky: false, align: "left" },
     { key: "bags", label: "Bags", minW: 40, sticky: false },
     { key: "ov", label: "OV", minW: 36, sticky: false },
-    { key: "serviceType", label: "Service", minW: 64, sticky: false },
     { key: "stopCount", label: "Stops", minW: 46, sticky: false },
     { key: "packageCount", label: "Pkgs", minW: 44, sticky: false },
-    { key: "routeDuration", label: "Dur", minW: 48, sticky: false },
+    { key: "routeDuration", label: "Duration", minW: 56, sticky: false },
     { key: "waveTime", label: "Wave", minW: 56, sticky: false },
     { key: "pad", label: "PAD", minW: 42, sticky: false },
-    { key: "dashcam", label: "Dashcam", minW: 64, sticky: false },
+    { key: "wst", label: "WST", minW: 50, sticky: false },
+    { key: "serviceType", label: "Service", minW: 64, sticky: false },
     { key: "routesCompleted", label: "Routes", minW: 50, sticky: false },
-    { key: "routeSize", label: "Rt Size", minW: 56, sticky: false },
     { key: "wstDuration", label: "WST Dur", minW: 52, sticky: false },
     { key: "stagingLocation", label: "Staging", minW: 60, sticky: false },
     { key: "departureDelay", label: "Dep Delay", minW: 60, sticky: false },
@@ -1055,7 +1056,7 @@ export default function RoutesPage() {
                                                         className="border-b border-border/20 hover:bg-muted/30 transition-colors group/row"
                                                     >
                                                         {/* 1. Employee */}
-                                                        <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card w-[200px]")}>
+                                                        <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card w-[160px]")}>
                                                             <div 
                                                                 className="flex items-center gap-2 w-full pr-1 cursor-pointer hover:bg-muted/80 rounded-md p-1 -m-1 transition-colors"
                                                                 onClick={(e) => {
@@ -1162,33 +1163,42 @@ export default function RoutesPage() {
                                                             </DropdownMenu>
                                                         </td>
 
-                                                        {/* 3. WST */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.wst ? (
-                                                                <span className={cn(
-                                                                    "text-[13px] font-semibold whitespace-nowrap",
-                                                                    row.serviceType
-                                                                        ? row.wst.toLowerCase() === row.serviceType.toLowerCase()
-                                                                            ? "text-emerald-500"
-                                                                            : "text-red-500"
-                                                                        : "text-foreground"
-                                                                )}>
-                                                                    {row.wst}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-[13px] text-muted-foreground/30 font-semibold">—</span>
-                                                            )}
-                                                        </td>
-
-                                                        {/* 4. Route # */}
+                                                        {/* 3. Route # */}
                                                         <td className="px-2 py-1.5">{renderCell(row, "routeNumber", row.routeNumber)}</td>
 
-                                                        {/* 5. Van */}
+                                                        {/* 4. Van */}
                                                         <td className="px-2 py-1.5 align-middle text-left" onClick={(e) => e.stopPropagation()}>
                                                             <DropdownMenu>
                                                                 <DropdownMenuTrigger asChild>
                                                                     <button className="cursor-pointer hover:bg-muted/50 rounded py-0.5 px-1 -ml-1 transition-colors focus:outline-none flex items-center gap-1 w-full text-left group">
-                                                                        {renderCell(row, "van", row.van)}
+                                                                        {(() => {
+                                                                            const v = vehicles.find(v => v.vehicleName === row.van);
+                                                                            const isInactive = v && v.status && v.status.toLowerCase() !== "active";
+                                                                            return (
+                                                                                <span className={cn(
+                                                                                    "text-[13px] whitespace-nowrap font-semibold",
+                                                                                    !row.van ? "text-muted-foreground/30" : isInactive ? "text-red-500" : "text-foreground"
+                                                                                )}>
+                                                                                    {row.van || "—"}
+                                                                                </span>
+                                                                            );
+                                                                        })()}
+                                                                        {(() => {
+                                                                            if (!row.dashcam || row.dashcam.toLowerCase() === "none") return null;
+                                                                            const camOpt = dropdowns.find((d: any) => d.type === "dashcam" && d.description.toLowerCase() === row.dashcam.toLowerCase());
+                                                                            const CamIcon = camOpt?.icon ? (LucideIcons as any)[camOpt.icon] : Video;
+                                                                            const camColor = camOpt?.color || undefined;
+                                                                            return (
+                                                                                <Tooltip>
+                                                                                    <TooltipTrigger asChild>
+                                                                                        <div onClick={(e) => e.stopPropagation()}>
+                                                                                            <CamIcon className={cn("h-3 w-3 ml-0.5", !camColor && "text-muted-foreground")} style={{ color: camColor }} />
+                                                                                        </div>
+                                                                                    </TooltipTrigger>
+                                                                                    <TooltipContent>{row.dashcam}</TooltipContent>
+                                                                                </Tooltip>
+                                                                            );
+                                                                        })()}
                                                                         <ChevronDown className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                                                                     </button>
                                                                 </DropdownMenuTrigger>
@@ -1231,61 +1241,55 @@ export default function RoutesPage() {
                                                             </DropdownMenu>
                                                         </td>
 
-                                                        {/* 6. Bags */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "bags", row.bags)}</td>
+                                                        {/* 5. Bags */}
+                                                        <td className="px-2 py-1.5 bg-sky-500/10">{renderCell(row, "bags", row.bags)}</td>
 
-                                                        {/* 7. OV */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "ov", row.ov)}</td>
+                                                        {/* 6. OV */}
+                                                        <td className="px-2 py-1.5 bg-sky-500/10">{renderCell(row, "ov", row.ov)}</td>
 
-                                                        {/* 8. Service Type (auto from Van) */}
+                                                        
+
+                                                        {/* 8. Stops */}
+                                                        <td className="px-2 py-1.5 bg-orange-500/10">{renderCell(row, "stopCount", row.stopCount)}</td>
+
+                                                        {/* 9. Packages */}
+                                                        <td className="px-2 py-1.5 bg-orange-500/10">{renderCell(row, "packageCount", row.packageCount)}</td>
+
+                                                        {/* 10. Duration */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "routeDuration", row.routeDuration)}</td>
+
+                                                        {/* 11. Wave Time */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "waveTime", row.waveTime)}</td>
+
+                                                        {/* 12. PAD */}
+                                                        <td className="px-2 py-1.5">{renderCell(row, "pad", row.pad)}</td>
+
+                                                        {/* 11. WST */}
+                                                        <td className="px-2 py-1.5">
+                                                            {row.wst ? (
+                                                                <span className={cn(
+                                                                    "text-[13px] font-semibold whitespace-nowrap",
+                                                                    row.serviceType
+                                                                        ? row.wst.toLowerCase() === row.serviceType.toLowerCase()
+                                                                            ? "text-emerald-500"
+                                                                            : "text-red-500"
+                                                                        : "text-foreground"
+                                                                )}>
+                                                                    {row.wst}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[13px] text-muted-foreground/30 font-semibold">—</span>
+                                                            )}
+                                                        </td>
+
+                                                        {/* 13. Service Type (auto from Van) */}
                                                         <td className="px-2 py-1.5">
                                                             <span className="text-[13px] font-semibold text-foreground whitespace-nowrap">
                                                                 {row.serviceType || <span className="text-muted-foreground/30 font-semibold">&mdash;</span>}
                                                             </span>
                                                         </td>
 
-                                                        {/* 9. Stops */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "stopCount", row.stopCount)}</td>
-
-                                                        {/* 10. Packages */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "packageCount", row.packageCount)}</td>
-
-                                                        {/* 11. Duration */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "routeDuration", row.routeDuration)}</td>
-
-                                                        {/* 12. Wave Time */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "waveTime", row.waveTime)}</td>
-
-                                                        {/* 13. PAD */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "pad", row.pad)}</td>
-
-                                                        {/* 14. Dashcam (auto from Van) — now after PAD */}
-                                                        <td className="px-2 py-1.5 align-middle text-center">
-                                                            {(() => {
-                                                                if (!row.dashcam || row.dashcam.toLowerCase() === "none") {
-                                                                    return <span className="text-muted-foreground/30 text-[13px] font-semibold">&mdash;</span>;
-                                                                }
-                                                                const camOpt = dropdowns.find((d: any) => d.type === "dashcam" && d.description.toLowerCase() === row.dashcam.toLowerCase());
-                                                                const CamIcon = camOpt?.icon ? (LucideIcons as any)[camOpt.icon] : Video;
-                                                                const camColor = camOpt?.color || undefined;
-
-                                                                return (
-                                                                    <div className="flex justify-center items-center h-full">
-                                                                        <Tooltip>
-                                                                            <TooltipTrigger asChild>
-                                                                                <div>
-                                                                                <CamIcon 
-                                                                                    className={cn("h-4 w-4", !camColor && "text-muted-foreground")} 
-                                                                                    style={{ color: camColor }} 
-                                                                                />
-                                                                                </div>
-                                                                            </TooltipTrigger>
-                                                                            <TooltipContent>{row.dashcam}</TooltipContent>
-                                                                        </Tooltip>
-                                                                    </div>
-                                                                );
-                                                            })()}
-                                                        </td>
+                                                        
 
                                                         {/* 10. Routes Completed */}
                                                         <td className="px-2 py-1.5">
@@ -1322,12 +1326,7 @@ export default function RoutesPage() {
                                                             </Tooltip>
                                                         </td>
 
-                                                        {/* 11. Rt Size */}
-                                                        <td className="px-2 py-1.5">
-                                                            <span className="text-[13px] font-medium text-foreground whitespace-nowrap">
-                                                                {row.routeSize || "—"}
-                                                            </span>
-                                                        </td>
+                                                        
 
                                                         {/* 17. WST Duration */}
                                                         <td className="px-2 py-1.5">{renderCell(row, "wstDuration", row.wstDuration)}</td>

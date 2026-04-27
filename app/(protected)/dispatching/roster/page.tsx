@@ -1,5 +1,7 @@
+import React from 'react';
 "use client";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouteTypes } from "@/lib/query/hooks/useShared";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../layout";
@@ -66,7 +68,7 @@ function toPacificDate(d: string | Date): string {
 }
 
 // ── Type Options with Icons & Colors (same as scheduling) ──
-import { getTypeStyle, TYPE_OPTIONS, TYPE_MAP } from "@/lib/route-types";
+import { getTypeStyle, TYPE_OPTIONS, TYPE_MAP, formatRouteTypes, getContrastText } from "@/lib/route-types";
 
 // ── Column Definitions ──
 const COLUMNS = [
@@ -113,6 +115,8 @@ const SHORT_DAYS: Record<string, string> = {
 };
 
 export default function RosterPage() {
+  const { data: routeTypesListData } = useRouteTypes();
+  const dynamicTypeOptions = React.useMemo(() => formatRouteTypes(routeTypesListData), [routeTypesListData]);
     const queryClient = useQueryClient();
     const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, refreshRoutes, refreshKey, setStats } = useDispatching();
 
@@ -533,7 +537,7 @@ export default function RosterPage() {
                                                             Change Type
                                                         </DropdownMenuLabel>
                                                         <DropdownMenuSeparator />
-                                                        {TYPE_OPTIONS.map(opt => {
+                                                        {dynamicTypeOptions.map(opt => {
                                                             const Icon = opt.icon;
                                                             const isActive = (row.type || "").toLowerCase() === opt.label.toLowerCase();
                                                             return (
@@ -545,8 +549,8 @@ export default function RosterPage() {
                                                                     )}
                                                                     onClick={() => handleTypeChange(row._id, opt.label, row.transporterId)}
                                                                 >
-                                                                    <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", opt.bg)}>
-                                                                        <Icon className={cn("h-3 w-3", opt.text)} />
+                                                                    <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", opt.bg)} style={opt.colorHex ? { backgroundColor: opt.colorHex } : undefined}>
+                                                                        <Icon className={cn("h-3 w-3", opt.text)} style={opt.colorHex ? { color: getContrastText(opt.colorHex) } : undefined} />
                                                                     </div>
                                                                     <span className="font-medium">{opt.label}</span>
                                                                     {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}

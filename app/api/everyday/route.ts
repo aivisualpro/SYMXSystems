@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
             const records = await SymxEveryday.find({ date: { $in: dateArray } });
             const result: Record<string, any> = {};
             records.forEach(r => {
-                result[r.date] = { notes: r.notes || "", routesAssigned: r.routesAssigned || 0, endDay: !!r.endDay };
+                result[r.date] = { notes: r.notes || "", attachments: r.attachments || [], routesAssigned: r.routesAssigned || 0, endDay: !!r.endDay };
             });
             return NextResponse.json({ records: result });
         }
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
         }
 
         const record = await SymxEveryday.findOne({ date });
-        return NextResponse.json({ notes: record?.notes || "", routesAssigned: record?.routesAssigned || 0, endDay: !!record?.endDay });
+        return NextResponse.json({ notes: record?.notes || "", attachments: record?.attachments || [], routesAssigned: record?.routesAssigned || 0, endDay: !!record?.endDay });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
         const body = await req.json();
-        const { date, notes, routesAssigned, endDay } = body;
+        const { date, notes, attachments, routesAssigned, endDay } = body;
 
         if (!date) {
             return NextResponse.json({ error: "Date is required" }, { status: 400 });
@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
 
         const updateData: any = {};
         if (notes !== undefined) updateData.notes = notes;
+        if (attachments !== undefined) updateData.attachments = attachments;
         if (routesAssigned !== undefined) updateData.routesAssigned = routesAssigned;
         if (endDay !== undefined) updateData.endDay = endDay;
 

@@ -208,29 +208,21 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
   const tomorrowPacific = getTomorrowPacific();
 
   if (tabId === "shift" || tabId === "route-itinerary") {
-    // Shift notification or Route Itinerary → use TODAY's Route schedule (Pacific)
+    // Shift notification or Route Itinerary → use TODAY's schedule (Pacific)
     const todayShift = emp.schedules?.find(
-      (s) => {
-        if (!s.date?.startsWith(todayPacific) || !s.type) return false;
-        const t = s.type.toLowerCase().trim();
-        if (t !== "route") return false;
-        return true;
-      }
+      (s) => s.date?.startsWith(todayPacific)
     );
     if (todayShift) targetShift = todayShift;
   } else if (tabId === "future-shift") {
-    // Future shift → use TOMORROW's Route schedule (Pacific)
+    // Future shift → use TOMORROW's schedule (Pacific)
     const tomorrowShift = emp.schedules?.find(
-      (s) => {
-        if (!s.date?.startsWith(tomorrowPacific) || !s.type) return false;
-        return s.type.toLowerCase().trim() === "route";
-      }
+      (s) => s.date?.startsWith(tomorrowPacific)
     );
     if (tomorrowShift) targetShift = tomorrowShift;
   } else if (tabId === "off-tomorrow") {
-    // Off-tomorrow → use TOMORROW's any working schedule (Pacific)
+    // Off-tomorrow → use TOMORROW's schedule (Pacific)
     const tomorrowShift = emp.schedules?.find(
-      (s) => s.date?.startsWith(tomorrowPacific) && s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
+      (s) => s.date?.startsWith(tomorrowPacific)
     );
     if (tomorrowShift) targetShift = tomorrowShift;
   }
@@ -1243,17 +1235,13 @@ function MessagingSubTab({
                 const tomorrowStr = getTomorrowPacific();
                 const nextShift = emp.schedules?.find(
                   (s) => {
-                    const t = s.type?.toLowerCase().trim() || "";
-                    if (!t || ["off", "close", "request off"].includes(t)) return false;
                     // Date-scope by tab
                     if (tab.id === "shift" || tab.id === "route-itinerary") {
                       const d = new Date(s.date).toISOString().split("T")[0];
-                      if (d !== todayStr) return false;
-                      if (t !== "route") return false;
+                      return d === todayStr;
                     } else if (tab.id === "future-shift") {
                       const d = new Date(s.date).toISOString().split("T")[0];
-                      if (d !== tomorrowStr) return false;
-                      if (t !== "route") return false;
+                      return d === tomorrowStr;
                     }
                     return true;
                   }

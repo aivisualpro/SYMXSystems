@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSchedulingWeeks } from "@/lib/query/hooks/useSchedules";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, Edit2, Phone, Timer, Package, Hash, ThumbsUp, type LucideIcon } from "lucide-react";
+import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, Edit2, Phone, Timer, Package, Hash, ThumbsUp, type LucideIcon , Paperclip, ImagePlus, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -116,6 +116,11 @@ export default function EverydayAfterDispatchingPage() {
 
     const [date, setDate] = useState("");
     const [notes, setNotes] = useState("");
+    const [attachments, setAttachments] = useState<string[]>([]);
+    const [isAttachmentsModalOpen, setIsAttachmentsModalOpen] = useState(false);
+    const [uploadingImage, setUploadingImage] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     const [savingNotes, setSavingNotes] = useState(false);
     const [loading, setLoading] = useState(true);
     const [endDay, setEndDay] = useState(false);
@@ -558,6 +563,7 @@ export default function EverydayAfterDispatchingPage() {
                 const fetchedNotes = notesData.notes || "";
                 setNotes(fetchedNotes);
                 setDebounceNotes(fetchedNotes); // prevent instant auto-save on load
+                setAttachments(notesData.attachments || []);
                 setEndDay(notesData.endDay || false);
             } else {
                 setEndDay(false);
@@ -689,14 +695,14 @@ export default function EverydayAfterDispatchingPage() {
     }, [fetchData]);
 
     // Auto-save logic
-    const saveNotesToDB = useCallback(async (notesToSave: string) => {
+    const saveNotesToDB = useCallback(async (notesToSave: string, attsToSave: string[] = attachments) => {
         if (!date) return;
         setSavingNotes(true);
         try {
             const res = await fetch("/api/everyday", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ date, notes: notesToSave })
+                body: JSON.stringify({ date, notes: notesToSave, attachments: attsToSave })
             });
             if (!res.ok) throw new Error("Failed to save notes");
         } catch (error) {
@@ -704,7 +710,7 @@ export default function EverydayAfterDispatchingPage() {
         } finally {
             setSavingNotes(false);
         }
-    }, [date]);
+    }, [date, attachments]);
 
     useEffect(() => {
         // If debounceNotes differs from initial load, trigger save
@@ -1028,6 +1034,20 @@ export default function EverydayAfterDispatchingPage() {
                             className="w-full h-full bg-background border border-primary ring-1 ring-primary rounded-lg pl-9 pr-[85px] text-sm font-medium placeholder:text-muted-foreground/40 placeholder:font-bold placeholder:text-base focus:outline-none transition-all shadow-sm"
                         />
                         <div className="absolute right-1 flex items-center gap-1.5 pointer-events-auto">
+                            <Button 
+                                onClick={() => setIsAttachmentsModalOpen(true)}
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 relative border-border/50 hover:bg-muted bg-background"
+                            >
+                                <Paperclip className="h-4 w-4 mr-1.5 text-muted-foreground" />
+                                Attachments
+                                {attachments.length > 0 && (
+                                    <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-primary text-[10px] font-bold text-primary-foreground flex items-center justify-center ring-2 ring-background">
+                                        {attachments.length}
+                                    </span>
+                                )}
+                            </Button>
                             <Button
                                 onClick={handleSaveNotes}
                                 disabled={savingNotes}
@@ -1078,7 +1098,7 @@ export default function EverydayAfterDispatchingPage() {
                             groups={groupedRoutes}
                             loading={loading}
                             columns={[
-                                { key: "employee", label: "Employee", minW: 100, className: "w-[220px] max-w-[220px]", sticky: true },
+                                { key: "employee", label: "Employee", minW: 100, className: "w-[160px] max-w-[160px]", sticky: true },
                                 { key: "deliveryCompletionTime", label: <HeaderIcon title="Delivery Completion Time" icon={Clock} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 70, className: "w-[70px] max-w-[70px] !px-1", align: "center" },
                                 ...(everydayRtsEnabled ? [{ key: "rts", label: <span className="font-semibold text-xs text-orange-600">RTS</span>, minW: 55, className: "w-[55px] max-w-[55px] !px-1", align: "center" as const }] : []),
                                 { key: "rescue", label: <span className="font-semibold text-xs text-teal-600">Rescue</span>, minW: 65, className: "w-[65px] max-w-[65px] !px-1", align: "center" },
@@ -1206,7 +1226,7 @@ export default function EverydayAfterDispatchingPage() {
                             groups={groupedTomorrowRoutes}
                             loading={loading}
                             columns={[
-                                { key: "employee", label: "Employee", minW: 100, className: "w-[220px] max-w-[220px]", sticky: true },
+                                { key: "employee", label: "Employee", minW: 100, className: "w-[160px] max-w-[160px]", sticky: true },
                                 { key: "dayBeforeConfirmation", label: <HeaderIcon title="Day Before Confirmation" icon={ThumbsUp} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 46, align: "center" },
                                 { key: "phone", label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 105, align: "center" },
                             ]}
@@ -1822,6 +1842,88 @@ export default function EverydayAfterDispatchingPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Attachments Modal */}
+            <Dialog open={isAttachmentsModalOpen} onOpenChange={setIsAttachmentsModalOpen}>
+                <DialogContent className="sm:max-w-[700px] bg-card/95 backdrop-blur-xl border-border shadow-2xl p-0 overflow-hidden">
+                    <DialogHeader className="px-6 py-4 border-b border-border bg-muted/20">
+                        <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                            <Paperclip className="h-5 w-5 text-primary" />
+                            Attachments ({attachments.length})
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="p-6">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-6">
+                            {attachments.map((url, i) => (
+                                <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border group bg-muted/30">
+                                    <img src={url} alt={`Attachment ${i}`} className="object-cover w-full h-full hover:scale-105 transition-transform" />
+                                    <button 
+                                        className="absolute top-2 right-2 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                                        onClick={async () => {
+                                            const newAtts = attachments.filter((_, idx) => idx !== i);
+                                            setAttachments(newAtts);
+                                            await saveNotesToDB(notes, newAtts);
+                                        }}
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            ))}
+                            {attachments.length === 0 && (
+                                <div className="col-span-full py-12 flex flex-col items-center justify-center text-muted-foreground/60 border-2 border-dashed border-border rounded-xl bg-muted/10">
+                                    <ImagePlus className="h-8 w-8 mb-2 opacity-50" />
+                                    <p className="text-sm font-medium">No attachments yet</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex justify-end">
+                            <input 
+                                type="file" 
+                                multiple 
+                                accept="image/*" 
+                                className="hidden" 
+                                ref={fileInputRef}
+                                onChange={async (e) => {
+                                    if (!e.target.files?.length) return;
+                                    setUploadingImage(true);
+                                    try {
+                                        const newUrls: string[] = [];
+                                        for (let i = 0; i < e.target.files.length; i++) {
+                                            const file = e.target.files[i];
+                                            const formData = new FormData();
+                                            formData.append("file", file);
+                                            const res = await fetch("/api/admin/upload?folder=symx-systems/everyday", {
+                                                method: "POST",
+                                                body: formData
+                                            });
+                                            if (!res.ok) throw new Error("Failed to upload image");
+                                            const data = await res.json();
+                                            newUrls.push(data.secure_url);
+                                        }
+                                        const updatedAtts = [...attachments, ...newUrls];
+                                        setAttachments(updatedAtts);
+                                        await saveNotesToDB(notes, updatedAtts);
+                                        toast.success("Attachments uploaded successfully");
+                                    } catch (err: any) {
+                                        toast.error(err.message || "Failed to upload");
+                                    } finally {
+                                        setUploadingImage(false);
+                                        if (fileInputRef.current) fileInputRef.current.value = '';
+                                    }
+                                }}
+                            />
+                            <Button 
+                                onClick={() => fileInputRef.current?.click()} 
+                                disabled={uploadingImage}
+                            >
+                                {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                                {uploadingImage ? "Uploading..." : "Upload Images"}
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }
