@@ -100,12 +100,22 @@ export default function FleetVehiclesPage() {
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
-      if (sortDir === "asc") setSortDir("desc");
-      else if (sortDir === "desc") { setSortKey(null); setSortDir(null); }
-      else setSortDir("asc");
+      if (key === "vehicleName") {
+        if (sortDir === "desc") setSortDir("asc");
+        else if (sortDir === "asc") { setSortKey(null); setSortDir(null); }
+        else setSortDir("desc");
+      } else {
+        if (sortDir === "asc") setSortDir("desc");
+        else if (sortDir === "desc") { setSortKey(null); setSortDir(null); }
+        else setSortDir("asc");
+      }
     } else {
       setSortKey(key);
-      setSortDir("asc");
+      if (key === "vehicleName") {
+        setSortDir("desc");
+      } else {
+        setSortDir("asc");
+      }
     }
   };
 
@@ -201,9 +211,9 @@ export default function FleetVehiclesPage() {
             const bd = bVal ? new Date(bVal).getTime() : 0;
             return sortDir === "asc" ? ad - bd : bd - ad;
           }
-          aVal = (aVal || "").toString().toLowerCase();
-          bVal = (bVal || "").toString().toLowerCase();
-          const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+          aVal = (aVal || "").toString();
+          bVal = (bVal || "").toString();
+          const cmp = aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' });
           return sortDir === "asc" ? cmp : -cmp;
         }
       }
@@ -211,9 +221,9 @@ export default function FleetVehiclesPage() {
       // Default: 1st by status rank, 2nd by vehicleName
       const statusCmp = statusRank(a.status || "") - statusRank(b.status || "");
       if (statusCmp !== 0) return statusCmp;
-      const aName = (a.vehicleName || "").toLowerCase();
-      const bName = (b.vehicleName || "").toLowerCase();
-      return aName < bName ? -1 : aName > bName ? 1 : 0;
+      const aName = (a.vehicleName || "").toString();
+      const bName = (b.vehicleName || "").toString();
+      return aName.localeCompare(bName, undefined, { numeric: true, sensitivity: 'base' });
     });
   }, [data?.vehicles, sortKey, sortDir, columns]);
 
