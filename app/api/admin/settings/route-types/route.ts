@@ -3,6 +3,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import RouteType from "@/lib/models/RouteType";
+import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+
+/** Compute current yearWeek (Sun-based) in Pacific Time. */
+function getCurrentYearWeek(): string {
+    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+    const date = new Date(todayStr + "T00:00:00.000Z");
+    const dayOfWeek = date.getUTCDay(); // 0=Sun … 6=Sat
+    const sundayOfThisWeek = new Date(date);
+    sundayOfThisWeek.setUTCDate(date.getUTCDate() - dayOfWeek);
+    const year = sundayOfThisWeek.getUTCFullYear();
+    const jan1 = new Date(Date.UTC(year, 0, 1));
+    const jan1Day = jan1.getUTCDay();
+    const firstSunday = new Date(jan1);
+    firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
+    const diffMs = sundayOfThisWeek.getTime() - firstSunday.getTime();
+    const diffDays = Math.round(diffMs / 86400000);
+    const weekNum = Math.floor(diffDays / 7) + 1;
+    return `${year}-W${weekNum.toString().padStart(2, "0")}`;
+}
 
 // GET — list all route types
 export async function GET() {
@@ -42,6 +61,10 @@ export async function POST(req: NextRequest) {
         }
 
         if (_id) {
+            // Fetch the existing record to detect startTime changes
+            const existing = await RouteType.findById(_id).lean();
+            if (!existing) return NextResponse.json({ error: "Route type not found" }, { status: 404 });
+
             // Update existing
             const updated = await RouteType.findByIdAndUpdate(
                 _id,
@@ -49,7 +72,26 @@ export async function POST(req: NextRequest) {
                 { new: true }
             ).lean();
             if (!updated) return NextResponse.json({ error: "Route type not found" }, { status: 404 });
-            return NextResponse.json(updated);
+
+            // If startTime changed, propagate to all current-week schedules matching this route type
+            let schedulesUpdated = 0;
+            if (startTime !== undefined && existing.startTime !== startTime) {
+                const currentWeek = getCurrentYearWeek();
+                const typeName = (existing.name || "").trim();
+                if (typeName) {
+                    const result = await SymxEmployeeSchedule.updateMany(
+                        {
+                            yearWeek: currentWeek,
+                            type: { $regex: new RegExp(`^${typeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+                        },
+                        { $set: { startTime: startTime || "" } }
+                    );
+                    schedulesUpdated = result.modifiedCount;
+                    console.log(`[Route Type] startTime changed for "${typeName}": updated ${schedulesUpdated} schedules in ${currentWeek}`);
+                }
+            }
+
+            return NextResponse.json({ ...updated, schedulesUpdated });
         } else {
             // Create new
             const route = await RouteType.create({

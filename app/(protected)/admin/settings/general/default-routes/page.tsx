@@ -116,8 +116,13 @@ export default function DefaultRoutesPage() {
             });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
             const saved = await res.json();
+            const schedulesUpdated = saved.schedulesUpdated || 0;
+            delete saved.schedulesUpdated;
             setRoutes(prev => prev.map((r, i) => i === idx ? { ...saved, isEditing: false, isNew: false } : r));
             toast.success("Saved");
+            if (schedulesUpdated > 0) {
+                toast.info(`Updated start time for ${schedulesUpdated} schedule${schedulesUpdated === 1 ? '' : 's'} this week`);
+            }
         } catch (err: any) { toast.error(err.message || "Failed to save"); }
         finally { setSaving(null); }
     };
