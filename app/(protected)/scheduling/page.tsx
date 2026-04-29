@@ -971,18 +971,6 @@ function SchedulingPageContent() {
         {weeks.length > 0 && (
           <>
             <div className="w-px h-5 bg-border/60 hidden sm:block" />
-            {currentUserEmail === "adeel@symxlogistics.com" && activeMainTab === "scheduling" && (
-              <Button
-                variant="destructive"
-                size="icon"
-                className="h-8 w-8 mr-1 opacity-80 hover:opacity-100"
-                onClick={handleDeleteWeek}
-                disabled={deletingWeek || generatingWeek}
-                title={`Delete ${selectedWeek}`}
-              >
-                {deletingWeek ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              </Button>
-            )}
             <Button
               variant="outline"
               size="icon"
@@ -1009,7 +997,7 @@ function SchedulingPageContent() {
               <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-[240px]">
                 {weeks.map(w => (
                   <SelectItem key={w} value={w}>
                     {formatWeekLabel(w)}

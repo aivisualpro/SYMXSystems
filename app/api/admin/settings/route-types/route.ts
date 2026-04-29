@@ -81,13 +81,13 @@ export async function POST(req: NextRequest) {
                 if (typeName) {
                     const result = await SymxEmployeeSchedule.updateMany(
                         {
-                            yearWeek: currentWeek,
+                            yearWeek: { $gte: currentWeek },
                             type: { $regex: new RegExp(`^${typeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
                         },
                         { $set: { startTime: startTime || "" } }
                     );
                     schedulesUpdated = result.modifiedCount;
-                    console.log(`[Route Type] startTime changed for "${typeName}": updated ${schedulesUpdated} schedules in ${currentWeek}`);
+                    console.log(`[Route Type] startTime changed for "${typeName}": updated ${schedulesUpdated} schedules in ${currentWeek}+`);
                 }
             }
 

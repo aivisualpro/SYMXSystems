@@ -448,7 +448,7 @@ export default function EverydayAfterDispatchingPage() {
                                 <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm" suppressHydrationWarning>
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className="max-h-[240px]">
                                     {weeks.map((week) => (
                                         <SelectItem key={week} value={week}>
                                             {formatWeekLabel(week)}

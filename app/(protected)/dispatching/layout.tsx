@@ -372,7 +372,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                             <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm" suppressHydrationWarning>
                                 <SelectValue />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className="max-h-[240px]">
                                 {weeks.map((w) => (
                                     <SelectItem key={w} value={w}>
                                         {formatWeekLabel(w)}
