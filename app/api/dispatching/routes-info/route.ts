@@ -27,6 +27,7 @@ function emptyRow(date: string, rowIndex: number) {
         bags: "",
         ov: "",
         stagingLocation: "",
+        commercialPackages: "",
         transporterId: "",
     };
 }
@@ -115,6 +116,7 @@ export async function GET(req: NextRequest) {
                 bags: r.bags || "",
                 ov: r.ov || "",
                 stagingLocation: r.stagingLocation || "",
+                commercialPackages: r.commercialPackages || "",
                 transporterId: rawTid,
                 rawSummary: r.rawSummary || null,
             };
@@ -222,6 +224,7 @@ export async function POST(req: NextRequest) {
                         bags: row.bags || "",
                         ov: row.ov || "",
                         stagingLocation: row.stagingLocation || "",
+                        commercialPackages: row.commercialPackages || "",
                         transporterId: row.transporterId || "",
                     },
                 },
@@ -309,7 +312,7 @@ export async function POST(req: NextRequest) {
 }
 
 // The route info fields that sync from RoutesInfo → SYMXRoute
-const ROUTE_INFO_FIELDS = ["routeNumber", "stopCount", "packageCount", "routeDuration", "waveTime", "pad", "wst", "wstDuration", "bags", "ov", "stagingLocation"];
+const ROUTE_INFO_FIELDS = ["routeNumber", "stopCount", "packageCount", "routeDuration", "waveTime", "pad", "wst", "wstDuration", "bags", "ov", "stagingLocation", "commercialPackages"];
 
 // Build a blank set of route info fields (to clear from old driver)
 function blankRouteInfoForRoute(): Record<string, any> {

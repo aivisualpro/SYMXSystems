@@ -12,6 +12,9 @@ import {
     Check,
     AlertCircle,
     FileJson,
+    Upload,
+    Download,
+    RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -42,6 +45,7 @@ const COLUMNS: ColumnDef[] = [
     { key: "bags", label: "Bags", width: 60, type: "text" },
     { key: "ov", label: "OV", width: 55, type: "text" },
     { key: "stagingLocation", label: "Staging", width: 85, type: "text" },
+    { key: "commercialPackages", label: "Comm Pkg", width: 75, type: "text" },
     { key: "actions", label: "", width: 40, readOnly: true, type: "index" }
 ];
 
@@ -62,6 +66,7 @@ interface RowData {
     bags: string;
     ov: string;
     stagingLocation: string;
+    commercialPackages: string;
     transporterId: string;
     rawSummary?: any;
 }
@@ -88,6 +93,12 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [dirtyRows, setDirtyRows] = useState<Set<number>>(new Set());
+    const [pdfImporting, setPdfImporting] = useState(false);
+    const [routeSheetUrl, setRouteSheetUrl] = useState<string>("");
+    const [pdfImportStats, setPdfImportStats] = useState<{ matched: number; skipped: number; total: number; skippedRoutes: string[] } | null>(null);
+    const [refetching, setRefetching] = useState(false);
+    const pdfFileRef = useRef<HTMLInputElement>(null);
+    const lastParsedPagesRef = useRef<any[]>([]);
 
     // Raw modal state
     const [rawSummaryOpen, setRawSummaryOpen] = useState<{ open: boolean; data: any; routeNumber: string }>({
@@ -110,6 +121,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
 
     // Header search state
     const [driverSearch, setDriverSearch] = useState("");
+    const [selectedRowIdx, setSelectedRowIdx] = useState<number | null>(null);
 
     // Refs
     const gridRef = useRef<HTMLDivElement>(null);
@@ -243,8 +255,54 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             .catch(() => toast.error("Failed to load routes info"))
             .finally(() => { if (!cancelled) setLoading(false); });
 
+        // Also fetch the SYMXRouteSheet URL + saved pages data from SYMXEveryday
+        fetch(`/api/everyday?date=${encodeURIComponent(date)}`)
+            .then(r => r.json())
+            .then(data => {
+                if (cancelled) return;
+                if (data.SYMXRouteSheet) {
+                    setRouteSheetUrl(data.SYMXRouteSheet);
+                }
+                // Restore persisted parsed pages and recompute stats
+                if (data.SYMXRouteSheetData && Array.isArray(data.SYMXRouteSheetData) && data.SYMXRouteSheetData.length > 0) {
+                    lastParsedPagesRef.current = data.SYMXRouteSheetData;
+                }
+            })
+            .catch(() => { /* silent */ });
+
         return () => { cancelled = true; };
     }, [open, date]);
+
+    // ── Recompute import stats whenever rows or lastParsedPages change ──
+    useEffect(() => {
+        if (!open || lastParsedPagesRef.current.length === 0 || rows.length === 0) return;
+        // Only recompute if we don't have loading in progress
+        if (loading) return;
+
+        const pages = lastParsedPagesRef.current;
+        const currentRouteNumbers = new Set<string>();
+        rows.forEach(r => {
+            const rn = (r.routeNumber || "").trim().toUpperCase();
+            if (rn) currentRouteNumbers.add(rn);
+        });
+
+        let matched = 0;
+        let skipped = 0;
+        const skippedRoutes: string[] = [];
+
+        pages.forEach((p: any) => {
+            const rn = (p.routeNumber || "").trim().toUpperCase();
+            if (!rn) { skipped++; return; }
+            if (currentRouteNumbers.has(rn)) {
+                matched++;
+            } else {
+                skipped++;
+                skippedRoutes.push(rn);
+            }
+        });
+
+        setPdfImportStats({ matched, skipped, total: pages.length, skippedRoutes });
+    }, [open, rows, loading]);
 
     // ── Sort function ──
     const handleSort = (key: string) => {
@@ -310,6 +368,457 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             setSaving(false);
         }
     }, [rows, dirtyRows, date, refreshRoutes]);
+
+    // ── PDF import handler ──
+    const handlePdfImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        // Reset file input so the same file can be re-selected
+        e.target.value = "";
+
+        if (file.type !== "application/pdf") {
+            toast.error("Please upload a PDF file");
+            return;
+        }
+
+        setPdfImporting(true);
+        const importToastId = toast.loading("Parsing PDF...");
+
+        try {
+            // Load PDF.js from CDN (cached after first load)
+            const PDFJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+            const PDFJS_WORKER_CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+            if (!(window as any).pdfjsLib) {
+                await new Promise<void>((resolve, reject) => {
+                    const script = document.createElement("script");
+                    script.src = PDFJS_CDN;
+                    script.onload = () => resolve();
+                    script.onerror = () => reject(new Error("Failed to load PDF.js"));
+                    document.head.appendChild(script);
+                });
+            }
+
+            const pdfjsLib = (window as any).pdfjsLib;
+            pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_CDN;
+
+            // Read the file as ArrayBuffer
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const totalPages = pdf.numPages;
+
+            toast.loading(`Extracting data from ${totalPages} pages...`, { id: importToastId });
+
+            const pages: { routeNumber: string; stagingLocation: string; bags: string; ov: string; commercialPackages: string }[] = [];
+
+            for (let i = 1; i <= totalPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const textItems = textContent.items.map((item: any) => item.str).filter((s: string) => s.trim());
+                const fullText = textItems.join(" ");
+
+                // ── Extract routeNumber ──
+                // Pattern: Usually appears as "CX42", "CX45" etc. — alphanumeric, typically 2 letters + digits
+                // It appears right after the STG line in the PDF layout
+                let routeNumber = "";
+                const routeMatch = fullText.match(/\b(C[A-Z]\d{1,4})\b/);
+                if (routeMatch) {
+                    routeNumber = routeMatch[1];
+                }
+
+                // ── Extract staging location ──
+                // Pattern: "STG.H.5" → strip "STG." → "H.5"
+                let stagingLocation = "";
+                const stagingMatch = fullText.match(/STG\.([A-Z0-9]+\.[A-Z0-9]+)/i);
+                if (stagingMatch) {
+                    stagingLocation = stagingMatch[1];
+                }
+
+                // ── Extract bags ──
+                // Pattern: "17 bags" or "16 bags"
+                let bags = "";
+                const bagsMatch = fullText.match(/(\d+)\s*bags/i);
+                if (bagsMatch) {
+                    bags = bagsMatch[1];
+                }
+
+                // ── Extract overflow (ov) ──
+                // PDF.js two-column layout: use x-coordinate positions to separate
+                // left column (bags) from right column (overflow).
+                // Each item in textContent.items has transform[4] = x position.
+                let ov = "";
+
+                // Get ALL items with their x-positions (not just filtered text)
+                const allItems: { str: string; x: number }[] = textContent.items
+                    .filter((item: any) => item.str && item.str.trim())
+                    .map((item: any) => ({ str: item.str.trim(), x: item.transform ? item.transform[4] : 0 }));
+
+                // Find zone codes (C-xx.xxX) and their x-positions to determine column boundary
+                const zoneItems = allItems.filter(item => /^[A-Z]-\d+\.\d+[A-Z]?$/i.test(item.str));
+                
+                if (zoneItems.length > 0) {
+                    // Find the x-positions of zones — left column zones have lower x, right column higher x
+                    const xPositions = zoneItems.map(z => z.x);
+                    const minX = Math.min(...xPositions);
+                    const maxX = Math.max(...xPositions);
+                    
+                    // If there's a clear gap between left and right columns
+                    // The midpoint separates bags zones (left) from overflow zones (right)
+                    const midX = (minX + maxX) / 2;
+                    
+                    // Only use x-separation if there's a meaningful gap (at least 100px difference)
+                    if (maxX - minX > 50) {
+                        // Right column zone codes = overflow zones
+                        const rightZones = zoneItems.filter(z => z.x > midX);
+                        
+                        // For each right-column zone, find the Pkgs value
+                        // The Pkgs is the next number that appears at a similar or higher x-position
+                        let overflowPkgsSum = 0;
+                        
+                        for (const zone of rightZones) {
+                            // Find this zone in allItems and get the next number after it
+                            const zoneIdx = allItems.findIndex(item => item.str === zone.str && Math.abs(item.x - zone.x) < 5);
+                            if (zoneIdx >= 0) {
+                                // Look for the next standalone number (Pkgs) within a few items
+                                for (let k = zoneIdx + 1; k < Math.min(zoneIdx + 4, allItems.length); k++) {
+                                    if (/^\d{1,3}$/.test(allItems[k].str)) {
+                                        overflowPkgsSum += parseInt(allItems[k].str);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (overflowPkgsSum > 0) {
+                            ov = String(overflowPkgsSum);
+                        }
+                    }
+                }
+
+                // Fallback: Total Packages - bags section Pkgs sum
+                if (!ov) {
+                    const totalPkgsMatch = fullText.match(/Total\s*Packages\s*(\d+)/i);
+                    if (totalPkgsMatch && bags && zoneItems.length > 0) {
+                        const totalPkgs = parseInt(totalPkgsMatch[1]);
+                        const bagsCount = parseInt(bags);
+                        const xPositions = zoneItems.map(z => z.x);
+                        const minX = Math.min(...xPositions);
+                        const maxX = Math.max(...xPositions);
+                        const midX = (minX + maxX) / 2;
+                        
+                        // Left column zones = bags zones
+                        const leftZones = zoneItems.filter(z => z.x <= midX);
+                        
+                        let bagsPkgsSum = 0;
+                        for (const zone of leftZones) {
+                            const zoneIdx = allItems.findIndex(item => item.str === zone.str && Math.abs(item.x - zone.x) < 5);
+                            if (zoneIdx >= 0) {
+                                for (let k = zoneIdx + 1; k < Math.min(zoneIdx + 6, allItems.length); k++) {
+                                    if (/^\d{1,3}$/.test(allItems[k].str)) {
+                                        bagsPkgsSum += parseInt(allItems[k].str);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (bagsPkgsSum > 0 && totalPkgs > bagsPkgsSum) {
+                            ov = String(totalPkgs - bagsPkgsSum);
+                        }
+                    }
+                }
+
+                // Last resort: scan textItems for "over*" word preceded by number
+                if (!ov) {
+                    for (let j = 1; j < textItems.length; j++) {
+                        const item = textItems[j].trim().toLowerCase();
+                        if (item.length >= 4 && item.startsWith("over")) {
+                            const prev = textItems[j - 1].trim();
+                            if (/^\d+$/.test(prev)) {
+                                ov = prev;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // ── Extract commercial packages ──
+                // Pattern: "Commercial Packages 19" or "Commercial Packages 6"
+                let commercialPackages = "";
+                const cpMatch = fullText.match(/Commercial\s*Packages\s*(\d+)/i);
+                if (cpMatch) {
+                    commercialPackages = cpMatch[1];
+                }
+
+                if (routeNumber) {
+                    pages.push({ routeNumber, stagingLocation, bags, ov, commercialPackages });
+                }
+            }
+
+            if (pages.length === 0) {
+                toast.error("No route data found in PDF", { id: importToastId });
+                return;
+            }
+
+            toast.loading(`Updating ${pages.length} routes...`, { id: importToastId });
+
+            // Send to server as FormData (includes PDF file for Cloudinary upload)
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("date", date);
+            formData.append("pages", JSON.stringify(pages));
+
+            const res = await fetch("/api/dispatching/routes-info/import-pdf", {
+                method: "POST",
+                body: formData,
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error);
+
+            // Update the route sheet URL for download
+            if (result.cloudinaryUrl) {
+                setRouteSheetUrl(result.cloudinaryUrl);
+            }
+
+            // Store import stats and parsed pages for refetch
+            setPdfImportStats({
+                matched: result.matched,
+                skipped: result.skipped,
+                total: result.totalPages,
+                skippedRoutes: result.skippedRoutes || [],
+            });
+            lastParsedPagesRef.current = pages;
+
+            // Show results
+            if (result.matched > 0) {
+                toast.success(
+                    `Imported ${result.matched} of ${result.totalPages} routes` +
+                    (result.skipped > 0 ? ` (${result.skipped} unmatched)` : ""),
+                    { id: importToastId, duration: 5000 }
+                );
+
+                // Re-fetch data to refresh the table
+                const refreshRes = await fetch(`/api/dispatching/routes-info?date=${encodeURIComponent(date)}`);
+                if (refreshRes.ok) {
+                    const refreshData = await refreshRes.json();
+                    let fetchedRows = refreshData.rows || [];
+                    fetchedRows.sort((a: any, b: any) => {
+                        const aVal = String(a[sortConfig.key] || "");
+                        const bVal = String(b[sortConfig.key] || "");
+                        if (!aVal && bVal) return 1;
+                        if (aVal && !bVal) return -1;
+                        return sortConfig.direction === "asc"
+                            ? aVal.localeCompare(bVal, undefined, { numeric: true })
+                            : bVal.localeCompare(aVal, undefined, { numeric: true });
+                    });
+                    setRows(fetchedRows);
+                    setDirtyRows(new Set());
+                }
+                refreshRoutes();
+            } else {
+                toast.warning("No matching routes found for imported data", { id: importToastId });
+            }
+        } catch (err: any) {
+            toast.error(err.message || "Failed to import PDF", { id: importToastId });
+        } finally {
+            setPdfImporting(false);
+        }
+    }, [date, sortConfig, refreshRoutes]);
+
+    // ── Refetch handler: re-download PDF from Cloudinary and re-parse with latest code ──
+    const handleRefetch = useCallback(async () => {
+        if (!routeSheetUrl) {
+            toast.info("No PDF to re-process. Please upload a PDF first.");
+            return;
+        }
+
+        setRefetching(true);
+        const refetchToastId = toast.loading("Downloading PDF from Cloudinary...");
+
+        try {
+            // ── 1. Load PDF.js if not already loaded ──
+            const PDFJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+            const PDFJS_WORKER_CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+            if (!(window as any).pdfjsLib) {
+                await new Promise<void>((resolve, reject) => {
+                    const script = document.createElement("script");
+                    script.src = PDFJS_CDN;
+                    script.onload = () => resolve();
+                    script.onerror = () => reject(new Error("Failed to load PDF.js"));
+                    document.head.appendChild(script);
+                });
+            }
+
+            const pdfjsLib = (window as any).pdfjsLib;
+            pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_CDN;
+
+            // ── 2. Download PDF from Cloudinary ──
+            const pdfResponse = await fetch(routeSheetUrl);
+            if (!pdfResponse.ok) throw new Error("Failed to download PDF from Cloudinary");
+            const arrayBuffer = await pdfResponse.arrayBuffer();
+
+            // ── 3. Re-parse with latest extraction logic ──
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const totalPages = pdf.numPages;
+            toast.loading(`Re-parsing ${totalPages} pages...`, { id: refetchToastId });
+
+            const pages: { routeNumber: string; stagingLocation: string; bags: string; ov: string; commercialPackages: string }[] = [];
+
+            for (let pi = 1; pi <= totalPages; pi++) {
+                const page = await pdf.getPage(pi);
+                const textContent = await page.getTextContent();
+                const textItems = textContent.items.map((item: any) => item.str).filter((s: string) => s.trim());
+                const fullText = textItems.join(" ");
+
+                // Route number
+                let routeNumber = "";
+                const routeMatch = fullText.match(/\b(C[A-Z]\d{1,4})\b/);
+                if (routeMatch) routeNumber = routeMatch[1];
+
+                // Staging location
+                let stagingLocation = "";
+                const stagingMatch = fullText.match(/STG\.([A-Z0-9]+\.[A-Z0-9]+)/i);
+                if (stagingMatch) stagingLocation = stagingMatch[1];
+
+                // Bags
+                let bags = "";
+                const bagsMatch = fullText.match(/(\d+)\s*bags/i);
+                if (bagsMatch) bags = bagsMatch[1];
+
+                // Overflow — use x-coordinate positions
+                let ov = "";
+                const allItems: { str: string; x: number }[] = textContent.items
+                    .filter((item: any) => item.str && item.str.trim())
+                    .map((item: any) => ({ str: item.str.trim(), x: item.transform ? item.transform[4] : 0 }));
+
+                const zoneItems = allItems.filter(item => /^[A-Z]-\d+\.\d+[A-Z]?$/i.test(item.str));
+
+                if (zoneItems.length > 0) {
+                    const xPositions = zoneItems.map(z => z.x);
+                    const minX = Math.min(...xPositions);
+                    const maxX = Math.max(...xPositions);
+                    const midX = (minX + maxX) / 2;
+
+                    if (maxX - minX > 50) {
+                        const rightZones = zoneItems.filter(z => z.x > midX);
+                        let overflowPkgsSum = 0;
+                        for (const zone of rightZones) {
+                            const zoneIdx = allItems.findIndex(item => item.str === zone.str && Math.abs(item.x - zone.x) < 5);
+                            if (zoneIdx >= 0) {
+                                for (let k = zoneIdx + 1; k < Math.min(zoneIdx + 4, allItems.length); k++) {
+                                    if (/^\d{1,3}$/.test(allItems[k].str)) {
+                                        overflowPkgsSum += parseInt(allItems[k].str);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (overflowPkgsSum > 0) ov = String(overflowPkgsSum);
+                    }
+                }
+
+                if (!ov) {
+                    const totalPkgsMatch2 = fullText.match(/Total\s*Packages\s*(\d+)/i);
+                    if (totalPkgsMatch2 && bags && zoneItems.length > 0) {
+                        const totalPkgs = parseInt(totalPkgsMatch2[1]);
+                        const xPositions = zoneItems.map(z => z.x);
+                        const midX = (Math.min(...xPositions) + Math.max(...xPositions)) / 2;
+                        const leftZones = zoneItems.filter(z => z.x <= midX);
+                        let bagsPkgsSum = 0;
+                        for (const zone of leftZones) {
+                            const zoneIdx = allItems.findIndex(item => item.str === zone.str && Math.abs(item.x - zone.x) < 5);
+                            if (zoneIdx >= 0) {
+                                for (let k = zoneIdx + 1; k < Math.min(zoneIdx + 6, allItems.length); k++) {
+                                    if (/^\d{1,3}$/.test(allItems[k].str)) {
+                                        bagsPkgsSum += parseInt(allItems[k].str);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (bagsPkgsSum > 0 && totalPkgs > bagsPkgsSum) {
+                            ov = String(totalPkgs - bagsPkgsSum);
+                        }
+                    }
+                }
+
+                if (!ov) {
+                    for (let j = 1; j < textItems.length; j++) {
+                        const item = textItems[j].trim().toLowerCase();
+                        if (item.length >= 4 && item.startsWith("over")) {
+                            const prev = textItems[j - 1].trim();
+                            if (/^\d+$/.test(prev)) { ov = prev; break; }
+                        }
+                    }
+                }
+
+                // Commercial packages
+                let commercialPackages = "";
+                const cpMatch = fullText.match(/Commercial\s*Packages\s*(\d+)/i);
+                if (cpMatch) commercialPackages = cpMatch[1];
+
+                if (routeNumber) {
+                    pages.push({ routeNumber, stagingLocation, bags, ov, commercialPackages });
+                }
+            }
+
+            if (pages.length === 0) {
+                toast.error("No route data found in PDF", { id: refetchToastId });
+                return;
+            }
+
+            // ── 4. Send freshly parsed data to server ──
+            toast.loading(`Updating ${pages.length} routes...`, { id: refetchToastId });
+
+            const formData = new FormData();
+            formData.append("date", date);
+            formData.append("pages", JSON.stringify(pages));
+
+            const res = await fetch("/api/dispatching/routes-info/import-pdf", {
+                method: "POST",
+                body: formData,
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error);
+
+            setPdfImportStats({
+                matched: result.matched,
+                skipped: result.skipped,
+                total: result.totalPages,
+                skippedRoutes: result.skippedRoutes || [],
+            });
+            lastParsedPagesRef.current = pages;
+
+            toast.success(
+                `Re-parsed & applied: ${result.matched} matched, ${result.skipped} missing`,
+                { id: refetchToastId, duration: 4000 }
+            );
+
+            // Re-fetch data to refresh the table
+            const refreshRes = await fetch(`/api/dispatching/routes-info?date=${encodeURIComponent(date)}`);
+            if (refreshRes.ok) {
+                const refreshData = await refreshRes.json();
+                let fetchedRows = refreshData.rows || [];
+                fetchedRows.sort((a: any, b: any) => {
+                    const aVal = String(a[sortConfig.key] || "");
+                    const bVal = String(b[sortConfig.key] || "");
+                    if (!aVal && bVal) return 1;
+                    if (aVal && !bVal) return -1;
+                    return sortConfig.direction === "asc"
+                        ? aVal.localeCompare(bVal, undefined, { numeric: true })
+                        : bVal.localeCompare(aVal, undefined, { numeric: true });
+                });
+                setRows(fetchedRows);
+                setDirtyRows(new Set());
+            }
+            refreshRoutes();
+        } catch (err: any) {
+            toast.error(err.message || "Failed to re-parse PDF", { id: refetchToastId });
+        } finally {
+            setRefetching(false);
+        }
+    }, [date, sortConfig, refreshRoutes, routeSheetUrl]);
 
     // ── Delete a row ──
     const deleteRow = useCallback(async (visualRowIndex: number) => {
@@ -940,6 +1449,74 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                     {dirtyRows.size} unsaved
                                 </span>
                             )}
+                            {/* PDF Route Sheet Module — grouped container */}
+                            {routeSheetUrl ? (
+                                <div className="flex items-center gap-0 rounded-lg border border-white/40 bg-muted/30 overflow-hidden">
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-8 gap-1.5 text-xs font-semibold text-blue-500 hover:bg-blue-500/10 hover:text-blue-400 rounded-none px-3"
+                                        onClick={() => window.open(routeSheetUrl, "_blank")}
+                                    >
+                                        <Download className="h-3.5 w-3.5" />
+                                        Route Sheet
+                                        {pdfImportStats && pdfImportStats.skipped > 0 && (
+                                            <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/20 text-amber-500 ring-1 ring-amber-500/30">
+                                                {pdfImportStats.skipped}/{pdfImportStats.total}
+                                            </span>
+                                        )}
+                                        {pdfImportStats && pdfImportStats.skipped === 0 && (
+                                            <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-500 ring-1 ring-emerald-500/30">
+                                                {pdfImportStats.matched}/{pdfImportStats.total}
+                                            </span>
+                                        )}
+                                    </Button>
+                                    {pdfImportStats && pdfImportStats.skipped > 0 && (
+                                        <>
+                                            <div className="w-px h-5 bg-border/60" />
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-8 px-2 text-xs text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-none"
+                                                onClick={handleRefetch}
+                                                disabled={refetching}
+                                                title={`Re-apply PDF data — ${pdfImportStats.skipped} missing: ${pdfImportStats.skippedRoutes.join(", ")}`}
+                                            >
+                                                {refetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                                            </Button>
+                                        </>
+                                    )}
+                                    <div className="w-px h-5 bg-border/60" />
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-8 px-2 text-xs text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10 rounded-none"
+                                        onClick={() => pdfFileRef.current?.click()}
+                                        disabled={pdfImporting}
+                                        title="Re-upload PDF"
+                                    >
+                                        {pdfImporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                                    </Button>
+                                </div>
+                            ) : (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 gap-1.5 text-xs font-semibold border-emerald-600/50 text-emerald-600 hover:bg-emerald-600/10 hover:text-emerald-500 shadow-sm"
+                                    onClick={() => pdfFileRef.current?.click()}
+                                    disabled={pdfImporting}
+                                >
+                                    {pdfImporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                                    {pdfImporting ? "Importing..." : "Import PDF"}
+                                </Button>
+                            )}
+                            <input
+                                ref={pdfFileRef}
+                                type="file"
+                                accept=".pdf"
+                                className="hidden"
+                                onChange={handlePdfImport}
+                            />
                             <Button
                                 size="sm"
                                 className="h-8 gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25"
@@ -1022,13 +1599,15 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                         <tr
                                             key={row.rowIndex}
                                             className={cn(
-                                                "group transition-colors border-b border-border",
+                                                "group transition-all border-b border-border cursor-pointer",
                                                 hasData
                                                     ? "bg-card hover:bg-muted/40"
                                                     : "bg-muted/20 hover:bg-muted/40",
                                                 isDirty && "bg-primary/10",
                                                 isHidden && "hidden"
                                             )}
+                                            style={selectedRowIdx === rowIdx ? { outline: '1px solid rgba(255,255,255,0.55)', outlineOffset: '-1px' } : undefined}
+                                            onClick={() => setSelectedRowIdx(prev => prev === rowIdx ? null : rowIdx)}
                                         >
                                             {/* Row number */}
                                             <td

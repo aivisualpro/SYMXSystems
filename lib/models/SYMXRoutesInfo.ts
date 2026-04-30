@@ -14,6 +14,7 @@ export interface ISYMXRoutesInfo extends Document {
     bags: string;
     ov: string;
     stagingLocation: string;
+    commercialPackages: string;
     transporterId: string;        // linked to employee
     rawSummary: Record<string, any>;  // full raw JSON from Amazon route-summaries API
 }
@@ -33,6 +34,7 @@ const SYMXRoutesInfoSchema = new Schema<ISYMXRoutesInfo>(
         bags: { type: String, default: "" },
         ov: { type: String, default: "" },
         stagingLocation: { type: String, default: "" },
+        commercialPackages: { type: String, default: "" },
         transporterId: { type: String, default: "" },
         rawSummary: { type: Schema.Types.Mixed, default: {} },
     },

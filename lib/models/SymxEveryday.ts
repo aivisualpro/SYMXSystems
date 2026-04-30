@@ -6,6 +6,8 @@ export interface ISymxEveryday extends Document {
   attachments: string[];
   routesAssigned: number;
   endDay: boolean;
+  SYMXRouteSheet: string;
+  SYMXRouteSheetData: any[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +34,14 @@ const SymxEverydaySchema: Schema = new Schema(
     endDay: {
       type: Boolean,
       default: false,
+    },
+    SYMXRouteSheet: {
+      type: String,
+      default: '',
+    },
+    SYMXRouteSheetData: {
+      type: Schema.Types.Mixed,
+      default: [],
     },
   },
   {
