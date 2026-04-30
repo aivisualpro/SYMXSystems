@@ -186,6 +186,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [globalEditMode, setGlobalEditMode] = useState(false);
     const [pdfLoading, setPdfLoading] = useState(false);
     const [confirmationFilter, setConfirmationFilter] = useState("all");
+    const currentWeek = useMemo(() => getCurrentYearWeek(), []);
 
     /** Pick best default week: URL > current > closest ≤ current > latest */
     const pickDefaultWeek = useCallback((availableWeeks: string[], urlW: string) => {
@@ -369,12 +370,22 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                             <ChevronLeft className="h-4 w-4" />
                         </Button>
                         <Select value={selectedWeek} onValueChange={setSelectedWeek}>
-                            <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm" suppressHydrationWarning>
+                            <SelectTrigger 
+                                className={cn(
+                                    "w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm",
+                                    selectedWeek === currentWeek && "text-emerald-600 font-bold"
+                                )} 
+                                suppressHydrationWarning
+                            >
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="max-h-[240px]">
                                 {weeks.map((w) => (
-                                    <SelectItem key={w} value={w}>
+                                    <SelectItem 
+                                        key={w} 
+                                        value={w}
+                                        className={cn(w === currentWeek && "text-emerald-600 focus:text-emerald-600 font-bold")}
+                                    >
                                         {formatWeekLabel(w)}
                                     </SelectItem>
                                 ))}

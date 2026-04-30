@@ -499,6 +499,7 @@ function SchedulingPageContent() {
 
   const [mounted, setMounted] = useState(false);
   const [weeks, setWeeks] = useState<string[]>([]);
+  const currentWeek = useMemo(() => getCurrentYearWeek(), []);
   const [selectedWeek, setSelectedWeekState] = useState<string>(urlWeek);
   const [weekData, setWeekData] = useState<WeekData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -994,12 +995,21 @@ function SchedulingPageContent() {
               )}
             </Button>
             <Select value={selectedWeek} onValueChange={setSelectedWeek}>
-              <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm">
+              <SelectTrigger 
+                className={cn(
+                  "w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm",
+                  selectedWeek === currentWeek && "text-emerald-600 font-bold"
+                )}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="max-h-[240px]">
                 {weeks.map(w => (
-                  <SelectItem key={w} value={w}>
+                  <SelectItem 
+                    key={w} 
+                    value={w}
+                    className={cn(w === currentWeek && "text-emerald-600 focus:text-emerald-600 font-bold")}
+                  >
                     {formatWeekLabel(w)}
                   </SelectItem>
                 ))}

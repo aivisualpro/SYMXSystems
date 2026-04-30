@@ -112,6 +112,7 @@ export default function EverydayAfterDispatchingPage() {
     const { setLeftContent, setRightContent } = useHeaderActions();
 
     const [weeks, setWeeks] = useState<string[]>([]);
+    const currentWeek = useMemo(() => getCurrentYearWeek(getTodayPacific()), []);
     const [selectedWeek, setSelectedWeek] = useState("");
 
     const [date, setDate] = useState("");
@@ -444,18 +445,28 @@ export default function EverydayAfterDispatchingPage() {
                             >
                                 <ChevronLeft className="h-4 w-4" />
                             </Button>
-                            <Select value={selectedWeek} onValueChange={setSelectedWeek}>
-                                <SelectTrigger className="w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm" suppressHydrationWarning>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[240px]">
-                                    {weeks.map((week) => (
-                                        <SelectItem key={week} value={week}>
-                                            {formatWeekLabel(week)}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                             <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+                                 <SelectTrigger 
+                                     className={cn(
+                                         "w-[110px] sm:w-[170px] h-8 text-xs sm:text-sm",
+                                         selectedWeek === currentWeek && "text-emerald-600 font-bold"
+                                     )} 
+                                     suppressHydrationWarning
+                                 >
+                                     <SelectValue />
+                                 </SelectTrigger>
+                                 <SelectContent className="max-h-[240px]">
+                                     {weeks.map((week) => (
+                                         <SelectItem 
+                                             key={week} 
+                                             value={week}
+                                             className={cn(week === currentWeek && "text-emerald-600 focus:text-emerald-600 font-bold")}
+                                         >
+                                             {formatWeekLabel(week)}
+                                         </SelectItem>
+                                     ))}
+                                 </SelectContent>
+                             </Select>
                             <Button
                                 variant="outline"
                                 size="icon"
