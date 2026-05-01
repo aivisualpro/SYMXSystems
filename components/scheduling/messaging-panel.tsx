@@ -271,50 +271,7 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
       const typeLower = typeStr.toLowerCase();
       
       if (typeLower && typeLower !== "route" && typeLower !== "off") {
-        const LUCIDE_TO_EMOJI: Record<string, string> = {
-          DoorClosed: "🏢", DoorOpen: "🏢", Coffee: "☕", PhoneOff: "🤒",
-          GraduationCap: "🎓", TruckIcon: "🚙", Truck: "🚙", UserCheck: "👥",
-          Ban: "🚫", ShieldAlert: "🩹", Clock: "⏳", Navigation: "📌",
-          Activity: "📊", AlertCircle: "⚠️", AlertTriangle: "⚠️", Award: "🏆",
-          Bell: "🔔", Briefcase: "💼", Bug: "🐛", Check: "✅", CheckCircle: "✅",
-          CheckCircle2: "✅", Clipboard: "📋", Crown: "👑", Flag: "🚩", Info: "ℹ️",
-          Lightbulb: "💡", Rocket: "🚀", Sparkles: "✨", Star: "⭐", Target: "🎯",
-          Trophy: "🏆", Zap: "⚡", ArrowDown: "⬇️", ArrowLeft: "⬅️", ArrowRight: "➡️",
-          ArrowUp: "⬆️", Route: "🛣️", Compass: "🧭", Home: "🏠", LogIn: "🚪",
-          LogOut: "🚪", ShieldCheck: "🛡️", AlarmClock: "⏰", Mail: "✉️",
-          MessageCircle: "💬", Phone: "📞", Camera: "📷", Image: "🖼️", Mic: "🎤",
-          Music: "🎵", Video: "📹", File: "📄", FileText: "📄", Folder: "📁",
-          Book: "📖", Edit: "✏️", Eye: "👁️", Filter: "🔍", Key: "🔑", Lock: "🔒",
-          LockOpen: "🔓", Search: "🔍", Settings: "⚙️", Trash: "🗑️", Trash2: "🗑️",
-          Calendar: "📅", Hourglass: "⏳", Timer: "⏱️", Moon: "🌙", Sun: "☀️",
-          Banknote: "💵", Coins: "🪙", CreditCard: "💳", ShoppingCart: "🛒",
-          Store: "🏪", User: "👤", Users: "👥", Baby: "👶", Smile: "😊",
-          Frown: "☹️", Handshake: "🤝", Car: "🚗", Bus: "🚌", Bike: "🚲",
-          Ship: "🚢", Plane: "✈️", Wrench: "🔧", MapPin: "📍", Map: "🗺️",
-          Heart: "❤️", Stethoscope: "🩺", Pill: "💊", Ambulance: "🚑",
-          Hospital: "🏥", Brain: "🧠", Building: "🏢", Building2: "🏢",
-          Factory: "🏭", Hotel: "🏨", School: "🏫", Church: "⛪", Hammer: "🔨",
-          Plug: "🔌", Flame: "🔥", Droplet: "💧", CloudRain: "🌧️", Snowflake: "❄️",
-          TreePine: "🌲", Flower: "🌸", Mountain: "⛰️", Cat: "🐱", Dog: "🐶",
-          Laptop: "💻", Smartphone: "📱", Monitor: "🖥️", Battery: "🔋",
-          Globe: "🌐", Package: "📦", Pizza: "🍕", Apple: "🍎"
-        };
-
-        let icon = "📌";
-        if (routeIconMap?.[typeLower]) {
-          const lucideName = routeIconMap[typeLower];
-          icon = LUCIDE_TO_EMOJI[lucideName] || "📌";
-        } else {
-          if (typeLower.includes("train")) icon = "🎓";
-          else if (typeLower.includes("fleet")) icon = "🚙";
-          else if (typeLower.includes("open") || typeLower.includes("close")) icon = "🏢";
-          else if (typeLower.includes("stand")) icon = "⏳";
-          else if (typeLower.includes("modifi")) icon = "🩹";
-          else if (typeLower.includes("call out") || typeLower.includes("sick")) icon = "🤒";
-          else if (typeLower.includes("request off") || typeLower.includes("pto") || typeLower.includes("vacation")) icon = "🌴";
-        }
-        
-        typeDisplay = ` ${icon} ${typeStr}`;
+        typeDisplay = ` | ${typeStr}`;
       }
 
       if (isWorking) {

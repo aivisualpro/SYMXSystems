@@ -797,7 +797,29 @@ function SchedulingPageContent() {
     if (storeWeekData) {
       setWeekData(storeWeekData);
       if (storeWeekData.auditCounts) setAuditCounts(storeWeekData.auditCounts);
-      if (storeWeekData.everydayRecords) setEverydayRecords(storeWeekData.everydayRecords);
+      if (storeWeekData.everydayRecords) {
+        // Merge: keep any locally-edited values (e.g. routesAssigned just saved by user)
+        // so that a type-change refetch doesn't wipe them out
+        setEverydayRecords(prev => {
+          const incoming = storeWeekData.everydayRecords as Record<string, any>;
+          const merged: Record<string, any> = { ...incoming };
+          Object.keys(prev).forEach(date => {
+            if (merged[date]) {
+              // Prefer the higher routesAssigned (local edit wins if server returns 0)
+              merged[date] = {
+                ...merged[date],
+                routesAssigned: Math.max(
+                  prev[date]?.routesAssigned ?? 0,
+                  merged[date]?.routesAssigned ?? 0
+                ),
+              };
+            } else {
+              merged[date] = prev[date];
+            }
+          });
+          return merged;
+        });
+      }
     }
   }, [storeWeekData]);
 
@@ -1102,17 +1124,20 @@ function SchedulingPageContent() {
   ) => {
     const isWorking = !NON_WORKING_TYPES.has(newType.trim().toLowerCase());
     const routeConfig = routeTypeConfigs[newType.trim().toLowerCase()];
-    const defaultStartTime = routeConfig?.startTime || "";
     const newRouteStatus = routeConfig?.routeStatus || (isWorking ? "Scheduled" : "Off");
 
     const payload: Record<string, any> = { 
       type: newType, 
-      startTime: defaultStartTime, 
       status: newRouteStatus,
       transporterId,
       dayIdx,
       yearWeek: selectedWeek
     };
+
+    // Only include startTime when the config has an explicit value — avoids blanking existing data
+    if (routeConfig?.startTime) {
+      payload.startTime = routeConfig.startTime;
+    }
 
     if (employeeName) payload.employeeName = employeeName;
     if (scheduleId) {
@@ -1138,7 +1163,7 @@ function SchedulingPageContent() {
       }
     });
 
-  }, [selectedWeek, weekData, updateSchedule]);
+  }, [selectedWeek, weekData, updateSchedule, routeTypeConfigs]);
 
   // Handle note save — optimistic update
   const handleNoteSaved = useCallback((transporterId: string, newNote: string, employeeName?: string, oldNote?: string) => {
