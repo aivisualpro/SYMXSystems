@@ -196,7 +196,7 @@ function getDayOfWeek(dateStr: string): string {
   return FULL_DAY_NAMES[d.getUTCDay()];
 }
 
-function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: string, selectedWeek?: string): string {
+function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: string, selectedWeek?: string, routeIconMap?: Record<string, string>): string {
   const NON_WORKING = ["off", "close", "request off", ""];
 
   // Determine which schedule to use based on tab context
@@ -264,11 +264,63 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
     const lines = sorted.map((s) => {
       const dn = s.weekDay || getDayOfWeek(s.date);
       const df = formatDateMMDDYYYY(s.date);
-      const isWorking = s.type && !NON_WORKING.includes(s.type.toLowerCase().trim());
+      const isWorking = (s.status || "").trim().toLowerCase() === "scheduled";
+      
+      let typeDisplay = "";
+      const typeStr = (s.type || "").trim();
+      const typeLower = typeStr.toLowerCase();
+      
+      if (typeLower && typeLower !== "route" && typeLower !== "off") {
+        const LUCIDE_TO_EMOJI: Record<string, string> = {
+          DoorClosed: "🏢", DoorOpen: "🏢", Coffee: "☕", PhoneOff: "🤒",
+          GraduationCap: "🎓", TruckIcon: "🚙", Truck: "🚙", UserCheck: "👥",
+          Ban: "🚫", ShieldAlert: "🩹", Clock: "⏳", Navigation: "📌",
+          Activity: "📊", AlertCircle: "⚠️", AlertTriangle: "⚠️", Award: "🏆",
+          Bell: "🔔", Briefcase: "💼", Bug: "🐛", Check: "✅", CheckCircle: "✅",
+          CheckCircle2: "✅", Clipboard: "📋", Crown: "👑", Flag: "🚩", Info: "ℹ️",
+          Lightbulb: "💡", Rocket: "🚀", Sparkles: "✨", Star: "⭐", Target: "🎯",
+          Trophy: "🏆", Zap: "⚡", ArrowDown: "⬇️", ArrowLeft: "⬅️", ArrowRight: "➡️",
+          ArrowUp: "⬆️", Route: "🛣️", Compass: "🧭", Home: "🏠", LogIn: "🚪",
+          LogOut: "🚪", ShieldCheck: "🛡️", AlarmClock: "⏰", Mail: "✉️",
+          MessageCircle: "💬", Phone: "📞", Camera: "📷", Image: "🖼️", Mic: "🎤",
+          Music: "🎵", Video: "📹", File: "📄", FileText: "📄", Folder: "📁",
+          Book: "📖", Edit: "✏️", Eye: "👁️", Filter: "🔍", Key: "🔑", Lock: "🔒",
+          LockOpen: "🔓", Search: "🔍", Settings: "⚙️", Trash: "🗑️", Trash2: "🗑️",
+          Calendar: "📅", Hourglass: "⏳", Timer: "⏱️", Moon: "🌙", Sun: "☀️",
+          Banknote: "💵", Coins: "🪙", CreditCard: "💳", ShoppingCart: "🛒",
+          Store: "🏪", User: "👤", Users: "👥", Baby: "👶", Smile: "😊",
+          Frown: "☹️", Handshake: "🤝", Car: "🚗", Bus: "🚌", Bike: "🚲",
+          Ship: "🚢", Plane: "✈️", Wrench: "🔧", MapPin: "📍", Map: "🗺️",
+          Heart: "❤️", Stethoscope: "🩺", Pill: "💊", Ambulance: "🚑",
+          Hospital: "🏥", Brain: "🧠", Building: "🏢", Building2: "🏢",
+          Factory: "🏭", Hotel: "🏨", School: "🏫", Church: "⛪", Hammer: "🔨",
+          Plug: "🔌", Flame: "🔥", Droplet: "💧", CloudRain: "🌧️", Snowflake: "❄️",
+          TreePine: "🌲", Flower: "🌸", Mountain: "⛰️", Cat: "🐱", Dog: "🐶",
+          Laptop: "💻", Smartphone: "📱", Monitor: "🖥️", Battery: "🔋",
+          Globe: "🌐", Package: "📦", Pizza: "🍕", Apple: "🍎"
+        };
+
+        let icon = "📌";
+        if (routeIconMap?.[typeLower]) {
+          const lucideName = routeIconMap[typeLower];
+          icon = LUCIDE_TO_EMOJI[lucideName] || "📌";
+        } else {
+          if (typeLower.includes("train")) icon = "🎓";
+          else if (typeLower.includes("fleet")) icon = "🚙";
+          else if (typeLower.includes("open") || typeLower.includes("close")) icon = "🏢";
+          else if (typeLower.includes("stand")) icon = "⏳";
+          else if (typeLower.includes("modifi")) icon = "🩹";
+          else if (typeLower.includes("call out") || typeLower.includes("sick")) icon = "🤒";
+          else if (typeLower.includes("request off") || typeLower.includes("pto") || typeLower.includes("vacation")) icon = "🌴";
+        }
+        
+        typeDisplay = ` ${icon} ${typeStr}`;
+      }
+
       if (isWorking) {
-        return ` ${dn} ${df} ✅ ${s.startTime || ""}`;
+        return ` ${dn} ${df} ✅ ${s.startTime || ""}${typeDisplay}`;
       } else {
-        return ` ${dn} ${df} ❌ OFF`;
+        return ` ${dn} ${df} ❌ OFF${typeDisplay}`;
       }
     });
     weekSchedule = lines.join("\n");
@@ -638,6 +690,7 @@ function MessagingSubTab({
   prefetchedTemplate,
   templatesLoaded,
   showOffToday,
+  routeIconMap,
   onSelectionReport,
   onEligibleReport,
 }: {
@@ -659,6 +712,7 @@ function MessagingSubTab({
   prefetchedTemplate?: string;
   templatesLoaded: boolean;
   showOffToday?: boolean;
+  routeIconMap?: Record<string, string>;
   onSelectionReport?: (count: number) => void;
   onEligibleReport?: (count: number) => void;
 }) {
@@ -1061,7 +1115,7 @@ function MessagingSubTab({
         const todayShift = emp.schedules?.find(
           (s) => {
             if (!s.date?.startsWith(todayPST) || !s.type) return false;
-            return s.type.toLowerCase().trim() === "route";
+            return ["route", "pending ecp"].includes(s.type.toLowerCase().trim());
           }
         );
         targetScheduleDate = todayShift?.date || undefined;
@@ -1070,7 +1124,7 @@ function MessagingSubTab({
         const tomorrowShift = emp.schedules?.find(
           (s) => {
             if (!s.date?.startsWith(tomorrowPST) || !s.type) return false;
-            return s.type.toLowerCase().trim() === "route";
+            return ["route", "pending ecp"].includes(s.type.toLowerCase().trim());
           }
         );
         targetScheduleDate = tomorrowShift?.date || undefined;
@@ -1089,7 +1143,7 @@ function MessagingSubTab({
       }
 
       // Build personalized message and append attachment links for flyer
-      let finalMessage = personalizeMessage(message.trim(), emp, tab.id, selectedWeek);
+      let finalMessage = personalizeMessage(message.trim(), emp, tab.id, selectedWeek, routeIconMap);
       if (tab.id === "flyer" && attachments.length > 0) {
         finalMessage += "\n\n📎 Attachments:";
         attachments.forEach((att) => {
@@ -1354,38 +1408,40 @@ function MessagingSubTab({
                     </span>
 
                     {/* Schedule Type — hidden on week-schedule tab */}
-                    {tab.id !== "week-schedule" && nextShift ? (() => {
-                      const typeKey = nextShift.type.toLowerCase().trim();
-                      const color = routeTypeMap[typeKey] || "#10b981"; // dynamic pull from DB
-                      
-                      let CellIcon = Navigation;
-                      let isOff = false;
-                      if (typeKey === "open") CellIcon = DoorOpen;
-                      else if (typeKey === "close") CellIcon = DoorClosed;
-                      else if (["off", "request off"].includes(typeKey)) { CellIcon = Coffee; isOff = true; }
-                      else if (typeKey === "call out") CellIcon = PhoneOff;
-                      else if (typeKey.includes("train")) CellIcon = GraduationCap;
-                      else if (typeKey === "fleet") CellIcon = TruckIcon;
-                      else if (typeKey === "trainer") CellIcon = UserCheck;
-                      else if (typeKey === "suspension") CellIcon = Ban;
-                      else if (typeKey === "modified duty") CellIcon = ShieldAlert;
-                      else if (typeKey === "stand by") CellIcon = Clock;
+                    {tab.id !== "week-schedule" && (
+                      nextShift ? (() => {
+                        const typeKey = nextShift.type.toLowerCase().trim();
+                        const color = routeTypeMap[typeKey] || "#10b981"; // dynamic pull from DB
+                        
+                        let CellIcon = Navigation;
+                        let isOff = false;
+                        if (typeKey === "open") CellIcon = DoorOpen;
+                        else if (typeKey === "close") CellIcon = DoorClosed;
+                        else if (["off", "request off"].includes(typeKey)) { CellIcon = Coffee; isOff = true; }
+                        else if (typeKey === "call out") CellIcon = PhoneOff;
+                        else if (typeKey.includes("train")) CellIcon = GraduationCap;
+                        else if (typeKey === "fleet") CellIcon = TruckIcon;
+                        else if (typeKey === "trainer") CellIcon = UserCheck;
+                        else if (typeKey === "suspension") CellIcon = Ban;
+                        else if (typeKey === "modified duty") CellIcon = ShieldAlert;
+                        else if (typeKey === "stand by") CellIcon = Clock;
 
-                      return (
-                        <span
-                          className="flex items-center justify-center gap-1 min-w-[70px] w-max h-6 rounded-md text-[10px] font-semibold tracking-wide border px-2 shadow-sm"
-                          style={{
-                            backgroundColor: isOff ? "transparent" : color,
-                            color: isOff ? color : "#ffffff",
-                            borderColor: isOff ? `${color}40` : color
-                          }}
-                        >
-                          <CellIcon className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{nextShift.type}</span>
-                        </span>
-                      );
-                    })() : (
-                      <span className="text-[11px] text-muted-foreground/40 truncate">—</span>
+                        return (
+                          <span
+                            className="flex items-center justify-center gap-1 min-w-[70px] w-max h-6 rounded-md text-[10px] font-semibold tracking-wide border px-2 shadow-sm"
+                            style={{
+                              backgroundColor: isOff ? "transparent" : color,
+                              color: isOff ? color : "#ffffff",
+                              borderColor: isOff ? `${color}40` : color
+                            }}
+                          >
+                            <CellIcon className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{nextShift.type}</span>
+                          </span>
+                        );
+                      })() : (
+                        <span className="text-[11px] text-muted-foreground/40 truncate">—</span>
+                      )
                     )}
                   </div>
                 );
@@ -1484,7 +1540,7 @@ function MessagingSubTab({
                           </span>
                         </div>
                         <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">
-                          {personalizeMessage(message, emp, tab.id, selectedWeek)}
+                          {personalizeMessage(message, emp, tab.id, selectedWeek, routeIconMap)}
                         </pre>
                         {/* Preview attachments if any */}
                         {tab.id === "flyer" && attachments.length > 0 && (
@@ -1891,13 +1947,22 @@ export default function MessagingPanel({
 
   // ── Route Types fetched ONCE here, shared to all sub-tabs via props ──
   const [routeTypeMap, setRouteTypeMap] = useState<Record<string, string>>({});
+  const [routeIconMap, setRouteIconMap] = useState<Record<string, string>>({});
   useEffect(() => {
     fetch("/api/admin/settings/route-types")
       .then(r => r.json())
       .then((data: any[]) => {
-        const map: Record<string, string> = {};
-        if (Array.isArray(data)) data.forEach(rt => { map[rt.name.toLowerCase().trim()] = rt.color; });
-        setRouteTypeMap(map);
+        const cMap: Record<string, string> = {};
+        const iMap: Record<string, string> = {};
+        if (Array.isArray(data)) {
+          data.forEach(rt => { 
+            const key = rt.name.toLowerCase().trim();
+            cMap[key] = rt.color; 
+            if (rt.icon) iMap[key] = rt.icon;
+          });
+        }
+        setRouteTypeMap(cMap);
+        setRouteIconMap(iMap);
       })
       .catch(() => {});
   }, []);
@@ -2203,6 +2268,7 @@ export default function MessagingPanel({
                   setFromNumberDisplay={setFromNumberDisplay}
                   loadingPhones={loadingPhones}
                   routeTypeMap={routeTypeMap}
+                  routeIconMap={routeIconMap}
                   prefetchedEmployees={employeesByTab[tab.id]}
                   employeesLoading={loadingTabs.has(tab.id)}
                   prefetchedTemplate={templatesByTab[tab.id]}

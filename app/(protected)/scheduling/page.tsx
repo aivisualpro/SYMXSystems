@@ -2,7 +2,7 @@
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment, useDeferredValue } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -44,6 +44,9 @@ import {
   Baby,
   BarChart3,
   DollarSign,
+  Filter,
+  RotateCcw,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
@@ -180,7 +183,7 @@ function computePlanningData(employees: EmployeeSchedule[], everydayRecords: Rec
       if (!day) continue;
       const typeVal = (day.type || "").trim().toLowerCase();
 
-      if (typeVal === "route") {
+      if (typeVal === "route" || typeVal === "pending ecp") {
         daStats[d]++;
       }
       if (typeVal === "stand by") {
@@ -208,7 +211,7 @@ function computePlanningData(employees: EmployeeSchedule[], everydayRecords: Rec
   ];
 }
 
-// Group employees by type
+// Group employees by type, and sort alphabetically with new hires at the bottom
 function groupByType(employees: EmployeeSchedule[]): Record<string, EmployeeSchedule[]> {
   const groups: Record<string, EmployeeSchedule[]> = {};
   employees.forEach(emp => {
@@ -216,6 +219,24 @@ function groupByType(employees: EmployeeSchedule[]): Record<string, EmployeeSche
     if (!groups[type]) groups[type] = [];
     groups[type].push(emp);
   });
+
+  // Sort within each group
+  Object.values(groups).forEach(groupList => {
+    groupList.sort((a, b) => {
+      const aIsNewHire = a.employee?.hiredDate ? (Date.now() - new Date(a.employee.hiredDate).getTime()) / 86400000 <= 30 : false;
+      const bIsNewHire = b.employee?.hiredDate ? (Date.now() - new Date(b.employee.hiredDate).getTime()) / 86400000 <= 30 : false;
+
+      // 1. New hires go to the bottom
+      if (aIsNewHire && !bIsNewHire) return 1;
+      if (!aIsNewHire && bIsNewHire) return -1;
+      
+      // 2. Alphabetical by name
+      const nameA = (a.employee?.name || a.transporterId || "").toLowerCase();
+      const nameB = (b.employee?.name || b.transporterId || "").toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  });
+
   return groups;
 }
 
@@ -461,6 +482,7 @@ function SchedulingPageContent() {
 
   // ── Read initial week from URL ──
   const urlWeek = searchParams.get("week") || "";
+  const urlSearch = searchParams.get("search") || "";
 
   // ── State-driven tab switching — NO route navigation, instant!
   const [activeMainTab, setActiveMainTab] = useState<"scheduling" | "messaging">(
@@ -472,9 +494,10 @@ function SchedulingPageContent() {
   });
 
   // ── Sync state changes to URL ──
-  const updateURL = useCallback((tab: "scheduling" | "messaging", subTab: string, week: string) => {
+  const updateURL = useCallback((tab: "scheduling" | "messaging", subTab: string, week: string, search: string) => {
     const params = new URLSearchParams();
     if (week) params.set("week", week);
+    if (search) params.set("search", search);
     const qs = params.toString();
     const basePath = tab === "messaging"
       ? `/scheduling/messaging/${subTab}`
@@ -488,14 +511,7 @@ function SchedulingPageContent() {
 
   // Sync URL when tabs change — runs ONLY when tab state actually changes, not on every render
   const isFirstRender = useRef(true);
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return; // skip the initial mount — URL is already correct
-    }
-    updateURL(activeMainTab, activeSubTab, selectedWeek);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeMainTab, activeSubTab]);
+  // Note: we'll handle the URL sync for tab, week, and search in a single effect below
 
   const [mounted, setMounted] = useState(false);
   const [weeks, setWeeks] = useState<string[]>([]);
@@ -503,10 +519,42 @@ function SchedulingPageContent() {
   const [selectedWeek, setSelectedWeekState] = useState<string>(urlWeek);
   const [weekData, setWeekData] = useState<WeekData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(urlSearch);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    updateURL(activeMainTab, activeSubTab, selectedWeek, deferredSearchQuery);
+  }, [activeMainTab, activeSubTab, selectedWeek, deferredSearchQuery, updateURL]);
+
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  // ── Magical Day-Level Filters ──
+  const [dayFilters, setDayFilters] = useState<Record<number, string[]>>({});
+  const [showDayFilter, setShowDayFilter] = useState(false);
+
+  const setDayFilterValue = useCallback((dayIdx: number, types: string[]) => {
+    setDayFilters(prev => {
+      const next = { ...prev };
+      if (types.length === 0) { delete next[dayIdx]; } else { next[dayIdx] = types; }
+      return next;
+    });
+  }, []);
+
+  const resetAllFilters = useCallback(() => {
+    setDayFilters({});
+    setSearchQuery("");
+    setTypeFilter("all");
+    setStatusFilter("all");
+    setShowDayFilter(false);
+  }, []);
+
+  const hasDayFilters = Object.keys(dayFilters).length > 0;
 
   const [selectAllTrigger, setSelectAllTrigger] = useState(0);
   const [activeTabInfo, setActiveTabInfo] = useState<ActiveTabInfo | null>(null);
@@ -630,8 +678,8 @@ function SchedulingPageContent() {
   // Wrapped setter that also updates URL
   const setSelectedWeek = useCallback((week: string) => {
     setSelectedWeekState(week);
-    updateURL(activeMainTab, activeSubTab, week);
-  }, [activeMainTab, activeSubTab, updateURL]);
+    updateURL(activeMainTab, activeSubTab, week, deferredSearchQuery);
+  }, [activeMainTab, activeSubTab, deferredSearchQuery, updateURL]);
 
   // Helpers to compute next/prev yearWeek strings
   const getNextYearWeek = (yw: string): string => {
@@ -1115,18 +1163,35 @@ function SchedulingPageContent() {
     setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
   }, []);
 
+  // Collect all unique schedule types from data for filter dropdowns
+  const allScheduleTypes = useMemo(() => {
+    if (!weekData?.employees) return [];
+    const types = new Set<string>();
+    weekData.employees.forEach(emp => {
+      Object.values(emp.days).forEach((d: DayData) => {
+        const t = (d.type || "").trim();
+        if (t) types.add(t);
+      });
+    });
+    return Array.from(types).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  }, [weekData]);
+
   // Filter employees
   const filteredEmployees = useMemo(() => {
     if (!weekData?.employees) return [];
     return weekData.employees.filter(emp => {
-      // Search filter
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
+      // Search filter — matches name, transporter ID, OR schedule type on any day
+      if (deferredSearchQuery) {
+        const q = deferredSearchQuery.toLowerCase();
         const name = emp.employee?.name || "";
         const tid = emp.transporterId || "";
-        if (!name.toLowerCase().includes(q) && !tid.toLowerCase().includes(q)) return false;
+        const nameMatch = name.toLowerCase().includes(q) || tid.toLowerCase().includes(q);
+        const typeMatch = Object.values(emp.days).some(
+          (d: DayData) => (d.type || "").toLowerCase().includes(q)
+        );
+        if (!nameMatch && !typeMatch) return false;
       }
-      // Type filter
+      // Type filter (employee group type)
       if (typeFilter !== "all") {
         const type = emp.employee?.type || "Unassigned";
         if (type !== typeFilter) return false;
@@ -1138,11 +1203,21 @@ function SchedulingPageContent() {
         );
         if (!hasStatus) return false;
       }
+      // ── Per-day type filters ──
+      const dayFilterEntries = Object.entries(dayFilters);
+      if (dayFilterEntries.length > 0) {
+        for (const [dayIdxStr, allowedTypes] of dayFilterEntries) {
+          const dayIdx = parseInt(dayIdxStr);
+          const day = emp.days[dayIdx];
+          const dayType = (day?.type || "").trim().toLowerCase();
+          if (!allowedTypes.some(t => t.toLowerCase() === dayType)) return false;
+        }
+      }
       return true;
     });
-  }, [weekData, searchQuery, typeFilter, statusFilter]);
+  }, [weekData, deferredSearchQuery, typeFilter, statusFilter, dayFilters]);
 
-  const isFiltered = searchQuery || typeFilter !== "all" || statusFilter !== "all";
+  const isFiltered = deferredSearchQuery || typeFilter !== "all" || statusFilter !== "all" || hasDayFilters;
 
   // Group data
   const grouped = useMemo(() => groupByType(filteredEmployees), [filteredEmployees]);
@@ -1191,7 +1266,7 @@ function SchedulingPageContent() {
     (sum, emp) => sum + Object.keys(emp.days).length, 0
   ) || 0;
   const totalRoutes = weekData?.employees?.reduce((sum, emp) => {
-    return sum + Object.values(emp.days).filter((d: DayData) => (d.type || "").trim().toLowerCase() === "route").length;
+    return sum + Object.values(emp.days).filter((d: DayData) => ["route", "pending ecp"].includes((d.type || "").trim().toLowerCase())).length;
   }, 0) || 0;
   const totalOff = weekData?.employees?.reduce((sum, emp) => {
     return sum + Object.values(emp.days).filter((d: DayData) => {
@@ -1275,7 +1350,7 @@ function SchedulingPageContent() {
             weeks={weeks}
             selectedWeek={selectedWeek}
             setSelectedWeek={setSelectedWeek}
-            searchQuery={searchQuery}
+            searchQuery={deferredSearchQuery}
             selectAllTrigger={selectAllTrigger}
             activeSubTab={activeSubTab}
             onSubTabChange={setActiveSubTab}
@@ -1331,8 +1406,189 @@ function SchedulingPageContent() {
                     {/* Table Header with Dates */}
                     <thead className="sticky top-0 z-20">
                       <tr className="bg-muted border-b border-border/50">
-                        <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[140px] sticky left-0 bg-muted z-30 backdrop-blur-sm">
-                          Employee Name
+                        <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[120px] sm:min-w-[160px] sticky left-0 bg-muted z-30 backdrop-blur-sm">
+                          <div className="flex flex-col gap-1.5">
+                            <span>Employee Name</span>
+                            <Popover open={showDayFilter} onOpenChange={setShowDayFilter}>
+                              <PopoverTrigger asChild>
+                                <button
+                                  className={cn(
+                                    "flex items-center justify-center gap-1.5 w-full px-2 py-1.5 rounded-md text-[10px] font-semibold uppercase tracking-wider transition-all duration-200 border",
+                                    hasDayFilters
+                                      ? "bg-gradient-to-r from-violet-500/20 to-fuchsia-500/20 border-violet-500/40 text-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.15)]"
+                                      : "bg-background border-foreground/20 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground hover:border-foreground/40"
+                                  )}
+                                >
+                                  <Filter className="h-3 w-3" />
+                                  <span>{hasDayFilters ? `Filtered (${Object.keys(dayFilters).length} day${Object.keys(dayFilters).length > 1 ? 's' : ''})` : 'Day Filters'}</span>
+                                  {hasDayFilters && (
+                                    <span className="flex items-center justify-center h-3.5 w-3.5 rounded-full bg-violet-500 text-[8px] text-white font-bold">
+                                      {Object.keys(dayFilters).length}
+                                    </span>
+                                  )}
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                align="start"
+                                sideOffset={8}
+                                className="w-[340px] p-0 border-border/50 bg-card shadow-2xl rounded-xl overflow-hidden"
+                                onOpenAutoFocus={e => e.preventDefault()}
+                              >
+                                {/* Header */}
+                                <div className="relative px-4 pt-4 pb-3">
+                                  <div className="absolute inset-0 bg-gradient-to-br from-violet-500/8 via-transparent to-fuchsia-500/8" />
+                                  <div className="relative flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                      <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 shadow-sm">
+                                        <Sparkles className="h-4 w-4 text-violet-400" />
+                                      </div>
+                                      <div>
+                                        <h4 className="text-sm font-bold">Day Filters</h4>
+                                        <p className="text-[10px] text-muted-foreground">Filter by schedule type per day</p>
+                                      </div>
+                                    </div>
+                                    {hasDayFilters && (
+                                      <button
+                                        onClick={resetAllFilters}
+                                        className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-red-400 hover:bg-red-500/10 transition-colors"
+                                      >
+                                        <RotateCcw className="h-3 w-3" />
+                                        Reset All
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Day rows */}
+                                <div className="px-3 pb-3 space-y-1">
+                                  {FULL_DAY_NAMES.map((dayName, dayIdx) => {
+                                    const selectedTypes = dayFilters[dayIdx] || [];
+                                    const hasFilter = selectedTypes.length > 0;
+                                    return (
+                                      <div key={dayName} className={cn(
+                                        "flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors",
+                                        hasFilter ? "bg-violet-500/8 border border-violet-500/20" : "hover:bg-muted/40"
+                                      )}>
+                                        <span className={cn(
+                                          "text-[11px] font-semibold w-[72px] shrink-0",
+                                          hasFilter ? "text-violet-400" : "text-muted-foreground"
+                                        )}>
+                                          {dayName}
+                                        </span>
+                                        <Popover>
+                                          <PopoverTrigger asChild>
+                                            <button className={cn(
+                                              "flex-1 flex items-center justify-between px-2 py-1 rounded-md border text-[11px] transition-all",
+                                              hasFilter
+                                                ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
+                                                : "border-border/50 bg-background/50 text-muted-foreground hover:bg-muted/30"
+                                            )}>
+                                              <span className="truncate">
+                                                {hasFilter ? selectedTypes.join(', ') : 'All Types'}
+                                              </span>
+                                              <ChevronDown className="h-3 w-3 shrink-0 opacity-50 ml-1" />
+                                            </button>
+                                          </PopoverTrigger>
+                                          <PopoverContent
+                                            align="start"
+                                            side="right"
+                                            className="w-[200px] p-1.5 flex flex-col gap-1 max-h-[280px] overflow-auto bg-card border-border/50 shadow-xl"
+                                            onOpenAutoFocus={e => e.preventDefault()}
+                                          >
+                                              <button
+                                                onClick={() => setDayFilterValue(dayIdx, [])}
+                                                className={cn(
+                                                  "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] font-bold transition-all border",
+                                                  !hasFilter 
+                                                    ? "bg-blue-500/10 text-blue-500 border-blue-500/30" 
+                                                    : "bg-muted/30 text-muted-foreground border-transparent hover:bg-muted/50"
+                                                )}
+                                              >
+                                                <div className={cn("w-3 h-3 shrink-0 rounded-sm border flex items-center justify-center", !hasFilter ? "border-blue-500" : "border-muted-foreground/40")}>
+                                                  {!hasFilter && <CheckCircle2 className="h-2.5 w-2.5 text-blue-500" />}
+                                                </div>
+                                                <span className="truncate flex-1 text-left">All Types</span>
+                                              </button>
+                                              
+                                              {allScheduleTypes.map(type => {
+                                                const isActive = selectedTypes.some(t => t.toLowerCase() === type.toLowerCase());
+                                                const matchedOpt = dynamicTypeOptions.find(opt => opt.label.toLowerCase() === type.toLowerCase());
+                                                const TypeIcon = matchedOpt?.icon;
+                                                const style = getDynamicTypeStyle(type, dynamicTypeOptions);
+                                                const bgHex = matchedOpt?.colorHex || style.colorHex;
+                                                const textColor = getContrastText(bgHex);
+                                                
+                                                return (
+                                                  <button
+                                                    key={type}
+                                                    onClick={() => {
+                                                      if (isActive) {
+                                                        setDayFilterValue(dayIdx, selectedTypes.filter(t => t.toLowerCase() !== type.toLowerCase()));
+                                                      } else {
+                                                        setDayFilterValue(dayIdx, [...selectedTypes, type]);
+                                                      }
+                                                    }}
+                                                    className={cn(
+                                                      "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] font-bold transition-all border",
+                                                      isActive ? "opacity-100 ring-1 ring-offset-1 ring-primary/40 shadow-sm" : "opacity-75 hover:opacity-100 filter saturate-50 hover:saturate-100"
+                                                    )}
+                                                    style={{ backgroundColor: bgHex, color: textColor, borderColor: bgHex }}
+                                                  >
+                                                    <div className={cn(
+                                                      "w-3 h-3 shrink-0 rounded-sm border flex items-center justify-center bg-background/30",
+                                                      isActive ? "border-current" : "border-current/40"
+                                                    )}>
+                                                      {isActive && <CheckCircle2 className="h-2.5 w-2.5" />}
+                                                    </div>
+                                                    {TypeIcon && <TypeIcon className="h-3 w-3 shrink-0" />}
+                                                    <span className="truncate flex-1 text-left">{type}</span>
+                                                  </button>
+                                                );
+                                              })}
+                                          </PopoverContent>
+                                        </Popover>
+                                        {hasFilter && (
+                                          <button
+                                            onClick={() => setDayFilterValue(dayIdx, [])}
+                                            className="p-0.5 rounded hover:bg-red-500/15 text-red-400 transition-colors shrink-0"
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Footer */}
+                                <div className="px-4 py-2.5 border-t border-border/40 bg-muted/20 flex items-center justify-between">
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {hasDayFilters ? `${filteredEmployees.length} matching` : `${weekData?.employees?.length || 0} total`}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {hasDayFilters && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setDayFilters({})}
+                                        className="h-6 px-2 text-[10px] text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                      >
+                                        <RotateCcw className="h-3 w-3 mr-1" />
+                                        Clear Days
+                                      </Button>
+                                    )}
+                                    <Button
+                                      size="sm"
+                                      onClick={() => setShowDayFilter(false)}
+                                      className="h-6 px-3 text-[10px] bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white border-0"
+                                    >
+                                      Done
+                                    </Button>
+                                  </div>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
                         </th>
                         {weekData?.dates?.map((date, i) => {
                           const isToday = date === getTodayPacific(); // strictly lock to Pacific Time
@@ -1508,13 +1764,16 @@ function SchedulingPageContent() {
                             {!collapsedGroups[groupName] &&
                               emps
                                 .sort((a, b) => {
-                                  const dateA = a.employee?.hiredDate ? new Date(a.employee.hiredDate).getTime() : Infinity;
-                                  const dateB = b.employee?.hiredDate ? new Date(b.employee.hiredDate).getTime() : Infinity;
-                                  if (dateA !== dateB) {
-                                    return dateA - dateB;
-                                  }
-                                  const nameA = a.employee?.name || "";
-                                  const nameB = b.employee?.name || "";
+                                  const aIsNewHire = a.employee?.hiredDate ? (Date.now() - new Date(a.employee.hiredDate).getTime()) / 86400000 <= 30 : false;
+                                  const bIsNewHire = b.employee?.hiredDate ? (Date.now() - new Date(b.employee.hiredDate).getTime()) / 86400000 <= 30 : false;
+
+                                  // 1. New hires to the bottom
+                                  if (aIsNewHire && !bIsNewHire) return 1;
+                                  if (!aIsNewHire && bIsNewHire) return -1;
+                                  
+                                  // 2. Alphabetical by name
+                                  const nameA = (a.employee?.name || a.transporterId || "").toLowerCase();
+                                  const nameB = (b.employee?.name || b.transporterId || "").toLowerCase();
                                   return nameA.localeCompare(nameB);
                                 })
                                 .map((emp) => {

@@ -220,7 +220,7 @@ export async function GET(req: NextRequest) {
           (s: any) =>
             toPacificDate(s.date) === tomorrowStr &&
             s.type &&
-            s.type.toLowerCase().trim() === "route"
+            ["route", "pending ecp"].includes(s.type.toLowerCase().trim())
         )
       );
     } else if (filter === "shift") {
@@ -231,7 +231,7 @@ export async function GET(req: NextRequest) {
           (s: any) =>
             toPacificDate(s.date) === todayStr &&
             s.type &&
-            s.type.toLowerCase().trim() === "route"
+            ["route", "pending ecp"].includes(s.type.toLowerCase().trim())
         )
       );
     } else if (filter === "off-tomorrow") {
@@ -256,7 +256,7 @@ export async function GET(req: NextRequest) {
         const isWorkingTomorrow =
           tomorrowSchedule &&
           ((tomorrowSchedule.status && tomorrowSchedule.status.toLowerCase().trim() === "scheduled") ||
-           (tomorrowSchedule.type && tomorrowSchedule.type.toLowerCase().trim() === "route"));
+           (tomorrowSchedule.type && ["route", "pending ecp"].includes(tomorrowSchedule.type.toLowerCase().trim())));
 
         return isOffToday && isWorkingTomorrow;
       });
@@ -276,7 +276,7 @@ export async function GET(req: NextRequest) {
           (s: any) =>
             toPacificDate(s.date) === todayStr &&
             s.type &&
-            s.type.toLowerCase().trim() === "route"
+            ["route", "pending ecp"].includes(s.type.toLowerCase().trim())
         )
       );
     } else if (filter === "flyer") {
