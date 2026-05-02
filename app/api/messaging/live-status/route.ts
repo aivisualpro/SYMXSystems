@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
       };
       // For date-specific tabs, scope by scheduleDate
       if (scheduleDate) {
-        confirmQuery.scheduleDate = scheduleDate;
+        confirmQuery.scheduleDate = { $regex: new RegExp("^" + scheduleDate) };
       }
       weekConfirmations = await ScheduleConfirmation.find(
         confirmQuery,
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     // If scheduleDate was specified but no confirmations found via ScheduleConfirmation,
     // try falling back to MessageLog.scheduleDate directly
     if (yearWeek && !weekLogIdFilter && scheduleDate) {
-      const logMatch: any = { messageType, toNumber: { $in: phones }, scheduleDate };
+      const logMatch: any = { messageType, toNumber: { $in: phones }, scheduleDate: { $regex: new RegExp("^" + scheduleDate) } };
       const latestLogs = await MessageLog.aggregate([
         { $match: logMatch },
         { $sort: { sentAt: -1 } },

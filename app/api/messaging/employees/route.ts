@@ -74,18 +74,25 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
 
-    // ── Detect cross-week boundary for future-shift ──
-    // When today is Saturday (last day of the week), "tomorrow" is Sunday of the NEXT week.
-    // We need to also fetch next week's schedules so the future-shift filter can find Sunday entries.
+    // ── Detect cross-week boundary ──
+    // When the requested scheduleDate (or computed target date) falls outside the selected week,
+    // also fetch next week's schedules.
     let needsNextWeek = false;
     let nextYearWeek = "";
-    if ((filter === "future-shift" || filter === "off-tomorrow") && yearWeek) {
-      const tomorrowStr = getTomorrowPacific();
-      const weekDates = getWeekDateStrings(yearWeek);
-      // If tomorrow's date is NOT within the selected week's date range, we need next week's data
-      if (weekDates.length > 0 && !weekDates.includes(tomorrowStr)) {
-        needsNextWeek = true;
-        nextYearWeek = getNextYearWeek(yearWeek);
+    if (yearWeek) {
+      // Determine which date we're targeting
+      let checkDate = date || "";
+      if (!checkDate && (filter === "future-shift" || filter === "off-tomorrow")) {
+        checkDate = getTomorrowPacific();
+      } else if (!checkDate && (filter === "shift" || filter === "route-itinerary")) {
+        checkDate = getTodayPacific();
+      }
+      if (checkDate) {
+        const weekDates = getWeekDateStrings(yearWeek);
+        if (weekDates.length > 0 && !weekDates.includes(checkDate)) {
+          needsNextWeek = true;
+          nextYearWeek = getNextYearWeek(yearWeek);
+        }
       }
     }
 
@@ -129,9 +136,13 @@ export async function GET(req: NextRequest) {
     // Combines ScheduleConfirmation + MessageLog lookups into one pipeline
     // For date-specific tabs (shift, future-shift, etc.) scope by scheduleDate;
     // for week-schedule, scope by yearWeek only.
-    const DATE_SPECIFIC_TABS = ["shift", "future-shift", "route-itinerary", "off-tomorrow"];
+    // If `date` param is provided by frontend, use it; otherwise compute from tab type.
+    const DATE_SPECIFIC_TABS = ["shift", "future-shift", "route-itinerary", "off-tomorrow", "flyer"];
     let targetScheduleDate = "";
-    if (filter && DATE_SPECIFIC_TABS.includes(filter)) {
+    if (date) {
+      // Frontend explicitly selected a date
+      targetScheduleDate = date;
+    } else if (filter && DATE_SPECIFIC_TABS.includes(filter)) {
       if (filter === "shift" || filter === "route-itinerary") {
         targetScheduleDate = getTodayPacific();
       } else if (filter === "future-shift" || filter === "off-tomorrow") {
@@ -147,7 +158,7 @@ export async function GET(req: NextRequest) {
           yearWeek, messageType: filter, messageLogId: { $exists: true },
         };
         if (targetScheduleDate) {
-          confirmQuery.scheduleDate = targetScheduleDate;
+          confirmQuery.scheduleDate = { $regex: new RegExp("^" + targetScheduleDate) };
         }
         const weekConfirmations = await ScheduleConfirmation.find(
           confirmQuery,
@@ -162,7 +173,7 @@ export async function GET(req: NextRequest) {
 
         if (wkLogIds.length === 0 && targetScheduleDate) {
           // Fallback: query MessageLog by scheduleDate directly
-          const logMatch: any = { messageType: filter, scheduleDate: targetScheduleDate };
+          const logMatch: any = { messageType: filter, scheduleDate: { $regex: new RegExp("^" + targetScheduleDate) } };
           latestLogs = await MessageLog.aggregate([
             { $match: logMatch },
             { $sort: { sentAt: -1 } },
@@ -343,53 +354,56 @@ export async function GET(req: NextRequest) {
     let filtered = enrichedEmployees;
 
     if (filter === "future-shift") {
-      // Employees on Route specifically TOMORROW (Pacific Time)
-      // Works across week boundaries: on Saturday (last day of W18), tomorrow is Sunday of W19
-      const tomorrowStr = getTomorrowPacific();
+      // Employees on Route for the target date
+      // If a specific date is selected via UI, use it; otherwise default to tomorrow
+      const targetDate = date || getTomorrowPacific();
       filtered = enrichedEmployees.filter((emp: any) =>
         emp.schedules.some(
           (s: any) =>
-            toPacificDate(s.date) === tomorrowStr &&
+            toPacificDate(s.date) === targetDate &&
             s.type &&
             ["route", "pending ecp"].includes(s.type.toLowerCase().trim())
         )
       );
     } else if (filter === "shift") {
-      // Employees on Route specifically TODAY (Pacific Time)
-      const todayStr = getTodayPacific();
+      // Employees on Route for the target date
+      const targetDate = date || getTodayPacific();
       filtered = enrichedEmployees.filter((emp: any) =>
         emp.schedules.some(
           (s: any) =>
-            toPacificDate(s.date) === todayStr &&
+            toPacificDate(s.date) === targetDate &&
             s.type &&
             ["route", "pending ecp"].includes(s.type.toLowerCase().trim())
         )
       );
     } else if (filter === "off-tomorrow") {
-      // Off today but scheduled tomorrow (Pacific Time)
-      const todayStr = getTodayPacific();
-      const tomorrowStr = getTomorrowPacific();
+      // Off on the day before the target date, but scheduled on the target date
+      const targetDate = date || getTomorrowPacific();
+      // Compute the day before the target date
+      const prevDay = new Date(targetDate + "T12:00:00.000Z");
+      prevDay.setUTCDate(prevDay.getUTCDate() - 1);
+      const prevDayStr = prevDay.toISOString().split("T")[0];
 
       filtered = enrichedEmployees.filter((emp: any) => {
-        const todaySchedule = emp.schedules.find(
-          (s: any) => toPacificDate(s.date) === todayStr
+        const prevDaySchedule = emp.schedules.find(
+          (s: any) => toPacificDate(s.date) === prevDayStr
         );
-        const tomorrowSchedule = emp.schedules.find(
-          (s: any) => toPacificDate(s.date) === tomorrowStr
+        const targetDaySchedule = emp.schedules.find(
+          (s: any) => toPacificDate(s.date) === targetDate
         );
 
-        const isOffToday =
-          !todaySchedule ||
-          (todaySchedule.status && todaySchedule.status.toLowerCase().trim() === "off") ||
-          (!todaySchedule.status && todaySchedule.type && ["off", "close", "request off", ""].includes(todaySchedule.type.toLowerCase().trim())) ||
-          (!todaySchedule.status && !todaySchedule.type);
+        const isOffPrevDay =
+          !prevDaySchedule ||
+          (prevDaySchedule.status && prevDaySchedule.status.toLowerCase().trim() === "off") ||
+          (!prevDaySchedule.status && prevDaySchedule.type && ["off", "close", "request off", ""].includes(prevDaySchedule.type.toLowerCase().trim())) ||
+          (!prevDaySchedule.status && !prevDaySchedule.type);
 
-        const isWorkingTomorrow =
-          tomorrowSchedule &&
-          ((tomorrowSchedule.status && tomorrowSchedule.status.toLowerCase().trim() === "scheduled") ||
-           (tomorrowSchedule.type && ["route", "pending ecp"].includes(tomorrowSchedule.type.toLowerCase().trim())));
+        const isWorkingTargetDay =
+          targetDaySchedule &&
+          ((targetDaySchedule.status && targetDaySchedule.status.toLowerCase().trim() === "scheduled") ||
+           (targetDaySchedule.type && ["route", "pending ecp"].includes(targetDaySchedule.type.toLowerCase().trim())));
 
-        return isOffToday && isWorkingTomorrow;
+        return isOffPrevDay && isWorkingTargetDay;
       });
     } else if (filter === "week-schedule") {
       // Employees with at least one day this week where status = "Scheduled"
@@ -400,12 +414,12 @@ export async function GET(req: NextRequest) {
         )
       );
     } else if (filter === "route-itinerary") {
-      // Employees on Route specifically TODAY (Pacific Time)
-      const todayStr = getTodayPacific();
+      // Employees on Route for the target date
+      const targetDate = date || getTodayPacific();
       filtered = enrichedEmployees.filter((emp: any) =>
         emp.schedules.some(
           (s: any) =>
-            toPacificDate(s.date) === todayStr &&
+            toPacificDate(s.date) === targetDate &&
             s.type &&
             ["route", "pending ecp"].includes(s.type.toLowerCase().trim())
         )

@@ -23,14 +23,49 @@ export async function GET(req: NextRequest) {
         const query: any = {};
         if (messageType) query.messageType = messageType;
 
-        // If scheduleDate is specified, filter by exact scheduleDate field on MessageLog
-        // This is used by date-specific tabs (shift, future-shift, route-itinerary, off-tomorrow)
+        // If scheduleDate is specified, find logs via two paths:
+        // 1) MessageLog records that have scheduleDate matching (new records)
+        // 2) MessageLog records linked from ScheduleConfirmation records with matching scheduleDate (old records)
+        let logs: any[] = [];
+
         if (scheduleDate) {
-            query.scheduleDate = scheduleDate;
+            const dateRegex = { $regex: new RegExp("^" + scheduleDate) };
+
+            // Path 1: MessageLogs with scheduleDate field
+            const directQuery: any = { ...query, scheduleDate: dateRegex };
+
+            // Path 2: Find messageLogIds from ScheduleConfirmation records that have this scheduleDate
+            const confirmQuery: any = {
+                scheduleDate: dateRegex,
+                messageLogId: { $exists: true },
+            };
+            if (messageType) confirmQuery.messageType = messageType;
+            const confirmations = await ScheduleConfirmation.find(
+                confirmQuery,
+                { messageLogId: 1 }
+            ).lean();
+            const confirmLogIds = confirmations.map((c: any) => c.messageLogId);
+
+            // Combine: logs matching directly OR linked via confirmations
+            if (confirmLogIds.length > 0) {
+                logs = await MessageLog.find({
+                    $or: [
+                        directQuery,
+                        { _id: { $in: confirmLogIds }, ...(messageType ? { messageType } : {}) },
+                    ],
+                })
+                    .sort({ sentAt: -1 })
+                    .limit(limit)
+                    .lean();
+            } else {
+                logs = await MessageLog.find(directQuery)
+                    .sort({ sentAt: -1 })
+                    .limit(limit)
+                    .lean();
+            }
         } else if (yearWeek) {
             // For week-level tabs (week-schedule), use the yearWeek field if stored,
             // otherwise fall back to sentAt date range
-            // First try matching by yearWeek field directly
             query.$or = [
                 { yearWeek },
                 // Fallback: filter by date range of that ISO week (for older records)
@@ -54,13 +89,16 @@ export async function GET(req: NextRequest) {
                     return {};
                 })(),
             ];
+            logs = await MessageLog.find(query)
+                .sort({ sentAt: -1 })
+                .limit(limit)
+                .lean();
+        } else {
+            logs = await MessageLog.find(query)
+                .sort({ sentAt: -1 })
+                .limit(limit)
+                .lean();
         }
-
-        // Get message logs sorted by most recent
-        const logs = await MessageLog.find(query)
-            .sort({ sentAt: -1 })
-            .limit(limit)
-            .lean();
 
         // Get associated confirmations for these logs
         const logIds = logs.map((l: any) => l._id);
