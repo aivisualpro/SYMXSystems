@@ -29,6 +29,37 @@ function toPacificDate(d: string | Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(date);
 }
 
+/** Compute the 7 dates (Sun–Sat) for a given yearWeek string like "2026-W18". */
+function getWeekDateStrings(yearWeek: string): string[] {
+  const match = yearWeek.match(/(\d{4})-W(\d{2})/);
+  if (!match) return [];
+  const year = parseInt(match[1]);
+  const week = parseInt(match[2]);
+  const jan1 = new Date(Date.UTC(year, 0, 1));
+  const jan1Day = jan1.getUTCDay();
+  const firstSunday = new Date(jan1);
+  firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
+  const weekSunday = new Date(firstSunday);
+  weekSunday.setUTCDate(firstSunday.getUTCDate() + (week - 1) * 7);
+  const dates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekSunday);
+    d.setUTCDate(weekSunday.getUTCDate() + i);
+    dates.push(d.toISOString().split("T")[0]);
+  }
+  return dates;
+}
+
+/** Compute next yearWeek: "2026-W18" → "2026-W19" */
+function getNextYearWeek(yearWeek: string): string {
+  const match = yearWeek.match(/(\d{4})-W(\d{2})/);
+  if (!match) return yearWeek;
+  let year = parseInt(match[1]);
+  let week = parseInt(match[2]) + 1;
+  if (week > 52) { year++; week = 1; }
+  return `${year}-W${String(week).padStart(2, "0")}`;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
@@ -43,6 +74,21 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
 
+    // ── Detect cross-week boundary for future-shift ──
+    // When today is Saturday (last day of the week), "tomorrow" is Sunday of the NEXT week.
+    // We need to also fetch next week's schedules so the future-shift filter can find Sunday entries.
+    let needsNextWeek = false;
+    let nextYearWeek = "";
+    if ((filter === "future-shift" || filter === "off-tomorrow") && yearWeek) {
+      const tomorrowStr = getTomorrowPacific();
+      const weekDates = getWeekDateStrings(yearWeek);
+      // If tomorrow's date is NOT within the selected week's date range, we need next week's data
+      if (weekDates.length > 0 && !weekDates.includes(tomorrowStr)) {
+        needsNextWeek = true;
+        nextYearWeek = getNextYearWeek(yearWeek);
+      }
+    }
+
     // ── Run all queries IN PARALLEL for maximum speed ──
     const employeePromise = SymxEmployee.find(
       { status: "Active", phoneNumber: { $exists: true, $ne: "" } },
@@ -52,18 +98,29 @@ export async function GET(req: NextRequest) {
       .lean();
 
     // Schedule query with PROJECTION — only fetch fields we actually use
-    const schedulePromise = yearWeek
+    // If cross-week boundary detected, also fetch next week's schedules
+    const scheduleQuery = yearWeek
+      ? (needsNextWeek
+        ? { yearWeek: { $in: [yearWeek, nextYearWeek] } }
+        : { yearWeek })
+      : null;
+    const schedulePromise = scheduleQuery
       ? SymxEmployeeSchedule.find(
-        { yearWeek },
+        scheduleQuery,
         { transporterId: 1, date: 1, weekDay: 1, type: 1, subType: 1, status: 1, startTime: 1, van: 1 }
       )
         .sort({ date: 1 })
         .lean()
       : Promise.resolve(null);
 
-    const routePromise = yearWeek
+    const routeQuery = yearWeek
+      ? (needsNextWeek
+        ? { yearWeek: { $in: [yearWeek, nextYearWeek] } }
+        : { yearWeek })
+      : null;
+    const routePromise = routeQuery
       ? SYMXRoute.find(
-          { yearWeek },
+          routeQuery,
           { transporterId: 1, date: 1, routeNumber: 1, stagingLocation: 1, pad: 1, waveTime: 1, van: 1 }
         ).lean()
       : Promise.resolve(null);
@@ -214,6 +271,7 @@ export async function GET(req: NextRequest) {
 
     if (filter === "future-shift") {
       // Employees on Route specifically TOMORROW (Pacific Time)
+      // Works across week boundaries: on Saturday (last day of W18), tomorrow is Sunday of W19
       const tomorrowStr = getTomorrowPacific();
       filtered = enrichedEmployees.filter((emp: any) =>
         emp.schedules.some(
