@@ -59,6 +59,7 @@ const ScheduleConfirmationSchema = new Schema<IScheduleConfirmation>(
 
 // Compound index for employees API / live-status lookups
 ScheduleConfirmationSchema.index({ yearWeek: 1, messageType: 1, messageLogId: 1 });
+ScheduleConfirmationSchema.index({ yearWeek: 1, messageType: 1, scheduleDate: 1 });
 ScheduleConfirmationSchema.index({ messageLogId: 1 });
 
 const ScheduleConfirmation: Model<IScheduleConfirmation> =

@@ -116,6 +116,8 @@ export async function POST(req: NextRequest) {
               messageType,
               content: personalizedContent,
               status: "failed",
+              scheduleDate: recipient.scheduleDate || "",
+              yearWeek: recipient.yearWeek || "",
               errorMessage:
                 responseData.message || responseData.error || `HTTP ${res.status}`,
             }).catch(() => { });
@@ -142,6 +144,8 @@ export async function POST(req: NextRequest) {
             messageType,
             content: personalizedContent,
             status: "sent",
+            scheduleDate: recipient.scheduleDate || "",
+            yearWeek: recipient.yearWeek || "",
             sentAt: new Date(),
           }).catch(() => null);
 
@@ -206,6 +210,8 @@ export async function POST(req: NextRequest) {
             messageType,
             content: personalizedContent,
             status: "failed",
+            scheduleDate: recipient.scheduleDate || "",
+            yearWeek: recipient.yearWeek || "",
             errorMessage: err.message || "Network error",
           }).catch(() => { });
 

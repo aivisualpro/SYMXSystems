@@ -415,7 +415,7 @@ interface HistoryLog {
   } | null;
 }
 
-function MessageHistoryTab({ messageType, selectedPhones, yearWeek }: { messageType: string; selectedPhones?: string[]; yearWeek?: string }) {
+function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate }: { messageType: string; selectedPhones?: string[]; yearWeek?: string; scheduleDate?: string }) {
   const [logs, setLogs] = useState<HistoryLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -423,7 +423,12 @@ function MessageHistoryTab({ messageType, selectedPhones, yearWeek }: { messageT
   useEffect(() => {
     setLoading(true);
     const params = new URLSearchParams({ messageType, limit: "200" });
-    if (yearWeek) params.set("yearWeek", yearWeek);
+    // For date-specific tabs, pass scheduleDate; for week-level tabs, pass yearWeek
+    if (scheduleDate) {
+      params.set("scheduleDate", scheduleDate);
+    } else if (yearWeek) {
+      params.set("yearWeek", yearWeek);
+    }
     fetch(`/api/messaging/history?${params.toString()}`)
       .then((res) => res.json())
       .then((data) => {
@@ -431,7 +436,7 @@ function MessageHistoryTab({ messageType, selectedPhones, yearWeek }: { messageT
       })
       .catch(() => setLogs([]))
       .finally(() => setLoading(false));
-  }, [messageType, yearWeek]);
+  }, [messageType, yearWeek, scheduleDate]);
 
   // Filter by selected phones
   const filteredLogs = useMemo(() => {
@@ -824,6 +829,14 @@ function MessagingSubTab({
           phones: sentPhonesRef.current.join(","),
         });
         if (selectedWeek) params.set("yearWeek", selectedWeek);
+        // For date-specific tabs, also pass scheduleDate
+        const DATE_SPECIFIC_TABS = ["shift", "future-shift", "route-itinerary", "off-tomorrow"];
+        if (DATE_SPECIFIC_TABS.includes(tab.id)) {
+          const targetDate = (tab.id === "shift" || tab.id === "route-itinerary")
+            ? getTodayPacific()
+            : getTomorrowPacific();
+          params.set("scheduleDate", targetDate);
+        }
 
         const res = await fetch(`/api/messaging/live-status?${params.toString()}`);
         if (!res.ok) return;
@@ -1778,6 +1791,14 @@ function MessagingSubTab({
             <MessageHistoryTab
               messageType={tab.id}
               yearWeek={selectedWeek}
+              scheduleDate={
+                // For date-specific tabs, scope history by the target date
+                ["shift", "route-itinerary"].includes(tab.id)
+                  ? getTodayPacific()
+                  : ["future-shift", "off-tomorrow"].includes(tab.id)
+                    ? getTomorrowPacific()
+                    : undefined
+              }
               selectedPhones={
                 selectedIds.size > 0
                   ? filteredEmployees

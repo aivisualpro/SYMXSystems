@@ -127,24 +127,44 @@ export async function GET(req: NextRequest) {
 
     // ── Messaging status — single optimized aggregation ──
     // Combines ScheduleConfirmation + MessageLog lookups into one pipeline
+    // For date-specific tabs (shift, future-shift, etc.) scope by scheduleDate;
+    // for week-schedule, scope by yearWeek only.
+    const DATE_SPECIFIC_TABS = ["shift", "future-shift", "route-itinerary", "off-tomorrow"];
+    let targetScheduleDate = "";
+    if (filter && DATE_SPECIFIC_TABS.includes(filter)) {
+      if (filter === "shift" || filter === "route-itinerary") {
+        targetScheduleDate = getTodayPacific();
+      } else if (filter === "future-shift" || filter === "off-tomorrow") {
+        targetScheduleDate = getTomorrowPacific();
+      }
+    }
+
     const messagingStatusPromise = (filter && yearWeek)
       ? (async () => {
         // Step 1: Get messageLogIds scoped to this week+messageType
+        // For date-specific tabs, additionally scope by scheduleDate
+        const confirmQuery: Record<string, any> = {
+          yearWeek, messageType: filter, messageLogId: { $exists: true },
+        };
+        if (targetScheduleDate) {
+          confirmQuery.scheduleDate = targetScheduleDate;
+        }
         const weekConfirmations = await ScheduleConfirmation.find(
-          { yearWeek, messageType: filter, messageLogId: { $exists: true } },
+          confirmQuery,
           { messageLogId: 1, status: 1, changeRemarks: 1 }
         ).lean();
 
         const wkLogIds = weekConfirmations.map((c: any) => c.messageLogId);
 
-        if (wkLogIds.length === 0) {
-          return { logMap: {} as Record<string, any>, confirmMap: {} as Record<string, any> };
-        }
+        // If no confirmations found via scheduleDate, also try querying MessageLog directly
+        // (handles older records that may not have scheduleDate on ScheduleConfirmation)
+        let latestLogs: any[];
 
-        // Step 2: Get latest log per phone — scoped to week's messageLogIds
-        const [latestLogs] = await Promise.all([
-          MessageLog.aggregate([
-            { $match: { _id: { $in: wkLogIds }, messageType: filter } },
+        if (wkLogIds.length === 0 && targetScheduleDate) {
+          // Fallback: query MessageLog by scheduleDate directly
+          const logMatch: any = { messageType: filter, scheduleDate: targetScheduleDate };
+          latestLogs = await MessageLog.aggregate([
+            { $match: logMatch },
             { $sort: { sentAt: -1 } },
             {
               $group: {
@@ -154,7 +174,60 @@ export async function GET(req: NextRequest) {
                 messageLogId: { $first: "$_id" },
               }
             },
-          ]),
+          ]);
+
+          if (latestLogs.length === 0) {
+            return { logMap: {} as Record<string, any>, confirmMap: {} as Record<string, any> };
+          }
+
+          // Look up confirmations for these specific log IDs
+          const fallbackLogIds = latestLogs.map((l: any) => l.messageLogId);
+          const fallbackConfirmations = await ScheduleConfirmation.find(
+            { messageLogId: { $in: fallbackLogIds } },
+            { messageLogId: 1, status: 1, changeRemarks: 1 }
+          ).lean();
+
+          const confirmMap: Record<string, any> = {};
+          fallbackConfirmations.forEach((c: any) => {
+            confirmMap[c.messageLogId.toString()] = c;
+          });
+
+          const logMap: Record<string, any> = {};
+          latestLogs.forEach((log: any) => {
+            const confirmation = confirmMap[log.messageLogId.toString()];
+            let finalStatus = log.status;
+            let changeRemarks = "";
+            if (confirmation?.status === "confirmed") finalStatus = "confirmed";
+            else if (confirmation?.status === "change_requested") {
+              finalStatus = "change_requested";
+              changeRemarks = confirmation.changeRemarks || "";
+            }
+            logMap[log._id] = {
+              status: finalStatus,
+              createdAt: log.sentAt?.toISOString?.() || log.sentAt,
+              ...(changeRemarks ? { changeRemarks } : {}),
+            };
+          });
+
+          return { logMap, confirmMap };
+        }
+
+        if (wkLogIds.length === 0) {
+          return { logMap: {} as Record<string, any>, confirmMap: {} as Record<string, any> };
+        }
+
+        // Step 2: Get latest log per phone — scoped to week's messageLogIds
+        latestLogs = await MessageLog.aggregate([
+          { $match: { _id: { $in: wkLogIds }, messageType: filter } },
+          { $sort: { sentAt: -1 } },
+          {
+            $group: {
+              _id: "$toNumber",
+              status: { $first: "$status" },
+              sentAt: { $first: "$sentAt" },
+              messageLogId: { $first: "$_id" },
+            }
+          },
         ]);
 
         // Build confirmation map from the already-fetched confirmations

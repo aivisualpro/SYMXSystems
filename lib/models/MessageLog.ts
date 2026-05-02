@@ -22,6 +22,10 @@ export interface IMessageLog extends Document {
     repliedAt?: Date;
     replyContent?: string;
 
+    // Schedule context
+    scheduleDate?: string;    // YYYY-MM-DD — the target schedule date this message is about
+    yearWeek?: string;        // e.g. "2026-W18" — the yearWeek this message belongs to
+
     // Metadata
     sentAt: Date;
     errorMessage?: string;
@@ -48,6 +52,8 @@ const MessageLogSchema = new Schema<IMessageLog>(
         deliveredAt: { type: Date },
         repliedAt: { type: Date },
         replyContent: { type: String },
+        scheduleDate: { type: String },
+        yearWeek: { type: String },
         sentAt: { type: Date, default: Date.now },
         errorMessage: { type: String },
         deliveryWebhookPayload: { type: Schema.Types.Mixed },
@@ -58,6 +64,7 @@ const MessageLogSchema = new Schema<IMessageLog>(
 
 // Compound index for quick lookups by phone + type
 MessageLogSchema.index({ toNumber: 1, messageType: 1, sentAt: -1 });
+MessageLogSchema.index({ messageType: 1, scheduleDate: 1, sentAt: -1 });
 MessageLogSchema.index({ fromNumber: 1 });
 
 const MessageLog: Model<IMessageLog> =
