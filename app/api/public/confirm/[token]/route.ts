@@ -108,7 +108,7 @@ export async function GET(
             weekSchedules = schedules.map((s: any) => ({
                 date: s.date,
                 weekDay: s.weekDay || "",
-                type: s.type || "OFF",
+                type: (s as any).type || "OFF",
                 startTime: s.startTime || "",
                 van: s.van || "",
             }));
@@ -117,7 +117,7 @@ export async function GET(
                 scheduleInfo = {
                     date: schedules[0].date,
                     weekDay: schedules[0].weekDay,
-                    type: schedules[0].type,
+                    type: (schedules[0] as any).type,
                     startTime: schedules[0].startTime,
                     van: schedules[0].van,
                 };
@@ -131,7 +131,7 @@ export async function GET(
                 scheduleInfo = {
                     date: schedule.date,
                     weekDay: schedule.weekDay,
-                    type: schedule.type,
+                    type: (schedule as any).type,
                     startTime: schedule.startTime,
                     van: schedule.van,
                 };
