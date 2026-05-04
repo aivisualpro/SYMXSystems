@@ -534,7 +534,7 @@ export default function RoutesPage() {
             };
         });
 
-        // Populate confirmation status
+        // Populate confirmation status from shiftNotification
         if (rawRouteData.confirmations) {
             rows.forEach(r => {
                 const dateStr = r.date && typeof r.date === 'string' ? r.date.split('T')[0] : "";

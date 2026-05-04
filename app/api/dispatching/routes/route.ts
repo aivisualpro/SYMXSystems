@@ -11,7 +11,8 @@ import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
 import SYMXSetting from "@/lib/models/SYMXSetting";
 import SymxUser from "@/lib/models/SymxUser";
 import Vehicle from "@/lib/models/Vehicle";
-import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
+
+
 import RouteType from "@/lib/models/RouteType";
 import { z } from "zod";
 import { validateBody, validateSearchParams } from "@/lib/validations";
@@ -174,13 +175,20 @@ export async function GET(req: NextRequest) {
             allVins.length > 0
                 ? Vehicle.find({ vin: { $in: allVins } }, { vin: 1, vehicleName: 1 }).lean()
                 : [],
-            ScheduleConfirmation.find(
-                {
-                    transporterId: { $in: transporterIds },
-                    createdAt: { $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) } // Last 2 weeks
-                },
-                { transporterId: 1, scheduleDate: 1, status: 1, changeRemarks: 1, updatedAt: 1 }
-            ).lean()
+            // Fetch schedules linked to these routes (for shiftNotification status)
+            (() => {
+                const scheduleIds = routes
+                    .map((r: any) => r.scheduleId)
+                    .filter(Boolean)
+                    .map((id: string) => { try { return new mongoose.Types.ObjectId(id); } catch { return null; } })
+                    .filter(Boolean);
+
+                if (scheduleIds.length === 0) return Promise.resolve([]);
+                return SymxEmployeeSchedule.find(
+                    { _id: { $in: scheduleIds } },
+                    { transporterId: 1, date: 1, shiftNotification: 1 }
+                ).lean();
+            })()
         ]);
 
         // ── Build maps (all O(n), very fast) ──
@@ -227,34 +235,41 @@ export async function GET(req: NextRequest) {
             if (v.vin && v.vehicleName) vehicleNames[v.vin] = v.vehicleName;
         });
 
-        // Build Confirmation Status Map (with full history)
+        // ── Build Confirmation Status Map ──
+        // Single source: shiftNotification[] from SYMXEmployeeSchedules
+        // Contains full timeline: sent → received → confirmed (after migration)
         const confirmationMap: Record<string, any> = {};
-        // Sort by updatedAt ascending so we process oldest first, latest overwrites
-        const sortedConfirmations = [...confirmationDocs as any[]].sort(
-            (a: any, b: any) => new Date(a.updatedAt || a.createdAt).getTime() - new Date(b.updatedAt || b.createdAt).getTime()
-        );
-        sortedConfirmations.forEach((c: any) => {
-            const dateStr = c.scheduleDate && typeof c.scheduleDate === 'string' ? c.scheduleDate.split('T')[0] : "";
-            const key = `${c.transporterId}_${dateStr}`;
-            
-            const entry = {
-                status: c.status,
-                changeRemarks: c.changeRemarks || "",
-                updatedAt: c.updatedAt || c.createdAt,
-                messageType: c.messageType || "",
-            };
 
-            if (!confirmationMap[key]) {
-                confirmationMap[key] = { ...entry, history: [entry] };
-            } else {
-                confirmationMap[key].history.push(entry);
-                // Latest status wins (prioritize confirmed/change_requested)
-                if (c.status === "confirmed" || c.status === "change_requested") {
-                    confirmationMap[key].status = c.status;
-                    confirmationMap[key].changeRemarks = c.changeRemarks || "";
-                    confirmationMap[key].updatedAt = c.updatedAt || c.createdAt;
-                }
+        (confirmationDocs as any[]).forEach((sched: any) => {
+            const arr: any[] = Array.isArray(sched.shiftNotification) ? sched.shiftNotification : [];
+            if (arr.length === 0) return;
+            const tid = (sched.transporterId || "").trim().toUpperCase();
+            const dateStr = sched.date ? new Date(sched.date).toISOString().split('T')[0] : "";
+            const key = `${tid}_${dateStr}`;
+
+            const history = arr.map((entry: any) => ({
+                status: entry.status || "pending",
+                changeRemarks: entry.changeRemarks || "",
+                updatedAt: entry.createdAt || new Date(),
+                messageType: "shift",
+            })).sort((a: any, b: any) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
+
+            // Find the highest-priority status: confirmed > change_requested > received > sent > pending
+            const statusPriority: Record<string, number> = { confirmed: 5, change_requested: 4, received: 3, delivered: 2, sent: 1, pending: 0 };
+            let bestEntry = arr[arr.length - 1]; // default to last
+            let bestPriority = -1;
+            for (const entry of arr) {
+                const p = statusPriority[entry.status] ?? -1;
+                if (p > bestPriority) { bestPriority = p; bestEntry = entry; }
             }
+
+            confirmationMap[key] = {
+                status: bestEntry.status || "pending",
+                changeRemarks: bestEntry.changeRemarks || "",
+                updatedAt: bestEntry.createdAt || new Date(),
+                messageType: "shift",
+                history,
+            };
         });
 
         return NextResponse.json({

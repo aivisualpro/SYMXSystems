@@ -63,6 +63,12 @@ export const STATUS_CONFIG: Record<string, {
     bg: "bg-purple-400/10 border border-purple-400/20",
     label: "Reply Received",
   },
+  received: {
+    icon: CheckCircle2,
+    color: "text-emerald-400",
+    bg: "bg-emerald-400/10 border border-emerald-400/20",
+    label: "Received",
+  },
 };
 
 export function MessageStatusBadge({

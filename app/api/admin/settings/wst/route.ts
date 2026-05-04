@@ -4,17 +4,8 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
 
-// GET — list all WST options
+// GET — list all WST options (no admin guard — read-only reference data used by dispatching)
 export async function GET(req: NextRequest) {
-  try {
-    await requirePermission("Admin", "view");
-  } catch (e: any) {
-    if (e.name === "ForbiddenError") {
-      return NextResponse.json({ error: e.message }, { status: 403 });
-    }
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
     try {
         const session = await getSession();
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
