@@ -22,7 +22,16 @@ import {
 import { formatPhoneNumber } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
-type FormEmployee = Omit<Partial<ISymxEmployee>, '_id'> & { _id?: string };
+type FormEmployee = Omit<Partial<ISymxEmployee>, '_id' | 'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday'> & {
+  _id?: string;
+  sunday?: string;
+  monday?: string;
+  tuesday?: string;
+  wednesday?: string;
+  thursday?: string;
+  friday?: string;
+  saturday?: string;
+};
 
 interface EmployeeFormProps {
   initialData?: FormEmployee;
