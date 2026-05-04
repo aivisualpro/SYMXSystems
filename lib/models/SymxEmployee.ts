@@ -24,14 +24,14 @@ export interface ISymxEmployee extends Document {
   motorVehicleReportDate?: Date;
   profileImage?: string;
 
-  // Schedule availability
-  sunday?: string;
-  monday?: string;
-  tuesday?: string;
-  wednesday?: string;
-  thursday?: string;
-  friday?: string;
-  saturday?: string;
+  // Schedule availability (ObjectId ref to RouteType, null = OFF)
+  sunday?: mongoose.Types.ObjectId;
+  monday?: mongoose.Types.ObjectId;
+  tuesday?: mongoose.Types.ObjectId;
+  wednesday?: mongoose.Types.ObjectId;
+  thursday?: mongoose.Types.ObjectId;
+  friday?: mongoose.Types.ObjectId;
+  saturday?: mongoose.Types.ObjectId;
 
   defaultVan1?: string;
   defaultVan2?: string;
@@ -89,13 +89,13 @@ const SymxEmployeeSchema: Schema = new Schema({
   motorVehicleReportDate: { type: Date },
   profileImage: { type: String },
 
-  sunday: { type: String, default: 'OFF' },
-  monday: { type: String, default: 'OFF' },
-  tuesday: { type: String, default: 'OFF' },
-  wednesday: { type: String, default: 'OFF' },
-  thursday: { type: String, default: 'OFF' },
-  friday: { type: String, default: 'OFF' },
-  saturday: { type: String, default: 'OFF' },
+  sunday: { type: Schema.Types.ObjectId, ref: 'RouteType', default: null },
+  monday: { type: Schema.Types.ObjectId, ref: 'RouteType', default: null },
+  tuesday: { type: Schema.Types.ObjectId, ref: 'RouteType', default: null },
+  wednesday: { type: Schema.Types.ObjectId, ref: 'RouteType', default: null },
+  thursday: { type: Schema.Types.ObjectId, ref: 'RouteType', default: null },
+  friday: { type: Schema.Types.ObjectId, ref: 'RouteType', default: null },
+  saturday: { type: Schema.Types.ObjectId, ref: 'RouteType', default: null },
 
   defaultVan1: { type: String },
   defaultVan2: { type: String },

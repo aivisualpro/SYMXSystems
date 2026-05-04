@@ -6,8 +6,10 @@ import connectToDatabase from "@/lib/db";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
+import RouteType from "@/lib/models/RouteType";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const DAY_FIELDS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
 /**
  * Compute the 7 dates (Sun–Sat) for a given yearWeek string like "2026-W09".
@@ -82,11 +84,18 @@ export async function POST(req: NextRequest) {
             yearWeek = getNextYearWeek((latestWeek as any).week);
         }
 
-        // Get ALL active employees
+        // Get ALL active employees including their day-of-week assignments
         const employees = await SymxEmployee.find(
             { status: "Active", transporterId: { $exists: true, $ne: "" } },
-            { _id: 1, transporterId: 1 }
+            { _id: 1, transporterId: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1 }
         ).lean();
+
+        // Load all route types and build id→RouteType map
+        const routeTypes = await RouteType.find().lean();
+        const routeTypeMap = new Map<string, any>();
+        for (const rt of routeTypes) {
+            routeTypeMap.set(String(rt._id), rt);
+        }
 
         if (employees.length === 0) {
             return NextResponse.json({ error: "No active employees found" }, { status: 400 });
@@ -127,25 +136,34 @@ export async function POST(req: NextRequest) {
             });
         }
 
+        // Find fallback "Off" route type for employees with no day assignment
+        const offRouteType = routeTypes.find((rt: any) => (rt.name || "").trim().toLowerCase() === "off");
+
         // Build insert operations only for missing employees
+        const isValidObjectId = session.id && typeof session.id === 'string' && /^[a-f\d]{24}$/i.test(session.id);
+        const userId = isValidObjectId ? new mongoose.Types.ObjectId(session.id) : undefined;
         const records = missingEmployees.flatMap((emp) =>
-            dates.map((date, dayIdx) => ({
-                transporterId: emp.transporterId,
-                employeeId: emp._id,
-                weekDay: DAY_NAMES[dayIdx],
-                yearWeek,
-                date,
-                status: "Off",
-                type: "Off",
-                subType: "",
-                trainingDay: "",
-                startTime: "",
-                dayBeforeConfirmation: "",
-                dayOfConfirmation: "",
-                weekConfirmation: "",
-                van: "",
-                note: "",
-            }))
+            dates.map((date, dayIdx) => {
+                const dayField = DAY_FIELDS[dayIdx];
+                const empDayId = (emp as any)[dayField] ? String((emp as any)[dayField]) : null;
+                const matchedRoute = empDayId ? routeTypeMap.get(empDayId) : null;
+                const resolvedTypeId = matchedRoute?._id ? String(matchedRoute._id) : (offRouteType?._id ? String(offRouteType._id) : undefined);
+
+                return {
+                    transporterId: emp.transporterId,
+                    employeeId: emp._id,
+                    weekDay: DAY_NAMES[dayIdx],
+                    yearWeek,
+                    date,
+                    typeId: resolvedTypeId,
+                    startTime: matchedRoute?.startTime || "",
+                    dayBeforeConfirmation: "",
+                    dayOfConfirmation: "",
+                    weekConfirmation: "",
+                    van: "",
+                    ...(userId ? { createdBy: userId } : {}),
+                };
+            })
         );
 
         const dbSession = await mongoose.startSession();

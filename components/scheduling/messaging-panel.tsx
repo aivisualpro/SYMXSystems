@@ -133,6 +133,22 @@ function getTomorrowPacific(): string {
   return d.toISOString().split("T")[0];
 }
 
+/** Get the next day after a given YYYY-MM-DD date string. */
+function getNextDay(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00.000Z");
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().split("T")[0];
+}
+
+/** Convert any date (string or Date) to YYYY-MM-DD in Pacific Time. */
+function toPacificDate(d: string | Date): string {
+  const date = typeof d === "string" ? new Date(d) : new Date(d.getTime());
+  if (isNaN(date.getTime())) return typeof d === "string" ? d : "";
+  // Nudge midnight-UTC dates to noon so Intl formatting doesn't slip a day
+  if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) date.setUTCHours(12);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(date);
+}
+
 function getWeekDates(yearWeek: string): string[] {
   const match = yearWeek.match(/(\d{4})-W(\d{2})/);
   if (!match) return [];
@@ -185,15 +201,23 @@ function addMinutesToTime(time: string, minutes: number): string {
 }
 
 function formatDateMMDDYYYY(dateStr: string): string {
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
-  return `${(d.getUTCMonth() + 1).toString().padStart(2, "0")}/${d.getUTCDate().toString().padStart(2, "0")}/${d.getUTCFullYear()}`;
+  const pacific = toPacificDate(dateStr);
+  if (!pacific || pacific === dateStr) {
+    // fallback for already-formatted YYYY-MM-DD strings
+    const parts = dateStr.split("-");
+    if (parts.length === 3) return `${parts[1]}/${parts[2]}/${parts[0]}`;
+    return dateStr;
+  }
+  const parts = pacific.split("-");
+  return `${parts[1]}/${parts[2]}/${parts[0]}`;
 }
 
 function getDayOfWeek(dateStr: string): string {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "";
-  return FULL_DAY_NAMES[d.getUTCDay()];
+  // Use Pacific timezone for day-of-week
+  const dayIdx = new Date(toPacificDate(dateStr) + "T12:00:00.000Z").getUTCDay();
+  return FULL_DAY_NAMES[dayIdx];
 }
 
 function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: string, selectedWeek?: string, routeIconMap?: Record<string, string>, selectedDate?: string): string {
@@ -204,26 +228,25 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
     (s) => s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
   );
 
-  // Use selectedDate if provided, otherwise fall back to today/tomorrow
-  const targetDate = selectedDate || (
-    (tabId === "shift" || tabId === "route-itinerary") ? getTodayPacific()
-    : (tabId === "future-shift" || tabId === "off-tomorrow") ? getTomorrowPacific()
-    : ""
-  );
+  // For future-shift/off-tomorrow, the actual shift day is tomorrow (selectedDate + 1)
+  const baseDate = selectedDate || getTodayPacific();
+  const targetDate = (tabId === "future-shift" || tabId === "off-tomorrow")
+    ? getNextDay(baseDate)
+    : baseDate;
 
   if (tabId === "shift" || tabId === "route-itinerary") {
     const dayShift = emp.schedules?.find(
-      (s) => s.date?.startsWith(targetDate)
+      (s) => toPacificDate(s.date) === targetDate
     );
     if (dayShift) targetShift = dayShift;
   } else if (tabId === "future-shift") {
     const dayShift = emp.schedules?.find(
-      (s) => s.date?.startsWith(targetDate)
+      (s) => toPacificDate(s.date) === targetDate
     );
     if (dayShift) targetShift = dayShift;
   } else if (tabId === "off-tomorrow") {
     const dayShift = emp.schedules?.find(
-      (s) => s.date?.startsWith(targetDate)
+      (s) => toPacificDate(s.date) === targetDate
     );
     if (dayShift) targetShift = dayShift;
   }
@@ -651,6 +674,8 @@ function MessagingSubTab({
   showOffToday,
   routeIconMap,
   selectedDate,
+  prefetchedOffTomorrowEmployees,
+  offTomorrowLoading,
   onSelectionReport,
   onEligibleReport,
 }: {
@@ -674,6 +699,8 @@ function MessagingSubTab({
   showOffToday?: boolean;
   routeIconMap?: Record<string, string>;
   selectedDate?: string;
+  prefetchedOffTomorrowEmployees?: EmployeeRecipient[];
+  offTomorrowLoading: boolean;
   onSelectionReport?: (count: number) => void;
   onEligibleReport?: (count: number) => void;
 }) {
@@ -682,23 +709,10 @@ function MessagingSubTab({
   const employees = prefetchedEmployees ?? EMPTY;
   const loading = employeesLoading;
 
-  // ── "Off Today" data for the future-shift tab (toggle state from parent) ──
-  const [offTodayEmployees, setOffTodayEmployees] = useState<EmployeeRecipient[]>([]);
-  const [offTodayLoading, setOffTodayLoading] = useState(false);
-
-  // Fetch "off-tomorrow" filter employees when toggle is ON
-  useEffect(() => {
-    if (tab.id !== "future-shift" || !showOffToday) return;
-    setOffTodayLoading(true);
-    const params = new URLSearchParams({ filter: "off-tomorrow" });
-    if (selectedWeek) params.append("yearWeek", selectedWeek);
-    if (selectedDate) params.append("date", selectedDate);
-    fetch(`/api/messaging/employees?${params.toString()}`)
-      .then(res => res.json())
-      .then(data => setOffTodayEmployees(data.employees || []))
-      .catch(() => setOffTodayEmployees([]))
-      .finally(() => setOffTodayLoading(false));
-  }, [tab.id, showOffToday, selectedWeek, selectedDate]);
+  // ── "Off Today" data for the future-shift tab ──
+  // Uses prefetched off-tomorrow data from parent (employeesByTab["off-tomorrow"])
+  const offTodayEmployees = prefetchedOffTomorrowEmployees ?? EMPTY;
+  const offTodayLoading = offTomorrowLoading;
 
   // Pick which employee list to show based on toggle
   const activeEmployees = (tab.id === "future-shift" && showOffToday) ? offTodayEmployees : employees;
@@ -1069,12 +1083,11 @@ function MessagingSubTab({
 
     // Build per-employee personalized messages
     const NON_WORKING = ["off", "close", "request off", ""];
-    // Use the user-selected date if available
-    const targetDateForSend = selectedDate || (
-      (tab.id === "shift" || tab.id === "route-itinerary") ? getTodayPacific()
-      : (tab.id === "future-shift" || tab.id === "off-tomorrow") ? getTomorrowPacific()
-      : ""
-    );
+    // For future-shift/off-tomorrow, the actual shift day is tomorrow (selectedDate + 1)
+    const baseDateForSend = selectedDate || getTodayPacific();
+    const targetDateForSend = (tab.id === "future-shift" || tab.id === "off-tomorrow")
+      ? getNextDay(baseDateForSend)
+      : baseDateForSend;
 
     const recipients = selectedEmployees.map((emp) => {
       // Determine the correct schedule date based on selected date or tab context
@@ -1083,15 +1096,14 @@ function MessagingSubTab({
       // Find matching schedule for the target date to get shift details
       const matchingShift = targetDateForSend
         ? emp.schedules?.find((s) => {
-            const d = new Date(s.date).toISOString().split("T")[0];
-            return d === targetDateForSend;
+            return toPacificDate(s.date) === targetDateForSend;
           })
         : emp.schedules?.find(
             (s) => s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
           );
 
       if (matchingShift?.date) {
-        targetScheduleDate = new Date(matchingShift.date).toISOString().split("T")[0];
+        targetScheduleDate = toPacificDate(matchingShift.date);
       }
 
       // Build personalized message and append attachment links for flyer
@@ -1236,17 +1248,15 @@ function MessagingSubTab({
               filteredEmployees.map((emp) => {
                 const isSelected = selectedIds.has(emp._id);
 
-                // Determine target date for display — use user-selected date
-                const displayDate = selectedDate || (
-                  (tab.id === "shift" || tab.id === "route-itinerary") ? getTodayPacific()
-                  : (tab.id === "future-shift") ? getTomorrowPacific()
-                  : ""
-                );
+                // For future-shift, display tomorrow's shift (selectedDate + 1)
+                const baseDisplayDate = selectedDate || getTodayPacific();
+                const displayDate = (tab.id === "future-shift" || tab.id === "off-tomorrow")
+                  ? getNextDay(baseDisplayDate)
+                  : baseDisplayDate;
                 const nextShift = emp.schedules?.find(
                   (s) => {
                     if (displayDate) {
-                      const d = new Date(s.date).toISOString().split("T")[0];
-                      return d === displayDate;
+                      return toPacificDate(s.date) === displayDate;
                     }
                     return true;
                   }
@@ -1361,8 +1371,9 @@ function MessagingSubTab({
                     {/* Schedule Type — hidden on week-schedule tab */}
                     {tab.id !== "week-schedule" && (
                       nextShift ? (() => {
-                        const typeKey = nextShift.type.toLowerCase().trim();
-                        const color = routeTypeMap[typeKey] || "#10b981"; // dynamic pull from DB
+                        const displayType = (nextShift as any).scheduleType || nextShift.type || "";
+                        const typeKey = displayType.toLowerCase().trim();
+                        const color = routeTypeMap[typeKey] || "#10b981";
                         
                         let CellIcon = Navigation;
                         let isOff = false;
@@ -1387,7 +1398,7 @@ function MessagingSubTab({
                             }}
                           >
                             <CellIcon className="h-3 w-3 shrink-0" />
-                            <span className="truncate">{nextShift.type}</span>
+                            <span className="truncate">{displayType}</span>
                           </span>
                         );
                       })() : (
@@ -1491,7 +1502,7 @@ function MessagingSubTab({
                           </span>
                         </div>
                         <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">
-                          {personalizeMessage(message, emp, tab.id, selectedWeek, routeIconMap)}
+                          {personalizeMessage(message, emp, tab.id, selectedWeek, routeIconMap, selectedDate)}
                         </pre>
                         {/* Preview attachments if any */}
                         {tab.id === "flyer" && attachments.length > 0 && (
@@ -1856,6 +1867,8 @@ export default function MessagingPanel({
   onSubTabChange,
   onActiveTabInfo,
   refreshTrigger,
+  initialDate,
+  onDateChange,
 }: {
   weeks: string[];
   selectedWeek: string;
@@ -1866,6 +1879,8 @@ export default function MessagingPanel({
   onSubTabChange?: (tab: string) => void;
   onActiveTabInfo?: (info: ActiveTabInfo) => void;
   refreshTrigger?: number;
+  initialDate?: string;
+  onDateChange?: (date: string) => void;
 }) {
   const resolvedTab = SUB_TABS.find((t) => t.id === activeSubTab) ? activeSubTab : SUB_TABS[0].id;
 
@@ -1932,26 +1947,34 @@ export default function MessagingPanel({
     return getWeekDates(selectedWeek);
   }, [selectedWeek]);
 
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDateState] = useState(initialDate || "");
   const [showOffToday, setShowOffToday] = useState(true);
+  const initialDateAppliedRef = useRef(false);
+
+  // Wrapped setter that notifies parent for URL sync
+  const setSelectedDate = useCallback((date: string) => {
+    setSelectedDateState(date);
+    onDateChange?.(date);
+  }, [onDateChange]);
 
   // Auto-select the contextual default date when week or tab changes
   useEffect(() => {
     if (weekDates.length === 0) return;
     const today = getTodayPacific();
-    const tomorrow = getTomorrowPacific();
+
+    // If an initial date was provided from URL and it's valid for this week, use it (once)
+    if (initialDate && !initialDateAppliedRef.current && weekDates.includes(initialDate)) {
+      initialDateAppliedRef.current = true;
+      setSelectedDate(initialDate);
+      return;
+    }
+    initialDateAppliedRef.current = true;
 
     if (resolvedTab === "week-schedule") {
       // No date selection for week-schedule
       setSelectedDate("");
-    } else if (resolvedTab === "shift" || resolvedTab === "route-itinerary") {
-      // Default to today if within this week, otherwise first day
-      setSelectedDate(weekDates.includes(today) ? today : weekDates[0]);
-    } else if (resolvedTab === "future-shift" || resolvedTab === "off-tomorrow") {
-      // Default to tomorrow if within this week, otherwise first day
-      setSelectedDate(weekDates.includes(tomorrow) ? tomorrow : weekDates[0]);
     } else {
-      // Flyer or others: default to today if available, otherwise first day
+      // Default to today if within this week, otherwise first day of the week
       setSelectedDate(weekDates.includes(today) ? today : weekDates[0]);
     }
   }, [weekDates, resolvedTab]);
@@ -1964,8 +1987,16 @@ export default function MessagingPanel({
     try {
       const params = new URLSearchParams({ filter: tabId });
       if (yearWeek) params.append("yearWeek", yearWeek);
-      // Pass selected date for date-specific tabs
-      if (date && tabId !== "week-schedule") params.append("date", date);
+      // For future-shift/off-tomorrow, API expects the target work day (tomorrow)
+      // so pass selectedDate + 1; for other tabs, pass selectedDate directly
+      if (date && tabId !== "week-schedule") {
+        // future-shift: pass tomorrow (the work day) as the date
+        // off-tomorrow: pass today (API computes tomorrow = today + 1 server-side)
+        const apiDate = tabId === "future-shift"
+          ? getNextDay(date)
+          : date;
+        params.append("date", apiDate);
+      }
       const res = await fetch(`/api/messaging/employees?${params.toString()}`);
       const data = await res.json();
       return data.employees || [];
@@ -2072,18 +2103,22 @@ export default function MessagingPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWeek, fetchTabEmployees, refreshTrigger]); // re-run when week changes or refreshed
 
-  // ── Re-fetch active tab when selectedDate changes ──
-  const prevDateRef = useRef("");
+  // ── Re-fetch active tab when selectedDate or tab changes ──
+  const prevFetchKeyRef = useRef("");
   useEffect(() => {
     if (!selectedWeek || !selectedDate) return;
-    if (prevDateRef.current === selectedDate) return;
-    prevDateRef.current = selectedDate;
+    // Track both date AND tab to ensure re-fetch when either changes
+    const fetchKey = `${resolvedTab}:${selectedDate}`;
+    if (prevFetchKeyRef.current === fetchKey) return;
+    prevFetchKeyRef.current = fetchKey;
     // Don't re-fetch for week-schedule since it doesn't use date
     if (resolvedTab === "week-schedule") return;
 
     setLoadingTabs(prev => {
       const next = new Set(prev);
       next.add(resolvedTab);
+      // Also refresh off-tomorrow when on future-shift tab
+      if (resolvedTab === "future-shift") next.add("off-tomorrow");
       return next;
     });
     fetchTabEmployees(resolvedTab, selectedWeek, selectedDate).then((emps) => {
@@ -2094,6 +2129,17 @@ export default function MessagingPanel({
         return next;
       });
     });
+    // Also re-fetch off-tomorrow data when date changes on future-shift tab
+    if (resolvedTab === "future-shift") {
+      fetchTabEmployees("off-tomorrow", selectedWeek, selectedDate).then((emps) => {
+        setEmployeesByTab(prev => ({ ...prev, ["off-tomorrow"]: emps }));
+        setLoadingTabs(prev => {
+          const next = new Set(prev);
+          next.delete("off-tomorrow");
+          return next;
+        });
+      });
+    }
   }, [selectedDate, selectedWeek, resolvedTab, fetchTabEmployees]);
 
   // ── Report active tab info to parent ──────────────────────────────────────
@@ -2242,6 +2288,11 @@ export default function MessagingPanel({
                   : <ToggleLeft className="h-4 w-4" />
                 }
                 Off Today
+                {showOffToday && (employeesByTab["off-tomorrow"]?.length ?? 0) > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[9px] font-bold tabular-nums">
+                    {employeesByTab["off-tomorrow"]?.length}
+                  </span>
+                )}
               </button>
             </>
           )}
@@ -2273,6 +2324,8 @@ export default function MessagingPanel({
                   prefetchedTemplate={templatesByTab[tab.id]}
                   templatesLoaded={templatesLoaded}
                   showOffToday={showOffToday}
+                  prefetchedOffTomorrowEmployees={employeesByTab["off-tomorrow"]}
+                  offTomorrowLoading={loadingTabs.has("off-tomorrow")}
                   selectedDate={resolvedTab !== "week-schedule" ? selectedDate : undefined}
                   onSelectionReport={setActiveSelectedCount}
                   onEligibleReport={setActiveEligibleCount}

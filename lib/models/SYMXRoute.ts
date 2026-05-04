@@ -9,9 +9,7 @@ export interface ISYMXRoute extends Document {
     transporterId: string;
 
     // ── Schedule-derived fields ──
-    type: string;
-    subType: string;
-    trainingDay: string;
+    typeId?: string;       // String _id of matching SYMXRouteType — sole source of truth
 
     // ── Route info ──
     routeSize: string;
@@ -100,10 +98,8 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
         yearWeek: { type: String, required: true },
         transporterId: { type: String, required: true },
 
-        // Schedule-derived
-        type: { type: String, default: "" },
-        subType: { type: String, default: "" },
-        trainingDay: { type: String, default: "" },
+        // Schedule-derived — typeId is sole reference, type/subType/trainingDay are no longer written
+        typeId: { type: String },
 
         // Route info
         routeSize: { type: String, default: "" },
@@ -188,7 +184,7 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
 // Compound index for upsert + fast lookups
 SYMXRouteSchema.index({ transporterId: 1, date: 1 }, { unique: true });
 SYMXRouteSchema.index({ yearWeek: 1, transporterId: 1 });
-SYMXRouteSchema.index({ transporterId: 1, type: 1 });  // for routesCompleted aggregation
+SYMXRouteSchema.index({ typeId: 1 });                   // primary type filter
 SYMXRouteSchema.index({ van: 1 });                      // for vehicle name lookups
 SYMXRouteSchema.index({ date: 1 });                     // for daily filters
 

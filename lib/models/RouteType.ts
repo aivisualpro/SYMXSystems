@@ -7,6 +7,11 @@ export interface IRouteType extends Document {
     theoryHrs: number;   // default theory hours
     group: string;       // "Operations" or "Driver"
     routeStatus: string; // default status e.g. "Scheduled", "Off", "Double Route"
+    isDefault: boolean;  // whether this is the default type for new schedules
+    partOf: string[];    // which modules this type belongs to e.g. ["Dispatching", "Shift"]
+    isDA: boolean;       // whether this counts as a DA (Delivery Associate)
+    isOps: boolean;      // whether this counts as OPS
+    isStandby: boolean;  // whether this counts as Standby
     icon: string;
     sortOrder: number;   // for display ordering
     isActive: boolean;
@@ -21,6 +26,11 @@ const RouteTypeSchema: Schema = new Schema({
     theoryHrs: { type: Number, default: 0 },
     group: { type: String, enum: ['Operations', 'Driver', 'None'], default: 'None' },
     routeStatus: { type: String, default: 'Scheduled' },
+    isDefault: { type: Boolean, default: false },
+    partOf: { type: [String], default: [] },
+    isDA: { type: Boolean, default: false },
+    isOps: { type: Boolean, default: false },
+    isStandby: { type: Boolean, default: false },
     icon: { type: String, default: '' },
     sortOrder: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },

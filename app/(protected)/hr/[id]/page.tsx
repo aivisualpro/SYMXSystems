@@ -37,12 +37,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
 import { cn, formatPhoneNumber } from "@/lib/utils";
-import { format, startOfWeek, addDays } from "date-fns";
+import { format } from "date-fns";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import { EmployeeScorecard } from "@/components/hr/employee-scorecard";
 import { useEmployeeDetail, useUpdateEmployee } from "@/lib/query/hooks/useEmployees";
-import { useVehicles } from "@/lib/query/hooks/useShared";
+import { useVehicles, useRouteTypes } from "@/lib/query/hooks/useShared";
+import * as LucideIcons from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -55,52 +56,92 @@ type PageProps = {
   params: Promise<{ id: string }>;
 };
 
-/* ── Availability Card (top-level for perf) ── */
-const AvailabilityCard = ({ day, date, status, dayKey, handleStatusChange }: any) => {
-  const statusConfig: Record<string, { icon: any; color: string; bg: string; border: string; text: string }> = {
-    'Assign Schedule': { icon: CalendarCheck,  color: 'text-[#F29727]',     bg: 'bg-[#F29727]/10',     border: 'border-[#F29727]/20',   text: 'text-[#F29727]' },
-    'Scheduled':       { icon: CheckCircle2,   color: 'text-[#16C47F]',     bg: 'bg-[#16C47F]/10',     border: 'border-[#16C47F]/20',   text: 'text-[#16C47F]' },
-    'OFF':             { icon: XCircle,        color: 'text-[#5E686D]',     bg: 'bg-transparent',      border: 'border-[#5E686D]/20',   text: 'text-[#5E686D]' },
-  };
-  const config = statusConfig[status] || statusConfig['OFF'];
-  const Icon = config.icon;
+/* ── Availability Card (route-type aware) ── */
+function isLightColor(hex: string): boolean {
+  if (!hex || hex.length < 7) return false;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6;
+}
+
+const AvailabilityCard = ({ day, routeType, isOff, dayKey, handleStatusChange, defaultRouteTypes, routeTypeIdMap }: any) => {
+  const chipColor = routeType?.color || "";
+  const chipIconName = routeType?.icon || "";
+  const ChipIcon = chipIconName ? (LucideIcons as any)[chipIconName] : null;
+  const displayName = isOff ? "OFF" : (routeType?.name || "—");
+  const textColor = chipColor && isLightColor(chipColor) ? "#1a1a1a" : "#fff";
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className={cn(
-          "flex flex-col items-center justify-center p-3 rounded-2xl border transition-all hover:scale-[1.02] active:scale-95 group relative overflow-hidden h-full min-h-[90px] cursor-pointer",
-          config.bg, config.border
-        )}>
-          <div className="flex flex-col items-center mb-1.5">
-            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 group-hover:text-foreground transition-colors leading-none mb-1">{day}</span>
-            <span className="text-[9px] font-bold text-muted-foreground/40 leading-none">{date}</span>
-          </div>
-          <Icon className={cn("w-5 h-5 mb-2 transition-transform group-hover:scale-110", config.color)} />
-          <span className={cn("text-[9px] font-black uppercase tracking-tighter leading-none whitespace-nowrap", config.text)}>
-            {status === 'Assign Schedule' ? 'Assign' : status}
+          "flex flex-col items-center justify-center p-3 rounded-2xl border transition-all hover:scale-[1.02] active:scale-95 group relative overflow-hidden h-full min-h-[80px] cursor-pointer",
+          isOff && "bg-transparent border-[#5E686D]/20"
+        )}
+        style={isOff ? {} : chipColor ? { backgroundColor: chipColor, borderColor: chipColor } : { backgroundColor: "#6B7280", borderColor: "#6B7280" }}
+        >
+          <span className={cn("text-[10px] font-black uppercase tracking-widest leading-none mb-2")}
+            style={isOff ? { color: "#5E686D" } : { color: textColor, opacity: 0.7 }}
+          >{day}</span>
+          {isOff ? (
+            <XCircle className="w-5 h-5 mb-1.5 text-[#5E686D] transition-transform group-hover:scale-110" />
+          ) : ChipIcon ? (
+            <ChipIcon className="w-5 h-5 mb-1.5 transition-transform group-hover:scale-110" style={{ color: textColor }} />
+          ) : (
+            <CalendarCheck className="w-5 h-5 mb-1.5 transition-transform group-hover:scale-110" style={{ color: textColor }} />
+          )}
+          <span className={cn("text-[9px] font-black uppercase tracking-tighter leading-none whitespace-nowrap")}
+            style={isOff ? { color: "#5E686D" } : { color: textColor }}
+          >
+            {displayName}
           </span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center" className="min-w-[160px] rounded-xl p-1.5 shadow-2xl border border-border bg-popover/95 backdrop-blur-md">
-        {Object.entries(statusConfig).map(([id, cfg]) => (
-          <DropdownMenuItem 
-            key={id} 
-            onClick={() => handleStatusChange(dayKey, id)}
-            className={cn(
-              "text-[10px] font-bold py-2.5 px-3 rounded-lg cursor-pointer flex items-center justify-between transition-colors",
-              status === id ? "bg-primary/10 text-primary" : "hover:bg-accent"
-            )}
-          >
-            <div className="flex items-center gap-2.5">
-              <div className={cn("p-1 rounded-md", cfg.bg)}>
-                <cfg.icon className={cn("w-3.5 h-3.5", cfg.color)} />
-              </div>
-              {id}
+        {/* OFF option */}
+        <DropdownMenuItem
+          onClick={() => handleStatusChange(dayKey, null)}
+          className={cn(
+            "text-[10px] font-bold py-2.5 px-3 rounded-lg cursor-pointer flex items-center justify-between transition-colors",
+            isOff ? "bg-primary/10 text-primary" : "hover:bg-accent"
+          )}
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="p-1 rounded-md bg-zinc-100 dark:bg-zinc-800">
+              <XCircle className="w-3.5 h-3.5 text-[#5E686D]" />
             </div>
-            {status === id && <CheckCircle2 className="w-3 h-3 text-primary animate-in zoom-in-50 duration-300" />}
-          </DropdownMenuItem>
-        ))}
+            OFF
+          </div>
+          {isOff && <CheckCircle2 className="w-3 h-3 text-primary animate-in zoom-in-50 duration-300" />}
+        </DropdownMenuItem>
+        {/* Route type options */}
+        {defaultRouteTypes.map((rt: any) => {
+          const RtIcon = rt.icon ? (LucideIcons as any)[rt.icon] : null;
+          const isActive = !isOff && routeType && String(routeType._id) === String(rt._id);
+          return (
+            <DropdownMenuItem
+              key={rt._id}
+              onClick={() => handleStatusChange(dayKey, String(rt._id))}
+              className={cn(
+                "text-[10px] font-bold py-2.5 px-3 rounded-lg cursor-pointer flex items-center justify-between transition-colors",
+                isActive ? "bg-primary/10 text-primary" : "hover:bg-accent"
+              )}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="p-1 rounded-md" style={{ backgroundColor: (rt.color || "#6B7280") + "20" }}>
+                  {RtIcon ? (
+                    <RtIcon className="w-3.5 h-3.5" style={{ color: rt.color || "#6B7280" }} />
+                  ) : (
+                    <CalendarCheck className="w-3.5 h-3.5" style={{ color: rt.color || "#6B7280" }} />
+                  )}
+                </div>
+                {rt.name}
+              </div>
+              {isActive && <CheckCircle2 className="w-3 h-3 text-primary animate-in zoom-in-50 duration-300" />}
+            </DropdownMenuItem>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -153,7 +194,24 @@ export default function EmployeeDetailPage(props: PageProps) {
 
   const { data: employee, isLoading: loading } = useEmployeeDetail(params.id);
   const { data: storeVehicles = [] } = useVehicles();
+  const { data: allRouteTypes = [] } = useRouteTypes();
   const { mutateAsync: updateEmployee } = useUpdateEmployee();
+
+  // Route type maps
+  const routeTypeIdMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (Array.isArray(allRouteTypes)) {
+      allRouteTypes.forEach((rt: any) => map.set(String(rt._id), rt));
+    }
+    return map;
+  }, [allRouteTypes]);
+
+  const defaultRouteTypes = useMemo(() => {
+    if (!Array.isArray(allRouteTypes)) return [];
+    return allRouteTypes.filter((rt: any) =>
+      rt.isDefault && rt.isActive !== false
+    );
+  }, [allRouteTypes]);
 
   const vehicleNames = useMemo(() => {
     return storeVehicles
@@ -172,10 +230,10 @@ export default function EmployeeDetailPage(props: PageProps) {
     }
   };
 
-  const handleStatusChange = async (dayKey: string, newStatus: string) => {
+  const handleStatusChange = async (dayKey: string, value: string | null) => {
     if (!employee) return;
     try {
-      await updateEmployee({ id: String(employee._id), data: { [dayKey]: newStatus } });
+      await updateEmployee({ id: String(employee._id), data: { [dayKey]: value } });
       toast.success(`${dayKey.charAt(0).toUpperCase() + dayKey.slice(1)} updated`);
     } catch (error) {
       toast.error("Failed to update availability");
@@ -393,10 +451,12 @@ export default function EmployeeDetailPage(props: PageProps) {
                         <div className="grid grid-cols-3 gap-2">
                            {['Sun', 'Mon', 'Tue'].map((day, idx) => {
                               const dayKey = ['sunday', 'monday', 'tuesday'][idx];
-                              const status = String(employee[dayKey as keyof ISymxEmployee] || 'OFF');
-                              const date = format(addDays(startOfWeek(new Date()), idx), "MMM d");
+                              const rawVal = (employee as any)[dayKey];
+                              const rtId = rawVal ? String(rawVal) : null;
+                              const matched = rtId ? routeTypeIdMap.get(rtId) : null;
+                              const isOff = !matched;
                               return (
-                                 <AvailabilityCard key={day} day={day} date={date} status={status} dayKey={dayKey} handleStatusChange={handleStatusChange} />
+                                 <AvailabilityCard key={day} day={day} routeType={matched} isOff={isOff} dayKey={dayKey} handleStatusChange={handleStatusChange} defaultRouteTypes={defaultRouteTypes} routeTypeIdMap={routeTypeIdMap} />
                               );
                            })}
                         </div>
@@ -404,10 +464,12 @@ export default function EmployeeDetailPage(props: PageProps) {
                         <div className="grid grid-cols-4 gap-2">
                            {['Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => {
                               const dayKey = ['wednesday', 'thursday', 'friday', 'saturday'][idx];
-                              const status = String(employee[dayKey as keyof ISymxEmployee] || 'OFF');
-                              const date = format(addDays(startOfWeek(new Date()), idx + 3), "MMM d");
+                              const rawVal = (employee as any)[dayKey];
+                              const rtId = rawVal ? String(rawVal) : null;
+                              const matched = rtId ? routeTypeIdMap.get(rtId) : null;
+                              const isOff = !matched;
                               return (
-                                 <AvailabilityCard key={day} day={day} date={date} status={status} dayKey={dayKey} handleStatusChange={handleStatusChange} />
+                                 <AvailabilityCard key={day} day={day} routeType={matched} isOff={isOff} dayKey={dayKey} handleStatusChange={handleStatusChange} defaultRouteTypes={defaultRouteTypes} routeTypeIdMap={routeTypeIdMap} />
                               );
                            })}
                         </div>

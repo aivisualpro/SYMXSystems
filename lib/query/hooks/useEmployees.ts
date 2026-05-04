@@ -45,7 +45,6 @@ export function useUpdateEmployee() {
     },
     onSuccess: (updatedEmployee, variables) => {
       queryClient.invalidateQueries({ queryKey: qk.employees.detail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: qk.employees.all });
       queryClient.invalidateQueries({ queryKey: qk.hr.dashboard });
       // Schedules might have the employee references
       queryClient.invalidateQueries({ queryKey: ['schedules'] });

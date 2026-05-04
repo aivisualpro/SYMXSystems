@@ -7,6 +7,7 @@ import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SYMXRoutesInfo from "@/lib/models/SYMXRoutesInfo";
+import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 
 export async function DELETE(req: NextRequest) {
   try {
@@ -20,7 +21,8 @@ export async function DELETE(req: NextRequest) {
 
   try {
     const session = await getSession();
-    if (!session || session.email !== "adeel@symxlogistics.com") {
+    const allowedEmails = ["adeel@symxlogistics.com", "symx@symxlogistics.com"];
+    if (!session || !allowedEmails.includes(session.email?.toLowerCase())) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -45,6 +47,7 @@ export async function DELETE(req: NextRequest) {
         logsRes = await ScheduleAuditLog.deleteMany({ yearWeek }, { session: dbSession });
         routesRes = await SYMXRoute.deleteMany({ yearWeek }, { session: dbSession });
         routeInfosRes = await SYMXRoutesInfo.deleteMany({ yearWeek }, { session: dbSession });
+        await SymxAvailableWeek.deleteOne({ week: yearWeek }, { session: dbSession });
       });
     } finally {
       await dbSession.endSession();

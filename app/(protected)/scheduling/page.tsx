@@ -74,6 +74,16 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import MessagingPanel, { type ActiveTabInfo, SUB_TABS } from "@/components/scheduling/messaging-panel";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -82,35 +92,35 @@ const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 // Working types — anything NOT in this list is considered "not working"
-const NON_WORKING_TYPES = new Set(["off", "", "call out", "request off", "suspension", "stand by"]);
-
-function isWorkingDay(day: DayData | undefined | null): boolean {
+// Resolve whether a day is a working day via typeId→routeTypeIdMap, falling back to type string
+function isWorkingDay(day: DayData | undefined | null, routeTypeIdMap?: Map<string, any>): boolean {
   if (!day) return false;
-  if (day.status) return day.status !== "Off";
-  return !NON_WORKING_TYPES.has((day.type || "").trim().toLowerCase());
-}
-
-// Route types for consecutive route detection
-const ROUTE_TYPES = new Set(["route"]);
-
-function isRouteDay(type: string): boolean {
-  return ROUTE_TYPES.has((type || "").trim().toLowerCase());
+  if (day.typeId && routeTypeIdMap) {
+    const rt = routeTypeIdMap.get(String(day.typeId));
+    if (rt) return (rt.routeStatus || "").trim().toLowerCase() !== "off";
+  }
+  // Legacy fallback
+  const NON_WORKING = new Set(["off", "", "call out", "request off", "suspension", "stand by"]);
+  return !NON_WORKING.has((day.type || "").trim().toLowerCase());
 }
 
 interface DayData {
   _id: string;
   date: string;
   weekDay: string;
-  status: string;
-  type: string;
-  subType: string;
-  trainingDay: string;
+  typeId?: string;
+  // Legacy fields — kept for read-back compatibility with old records
+  type?: string;
+  status?: string;
+  routeStatus?: string;
+  subType?: string;
+  trainingDay?: string;
+  note?: string;
   startTime: string;
   dayBeforeConfirmation: string;
   dayOfConfirmation: string;
   weekConfirmation: string;
   van: string;
-  note: string;
 }
 
 interface EmployeeSchedule {
@@ -162,7 +172,7 @@ interface PlanningRow {
   color: string;
 }
 
-function computePlanningData(employees: EmployeeSchedule[], everydayRecords: Record<string, any> = {}, dates: string[] = []): PlanningRow[] {
+function computePlanningData(employees: EmployeeSchedule[], everydayRecords: Record<string, any> = {}, dates: string[] = [], routeTypeIdMap: Map<string, any> = new Map()): PlanningRow[] {
   const daStats = Array(7).fill(0);
   const standBy = Array(7).fill(0);
   const routesAssigned = Array(7).fill(0);
@@ -181,17 +191,18 @@ function computePlanningData(employees: EmployeeSchedule[], everydayRecords: Rec
     for (let d = 0; d < 7; d++) {
       const day = emp.days[d];
       if (!day) continue;
+
+      // Prefer resolving via typeId for accuracy; fall back to type string
+      const rt = day.typeId ? routeTypeIdMap.get(String(day.typeId)) : null;
       const typeVal = (day.type || "").trim().toLowerCase();
 
-      if (typeVal === "route" || typeVal === "pending ecp") {
-        daStats[d]++;
-      }
-      if (typeVal === "stand by") {
-        standBy[d]++;
-      }
-      if (["open", "close", "fleet"].includes(typeVal)) {
-        ops[d]++;
-      }
+      const isDA = rt ? rt.isDA : (typeVal === "route" || typeVal === "pending ecp");
+      const isStandby = rt ? rt.isStandby : (typeVal === "stand by");
+      const isOps = rt ? rt.isOps : (["open", "close", "fleet"].includes(typeVal));
+
+      if (isDA) daStats[d]++;
+      if (isStandby) standBy[d]++;
+      if (isOps) ops[d]++;
     }
   });
 
@@ -240,29 +251,25 @@ function groupByType(employees: EmployeeSchedule[]): Record<string, EmployeeSche
   return groups;
 }
 
-// Count working days for an employee
-function countWorkingDays(emp: EmployeeSchedule): number {
+// Count working days for an employee using typeId resolution
+function countWorkingDays(emp: EmployeeSchedule, routeTypeIdMap?: Map<string, any>): number {
   let count = 0;
   for (let d = 0; d < 7; d++) {
     const day = emp.days[d];
-    if (day && (day.status || "").trim().toLowerCase() === "scheduled") {
-      count++;
-    }
+    if (isWorkingDay(day, routeTypeIdMap)) count++;
   }
   return count;
 }
 
 // Detect consecutive working days and return warnings per day index
 // carryOver = how many consecutive working days the employee had at the END of the previous week
-// Returns a Map<dayIndex, { consecutive: number, type: 'caution' | 'danger' }>
-function getConsecutiveWarnings(emp: EmployeeSchedule, carryOver: number = 0): Map<number, { consecutive: number; type: 'caution' | 'danger' }> {
+function getConsecutiveWarnings(emp: EmployeeSchedule, carryOver: number = 0, routeTypeIdMap?: Map<string, any>): Map<number, { consecutive: number; type: 'caution' | 'danger' }> {
   const warnings = new Map<number, { consecutive: number; type: 'caution' | 'danger' }>();
 
-  // Start with carry-over from previous week
   let consecutive = carryOver;
   for (let d = 0; d < 7; d++) {
     const day = emp.days[d];
-    if (day && (day.status || "").trim().toLowerCase() === "scheduled") {
+    if (isWorkingDay(day, routeTypeIdMap)) {
       consecutive++;
       if (consecutive === 6) {
         warnings.set(d, { consecutive: 6, type: 'caution' });
@@ -480,9 +487,10 @@ function SchedulingPageContent() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
-  // ── Read initial week from URL ──
+  // ── Read initial week and date from URL ──
   const urlWeek = searchParams.get("week") || "";
   const urlSearch = searchParams.get("search") || "";
+  const urlDate = searchParams.get("date") || "";
 
   // ── State-driven tab switching — NO route navigation, instant!
   const [activeMainTab, setActiveMainTab] = useState<"scheduling" | "messaging">(
@@ -494,10 +502,11 @@ function SchedulingPageContent() {
   });
 
   // ── Sync state changes to URL ──
-  const updateURL = useCallback((tab: "scheduling" | "messaging", subTab: string, week: string, search: string) => {
+  const updateURL = useCallback((tab: "scheduling" | "messaging", subTab: string, week: string, search: string, date?: string) => {
     const params = new URLSearchParams();
     if (week) params.set("week", week);
     if (search) params.set("search", search);
+    if (date && tab === "messaging") params.set("date", date);
     const qs = params.toString();
     const basePath = tab === "messaging"
       ? `/scheduling/messaging/${subTab}`
@@ -521,14 +530,15 @@ function SchedulingPageContent() {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState(urlSearch);
   const deferredSearchQuery = useDeferredValue(searchQuery);
+  const [messagingDate, setMessagingDate] = useState(urlDate);
 
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
-    updateURL(activeMainTab, activeSubTab, selectedWeek, deferredSearchQuery);
-  }, [activeMainTab, activeSubTab, selectedWeek, deferredSearchQuery, updateURL]);
+    updateURL(activeMainTab, activeSubTab, selectedWeek, deferredSearchQuery, messagingDate);
+  }, [activeMainTab, activeSubTab, selectedWeek, deferredSearchQuery, messagingDate, updateURL]);
 
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -563,6 +573,7 @@ function SchedulingPageContent() {
 
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [deletingWeek, setDeletingWeek] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [kpiOpen, setKpiOpen] = useState(false);
   const [canViewKpi, setCanViewKpi] = useState(false);
   const kpiRowRef = useRef<HTMLTableRowElement>(null);
@@ -606,8 +617,7 @@ function SchedulingPageContent() {
 
   const handleDeleteWeek = async () => {
     if (!selectedWeek) return;
-    if (!confirm(`Are you sure you want to delete ALL data (Schedules, Routes, Info, Audits) for ${selectedWeek}? This cannot be undone.`)) return;
-
+    setShowDeleteConfirm(false);
     setDeletingWeek(true);
     try {
       const res = await fetch(`/api/schedules/reset-week?yearWeek=${encodeURIComponent(selectedWeek)}`, {
@@ -618,16 +628,28 @@ function SchedulingPageContent() {
 
       toast.success(`Schedule deleted successfully. Removed ${data.deleted?.schedules || 0} schedules.`);
 
-      // Update UI state
-      setWeeks(prev => prev.filter(w => w !== selectedWeek));
+      const deletedWeek = selectedWeek;
 
-      // Refresh current week data since it is now empty
-      const idx = weeks.indexOf(selectedWeek);
+      // Prevent auto-sync from re-generating this week
+      syncedWeeksRef.current.add(deletedWeek);
+
+      // Update UI state — remove from local weeks list
+      setWeeks(prev => prev.filter(w => w !== deletedWeek));
+
+      // Switch to another week
+      const idx = weeks.indexOf(deletedWeek);
       if (weeks.length > 1) {
-        setSelectedWeek(weeks[idx > 0 ? idx - 1 : 1]);
+        const nextIdx = idx > 0 ? idx - 1 : 1;
+        const nextWeek = weeks[nextIdx];
+        // Mark the next week as already synced so auto-sync doesn't re-generate
+        syncedWeeksRef.current.add(nextWeek);
+        setSelectedWeek(nextWeek);
       } else {
         setWeekData(null);
       }
+
+      // Refresh weeks list from server
+      queryClient.invalidateQueries({ queryKey: ['schedules', 'weeksList'] });
     } catch (err: any) {
       toast.error(err.message || "Failed to delete week");
     } finally {
@@ -678,8 +700,8 @@ function SchedulingPageContent() {
   // Wrapped setter that also updates URL
   const setSelectedWeek = useCallback((week: string) => {
     setSelectedWeekState(week);
-    updateURL(activeMainTab, activeSubTab, week, deferredSearchQuery);
-  }, [activeMainTab, activeSubTab, deferredSearchQuery, updateURL]);
+    updateURL(activeMainTab, activeSubTab, week, deferredSearchQuery, messagingDate);
+  }, [activeMainTab, activeSubTab, deferredSearchQuery, messagingDate, updateURL]);
 
   // Helpers to compute next/prev yearWeek strings
   const getNextYearWeek = (yw: string): string => {
@@ -768,6 +790,16 @@ function SchedulingPageContent() {
 
   const dynamicTypeOptions = useMemo(() => {
     return formatRouteTypes(storeRouteTypes || routeTypesList);
+  }, [storeRouteTypes, routeTypesList]);
+
+  // Build id→RouteType map for resolving typeId on schedule records
+  const routeTypeIdMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const source = storeRouteTypes || routeTypesList;
+    if (Array.isArray(source)) {
+      source.forEach((rt: any) => map.set(String(rt._id), rt));
+    }
+    return map;
   }, [storeRouteTypes, routeTypesList]);
 
   // Sync weeks from TanStack Query
@@ -871,7 +903,7 @@ function SchedulingPageContent() {
     const cautionNames: string[] = [];
     const dangerNames: string[] = [];
     weekData.employees.forEach(emp => {
-      const warnings = getConsecutiveWarnings(emp, weekData.prevWeekTrailing?.[emp.transporterId] || 0);
+      const warnings = getConsecutiveWarnings(emp, weekData.prevWeekTrailing?.[emp.transporterId] || 0, routeTypeIdMap);
       let hasCaution = false;
       let hasDanger = false;
       warnings.forEach(w => {
@@ -883,40 +915,31 @@ function SchedulingPageContent() {
       else if (hasCaution) { caution++; cautionNames.push(name); }
     });
     return { caution, danger, cautionNames, dangerNames };
-  }, [weekData]);
+  }, [weekData, routeTypeIdMap]);
 
-  // Average Days Per Employee (for "Employee" type only, excluding specific inactive types)
+  // Average Days Per Employee ("Employee" type only) using typeId resolution
   const averageDays = useMemo(() => {
     if (!weekData?.employees || weekData.employees.length === 0) return "0.0";
-    const EXCLUDED = new Set(["off", "request off", "assign schedule", "call out", "reduction", "stand by", ""]);
-
-    // Only include employees with type "Employee" (case insensitive)
     const validEmps = weekData.employees.filter(emp => (emp.employee?.type || "").trim().toLowerCase() === "employee");
     if (validEmps.length === 0) return "0.0";
 
     let totalDays = 0;
     validEmps.forEach(emp => {
       for (let d = 0; d < 7; d++) {
-        const day = emp.days[d];
-        if (day) {
-          const typeVal = (day.type || "").trim().toLowerCase();
-          if (!EXCLUDED.has(typeVal)) {
-            totalDays++;
-          }
-        }
+        if (isWorkingDay(emp.days[d], routeTypeIdMap)) totalDays++;
       }
     });
 
     return (totalDays / validEmps.length).toFixed(1);
-  }, [weekData]);
+  }, [weekData, routeTypeIdMap]);
 
-  // Employees with at least 1 day where status = "Scheduled" this week
+  // Employees with at least 1 working day this week
   const workingEmps = useMemo(() => {
     if (!weekData?.employees) return 0;
     return weekData.employees.filter(emp =>
-      Object.values(emp.days).some((d: DayData) => (d.status || "").trim().toLowerCase() === "scheduled")
+      Object.values(emp.days).some((d: DayData) => isWorkingDay(d, routeTypeIdMap))
     ).length;
-  }, [weekData]);
+  }, [weekData, routeTypeIdMap]);
 
   // Push title into left
   useEffect(() => {
@@ -1038,6 +1061,19 @@ function SchedulingPageContent() {
             </Button>
           </>
         )}
+        {/* Delete Week button — only for allowed users */}
+        {["adeel@symxlogistics.com", "symx@symxlogistics.com"].includes(currentUserEmail || "") && activeMainTab === "scheduling" && weeks.length > 0 && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={deletingWeek}
+            title={`Delete all schedules for ${selectedWeek}`}
+          >
+            {deletingWeek ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+          </Button>
+        )}
         {/* Week selector — shown on both scheduling and messaging */}
         {weeks.length > 0 && (
           <>
@@ -1112,7 +1148,7 @@ function SchedulingPageContent() {
       </div>
     );
     return () => setRightContent(null);
-  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek, weekData?.totalEmployees, workingEmps, warningCounts, averageDays, currentUserEmail, deletingWeek]);
+  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek, weekData?.totalEmployees, workingEmps, warningCounts, averageDays, currentUserEmail, deletingWeek, showDeleteConfirm]);
 
   // Handle type change via dropdown
   const handleTypeChange = useCallback((
@@ -1122,21 +1158,24 @@ function SchedulingPageContent() {
     dayIdx: number,
     employeeName?: string
   ) => {
-    const isWorking = !NON_WORKING_TYPES.has(newType.trim().toLowerCase());
-    const routeConfig = routeTypeConfigs[newType.trim().toLowerCase()];
-    const newRouteStatus = routeConfig?.routeStatus || (isWorking ? "Scheduled" : "Off");
+    // Resolve the route type object first — it has routeStatus and startTime
+    const allRTs = storeRouteTypes || routeTypesList;
+    const matchedRT = Array.isArray(allRTs) ? allRTs.find((rt: any) => rt.name?.trim().toLowerCase() === newType.trim().toLowerCase()) : null;
 
-    const payload: Record<string, any> = { 
-      type: newType, 
+    const newRouteStatus = matchedRT?.routeStatus || (matchedRT ? "Scheduled" : "Off");
+
+    const payload: Record<string, any> = {
+      type: newType,
       status: newRouteStatus,
       transporterId,
       dayIdx,
-      yearWeek: selectedWeek
+      yearWeek: selectedWeek,
+      ...(matchedRT?._id ? { typeId: String(matchedRT._id) } : {}),
     };
 
-    // Only include startTime when the config has an explicit value — avoids blanking existing data
-    if (routeConfig?.startTime) {
-      payload.startTime = routeConfig.startTime;
+    // Only include startTime when the matched type has an explicit value
+    if (matchedRT?.startTime) {
+      payload.startTime = matchedRT.startTime;
     }
 
     if (employeeName) payload.employeeName = employeeName;
@@ -1163,7 +1202,7 @@ function SchedulingPageContent() {
       }
     });
 
-  }, [selectedWeek, weekData, updateSchedule, routeTypeConfigs]);
+  }, [selectedWeek, weekData, updateSchedule, routeTypeConfigs, storeRouteTypes, routeTypesList]);
 
   // Handle note save — optimistic update
   const handleNoteSaved = useCallback((transporterId: string, newNote: string, employeeName?: string, oldNote?: string) => {
@@ -1249,8 +1288,8 @@ function SchedulingPageContent() {
 
   // Planning data now uses filtered employees when any filter is active
   const planningData = useMemo(
-    () => computePlanningData(isFiltered ? filteredEmployees : (weekData?.employees || []), everydayRecords, weekData?.dates || []),
-    [weekData, filteredEmployees, isFiltered, everydayRecords]
+    () => computePlanningData(isFiltered ? filteredEmployees : (weekData?.employees || []), everydayRecords, weekData?.dates || [], routeTypeIdMap),
+    [weekData, filteredEmployees, isFiltered, everydayRecords, routeTypeIdMap]
   );
 
   // Get unique types and statuses for filters
@@ -1291,10 +1330,15 @@ function SchedulingPageContent() {
     (sum, emp) => sum + Object.keys(emp.days).length, 0
   ) || 0;
   const totalRoutes = weekData?.employees?.reduce((sum, emp) => {
-    return sum + Object.values(emp.days).filter((d: DayData) => ["route", "pending ecp"].includes((d.type || "").trim().toLowerCase())).length;
+    return sum + Object.values(emp.days).filter((d: DayData) => {
+      const rt = d.typeId ? routeTypeIdMap.get(String(d.typeId)) : null;
+      return rt ? rt.isDA : ["route", "pending ecp"].includes((d.type || "").trim().toLowerCase());
+    }).length;
   }, 0) || 0;
   const totalOff = weekData?.employees?.reduce((sum, emp) => {
     return sum + Object.values(emp.days).filter((d: DayData) => {
+      const rt = d.typeId ? routeTypeIdMap.get(String(d.typeId)) : null;
+      if (rt) return (rt.routeStatus || "").toLowerCase() === "off";
       const t = (d.type || "").trim().toLowerCase();
       return t === "off" || t === "";
     }).length;
@@ -1304,20 +1348,22 @@ function SchedulingPageContent() {
   const totalCallOuts = useMemo(() => {
     if (!weekData?.employees) return 0;
     return weekData.employees.reduce((sum, emp) => {
-      return sum + Object.values(emp.days).filter((d: DayData) =>
-        (d.type || "").trim().toLowerCase() === "call out"
-      ).length;
+      return sum + Object.values(emp.days).filter((d: DayData) => {
+        const rt = d.typeId ? routeTypeIdMap.get(String(d.typeId)) : null;
+        return rt ? (rt.name || "").trim().toLowerCase() === "call out" : (d.type || "").trim().toLowerCase() === "call out";
+      }).length;
     }, 0);
-  }, [weekData]);
+  }, [weekData, routeTypeIdMap]);
 
   const totalStandBy = useMemo(() => {
     if (!weekData?.employees) return 0;
     return weekData.employees.reduce((sum, emp) => {
-      return sum + Object.values(emp.days).filter((d: DayData) =>
-        (d.type || "").trim().toLowerCase() === "stand by"
-      ).length;
+      return sum + Object.values(emp.days).filter((d: DayData) => {
+        const rt = d.typeId ? routeTypeIdMap.get(String(d.typeId)) : null;
+        return rt ? rt.isStandby : (d.type || "").trim().toLowerCase() === "stand by";
+      }).length;
     }, 0);
-  }, [weekData]);
+  }, [weekData, routeTypeIdMap]);
 
 
   // Percentage of scheduled slots that are "working" (not off)
@@ -1327,18 +1373,21 @@ function SchedulingPageContent() {
     return Math.round((working / totalScheduleEntries) * 100);
   }, [totalScheduleEntries, totalOff]);
 
-  // How many unique employees have at least one Route day this week
+  // How many unique employees have at least one DA day this week
   const activeRouteEmployees = useMemo(() => {
     if (!weekData?.employees) return 0;
     return weekData.employees.filter(emp =>
-      Object.values(emp.days).some((d: DayData) => (d.type || "").trim().toLowerCase() === "route")
+      Object.values(emp.days).some((d: DayData) => {
+        const rt = d.typeId ? routeTypeIdMap.get(String(d.typeId)) : null;
+        return rt ? rt.isDA : (d.type || "").trim().toLowerCase() === "route";
+      })
     ).length;
-  }, [weekData]);
+  }, [weekData, routeTypeIdMap]);
 
   if (!mounted) return null;
 
   return (
-    <TooltipProvider delayDuration={0} disableHoverableContent>
+    <TooltipProvider delayDuration={0}>
       <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-4">
 
         {/* ── Main Tabs: Scheduling | Messaging ── */}
@@ -1381,6 +1430,8 @@ function SchedulingPageContent() {
             onSubTabChange={setActiveSubTab}
             onActiveTabInfo={setActiveTabInfo}
             refreshTrigger={messagingRefreshKey}
+            initialDate={urlDate}
+            onDateChange={setMessagingDate}
           />
         </div>
 
@@ -1802,9 +1853,9 @@ function SchedulingPageContent() {
                                   return nameA.localeCompare(nameB);
                                 })
                                 .map((emp) => {
-                                  const workDays = countWorkingDays(emp);
+                                  const workDays = countWorkingDays(emp, routeTypeIdMap);
                                   const notes = emp.employee?.ScheduleNotes || "";
-                                  const consecutiveWarnings = getConsecutiveWarnings(emp, weekData?.prevWeekTrailing?.[emp.transporterId] || 0);
+                                  const consecutiveWarnings = getConsecutiveWarnings(emp, weekData?.prevWeekTrailing?.[emp.transporterId] || 0, routeTypeIdMap);
 
                                   const isNewHire = emp.employee?.hiredDate && (Date.now() - new Date(emp.employee.hiredDate).getTime()) / 86400000 <= 30;
 
@@ -1843,25 +1894,31 @@ function SchedulingPageContent() {
                                         const van = day?.van || "";
                                         const startTime = day?.startTime || "";
                                         const type = day?.type || "";
-                                        const displayValue = type || status || "";
+                                        // Resolve typeId to route type for icon/name/color
+                                        const resolvedRT = day?.typeId ? routeTypeIdMap.get(String(day.typeId)) : null;
+                                        const displayValue = resolvedRT?.name || type || status || "";
+                                        const resolvedColor = resolvedRT?.color || null;
+                                        const resolvedIconName = resolvedRT?.icon || "";
+                                        const ResolvedIcon = resolvedIconName ? (LucideIcons as any)[resolvedIconName] : null;
+                                        // Fallback to old dynamicTypeOptions for legacy records without typeId
                                         const style = getDynamicTypeStyle(displayValue, dynamicTypeOptions);
                                         const matchedOpt = dynamicTypeOptions.find(opt => opt.label.toLowerCase() === displayValue.toLowerCase());
-                                        const CellIcon = matchedOpt?.icon;
+                                        const CellIcon = ResolvedIcon || matchedOpt?.icon;
+                                        const chipColor = resolvedColor || matchedOpt?.colorHex || style.colorHex;
                                         const warning = consecutiveWarnings.get(dayIdx);
 
                                         return (
                                           <td key={dayIdx} className="text-center px-0.5 sm:px-1 py-0.5 sm:py-1">
-                                            <DropdownMenu>
-                                              <Tooltip delayDuration={400}>
+                                            <Tooltip delayDuration={150}>
+                                              <DropdownMenu>
                                                 <TooltipTrigger asChild>
                                                   <DropdownMenuTrigger asChild>
                                                     <div
                                                       className={cn(
                                                         "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
-                                                        
                                                         "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
                                                       )}
-                                                      style={{ backgroundColor: matchedOpt?.colorHex || style.colorHex, color: getContrastText(matchedOpt?.colorHex || style.colorHex), borderColor: matchedOpt?.colorHex || style.colorHex }}
+                                                      style={{ backgroundColor: chipColor, color: getContrastText(chipColor), borderColor: chipColor }}
                                                     >
                                                       {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
                                                       <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
@@ -1878,68 +1935,72 @@ function SchedulingPageContent() {
                                                     </div>
                                                   </DropdownMenuTrigger>
                                                 </TooltipTrigger>
-                                                <TooltipContent side="top" align="center" className="flex flex-col gap-1 p-2.5 text-xs w-[180px] shadow-xl bg-card border-border/60 rounded-xl">
+                                                <TooltipContent
+                                                  side="top"
+                                                  align="center"
+                                                  sideOffset={6}
+                                                  avoidCollisions
+                                                  collisionPadding={8}
+                                                  className="flex flex-col gap-1 p-2.5 text-xs w-[220px] shadow-xl bg-card border-border/60 rounded-xl z-[100] pointer-events-none"
+                                                >
                                                   <div className="font-bold text-[13px] uppercase tracking-tight text-foreground flex items-center justify-between pb-1">
                                                     <span className="truncate">{emp.employee?.name || emp.transporterId}</span>
                                                     {day?.dayBeforeConfirmation === "true" && <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />}
                                                   </div>
-                                                  
                                                   <div className="font-semibold text-muted-foreground/80 mb-1 flex items-center gap-1.5 bg-muted/40 p-1.5 rounded-lg text-[11px]">
                                                     <CalendarDays className="h-3 w-3" />
                                                     {day?.weekDay || FULL_DAY_NAMES[dayIdx]} — {day?.date ? formatDate(day.date) : ""}
                                                   </div>
-                                                  
                                                   <div className="flex flex-col gap-1.5 mt-0.5 pl-0.5">
-                                                    {status && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[50px]">Status:</span><span className="font-semibold text-foreground uppercase tracking-wide">{status}</span></div>}
-                                                    {type && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[50px]">Type:</span><span className="font-semibold text-primary drop-shadow-[0_0_8px_rgba(59,130,246,0.2)]">{type}</span></div>}
-                                                    {day?.subType && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[50px]">Sub Type:</span><span className="font-semibold text-foreground">{day.subType}</span></div>}
-                                                    {startTime && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[50px]">Start:</span><span className="font-semibold text-blue-500 font-mono tracking-wider">{startTime}</span></div>}
-                                                    {van && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[50px]">Van:</span><span className="font-semibold text-emerald-600 font-mono">{van}</span></div>}
+                                                    {status && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[80px]">Confirmation:</span><span className="font-semibold text-foreground uppercase tracking-wide">{status}</span></div>}
+                                                    {(resolvedRT?.routeStatus || day?.routeStatus) && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[80px]">Shift:</span><span className="font-semibold text-emerald-500 uppercase tracking-wide">{resolvedRT?.routeStatus || day?.routeStatus}</span></div>}
+                                                    {displayValue && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[80px]">Type:</span><span className="font-semibold text-primary drop-shadow-[0_0_8px_rgba(59,130,246,0.2)]">{displayValue}</span></div>}
+                                                    {startTime && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[80px]">Time:</span><span className="font-semibold text-blue-500 font-mono tracking-wider">{startTime}</span></div>}
+                                                    {van && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[80px]">Van:</span><span className="font-semibold text-emerald-600 font-mono">{van}</span></div>}
                                                   </div>
-                                                  
                                                   {warning && (
                                                     <div className="mt-2 text-[10px] flex items-center gap-1.5 text-red-500 font-bold bg-red-500/10 border border-red-500/20 px-2 py-1.5 rounded-lg leading-tight">
                                                       <span className="text-[14px]">⚠️</span> {warning.consecutive} consecutive work days
                                                     </div>
                                                   )}
                                                 </TooltipContent>
-                                              </Tooltip>
-                                              <DropdownMenuContent
-                                                align="start"
-                                                side="bottom"
-                                                avoidCollisions
-                                                className="w-48 p-0 overflow-hidden group"
-                                              >
-                                                <div className="max-h-[320px] overflow-y-auto flex flex-col py-1">
-                                                  {dynamicTypeOptions.map(opt => {
-                                                    const Icon = opt.icon;
-                                                    const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();
-                                                    return (
-                                                      <DropdownMenuItem
-                                                        key={opt.label}
-                                                        className={cn(
-                                                          "flex items-center gap-2 cursor-pointer text-xs mx-1 rounded",
-                                                          isActive && "bg-accent"
-                                                        )}
-                                                        onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name)}
-                                                      >
-                                                        <div
-                                                          className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", "")}
-                                                          style={opt.colorHex ? { backgroundColor: opt.colorHex } : undefined}
+                                                <DropdownMenuContent
+                                                  align="start"
+                                                  side="bottom"
+                                                  avoidCollisions
+                                                  className="w-48 p-0 overflow-hidden group"
+                                                >
+                                                  <div className="max-h-[320px] overflow-y-auto flex flex-col py-1">
+                                                    {dynamicTypeOptions.map(opt => {
+                                                      const Icon = opt.icon;
+                                                      const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();
+                                                      return (
+                                                        <DropdownMenuItem
+                                                          key={opt.label}
+                                                          className={cn(
+                                                            "flex items-center gap-2 cursor-pointer text-xs mx-1 rounded",
+                                                            isActive && "bg-accent"
+                                                          )}
+                                                          onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name)}
                                                         >
-                                                          <Icon
-                                                            className={cn("h-3 w-3", "")}
-                                                            style={opt.colorHex ? { color: getContrastText(opt.colorHex) } : undefined}
-                                                          />
-                                                        </div>
-                                                        <span className="font-medium">{opt.label}</span>
-                                                        {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
-                                                      </DropdownMenuItem>
-                                                    );
-                                                  })}
-                                                </div>
-                                              </DropdownMenuContent>
-                                            </DropdownMenu>
+                                                          <div
+                                                            className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", "")}
+                                                            style={opt.colorHex ? { backgroundColor: opt.colorHex } : undefined}
+                                                          >
+                                                            <Icon
+                                                              className={cn("h-3 w-3", "")}
+                                                              style={opt.colorHex ? { color: getContrastText(opt.colorHex) } : undefined}
+                                                            />
+                                                          </div>
+                                                          <span className="font-medium">{opt.label}</span>
+                                                          {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
+                                                        </DropdownMenuItem>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                </DropdownMenuContent>
+                                              </DropdownMenu>
+                                            </Tooltip>
                                           </td>
                                         );
                                       })}
@@ -2572,6 +2633,28 @@ function SchedulingPageContent() {
         employee={notesEmployee}
         onNoteAdded={(tid) => setNoteCounts(prev => ({ ...prev, [tid]: (prev[tid] || 0) + 1 }))}
       />
+      {/* ── Delete Week Confirmation Dialog ── */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-500">Delete Week Data</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">This will permanently delete <strong>all</strong> data for <strong>{selectedWeek}</strong>:</span>
+              <span className="block text-xs text-muted-foreground">• Employee schedules<br/>• Routes &amp; route info<br/>• Audit logs</span>
+              <span className="block font-semibold text-red-500">This action cannot be undone.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleDeleteWeek}
+            >
+              Delete Everything
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </TooltipProvider>
   );
 }

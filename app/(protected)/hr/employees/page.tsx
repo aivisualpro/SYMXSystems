@@ -16,6 +16,7 @@ import { Search, User, CheckCircle2, Minus, Coffee } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 
 
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
@@ -36,7 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSearchParams } from "next/navigation";
 import { useEmployeesList, useUpdateEmployee, useCreateEmployee } from "@/lib/query/hooks/useEmployees";
-import { useDropdowns, useVehicles } from "@/lib/query/hooks/useShared";
+import { useDropdowns, useVehicles, useRouteTypes } from "@/lib/query/hooks/useShared";
 import { useQueryClient } from "@tanstack/react-query";
 
 
@@ -64,6 +65,7 @@ function EmployeesPageContent() {
   const queryClient = useQueryClient();
   const { data: storeDropdowns = [], isLoading: isLoadingDropdowns } = useDropdowns();
   const { data: storeVehicles = [], isLoading: isLoadingVehicles } = useVehicles();
+  const { data: allRouteTypes = [], isLoading: isLoadingRouteTypes } = useRouteTypes();
   const { mutateAsync: updateEmployee } = useUpdateEmployee();
   const { mutateAsync: createEmployee } = useCreateEmployee();
 
@@ -94,6 +96,7 @@ function EmployeesPageContent() {
   const [fetchedFromApi, setFetchedFromApi] = useState(false);
   const PAGE_SIZE = 50;
   const router = useRouter();
+  const [showInactives, setShowInactives] = useState(false);
 
 
   // Vehicle names from store
@@ -105,19 +108,22 @@ function EmployeesPageContent() {
       .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
   }, [storeVehicles]);
 
-  // Schedule types from store
-  const scheduleTypes = useMemo<ScheduleTypeOption[]>(() => {
-    if (!Array.isArray(storeDropdowns)) return [];
-    return storeDropdowns.filter((d: any) => 
-      d.type === "schedule type" && d.isActive !== false
+  // Default route types (isDefault=true) from /admin/settings/general/default-routes
+  // Includes Off and Assign Schedule — all isDefault types shown
+  const defaultRouteTypes = useMemo(() => {
+    if (!Array.isArray(allRouteTypes)) return [];
+    return allRouteTypes.filter((rt: any) => 
+      rt.isDefault && rt.isActive !== false
     );
-  }, [storeDropdowns]);
+  }, [allRouteTypes]);
 
-  const scheduleTypeMap = useMemo(() => {
-    const map = new Map<string, ScheduleTypeOption>();
-    scheduleTypes.forEach(st => map.set(st.description.toLowerCase(), st));
+  const routeTypeIdMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (Array.isArray(allRouteTypes)) {
+      allRouteTypes.forEach((rt: any) => map.set(String(rt._id), rt));
+    }
     return map;
-  }, [scheduleTypes]);
+  }, [allRouteTypes]);
 
   // ── Sync from store when no filters are active ──
   useEffect(() => {
@@ -130,10 +136,10 @@ function EmployeesPageContent() {
   }, [storeEmployees, needsApiCall, fetchedFromApi]);
 
   // ── Show loading only if store has no data yet AND no API call is pending ──
-  const isInitialLoading = isLoadingDropdowns || isLoadingVehicles || (!fetchedFromApi && isLoadingEmployees);
+  const isInitialLoading = isLoadingDropdowns || isLoadingVehicles || isLoadingRouteTypes || (!fetchedFromApi && isLoadingEmployees);
 
   // Inline update helper
-  const updateEmployeeField = async (id: string, field: string, value: string) => {
+  const updateEmployeeField = async (id: string, field: string, value: string | null) => {
     try {
       setData(prev => prev.map(emp =>
         String(emp._id) === id ? { ...emp, [field]: value } as any : emp
@@ -315,7 +321,10 @@ function EmployeesPageContent() {
       header: "Name",
       accessorFn: (row) => `${row.firstName || ""} ${row.lastName || ""}`.trim(),
       cell: ({ row }) => (
-        <span className="font-medium whitespace-nowrap">
+        <span
+          className="font-medium whitespace-nowrap cursor-pointer"
+          onClick={(e) => { e.stopPropagation(); router.push(`/hr/${row.original._id}`); }}
+        >
           {`${row.original.firstName || ""} ${row.original.lastName || ""}`.trim() || "—"}
         </span>
       ),
@@ -330,29 +339,18 @@ function EmployeesPageContent() {
       accessorKey: day,
       header: day.charAt(0).toUpperCase() + day.slice(1, 3),
       cell: ({ row }: any) => {
-        const val = row.original[day] || "OFF";
-        const matched = scheduleTypeMap.get(val.toLowerCase());
+        const rawVal = row.original[day];
+        const rtId = rawVal ? String(rawVal) : null;
+        const matched = rtId ? routeTypeIdMap.get(rtId) : null;
+        const isUnset = !matched;
         const chipColor = matched?.color || "";
         const chipIconName = matched?.icon || "";
         const ChipIcon = chipIconName ? (LucideIcons as any)[chipIconName] : null;
+        const displayName = matched?.name || "—";
 
-        // OFF special styling
-        const isOff = val.toLowerCase() === "off" || val.trim() === "";
-        const bgStyle = isOff
-          ? {}
-          : chipColor
-            ? { backgroundColor: chipColor }
-            : { backgroundColor: "#6B7280" };
-        const textStyle = isOff
-          ? {}
-          : chipColor && isLightColor(chipColor)
-            ? { color: "#1a1a1a" }
-            : { color: "#fff" };
-        const borderStyle = isOff
-          ? {}
-          : chipColor
-            ? { borderColor: chipColor }
-            : { borderColor: "#6B7280" };
+        const bgStyle = isUnset ? {} : chipColor ? { backgroundColor: chipColor } : { backgroundColor: "#6B7280" };
+        const textStyle = isUnset ? {} : chipColor && isLightColor(chipColor) ? { color: "#1a1a1a" } : { color: "#fff" };
+        const borderStyle = isUnset ? {} : chipColor ? { borderColor: chipColor } : { borderColor: "#6B7280" };
 
         return (
           <DropdownMenu>
@@ -361,68 +359,52 @@ function EmployeesPageContent() {
                 onClick={(e) => e.stopPropagation()}
                 className={cn(
                   "relative flex items-center justify-center gap-0.5 h-7 rounded-md text-[10px] font-semibold transition-all border cursor-pointer select-none px-1.5 min-w-[80px]",
-                  isOff
+                  isUnset
                     ? "bg-zinc-100 dark:bg-zinc-700 text-zinc-400 dark:text-zinc-400 border-zinc-200 dark:border-zinc-600"
                     : "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
                 )}
-                style={isOff ? {} : { ...bgStyle, ...borderStyle }}
+                style={isUnset ? {} : { ...bgStyle, ...borderStyle }}
               >
-                {isOff ? (
-                  <Coffee className="h-3 w-3 shrink-0 mr-0.5" />
-                ) : ChipIcon ? (
+                {isUnset ? null : ChipIcon ? (
                   <ChipIcon className="h-3 w-3 shrink-0 mr-0.5" style={textStyle} />
                 ) : null}
-                <span className="truncate" style={isOff ? {} : textStyle}>{val || "OFF"}</span>
+                <span className="truncate" style={isUnset ? {} : textStyle}>{displayName}</span>
               </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="start"
               side="bottom"
-              className="w-48 max-h-[320px] overflow-y-auto"
+              className="w-52 max-h-[320px] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Change Schedule
+                Assign Schedule
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {/* OFF option */}
-              <DropdownMenuItem
-                className={cn(
-                  "flex items-center gap-2 cursor-pointer text-xs",
-                  val.toLowerCase() === "off" && "bg-accent"
-                )}
-                onClick={() => updateEmployeeField(String(row.original._id), day, "OFF")}
-              >
-                <div className="h-5 w-5 rounded flex items-center justify-center shrink-0 bg-zinc-200 dark:bg-zinc-600">
-                  <Coffee className="h-3 w-3 text-zinc-500 dark:text-zinc-300" />
-                </div>
-                <span className="font-medium">OFF</span>
-                {val.toLowerCase() === "off" && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
-              </DropdownMenuItem>
-              {/* Dynamic schedule type options */}
-              {scheduleTypes.map(opt => {
+              {/* Default route type options */}
+              {defaultRouteTypes.map((opt: any) => {
                 const OptIcon = opt.icon ? (LucideIcons as any)[opt.icon] : null;
-                const isActive = val.toLowerCase() === opt.description.toLowerCase();
+                const isActive = rtId === String(opt._id);
                 return (
                   <DropdownMenuItem
                     key={opt._id}
                     className={cn(
-                      "flex items-center gap-2 cursor-pointer text-xs",
+                      "flex items-center gap-2 cursor-pointer text-sm py-2",
                       isActive && "bg-accent"
                     )}
-                    onClick={() => updateEmployeeField(String(row.original._id), day, opt.description)}
+                    onClick={() => updateEmployeeField(String(row.original._id), day, String(opt._id))}
                   >
                     <div
-                      className="h-5 w-5 rounded flex items-center justify-center shrink-0"
+                      className="h-6 w-6 rounded flex items-center justify-center shrink-0"
                       style={{ backgroundColor: opt.color || "#6B7280" }}
                     >
                       {OptIcon ? (
-                        <OptIcon className="h-3 w-3" style={{ color: opt.color && isLightColor(opt.color) ? "#1a1a1a" : "#fff" }} />
+                        <OptIcon className="h-3.5 w-3.5" style={{ color: opt.color && isLightColor(opt.color) ? "#1a1a1a" : "#fff" }} />
                       ) : (
-                        <Minus className="h-3 w-3 text-white" />
+                        <Minus className="h-3.5 w-3.5 text-white" />
                       )}
                     </div>
-                    <span className="font-medium">{opt.description}</span>
+                    <span className="font-medium">{opt.name}</span>
                     {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
                   </DropdownMenuItem>
                 );
@@ -659,19 +641,22 @@ function EmployeesPageContent() {
   };
 
   const filteredData = React.useMemo(() => {
-    // The server already filters by 'terminated' and 'search' now,
-    // so we can just return data directly.
+    // Filter out inactive (Terminated, Resigned) employees unless toggle is on
+    if (!showInactives) {
+      return data.filter(emp => emp.status === 'Active');
+    }
     return data;
-  }, [data]);
+  }, [data, showInactives]);
 
   // ── Shared chip renderer for mobile cards ──
   const renderDayChip = (emp: ISymxEmployee, day: string) => {
-    const val = (emp as any)[day] || "OFF";
-    const matched = scheduleTypeMap.get(val.toLowerCase());
+    const rawVal = (emp as any)[day];
+    const rtId = rawVal ? String(rawVal) : null;
+    const matched = rtId ? routeTypeIdMap.get(rtId) : null;
+    const isUnset = !matched;
     const chipColor = matched?.color || "";
     const chipIconName = matched?.icon || "";
     const ChipIcon = chipIconName ? (LucideIcons as any)[chipIconName] : null;
-    const isOff = val.toLowerCase() === "off" || val.trim() === "";
 
     return (
       <DropdownMenu key={day}>
@@ -688,52 +673,42 @@ function EmployeesPageContent() {
             <div
               className={cn(
                 "flex items-center justify-center gap-0.5 h-6 w-full min-w-[38px] rounded-md text-[9px] font-bold border transition-all",
-                isOff
+                isUnset
                   ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-700"
                   : "group-hover/chip:brightness-110 group-hover/chip:shadow-md"
               )}
-              style={isOff ? {} : {
+              style={isUnset ? {} : {
                 backgroundColor: chipColor || "#6B7280",
                 borderColor: chipColor || "#6B7280",
                 color: chipColor && isLightColor(chipColor) ? "#1a1a1a" : "#fff"
               }}
             >
-              {isOff ? (
-                <Coffee className="h-2.5 w-2.5" />
+              {isUnset ? (
+                <Minus className="h-2.5 w-2.5 opacity-40" />
               ) : ChipIcon ? (
                 <ChipIcon className="h-2.5 w-2.5" />
               ) : null}
             </div>
           </div>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="center" side="bottom" className="w-48 max-h-[280px] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuContent align="center" side="bottom" className="w-52 max-h-[280px] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
             {day.charAt(0).toUpperCase() + day.slice(1)}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className={cn("flex items-center gap-2 cursor-pointer text-xs", isOff && "bg-accent")}
-            onClick={() => updateEmployeeField(String(emp._id), day, "OFF")}
-          >
-            <div className="h-5 w-5 rounded flex items-center justify-center shrink-0 bg-zinc-200 dark:bg-zinc-600">
-              <Coffee className="h-3 w-3 text-zinc-500 dark:text-zinc-300" />
-            </div>
-            <span className="font-medium">OFF</span>
-            {isOff && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
-          </DropdownMenuItem>
-          {scheduleTypes.map(opt => {
+          {defaultRouteTypes.map((opt: any) => {
             const OptIcon = opt.icon ? (LucideIcons as any)[opt.icon] : null;
-            const isActive = val.toLowerCase() === opt.description.toLowerCase();
+            const isActive = rtId === String(opt._id);
             return (
               <DropdownMenuItem
                 key={opt._id}
-                className={cn("flex items-center gap-2 cursor-pointer text-xs", isActive && "bg-accent")}
-                onClick={() => updateEmployeeField(String(emp._id), day, opt.description)}
+                className={cn("flex items-center gap-2 cursor-pointer text-sm py-2", isActive && "bg-accent")}
+                onClick={() => updateEmployeeField(String(emp._id), day, String(opt._id))}
               >
-                <div className="h-5 w-5 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: opt.color || "#6B7280" }}>
-                  {OptIcon ? <OptIcon className="h-3 w-3" style={{ color: opt.color && isLightColor(opt.color) ? "#1a1a1a" : "#fff" }} /> : <Minus className="h-3 w-3 text-white" />}
+                <div className="h-6 w-6 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: opt.color || "#6B7280" }}>
+                  {OptIcon ? <OptIcon className="h-3.5 w-3.5" style={{ color: opt.color && isLightColor(opt.color) ? "#1a1a1a" : "#fff" }} /> : <Minus className="h-3.5 w-3.5 text-white" />}
                 </div>
-                <span className="font-medium">{opt.description}</span>
+                <span className="font-medium">{opt.name}</span>
                 {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
               </DropdownMenuItem>
             );
@@ -764,7 +739,7 @@ function EmployeesPageContent() {
           showColumnToggle={false}
           initialColumnVisibility={initialVisibility}
           enableGlobalFilter={false}
-          onRowClick={(employee) => router.push(`/hr/${employee._id}`)}
+
           hasMore={hasMore}
           onLoadMore={() => fetchEmployees(false)}
           loadingMore={loadingMore}
@@ -781,8 +756,16 @@ function EmployeesPageContent() {
                 />
               </div>
               <Badge variant="secondary" className="h-8 px-3 text-xs shrink-0 font-normal">
-                {data.length} of {totalCount > 0 ? totalCount : data.length} records
+                {filteredData.length} of {totalCount > 0 ? totalCount : data.length} records
               </Badge>
+              <div className="flex items-center gap-2 border border-border rounded-lg px-3 h-8 bg-muted/30">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Show Inactives</span>
+                <Switch
+                  checked={showInactives}
+                  onCheckedChange={setShowInactives}
+                  className="scale-75"
+                />
+              </div>
 
             </div>
           }
@@ -800,13 +783,23 @@ function EmployeesPageContent() {
                 Employees
               </h1>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {data.length} of {totalCount > 0 ? totalCount : data.length} records
+                {filteredData.length} of {totalCount > 0 ? totalCount : data.length} records
               </p>
             </div>
-            <Button size="sm" onClick={openAddDialog} className="gap-1.5 h-8 shadow-sm">
-              <LucideIcons.Plus className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Add</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 border border-border rounded-lg px-2 h-7 bg-muted/30">
+                <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Inactives</span>
+                <Switch
+                  checked={showInactives}
+                  onCheckedChange={setShowInactives}
+                  className="scale-[0.6]"
+                />
+              </div>
+              <Button size="sm" onClick={openAddDialog} className="gap-1.5 h-8 shadow-sm">
+                <LucideIcons.Plus className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Add</span>
+              </Button>
+            </div>
           </div>
 
           {/* Search + Toggle */}

@@ -23,6 +23,7 @@ const schedulesQuerySchema = z.object({
 const updateScheduleSchema = z.object({
   scheduleId: z.string().optional(),
   type: z.string().optional(),
+  typeId: z.string().optional(),
   employeeId: z.string().optional(),
   note: z.string().optional(),
   startTime: z.string().optional(),
@@ -32,7 +33,8 @@ const updateScheduleSchema = z.object({
   oldNote: z.string().optional(),
   date: z.string().optional(),
   yearWeek: z.string().optional(),
-  weekDay: z.string().optional()
+  weekDay: z.string().optional(),
+  dayIdx: z.number().optional(),
 });
 
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -101,7 +103,7 @@ export async function GET(req: NextRequest) {
     // Fetch all schedule entries for this week
     const schedules = await SymxEmployeeSchedule.find(
       { yearWeek },
-      { transporterId: 1, date: 1, weekDay: 1, status: 1, type: 1, subType: 1, trainingDay: 1, startTime: 1, dayBeforeConfirmation: 1, dayOfConfirmation: 1, weekConfirmation: 1, van: 1, note: 1 }
+      { transporterId: 1, date: 1, weekDay: 1, status: 1, routeStatus: 1, type: 1, typeId: 1, subType: 1, trainingDay: 1, startTime: 1, dayBeforeConfirmation: 1, dayOfConfirmation: 1, weekConfirmation: 1, van: 1, note: 1 }
     )
       .sort({ date: 1 })
       .lean();
@@ -181,7 +183,9 @@ export async function GET(req: NextRequest) {
         date: s.date,
         weekDay: s.weekDay,
         status: s.status,
+        routeStatus: s.routeStatus,
         type: s.type,
+        typeId: s.typeId,
         subType: s.subType,
         trainingDay: s.trainingDay,
         startTime: s.startTime,
@@ -290,8 +294,7 @@ export async function GET(req: NextRequest) {
     const dailyRevenueBreakdown: Record<string, any[]> = {};
     
     if (dates.length > 0) {
-      const dateObjects = dates.map(d => new Date(d));
-      const dbRecords = await SymxEveryday.find({ date: { $in: dateObjects } }).lean();
+      const dbRecords = await SymxEveryday.find({ date: { $in: dates } }).lean();
       dbRecords.forEach((r: any) => {
         if (!r.date) return;
         const dStr = r.date instanceof Date ? r.date.toISOString().split("T")[0] : new Date(r.date).toISOString().split("T")[0];
@@ -305,6 +308,7 @@ export async function GET(req: NextRequest) {
           dailyRevenue[d] = 0;
           dailyRevenueBreakdown[d] = [];
       });
+      const dateObjects = dates.map(d => new Date(d));
       const routeRecords = await SYMXRoute.find(
         { date: { $in: dateObjects } },
         { date: 1, transporterId: 1, type: 1, wst: 1, wstDuration: 1, totalCost: 1, paycomInDay: 1, paycomOutLunch: 1, paycomInLunch: 1, paycomOutDay: 1, totalHours: 1 }
@@ -515,7 +519,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const body = validation.data;
-    const { scheduleId, type, employeeId, note, startTime, status } = body;
+    const { scheduleId, type, employeeId, note, startTime, status, typeId } = body;
 
     // Update employee global note (ScheduleNotes)
     if (employeeId && note !== undefined) {
@@ -556,8 +560,13 @@ export async function PATCH(req: NextRequest) {
 
       const newType = (type || "").trim();
       const updateFields: Record<string, any> = { type: newType };
+      // Set typeId if provided from the client
+      if (typeId) {
+        updateFields.typeId = typeId;
+      }
       if (status !== undefined) {
         updateFields.status = status;
+        updateFields.routeStatus = status;
       } else {
         let resolvedStatus = "Scheduled";
         if (newType === "") {
@@ -572,6 +581,7 @@ export async function PATCH(req: NextRequest) {
           }
         }
         updateFields.status = resolvedStatus;
+        updateFields.routeStatus = resolvedStatus;
       }
       if (startTime !== undefined) updateFields.startTime = startTime;
 
@@ -631,32 +641,28 @@ export async function PATCH(req: NextRequest) {
             }], { session: dbSession });
           }
 
-          // Sync type/status to SYMXRoute (dispatching)
+          // Sync typeId to existing SYMXRoute only — never create (that's the Generate button's job)
           if (typeChanged || status !== undefined) {
-            const newTypeNorm = (updated.type || "").trim();
-            const isNowWorking = newTypeNorm !== "" && updated.status !== "Off";
+            const isNowWorking = !!updateFields.typeId && updated.status !== "Off";
+            const routesCol = mongoose.connection.db!.collection("SYMXRoutes");
 
             if (isNowWorking) {
-              await SYMXRoute.updateOne(
+              // Update only — no upsert
+              await routesCol.updateOne(
                 { transporterId: updated.transporterId, date: updated.date },
                 {
                   $set: {
-                    scheduleId: scheduleId,
-                    type: type || "",
-                    subType: updated.subType || "",
+                    scheduleId: String(scheduleId),
+                    typeId: updateFields.typeId || "",
                     weekDay: updated.weekDay || "",
                     yearWeek: updated.yearWeek || "",
                     van: updated.van || "",
                   },
-                },
-                { upsert: true, session: dbSession }
-              );
-            } else {
-              await SYMXRoute.deleteOne(
-                { transporterId: updated.transporterId, date: updated.date },
-                { session: dbSession }
+                }
+                // No upsert — only update if route already exists
               );
             }
+            // Note: do NOT delete route when type becomes Off — only Generate/Regenerate manages route lifecycle
           }
         });
       } catch (e: any) {
@@ -702,6 +708,7 @@ export async function PATCH(req: NextRequest) {
                 yearWeek,
                 weekDay: weekDay || "",
                 status: resolvedStatus,
+                routeStatus: resolvedStatus,
                 ...(startTime !== undefined ? { startTime } : {}),
               },
               $setOnInsert: {
@@ -729,30 +736,28 @@ export async function PATCH(req: NextRequest) {
             performedByName: performer.name,
           }], { session: dbSession });
 
-          // Sync to SYMXRoute — only create for working types
+          // Sync typeId to existing SYMXRoute only — never create
           if (created && (created as any)._id) {
-            const newTypeNorm = (created.type || "").trim();
-            const isWorking = newTypeNorm !== "" && created.status !== "Off";
+            const newTypeId = (created as any).typeId;
+            const isWorking = !!newTypeId && created.status !== "Off";
+            const routesCol = mongoose.connection.db!.collection("SYMXRoutes");
 
             if (isWorking) {
-              await SYMXRoute.updateOne(
+              // Update only — no upsert
+              await routesCol.updateOne(
                 { transporterId, date: new Date(date) },
                 {
                   $set: {
-                    scheduleId: (created as any)._id,
-                    type: type || "",
+                    scheduleId: String((created as any)._id),
+                    typeId: String(newTypeId),
                     weekDay: weekDay || "",
                     yearWeek,
                   },
-                },
-                { upsert: true, session: dbSession }
-              );
-            } else {
-              await SYMXRoute.deleteOne(
-                { transporterId, date: new Date(date) },
-                { session: dbSession }
+                }
+                // No upsert
               );
             }
+            // Note: do NOT delete — only Generate/Regenerate manages route lifecycle
           }
         });
       } finally {

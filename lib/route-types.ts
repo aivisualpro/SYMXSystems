@@ -61,8 +61,9 @@ import * as LucideIcons from "lucide-react";
 
 export function formatRouteTypes(routeTypesList: any[] | undefined) {
     if (!routeTypesList || !Array.isArray(routeTypesList)) return [];
+    const excluded = new Set(["assign schedule"]);
     return routeTypesList
-      .filter((rt: any) => rt.isActive !== false) // Only show active types in dropdowns
+      .filter((rt: any) => rt.isActive !== false && rt.icon && (LucideIcons as any)[rt.icon] && !excluded.has((rt.name || "").trim().toLowerCase())) // Only show active types with valid icons, exclude non-scheduling types
       .map((rt: any) => {
         const DBIcon = rt.icon && (LucideIcons as any)[rt.icon] ? (LucideIcons as any)[rt.icon] : Navigation;
         

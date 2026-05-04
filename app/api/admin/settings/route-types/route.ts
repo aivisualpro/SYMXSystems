@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
         const body = await req.json();
-        const { _id, name, color, startTime, theoryHrs, group, routeStatus, icon, sortOrder, isActive } = body;
+        const { _id, name, color, startTime, theoryHrs, group, routeStatus, isDefault, partOf, isDA, isOps, isStandby, icon, sortOrder, isActive } = body;
 
         if (!name?.trim()) {
             return NextResponse.json({ error: "Route type name is required" }, { status: 400 });
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
             // Update existing
             const updated = await RouteType.findByIdAndUpdate(
                 _id,
-                { name: name.trim(), color, startTime, theoryHrs, group, routeStatus, icon, sortOrder, isActive },
+                { name: name.trim(), color, startTime, theoryHrs, group, routeStatus, isDefault, partOf, isDA, isOps, isStandby, icon, sortOrder, isActive },
                 { new: true }
             ).lean();
             if (!updated) return NextResponse.json({ error: "Route type not found" }, { status: 404 });
@@ -101,6 +101,11 @@ export async function POST(req: NextRequest) {
                 theoryHrs: theoryHrs || 0,
                 group: group || "None",
                 routeStatus: routeStatus || "Scheduled",
+                isDefault: isDefault ?? false,
+                partOf: partOf || [],
+                isDA: isDA ?? false,
+                isOps: isOps ?? false,
+                isStandby: isStandby ?? false,
                 icon: icon || "",
                 sortOrder: sortOrder ?? 0,
                 isActive: isActive ?? true,

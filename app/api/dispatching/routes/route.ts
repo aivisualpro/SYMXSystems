@@ -84,14 +84,44 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ routesGenerated: count > 0 });
         }
 
-        // Fetch types configured as "Off" to exclude them from dispatching
-        const offTypesConfigs = await RouteType.find({ routeStatus: { $in: ["off", "Off", "OFF", "oFF"] } }, { name: 1 }).lean();
-        const offTypes = offTypesConfigs.map((rt: any) => rt.name.trim()); // exact match
+        // Fetch RouteType metadata — filter to only those with "Dispatching" in partOf
+        const allRouteTypes = await RouteType.find({}, { _id: 1, name: 1, routeStatus: 1, partOf: 1 }).lean() as any[];
+        const rtNameToId = new Map<string, string>();   // name.lower → typeId string
 
-        // Build query — exclude empty types and types mapped to "Off" status
+        // Only include typeIds that have "Dispatching" in partOf AND are not "Off"
+        const dispatchingTypeIds: string[] = [];
+        const offTypeIds: string[] = [];
+
+        for (const rt of allRouteTypes) {
+            const id = String(rt._id);
+            rtNameToId.set((rt.name || "").trim().toLowerCase(), id);
+            const partOf: string[] = Array.isArray(rt.partOf) ? rt.partOf : [];
+            const isDispatchingType = partOf.includes("Dispatching");
+            const isOff = ["off", "Off", "OFF"].includes(rt.routeStatus || "");
+
+            if (isDispatchingType && !isOff) {
+                dispatchingTypeIds.push(id);
+            } else {
+                offTypeIds.push(id); // everything else is excluded
+            }
+        }
+
+        // Build query — only show routes whose typeId is a Dispatching-partOf, non-Off RouteType
+        // Match both string AND ObjectId stored values (handles pre-migration records)
         const query: any = { yearWeek };
         if (date) query.date = new Date(date);
-        query.type = offTypes.length > 0 ? { $nin: offTypes, $ne: "" } : { $ne: "" };
+        if (dispatchingTypeIds.length > 0) {
+            const asObjectIds = dispatchingTypeIds
+                .map(id => { try { return new mongoose.Types.ObjectId(id); } catch { return null; } })
+                .filter(Boolean);
+            query.$or = [
+                { typeId: { $in: dispatchingTypeIds } },        // stored as string
+                { typeId: { $in: asObjectIds } },               // stored as ObjectId
+            ];
+        } else {
+            // No valid dispatching types configured — return nothing
+            query.typeId = { $in: [] };
+        }
 
         // ── PHASE 1: Fetch routes + completion setting in parallel ──
         const [routes, completionSetting] = await Promise.all([
@@ -114,15 +144,17 @@ export async function GET(req: NextRequest) {
         const transporterIds = [...transporterIdsSet];
         const allVins = [...new Set(routes.map((r: any) => r.van).filter(Boolean))];
 
-        // Build completion types filter
-        const completionTypes: string[] = Array.isArray(completionSetting?.value) && (completionSetting as any).value.length > 0
-            ? (completionSetting as any).value.map((t: string) => t.toLowerCase().trim())
+        // Build completion types filter using typeId
+        const completionTypeIds: string[] = Array.isArray(completionSetting?.value) && (completionSetting as any).value.length > 0
+            ? (completionSetting as any).value
+                .map((t: string) => rtNameToId.get(t.toLowerCase().trim()))
+                .filter(Boolean)
             : [];
         const routeCountMatch: any = { transporterId: { $in: transporterIds } };
-        if (completionTypes.length > 0) {
-            routeCountMatch.type = { $in: completionTypes };
+        if (completionTypeIds.length > 0) {
+            routeCountMatch.typeId = { $in: completionTypeIds };
         } else {
-            routeCountMatch.type = { $ne: "" };
+            routeCountMatch.typeId = { $exists: true, $ne: "" };
         }
 
         // Use exact match since IDs are normalized, avoiding expensive dynamic map of 150 regexes
@@ -283,10 +315,10 @@ export async function POST(req: NextRequest) {
             await SYMXRoute.deleteMany({ yearWeek });
         }
 
-        // Fetch all schedules for this week
+        // Fetch all schedules for this week — only fields needed for route generation
         const schedules = await SymxEmployeeSchedule.find(
             { yearWeek },
-            { _id: 1, transporterId: 1, date: 1, weekDay: 1, type: 1, subType: 1, trainingDay: 1, van: 1, status: 1 }
+            { _id: 1, transporterId: 1, date: 1, weekDay: 1, typeId: 1, van: 1 }
         ).lean();
 
         console.log(`[Generate Routes] Found ${schedules.length} schedule records for ${yearWeek}`);
@@ -295,11 +327,25 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "No schedules found for this week" }, { status: 404 });
         }
 
-        // Filter out empty-type schedules and any schedule evaluated as "Off"
+        // Build RouteType map: typeId → { routeStatus, partOf }
+        const routeTypes = await RouteType.find({}, { _id: 1, routeStatus: 1, partOf: 1 }).lean() as any[];
+        const typeIdToMeta = new Map<string, { routeStatus: string; partOf: string[] }>();
+        for (const rt of routeTypes) {
+            typeIdToMeta.set(String(rt._id), {
+                routeStatus: (rt.routeStatus || "").toLowerCase(),
+                partOf: Array.isArray(rt.partOf) ? rt.partOf : [],
+            });
+        }
+
+        // Filter: keep only schedules where typeId resolves to a RouteType that:
+        //   1. Has routeStatus !== "off"
+        //   2. Has "Dispatching" in its partOf array
         const workingSchedules = schedules.filter((s: any) => {
-            const t = (s.type || "").trim();
-            const isOff = (s.status || "").toLowerCase() === "off";
-            return t !== "" && !isOff;
+            if (!s.typeId) return false;
+            const meta = typeIdToMeta.get(String(s.typeId));
+            if (!meta) return false;
+            if (meta.routeStatus === "off") return false;
+            return meta.partOf.includes("Dispatching");
         });
 
         console.log(`[Generate Routes] ${schedules.length} total schedules, ${workingSchedules.length} working (excluded empty/Off)`);
@@ -312,19 +358,20 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // Create route records — one per working schedule entry
+        // Create route records — one per working schedule entry (typeId only, no type/subType)
         // Use bulkWrite with upserts to handle the unique {transporterId, date} index gracefully
+        const db = mongoose.connection.db!;
+        const routesCol = db.collection("SYMXRoutes");
+
         const bulkOps = workingSchedules.map((s: any) => ({
             updateOne: {
                 filter: { transporterId: s.transporterId, date: s.date },
                 update: {
                     $set: {
-                        scheduleId: s._id,
+                        scheduleId: String(s._id),
                         weekDay: s.weekDay,
                         yearWeek,
-                        type: s.type || "",
-                        subType: s.subType || "",
-                        trainingDay: s.trainingDay || "",
+                        typeId: s.typeId ? String(s.typeId) : "",
                         van: s.van || "",
                     },
                 },
@@ -332,10 +379,9 @@ export async function POST(req: NextRequest) {
             },
         }));
 
-        const result = await SYMXRoute.bulkWrite(bulkOps, { ordered: false });
-        const createdCount = result.upsertedCount + result.modifiedCount;
-
-        console.log(`[Generate Routes] bulkWrite result: upserted=${result.upsertedCount}, matched=${result.matchedCount}, modified=${result.modifiedCount}, total=${createdCount}`);
+        const result = await routesCol.bulkWrite(bulkOps, { ordered: false });
+        const createdCount = (result.upsertedCount || 0) + (result.modifiedCount || 0);
+        console.log(`[Generate Routes] bulkWrite result: upserted=${result.upsertedCount}, modified=${result.modifiedCount}, total=${createdCount}`);
 
         // ══════════════════════════════════════════════════════════
         // ── RE-APPLY ROUTES INFO DATA ──
@@ -441,18 +487,24 @@ async function reApplyRoutesInfo(yearWeek: string, schedules: any[]) {
 // ══════════════════════════════════════════════════════════
 async function autoAssignVans(yearWeek: string) {
     const SIZE_CATEGORIES = ["SP XL", "SP L"];
-    const ELIGIBLE_TYPES = ["route", "training otr"];
     const NINETY_DAYS_AGO = new Date();
     NINETY_DAYS_AGO.setDate(NINETY_DAYS_AGO.getDate() - 90);
 
-    // 1. Fetch all routes for the week that need vans
+    // Resolve eligible typeIds (non-"off" route status routes with van assignment intent)
+    // We fetch all route types and find IDs whose routeStatus is not "off"
+    const eligibleRouteTypes = await RouteType.find(
+        { routeStatus: { $nin: ["off", "Off", "OFF"] }, isActive: { $ne: false } },
+        { _id: 1 }
+    ).lean() as any[];
+    const eligibleTypeIds = eligibleRouteTypes.map((rt: any) => String(rt._id));
+
     const allRoutes = await SYMXRoute.find(
         {
             yearWeek,
             van: { $in: ["", null] },
-            type: { $in: ELIGIBLE_TYPES },
+            typeId: { $in: eligibleTypeIds },
         },
-        { _id: 1, transporterId: 1, date: 1, routeSize: 1, type: 1, van: 1 }
+        { _id: 1, transporterId: 1, date: 1, routeSize: 1, typeId: 1, van: 1 }
     ).lean() as any[];
 
     if (allRoutes.length === 0) {
@@ -669,71 +721,71 @@ export async function PUT(req: NextRequest) {
             updates.dashcam = "";
         }
 
-        const dbSession = await mongoose.startSession();
-        let updated: any = null;
+        // Update route record directly (no session — Atlas free tier has write conflict issues with transactions)
+        const updated = await SYMXRoute.findByIdAndUpdate(
+            routeId,
+            { $set: updates },
+            { new: true, lean: true }
+        ) as any;
 
-        try {
-            await dbSession.withTransaction(async () => {
-                updated = await SYMXRoute.findByIdAndUpdate(
-                    routeId,
-                    { $set: updates },
-                    { new: true, lean: true, session: dbSession }
-                ) as any;
+        // If typeId was changed, sync it back to SYMXEmployeeSchedule + audit log
+        if (updates.typeId !== undefined && existing.typeId !== updates.typeId) {
+            const newTypeId = (updates.typeId || "").trim();
 
-                // If type was changed, sync it back to the schedule + create audit log
-                if (updates.type !== undefined && existing.type !== updates.type) {
-                    const isWorking = !["off", ""].includes((updates.type || "").trim().toLowerCase());
-                    const scheduleUpdates: Record<string, any> = {
-                        type: updates.type,
-                        status: isWorking ? "Scheduled" : "Off",
-                    };
-                    if (updates.subType !== undefined) scheduleUpdates.subType = updates.subType;
+            // Resolve routeStatus from RouteType for the schedule sync
+            let newRouteStatus = "Scheduled";
+            if (!newTypeId) {
+                newRouteStatus = "Off";
+            } else {
+                try {
+                    const rt = await RouteType.findById(newTypeId, { routeStatus: 1 }).lean() as any;
+                    if (rt?.routeStatus) newRouteStatus = rt.routeStatus;
+                } catch { }
+            }
 
-                    // Sync to schedule
-                    if (existing.scheduleId) {
-                        await SymxEmployeeSchedule.findByIdAndUpdate(
-                            existing.scheduleId,
-                            { $set: scheduleUpdates },
-                            { session: dbSession }
-                        );
-                    }
+            // Sync typeId → SYMXEmployeeSchedule via native collection (bypass strict mode)
+            if (existing.scheduleId) {
+                const schedulesCol = mongoose.connection.db!.collection("SYMXEmployeeSchedules");
+                await schedulesCol.updateOne(
+                    { _id: new mongoose.Types.ObjectId(String(existing.scheduleId)) },
+                    { $set: { typeId: newTypeId, routeStatus: newRouteStatus } }
+                );
+            }
 
-                    // Resolve performer name and employee name
-                    const performer = await resolvePerformerName(session);
+            // Also ensure typeId is persisted on the route via native collection
+            const routesCol = mongoose.connection.db!.collection("SYMXRoutes");
+            await routesCol.updateOne(
+                { _id: new mongoose.Types.ObjectId(routeId) },
+                { $set: { typeId: newTypeId } }
+            );
 
-                    // Look up employee name
-                    let employeeName = "";
-                    try {
-                        const emp = await SymxEmployee.findOne(
-                            { transporterId: existing.transporterId },
-                            { firstName: 1, lastName: 1 },
-                            { session: dbSession }
-                        ).lean() as any;
-                        if (emp) employeeName = `${emp.firstName} ${emp.lastName}`.toUpperCase();
-                    } catch { }
+            // Resolve performer name and employee name for audit
+            const performer = await resolvePerformerName(session);
+            let employeeName = "";
+            try {
+                const emp = await SymxEmployee.findOne(
+                    { transporterId: existing.transporterId },
+                    { firstName: 1, lastName: 1 }
+                ).lean() as any;
+                if (emp) employeeName = `${emp.firstName} ${emp.lastName}`.toUpperCase();
+            } catch { }
 
-                    // Get day info
-                    const dateObj = existing.date ? new Date(existing.date) : null;
-                    const dayName = dateObj ? FULL_DAY_NAMES[dateObj.getUTCDay()] : "";
+            const dateObj = existing.date ? new Date(existing.date) : null;
+            const dayName = dateObj ? FULL_DAY_NAMES[dateObj.getUTCDay()] : "";
 
-                    // Create audit log
-                    await ScheduleAuditLog.create([{
-                        yearWeek: existing.yearWeek || "",
-                        transporterId: existing.transporterId,
-                        employeeName,
-                        action: "type_changed",
-                        field: "type",
-                        oldValue: existing.type || "",
-                        newValue: updates.type || "",
-                        date: existing.date,
-                        dayOfWeek: dayName,
-                        performedBy: performer.email,
-                        performedByName: performer.name,
-                    }], { session: dbSession });
-                }
-            });
-        } finally {
-            await dbSession.endSession();
+            await ScheduleAuditLog.create([{
+                yearWeek: existing.yearWeek || "",
+                transporterId: existing.transporterId,
+                employeeName,
+                action: "type_changed",
+                field: "typeId",
+                oldValue: existing.typeId || "",
+                newValue: newTypeId,
+                date: existing.date,
+                dayOfWeek: dayName,
+                performedBy: performer.email,
+                performedByName: performer.name,
+            }]);
         }
 
         return NextResponse.json({ route: updated });

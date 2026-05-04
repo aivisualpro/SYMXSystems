@@ -41,7 +41,7 @@ export function useUpdateSchedule() {
       return res.json();
     },
     onMutate: async ({ payload }) => {
-      const { yearWeek, transporterId, dayIdx, type, status, startTime } = payload;
+      const { yearWeek, transporterId, dayIdx, type, status, startTime, typeId } = payload;
       
       // Cancel any outgoing refetches so they don't overwrite our optimistic update
       if (yearWeek) {
@@ -68,6 +68,7 @@ export function useUpdateSchedule() {
                     [dayIdx]: {
                       ...(emp.days[dayIdx] || {}),
                       type: type !== undefined ? type : emp.days[dayIdx]?.type,
+                      typeId: typeId !== undefined ? typeId : emp.days[dayIdx]?.typeId,
                       status: status !== undefined ? status : emp.days[dayIdx]?.status,
                       startTime: startTime !== undefined ? startTime : emp.days[dayIdx]?.startTime,
                     }

@@ -26,16 +26,13 @@ export interface ISymxEmployeeSchedule extends Document {
   weekDay: string;
   yearWeek: string; // Format: yyyy-Wxx
   date: Date;
-  status: string;
-  type: string;
-  subType?: string;
-  trainingDay?: string;
+  typeId?: string;          // ObjectId string of the RouteType — source of truth
   startTime?: string;
   dayBeforeConfirmation?: string;
   dayOfConfirmation?: string;
   weekConfirmation?: string;
   van?: string;
-  note?: string;
+  createdBy?: mongoose.Types.ObjectId;
 
   // ── Messaging status tracking arrays ──
   futureShift: IMessageStatusEntry[];
@@ -51,16 +48,13 @@ const SymxEmployeeScheduleSchema: Schema = new Schema({
   weekDay: { type: String, required: true },
   yearWeek: { type: String, required: true },
   date: { type: Date, required: true },
-  status: { type: String, default: 'Off' },
-  type: { type: String, default: '' },
-  subType: { type: String, default: '' },
-  trainingDay: { type: String, default: '' },
+  typeId: { type: String },
   startTime: { type: String, default: '' },
   dayBeforeConfirmation: { type: String, default: '' },
   dayOfConfirmation: { type: String, default: '' },
   weekConfirmation: { type: String, default: '' },
   van: { type: String, default: '' },
-  note: { type: String, default: '' },
+  createdBy: { type: Schema.Types.ObjectId, ref: 'SymxUser' },
 
   // ── Messaging status arrays ──
   futureShift: { type: [MessageStatusEntrySchema], default: [] },
@@ -68,14 +62,14 @@ const SymxEmployeeScheduleSchema: Schema = new Schema({
   offTodayScheduleTom: { type: [MessageStatusEntrySchema], default: [] },
   weekSchedule: { type: [MessageStatusEntrySchema], default: [] },
   routeItinerary: { type: [MessageStatusEntrySchema], default: [] },
-}, { timestamps: true, collection: 'SYMXEmployeeSchedules' });
+}, { timestamps: { createdAt: true, updatedAt: false }, collection: 'SYMXEmployeeSchedules' });
 
 // Compound index for upsert
 SymxEmployeeScheduleSchema.index({ transporterId: 1, date: 1 }, { unique: true });
 // Index for week queries
 SymxEmployeeScheduleSchema.index({ yearWeek: 1 });
 SymxEmployeeScheduleSchema.index({ date: 1 });
-SymxEmployeeScheduleSchema.index({ status: 1 });
+SymxEmployeeScheduleSchema.index({ typeId: 1 });
 
 const SymxEmployeeSchedule: Model<ISymxEmployeeSchedule> =
   mongoose.models.SymxEmployeeSchedule ||

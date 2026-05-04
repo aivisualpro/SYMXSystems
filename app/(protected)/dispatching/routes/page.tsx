@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
-import { useVehicles, useWst, useDropdowns } from "@/lib/query/hooks/useShared";
+import { useVehicles, useWst, useDropdowns, useRouteTypes } from "@/lib/query/hooks/useShared";
 import { useUpdateRouteStatus } from "@/lib/query/hooks/useDispatching";
 import { cn } from "@/lib/utils";
 import { MessageStatusBadge } from "@/components/ui-elements/message-status-badge";
@@ -158,7 +158,7 @@ function toPacificDate(d: string | Date): string {
 // ── Column Definitions ──
 type ColumnDef = { key: string; label: string; minW: number; sticky: boolean; align?: "left" | "center" | "right" };
 const COLUMNS: ColumnDef[] = [
-    { key: "employee", label: "Employee", minW: 110, sticky: true },
+    { key: "employee", label: "Employee", minW: 260, sticky: true },
     { key: "confirmationStatus", label: "Conf Status", minW: 100, sticky: false },
     { key: "routeNumber", label: "Route #", minW: 60, sticky: false },
     { key: "van", label: "Van", minW: 58, sticky: false, align: "left" },
@@ -203,6 +203,7 @@ interface RouteRow {
     date: string;
     weekDay: string;
     type: string;
+    typeId?: string;
     subType: string;
     van: string;
     serviceType: string;
@@ -277,6 +278,36 @@ export default function RoutesPage() {
     const queryClient = useQueryClient();
     const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, refreshRoutes, refreshKey, setStats } = useDispatching();
     const { data: dropdowns = [] } = useDropdowns();
+
+    // ── Route type map from store (same pattern as /scheduling) ──
+    const { data: storeRouteTypes } = useRouteTypes();
+    const routeTypeIdMap = useMemo(() => {
+        const map = new Map<string, any>();
+        if (Array.isArray(storeRouteTypes)) {
+            storeRouteTypes.forEach((rt: any) => map.set(String(rt._id), rt));
+        }
+        return map;
+    }, [storeRouteTypes]);
+
+    // ── Name-based fallback map (for group headers keyed by type string) ──
+    const routeTypeNameMap = useMemo(() => {
+        const map = new Map<string, any>();
+        if (Array.isArray(storeRouteTypes)) {
+            storeRouteTypes.forEach((rt: any) => map.set((rt.name || "").trim().toLowerCase(), rt));
+        }
+        return map;
+    }, [storeRouteTypes]);
+
+    // Helper: resolve RT from a row (prefers typeId, falls back to type name)
+    const resolveRT = useCallback((row: { typeId?: string; type: string }) => {
+        if (row.typeId) {
+            const rt = routeTypeIdMap.get(row.typeId);
+            if (rt) return rt;
+        }
+        return routeTypeNameMap.get((row.type || "").trim().toLowerCase()) || null;
+    }, [routeTypeIdMap, routeTypeNameMap]);
+
+    // getContrastText is already imported from lib/route-types
 
     const [allRoutes, setAllRoutes] = useState<RouteRow[]>([]);
     const [loading, setLoading] = useState(false);
@@ -435,6 +466,7 @@ export default function RoutesPage() {
                 date: rec.date,
                 weekDay: rec.weekDay || "",
                 type: rec.type || "",
+                typeId: rec.typeId || "",
                 subType: rec.subType || "",
                 van: (rec.van && rawRouteData.vehicleNames?.[rec.van]) || rec.van || "",
                 serviceType: rec.serviceType || "",
@@ -504,20 +536,22 @@ export default function RoutesPage() {
     }, [rawRouteData, rawRouteDataLoading]);
 
     // ── Handle type change ──
-    const handleTypeChange = useCallback(async (routeId: string, newType: string, transporterId: string) => {
+    const handleTypeChange = useCallback(async (routeId: string, newTypeId: string, newTypeName: string, transporterId: string) => {
+        // Optimistic update — set typeId and type name on the row
         setAllRoutes(prev => prev.map(r =>
-            r._id === routeId ? { ...r, type: newType } : r
+            r._id === routeId ? { ...r, typeId: newTypeId, type: newTypeName } : r
         ));
-        patchRouteCache(routeId, { type: newType });
+        patchRouteCache(routeId, { typeId: newTypeId, type: newTypeName });
         try {
             const res = await fetch("/api/dispatching/routes", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ routeId, updates: { type: newType } }),
+                // Send typeId as the authoritative field; API will sync to SYMXEmployeeSchedules
+                body: JSON.stringify({ routeId, updates: { typeId: newTypeId } }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update");
-            toast.success(`Type updated to ${newType}`);
+            toast.success(`Type updated to ${newTypeName}`);
             setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch (err: any) {
@@ -832,7 +866,9 @@ export default function RoutesPage() {
 
         const typeGroups: Record<string, RouteRow[]> = {};
         sorted.forEach(r => {
-            const typeKey = r.type || "Unassigned";
+            // Resolve group name from typeId first (authoritative), fallback to type string
+            const resolvedName = r.typeId ? (routeTypeIdMap.get(r.typeId)?.name || r.type || "Unassigned") : (r.type || "Unassigned");
+            const typeKey = resolvedName;
             if (!typeGroups[typeKey]) typeGroups[typeKey] = [];
             typeGroups[typeKey].push(r);
         });
@@ -944,28 +980,29 @@ export default function RoutesPage() {
                             Set Type
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        {TYPE_OPTIONS.map(opt => {
+                        {(storeRouteTypes as any[] || []).map((rt: any) => {
                             const activeRow = allRoutes.find(r => r._id === typeMenu.routeId);
-                            const isActive = (activeRow?.type || "").trim().toLowerCase() === opt.label.toLowerCase();
-                            
+                            const rtId = String(rt._id);
+                            const isActive = (activeRow?.typeId || "") === rtId;
+                            const rtColor = rt.color || null;
+                            const RtIconName = rt.icon;
+                            const RtIcon = RtIconName ? (LucideIcons as any)[RtIconName] : null;
+
                             return (
                                 <DropdownMenuItem
-                                    key={opt.label}
-                                    onClick={() => handleTypeChange(typeMenu.routeId, opt.label, typeMenu.transporterId)}
+                                    key={rtId}
+                                    onClick={() => handleTypeChange(typeMenu.routeId, rtId, rt.name, typeMenu.transporterId)}
                                     className="gap-2 cursor-pointer"
                                     disabled={isActive}
                                 >
-                                    <div className={cn(
-                                        "flex items-center justify-center w-5 h-5 rounded shadow-sm border",
-                                        !opt.colorHex && opt.bg, !opt.colorHex && opt.border
-                                    )} style={{
-                                        backgroundColor: opt.colorHex || undefined,
-                                        borderColor: opt.colorHex ? 'transparent' : undefined,
-                                        color: opt.colorHex ? getContrastText(opt.colorHex) : undefined
+                                    <div className="flex items-center justify-center w-5 h-5 rounded shadow-sm border" style={{
+                                        backgroundColor: rtColor || undefined,
+                                        borderColor: rtColor ? 'transparent' : undefined,
+                                        color: rtColor ? getContrastText(rtColor) : undefined
                                     }}>
-                                        <opt.icon className={cn("h-3 w-3", !opt.colorHex && opt.text)} />
+                                        {RtIcon && <RtIcon className="h-3 w-3" />}
                                     </div>
-                                    <span className="text-xs font-medium flex-1">{opt.label}</span>
+                                    <span className="text-xs font-medium flex-1">{rt.name}</span>
                                     {isActive && <Check className="h-3 w-3 ml-auto text-primary" />}
                                 </DropdownMenuItem>
                             );
@@ -977,7 +1014,7 @@ export default function RoutesPage() {
                 <div className="flex-1 min-h-0 rounded-xl border border-border/50 bg-card overflow-hidden flex flex-col">
                     {/* Scrollable table container */}
                     <div className="flex-1 overflow-auto">
-                        <table className="w-full border-collapse" style={{ minWidth: 1200 }}>
+                        <table className="w-full border-collapse" style={{ minWidth: 1200, tableLayout: "fixed" }}>
                             {/* Header */}
                             <thead className="sticky top-0 z-10">
                                 <tr className="bg-muted border-b border-border/50">
@@ -990,7 +1027,7 @@ export default function RoutesPage() {
                                                 col.sticky ? "sticky left-0 z-20 bg-muted" : "",
                                                 col.align === "center" ? "text-center" : "text-left"
                                             )}
-                                            style={{ minWidth: col.minW }}
+                                            style={{ width: col.minW, minWidth: col.minW }}
                                         >
                                             <span className={cn("inline-flex items-center gap-0.5", col.align === "center" && "justify-center w-full")}>
                                                 {col.label}
@@ -1009,9 +1046,14 @@ export default function RoutesPage() {
                             <tbody>
                                 {groups.map((group) => {
                                     const isCollapsed = collapsedGroups[group.type] ?? false;
-                                    const typeOpt = TYPE_MAP.get(group.type.toLowerCase());
-                                    const GroupIcon = typeOpt?.icon;
-                                    const groupStyle = getTypeStyle(group.type);
+                                    // Resolve color/icon from typeId (authoritative) then name fallback
+                                    const firstRow = group.rows[0];
+                                    const rtForGroup = firstRow?.typeId
+                                        ? routeTypeIdMap.get(firstRow.typeId)
+                                        : routeTypeNameMap.get(group.type.toLowerCase());
+                                    const groupColor = rtForGroup?.color || getTypeStyle(group.type).colorHex || null;
+                                    const GroupIconName = rtForGroup?.icon;
+                                    const GroupIcon = GroupIconName ? (LucideIcons as any)[GroupIconName] : (TYPE_MAP.get(group.type.toLowerCase())?.icon || null);
 
                                     return (
                                         <React.Fragment key={group.type}>
@@ -1026,15 +1068,10 @@ export default function RoutesPage() {
                                                             "h-3 w-3 text-muted-foreground transition-transform",
                                                             !isCollapsed && "rotate-90"
                                                         )} />
-                                                        <div className={cn(
-                                                            "flex items-center gap-1 px-2 py-0.5 rounded text-[12px] font-semibold border shadow-sm",
-                                                            !groupStyle.colorHex && groupStyle.bg,
-                                                            !groupStyle.colorHex && groupStyle.text,
-                                                            !groupStyle.colorHex && groupStyle.border
-                                                        )} style={{
-                                                            backgroundColor: groupStyle.colorHex || undefined,
-                                                            color: groupStyle.colorHex ? getContrastText(groupStyle.colorHex) : undefined,
-                                                            borderColor: groupStyle.colorHex ? 'transparent' : undefined
+                                                        <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[12px] font-semibold border shadow-sm" style={{
+                                                            backgroundColor: groupColor || undefined,
+                                                            color: groupColor ? getContrastText(groupColor) : undefined,
+                                                            borderColor: groupColor ? 'transparent' : undefined
                                                         }}>
                                                             {GroupIcon && <GroupIcon className="h-3 w-3" />}
                                                             {group.type || "Unassigned"}
@@ -1056,9 +1093,9 @@ export default function RoutesPage() {
                                                         className="border-b border-border/20 hover:bg-muted/30 transition-colors group/row"
                                                     >
                                                         {/* 1. Employee */}
-                                                        <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card w-[160px]")}>
+                                                        <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card overflow-hidden")} style={{ width: 160, minWidth: 160 }}>
                                                             <div 
-                                                                className="flex items-center gap-2 w-full pr-1 cursor-pointer hover:bg-muted/80 rounded-md p-1 -m-1 transition-colors"
+                                                                className="flex items-center gap-2 min-w-0 overflow-hidden pr-1 cursor-pointer hover:bg-muted/80 rounded-md p-1 -m-1 transition-colors"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     if (dispatchingDetailsEnabled) {
@@ -1093,15 +1130,21 @@ export default function RoutesPage() {
                                                                         </span>
                                                                     </div>
                                                                 )}
-                                                                {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
-                                                                {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
-                                                                <span
-                                                                    className="text-[13px] font-bold truncate flex-1 min-w-0"
-                                                                    title={row.employeeName}
-                                                                    style={{ color: getTypeStyle(row.type).colorHex || "inherit" }}
-                                                                >
-                                                                    {row.employeeName}
-                                                                </span>
+                                                                {(() => {
+                                                                    const rt = resolveRT(row);
+                                                                    const rtColor = rt?.color || getTypeStyle(row.type).colorHex || "inherit";
+                                                                    const RtIcon = rt?.icon ? (LucideIcons as any)[rt.icon] : null;
+                                                                    return (<>
+                                                                        {RtIcon && <RtIcon className="h-3 w-3 shrink-0" style={{ color: rtColor }} />}
+                                                                        <span
+                                                                            className="text-[13px] font-bold truncate flex-1 min-w-0"
+                                                                            title={row.employeeName}
+                                                                            style={{ color: rtColor }}
+                                                                        >
+                                                                            {row.employeeName}
+                                                                        </span>
+                                                                    </>);
+                                                                })()}
                                                                 {row.hiredDate && (Date.now() - new Date(row.hiredDate).getTime()) / 86400000 <= 30 && (
                                                                     <Baby className="h-4 w-4 text-pink-500 drop-shadow ml-auto flex-shrink-0" />
                                                                 )}
