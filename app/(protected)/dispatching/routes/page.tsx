@@ -281,6 +281,22 @@ export default function RoutesPage() {
 
     // ── Route type map from store (same pattern as /scheduling) ──
     const { data: storeRouteTypes } = useRouteTypes();
+
+    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+    useEffect(() => {
+        fetch("/api/user/permissions")
+            .then(res => res.json())
+            .then(data => { if (data.role === "Super Admin") setIsSuperAdmin(true); })
+            .catch(() => {});
+    }, []);
+
+    // ── Visible columns (hide pay columns from non-Super Admin) ──
+    const PAY_KEYS = new Set(["regPay", "otPay", "totalCost"]);
+    const visibleColumns = useMemo(
+        () => COLUMNS.filter(col => !PAY_KEYS.has(col.key) || isSuperAdmin),
+        [isSuperAdmin]
+    );
+
     const routeTypeIdMap = useMemo(() => {
         const map = new Map<string, any>();
         if (Array.isArray(storeRouteTypes)) {
@@ -319,6 +335,7 @@ export default function RoutesPage() {
     const [routeCountsByDate, setRouteCountsByDate] = useState<Record<string, Record<string, number>>>({});
     const [initialRoutesComp, setInitialRoutesComp] = useState<Record<string, number>>({});
     const [dispatchingDetailsEnabled, setDispatchingDetailsEnabled] = useState(true);
+
 
     useEffect(() => {
         fetch("/api/admin/settings/general?key=dispatching_logic_details")
@@ -1014,11 +1031,17 @@ export default function RoutesPage() {
                 <div className="flex-1 min-h-0 rounded-xl border border-border/50 bg-card overflow-hidden flex flex-col">
                     {/* Scrollable table container */}
                     <div className="flex-1 overflow-auto">
-                        <table className="w-full border-collapse" style={{ minWidth: 1200, tableLayout: "fixed" }}>
+                        <table className="w-full border-collapse" style={{ minWidth: 1200 }}>
+                            {/* Explicit column widths — prevents misalignment from colSpan group rows */}
+                            <colgroup>
+                                {visibleColumns.map(col => (
+                                    <col key={col.key} style={{ width: col.minW, minWidth: col.minW }} />
+                                ))}
+                            </colgroup>
                             {/* Header */}
                             <thead className="sticky top-0 z-10">
                                 <tr className="bg-muted border-b border-border/50">
-                                    {COLUMNS.map((col) => (
+                                    {visibleColumns.map((col) => (
                                         <th
                                             key={col.key}
                                             onClick={() => handleSort(col.key)}
@@ -1027,7 +1050,7 @@ export default function RoutesPage() {
                                                 col.sticky ? "sticky left-0 z-20 bg-muted" : "",
                                                 col.align === "center" ? "text-center" : "text-left"
                                             )}
-                                            style={{ width: col.minW, minWidth: col.minW }}
+                                            style={{ minWidth: col.minW }}
                                         >
                                             <span className={cn("inline-flex items-center gap-0.5", col.align === "center" && "justify-center w-full")}>
                                                 {col.label}
@@ -1057,13 +1080,14 @@ export default function RoutesPage() {
 
                                     return (
                                         <React.Fragment key={group.type}>
-                                            {/* Group Header Row */}
                                             <tr
                                                 onClick={() => toggleGroup(group.type)}
-                                                className="cursor-pointer hover:bg-muted/60 transition-colors bg-muted/30 border-b border-border/30"
+                                                className="cursor-pointer hover:bg-muted/60 transition-colors border-b border-border/30"
+                                                style={{ backgroundColor: 'hsl(var(--muted) / 0.95)' }}
                                             >
-                                                <td colSpan={COLUMNS.length} className="px-2 py-1.5">
-                                                    <div className="flex items-center gap-2">
+                                                {/* Sticky label cell — pinned on horizontal scroll */}
+                                                <td className="px-2 py-1.5 sticky left-0 z-[9]" style={{ backgroundColor: 'inherit' }}>
+                                                    <div className="flex items-center gap-2 whitespace-nowrap">
                                                         <ChevronRight className={cn(
                                                             "h-3 w-3 text-muted-foreground transition-transform",
                                                             !isCollapsed && "rotate-90"
@@ -1081,6 +1105,8 @@ export default function RoutesPage() {
                                                         </span>
                                                     </div>
                                                 </td>
+                                                {/* Empty remaining cells */}
+                                                <td colSpan={visibleColumns.length - 1} />
                                             </tr>
 
                                             {/* Group Data Rows */}
@@ -1481,26 +1507,32 @@ export default function RoutesPage() {
                                                             ) : <span className="text-[13px] text-muted-foreground/30 font-semibold">—</span>}
                                                         </td>
 
-                                                        {/* Reg Pay */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.regPay > 0 ? (
-                                                                <span className="text-[13px] font-semibold text-emerald-500 whitespace-nowrap">${row.regPay.toFixed(2)}</span>
-                                                            ) : <span className="text-[13px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
+                                                        {/* Reg Pay — Super Admin only */}
+                                                        {isSuperAdmin && (
+                                                            <td className="px-2 py-1.5">
+                                                                {row.regPay > 0 ? (
+                                                                    <span className="text-[13px] font-semibold text-emerald-500 whitespace-nowrap">${row.regPay.toFixed(2)}</span>
+                                                                ) : <span className="text-[13px] text-muted-foreground/30 font-semibold">—</span>}
+                                                            </td>
+                                                        )}
 
-                                                        {/* OT Pay */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.otPay > 0 ? (
-                                                                <span className="text-[13px] font-bold text-amber-400 whitespace-nowrap">${row.otPay.toFixed(2)}</span>
-                                                            ) : <span className="text-[13px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
+                                                        {/* OT Pay — Super Admin only */}
+                                                        {isSuperAdmin && (
+                                                            <td className="px-2 py-1.5">
+                                                                {row.otPay > 0 ? (
+                                                                    <span className="text-[13px] font-bold text-amber-400 whitespace-nowrap">${row.otPay.toFixed(2)}</span>
+                                                                ) : <span className="text-[13px] text-muted-foreground/30 font-semibold">—</span>}
+                                                            </td>
+                                                        )}
 
-                                                        {/* Total Cost */}
-                                                        <td className="px-2 py-1.5">
-                                                            {row.totalCost > 0 ? (
-                                                                <span className="text-[13px] font-bold text-emerald-400 whitespace-nowrap">${row.totalCost.toFixed(2)}</span>
-                                                            ) : <span className="text-[13px] text-muted-foreground/30 font-semibold">—</span>}
-                                                        </td>
+                                                        {/* Total Cost — Super Admin only */}
+                                                        {isSuperAdmin && (
+                                                            <td className="px-2 py-1.5">
+                                                                {row.totalCost > 0 ? (
+                                                                    <span className="text-[13px] font-bold text-emerald-400 whitespace-nowrap">${row.totalCost.toFixed(2)}</span>
+                                                                ) : <span className="text-[13px] text-muted-foreground/30 font-semibold">—</span>}
+                                                            </td>
+                                                        )}
 
                                                         {/* 7d Hrs */}
                                                         <td className="px-2 py-1.5">
@@ -1535,7 +1567,7 @@ export default function RoutesPage() {
 
                                 {groups.length === 0 && (
                                     <tr>
-                                        <td colSpan={COLUMNS.length} className="text-center py-12 text-sm text-muted-foreground">
+                                        <td colSpan={visibleColumns.length} className="text-center py-12 text-sm text-muted-foreground">
                                             No employees found for this date
                                         </td>
                                     </tr>
