@@ -744,19 +744,19 @@ function MessagingSubTab({
   // ── Live Status Polling ─────────────────────────────────────────────────
   const [liveStatuses, setLiveStatuses] = useState<Record<string, { status: string; createdAt: string; changeRemarks?: string }>>({}); 
   const [isPolling, setIsPolling] = useState(false);
-  const [liveUpdatedPhones, setLiveUpdatedPhones] = useState<Set<string>>(new Set());
+  const [liveUpdatedTids, setLiveUpdatedTids] = useState<Set<string>>(new Set());
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pollStartRef = useRef<number>(0);
-  const sentPhonesRef = useRef<string[]>([]);
+  const sentTidsRef = useRef<string[]>([]);
   const prevStatusRef = useRef<Record<string, string>>({});
 
-  // Start polling after successful send
-  const startPolling = useCallback((phones: string[]) => {
-    sentPhonesRef.current = phones;
+  // Start polling after successful send — pass transporterIds
+  const startPolling = useCallback((transporterIds: string[]) => {
+    sentTidsRef.current = transporterIds;
     pollStartRef.current = Date.now();
     // Snapshot current statuses so we can detect transitions
     const snapshot: Record<string, string> = {};
-    phones.forEach(ph => snapshot[ph] = "sent");
+    transporterIds.forEach(tid => snapshot[tid] = "sent");
     prevStatusRef.current = snapshot;
     setIsPolling(true);
   }, []);
@@ -771,7 +771,7 @@ function MessagingSubTab({
 
   // Polling effect
   useEffect(() => {
-    if (!isPolling || sentPhonesRef.current.length === 0) return;
+    if (!isPolling || sentTidsRef.current.length === 0) return;
 
     const doPoll = async () => {
       try {
@@ -783,10 +783,9 @@ function MessagingSubTab({
 
         const params = new URLSearchParams({
           messageType: tab.id,
-          phones: sentPhonesRef.current.join(","),
+          transporterIds: sentTidsRef.current.join(","),
         });
         if (selectedWeek) params.set("yearWeek", selectedWeek);
-        // Pass the selected date for date-scoped status lookups
         if (selectedDate && tab.id !== "week-schedule") {
           params.set("scheduleDate", selectedDate);
         }
@@ -796,41 +795,35 @@ function MessagingSubTab({
         const data = await res.json();
         const newStatuses = data.statuses || {};
 
-        // Detect status transitions and animate them
-        const updatedPhones = new Set<string>();
-        Object.entries(newStatuses).forEach(([phone, info]: [string, any]) => {
-          const prev = prevStatusRef.current[phone] || liveStatuses[phone]?.status;
+        // Detect status transitions and animate them (keyed by transporterId)
+        const updatedTids = new Set<string>();
+        Object.entries(newStatuses).forEach(([tid, info]: [string, any]) => {
+          const prev = prevStatusRef.current[tid] || liveStatuses[tid]?.status;
           if (prev && prev !== info.status) {
-            updatedPhones.add(phone);
+            updatedTids.add(tid);
             // Show toast for confirmed/change_requested transitions
             if (info.status === "confirmed") {
-              const empName = activeEmployees.find(e => {
-                const normalized = e.phoneNumber.startsWith("+") ? e.phoneNumber : `+1${e.phoneNumber.replace(/\D/g, "")}`;
-                return normalized === phone;
-              })?.name;
-              toast.success(`✅ ${empName || phone} confirmed their schedule!`, { duration: 5000 });
+              const empName = activeEmployees.find(e => e.transporterId === tid)?.name;
+              toast.success(`✅ ${empName || tid} confirmed their schedule!`, { duration: 5000 });
             } else if (info.status === "change_requested") {
-              const empName = activeEmployees.find(e => {
-                const normalized = e.phoneNumber.startsWith("+") ? e.phoneNumber : `+1${e.phoneNumber.replace(/\D/g, "")}`;
-                return normalized === phone;
-              })?.name;
-              toast.info(`🔄 ${empName || phone} requested a change`, { duration: 5000 });
+              const empName = activeEmployees.find(e => e.transporterId === tid)?.name;
+              toast.info(`🔄 ${empName || tid} requested a change`, { duration: 5000 });
             }
           }
-          prevStatusRef.current[phone] = info.status;
+          prevStatusRef.current[tid] = info.status;
         });
 
-        if (updatedPhones.size > 0) {
-          setLiveUpdatedPhones(prev => {
+        if (updatedTids.size > 0) {
+          setLiveUpdatedTids(prev => {
             const next = new Set(prev);
-            updatedPhones.forEach(p => next.add(p));
+            updatedTids.forEach(t => next.add(t));
             return next;
           });
           // Clear the "just updated" animation after 3 seconds
           setTimeout(() => {
-            setLiveUpdatedPhones(prev => {
+            setLiveUpdatedTids(prev => {
               const next = new Set(prev);
-              updatedPhones.forEach(p => next.delete(p));
+              updatedTids.forEach(t => next.delete(t));
               return next;
             });
           }, 3000);
@@ -842,7 +835,7 @@ function MessagingSubTab({
       }
     };
 
-    // Poll immediately, then every 8 seconds (reduced from 4s for performance)
+    // Poll immediately, then every 8 seconds
     doPoll();
     pollIntervalRef.current = setInterval(doPoll, 8000);
 
@@ -1122,14 +1115,15 @@ function MessagingSubTab({
         toast.warning(`${successCount} sent, ${failCount} failed`);
       }
 
-      // Start live polling for successfully sent phones
-      const sentPhones = results
-        .filter((r) => r.success)
-        .map((r) => r.to);
-      if (sentPhones.length > 0) {
+      // Start live polling for successfully sent employees (by transporterId)
+      const sentTids = recipients
+        .filter(r => results.find(res => res.to === r.phone && res.success))
+        .map(r => r.transporterId)
+        .filter(Boolean) as string[];
+      if (sentTids.length > 0) {
         setLiveStatuses({});
-        setLiveUpdatedPhones(new Set());
-        startPolling(sentPhones);
+        setLiveUpdatedTids(new Set());
+        startPolling(sentTids);
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to send messages");
@@ -1213,12 +1207,9 @@ function MessagingSubTab({
                       : `+1${emp.phoneNumber.replace(/\D/g, "")}`)
                 );
 
-                // Compute normalized phone for live status lookup
-                const normalizedPhone = emp.phoneNumber.startsWith("+")
-                  ? emp.phoneNumber
-                  : `+1${emp.phoneNumber.replace(/\D/g, "")}`;
-                const liveStatus = liveStatuses[normalizedPhone];
-                const isLiveHighlight = liveUpdatedPhones.has(normalizedPhone);
+                // Live status keyed by transporterId
+                const liveStatus = liveStatuses[emp.transporterId];
+                const isLiveHighlight = liveUpdatedTids.has(emp.transporterId);
 
                 return (
                   <div
