@@ -130,43 +130,35 @@ export function MessageStatusBadge({
           {!iconOnly && isConfirmCelebration && <span className="ml-0.5">✓</span>}
         </div>
       </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs max-w-[300px] p-0">
-        <div className="p-2">
-          <span className="font-semibold text-white">{config.label}</span>
-          {isLiveUpdate && <span className="text-emerald-400 ml-1">• Live</span>}
-          {timeAgo && <span className="text-white ml-1 tracking-wide">• {timeAgo}</span>}
-        </div>
-
-        {/* History Timeline — status, createdBy, createdAt only */}
-        {history && history.length > 1 && (
-          <div className="border-t border-white/10 px-2 py-1.5 space-y-0">
-            <p className="text-[10px] uppercase tracking-wider text-white/50 font-semibold mb-1">History</p>
-            {[...history].reverse().map((h, i) => {
-              const hConfig = STATUS_CONFIG[h.status];
-              if (!hConfig) return null;
-              const HIcon = hConfig.icon;
-              const hTime = h.updatedAt
-                ? new Date(h.updatedAt).toLocaleString("en-US", {
-                    timeZone: "America/Los_Angeles",
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })
-                : "";
-              return (
-                <div key={i} className="flex items-start gap-1.5 py-0.5">
-                  <HIcon className={cn("h-3 w-3 mt-0.5 shrink-0", hConfig.color)} />
-                  <div className="min-w-0">
-                    <span className={cn("font-medium text-white")}>{hConfig.label}</span>
-                    {h.createdBy && (
-                      <span className="text-white ml-1">— {h.createdBy}</span>
-                    )}
-                    {hTime && <span className="text-white ml-1">{hTime}</span>}
-                  </div>
-                </div>
-              );
-            })}
+      <TooltipContent side="top" className="text-xs max-w-[300px] p-2 space-y-0.5">
+        {/* Show history entries (newest first), or just the current status */}
+        {history && history.length > 0 ? (
+          [...history].reverse().map((h, i) => {
+            const hConfig = STATUS_CONFIG[h.status];
+            if (!hConfig) return null;
+            const HIcon = hConfig.icon;
+            const hTime = h.updatedAt
+              ? new Date(h.updatedAt).toLocaleString("en-US", {
+                  timeZone: "America/Los_Angeles",
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : "";
+            return (
+              <div key={i} className="flex items-center gap-1.5">
+                <HIcon className={cn("h-3 w-3 shrink-0", hConfig.color)} />
+                <span className="font-medium text-white">{hConfig.label}</span>
+                {hTime && <span className="text-white/70">— {hTime}</span>}
+              </div>
+            );
+          })
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <Icon className={cn("h-3 w-3 shrink-0", config.color)} />
+            <span className="font-medium text-white">{config.label}</span>
+            {timeAgo && <span className="text-white/70">— {timeAgo}</span>}
           </div>
         )}
       </TooltipContent>
