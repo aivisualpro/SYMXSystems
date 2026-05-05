@@ -2029,14 +2029,14 @@ export default function MessagingPanel({
   // ── Re-fetch active tab when selectedDate or tab changes ──
   const prevFetchKeyRef = useRef("");
   useEffect(() => {
-    if (!selectedWeek || !selectedDate) return;
+    if (!selectedWeek) return;
+    // week-schedule doesn't need a selectedDate; all other tabs do
+    const isWeekScheduleTab = resolvedTab === "week-schedule";
+    if (!isWeekScheduleTab && !selectedDate) return;
     // Track both date AND tab to ensure re-fetch when either changes
-    const fetchKey = `${resolvedTab}:${selectedDate}:${selectedWeek}`;
+    const fetchKey = `${resolvedTab}:${selectedDate || "none"}:${selectedWeek}`;
     if (prevFetchKeyRef.current === fetchKey) return;
     prevFetchKeyRef.current = fetchKey;
-    // Don't re-fetch for week-schedule since it doesn't use date
-    if (resolvedTab === "week-schedule") return;
-
     // Check if this is a fresh week load (all tabs loading = week just changed)
     const isWeekSwitch = loadingTabs.size === SUB_TABS.length;
 
