@@ -8,6 +8,7 @@ import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SYMXRoutesInfo from "@/lib/models/SYMXRoutesInfo";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
+import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 
 export async function DELETE(req: NextRequest) {
   try {
@@ -40,6 +41,7 @@ export async function DELETE(req: NextRequest) {
     let logsRes: any = { deletedCount: 0 };
     let routesRes: any = { deletedCount: 0 };
     let routeInfosRes: any = { deletedCount: 0 };
+    let confirmationsRes: any = { deletedCount: 0 };
 
     try {
       await dbSession.withTransaction(async () => {
@@ -47,6 +49,7 @@ export async function DELETE(req: NextRequest) {
         logsRes = await ScheduleAuditLog.deleteMany({ yearWeek }, { session: dbSession });
         routesRes = await SYMXRoute.deleteMany({ yearWeek }, { session: dbSession });
         routeInfosRes = await SYMXRoutesInfo.deleteMany({ yearWeek }, { session: dbSession });
+        confirmationsRes = await ScheduleConfirmation.deleteMany({ yearWeek }, { session: dbSession });
         await SymxAvailableWeek.deleteOne({ week: yearWeek }, { session: dbSession });
       });
     } finally {
@@ -60,6 +63,7 @@ export async function DELETE(req: NextRequest) {
         logs: logsRes.deletedCount,
         routes: routesRes.deletedCount,
         routeInfos: routeInfosRes.deletedCount,
+        confirmations: confirmationsRes.deletedCount,
       }
     });
   } catch (error: any) {

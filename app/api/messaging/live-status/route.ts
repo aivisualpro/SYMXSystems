@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
 /**
  * Lightweight polling endpoint for live message status updates.
- * Reads from shiftNotification/futureShift/routeItinerary arrays in
- * SYMXEmployeeSchedules (single source of truth).
+ * Reads from:
+ * - SYMXScheduleConfirmations (week-schedule)
+ * - shiftNotification/futureShift/routeItinerary arrays in SYMXEmployeeSchedules (other tabs)
  *
  * Accepts: messageType, transporterIds (comma-separated), yearWeek, scheduleDate
  * Returns: { statuses: { [transporterId]: { status, createdAt, changeRemarks? } } }
@@ -31,6 +33,37 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
 
+    // ── week-schedule: read from SYMXScheduleConfirmations ──
+    if (messageType === "week-schedule") {
+      if (!yearWeek) {
+        return NextResponse.json({ statuses: {} });
+      }
+
+      const confirmations = await ScheduleConfirmation.find(
+        {
+          yearWeek,
+          messageType: "week-schedule",
+          transporterId: { $in: transporterIds },
+        },
+        { transporterId: 1, status: 1, createdAt: 1, changeRemarks: 1 }
+      ).sort({ createdAt: -1 }).lean() as any[];
+
+      const statuses: Record<string, { status: string; createdAt: string; changeRemarks?: string }> = {};
+      // Keep only the latest per transporterId
+      for (const c of confirmations) {
+        if (!statuses[c.transporterId]) {
+          statuses[c.transporterId] = {
+            status: c.status || "pending",
+            createdAt: c.createdAt?.toISOString?.() || c.createdAt || new Date().toISOString(),
+            ...(c.changeRemarks ? { changeRemarks: c.changeRemarks } : {}),
+          };
+        }
+      }
+
+      return NextResponse.json({ statuses });
+    }
+
+    // ── Other tabs: read from SYMXEmployeeSchedules arrays ──
     const scheduleField = TAB_TO_SCHEDULE_FIELD[messageType];
     if (!scheduleField) {
       return NextResponse.json({ statuses: {} });
