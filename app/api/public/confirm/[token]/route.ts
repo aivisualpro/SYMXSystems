@@ -164,19 +164,38 @@ export async function GET(
                 };
             }
         } else {
-            // Resolve type for single schedule
-            let typeName = schedule.type || "OFF";
-            if (schedule.typeId) {
-                const rt = await RouteType.findById(schedule.typeId, { name: 1 }).lean() as any;
+            // For future-shift/off-tomorrow, the token is stored on today's schedule doc
+            // but the employee is confirming TOMORROW's shift — fetch that doc for display
+            let displaySchedule = schedule;
+            if ((messageType === "future-shift" || messageType === "off-tomorrow") && schedule.date) {
+                const todayDate = new Date(schedule.date);
+                const tomorrowStart = new Date(todayDate);
+                tomorrowStart.setUTCDate(todayDate.getUTCDate() + 1);
+                tomorrowStart.setUTCHours(0, 0, 0, 0);
+                const tomorrowEnd = new Date(tomorrowStart);
+                tomorrowEnd.setUTCHours(23, 59, 59, 999);
+
+                const tomorrowSchedule = await SymxEmployeeSchedule.findOne({
+                    transporterId: schedule.transporterId,
+                    date: { $gte: tomorrowStart, $lte: tomorrowEnd },
+                }).lean() as any;
+
+                if (tomorrowSchedule) displaySchedule = tomorrowSchedule;
+            }
+
+            // Resolve type for display schedule
+            let typeName = displaySchedule.type || "OFF";
+            if (displaySchedule.typeId) {
+                const rt = await RouteType.findById(displaySchedule.typeId, { name: 1 }).lean() as any;
                 if (rt?.name) typeName = rt.name;
             }
 
             scheduleInfo = {
-                date: schedule.date,
-                weekDay: schedule.weekDay,
+                date: displaySchedule.date,
+                weekDay: displaySchedule.weekDay,
                 type: typeName,
-                startTime: schedule.startTime,
-                van: schedule.van,
+                startTime: displaySchedule.startTime,
+                van: displaySchedule.van,
             };
         }
 
