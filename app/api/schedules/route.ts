@@ -563,6 +563,15 @@ export async function PATCH(req: NextRequest) {
       // Set typeId if provided from the client
       if (typeId) {
         updateFields.typeId = typeId;
+        // Auto-set startTime from RouteType if client didn't explicitly provide one
+        if (startTime === undefined) {
+          try {
+            const rt = await RouteType.findById(typeId, { startTime: 1 }).lean() as any;
+            if (rt?.startTime) {
+              updateFields.startTime = rt.startTime;
+            }
+          } catch { /* non-fatal — proceed without startTime */ }
+        }
       }
       if (status !== undefined) {
         updateFields.status = status;

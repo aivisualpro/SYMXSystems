@@ -252,6 +252,7 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
   }
 
   const name = emp.name || `${emp.firstName} ${emp.lastName}`.toUpperCase();
+  // Use scheduleType (resolved from typeId → RouteType name), fallback to legacy type string
   const startTime = targetShift?.startTime || "";
   const standupTime = startTime ? addMinutesToTime(startTime, 5) : "";
 
@@ -287,7 +288,8 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
       const isWorking = (s.status || "").trim().toLowerCase() === "scheduled";
       
       let typeDisplay = "";
-      const typeStr = (s.type || "").trim();
+      // Use scheduleType (resolved from typeId → RouteType name), fallback to legacy type string
+      const typeStr = ((s as any).scheduleType || s.type || "").trim();
       const typeLower = typeStr.toLowerCase();
       
       if (typeLower && typeLower !== "route" && typeLower !== "off") {
