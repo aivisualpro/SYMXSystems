@@ -89,27 +89,29 @@ export async function GET(req: NextRequest) {
             // Find key entries
             const sentEntry = sorted.find((e: any) => e.status === "sent");
             const deliveredEntry = sorted.find((e: any) => e.status === "delivered");
-            const confirmedEntry = sorted.find((e: any) => e.status === "confirmed");
-            const changeEntry = sorted.find((e: any) => e.status === "change_requested");
 
-            // Determine overall status
+            // Build ALL confirmation events (change_requested, confirmed, etc.) in order
+            const confirmationEvents = sorted
+                .filter((e: any) => e.status === "confirmed" || e.status === "change_requested")
+                .map((e: any) => ({
+                    status: e.status,
+                    ...(e.status === "confirmed" ? { confirmedAt: e.createdAt } : {}),
+                    ...(e.status === "change_requested" ? {
+                        changeRequestedAt: e.createdAt,
+                        changeRemarks: e.changeRemarks || "",
+                    } : {}),
+                    createdBy: e.createdBy || "",
+                }));
+
+            // Determine overall status (latest confirmation wins)
+            const lastConfEvent = confirmationEvents.length > 0
+                ? confirmationEvents[confirmationEvents.length - 1]
+                : null;
             let overallStatus = sorted[sorted.length - 1]?.status || "sent";
-            let confirmation: any = null;
+            if (lastConfEvent) overallStatus = "received_reply";
 
-            if (confirmedEntry) {
-                overallStatus = "received_reply";
-                confirmation = {
-                    status: "confirmed",
-                    confirmedAt: confirmedEntry.createdAt,
-                };
-            } else if (changeEntry) {
-                overallStatus = "received_reply";
-                confirmation = {
-                    status: "change_requested",
-                    changeRequestedAt: changeEntry.createdAt,
-                    changeRemarks: changeEntry.changeRemarks || "",
-                };
-            }
+            // Single confirmation object for backward compat (last event)
+            let confirmation: any = lastConfEvent || null;
 
             logs.push({
                 _id: `${sched._id}_${messageType}`,
@@ -121,12 +123,7 @@ export async function GET(req: NextRequest) {
                 sentBy: sentEntry?.createdBy || "",
                 sentAt: sentEntry?.createdAt || sorted[0]?.createdAt || sched.createdAt,
                 deliveredAt: deliveredEntry?.createdAt || undefined,
-                repliedAt: confirmedEntry?.createdAt || changeEntry?.createdAt || undefined,
-                replyContent: confirmedEntry
-                    ? "✅ Confirmed via link"
-                    : changeEntry
-                        ? `🔄 Change Requested: ${changeEntry.changeRemarks || "No remarks"}`
-                        : undefined,
+                confirmationEvents,
                 confirmation,
             });
         }

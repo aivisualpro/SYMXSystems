@@ -434,6 +434,13 @@ interface HistoryLog {
     changeRemarks?: string;
     token?: string;
   } | null;
+  confirmationEvents?: Array<{
+    status: string;
+    confirmedAt?: string;
+    changeRequestedAt?: string;
+    changeRemarks?: string;
+    createdBy?: string;
+  }>;
 }
 
 function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate }: { messageType: string; selectedPhones?: string[]; yearWeek?: string; scheduleDate?: string }) {
@@ -516,42 +523,63 @@ function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate
             </div>
           )}
 
-          {/* Confirmed */}
-          {log.confirmation?.status === "confirmed" && (
-            <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3">
-              <div className="flex items-center gap-1.5">
-                <ArrowDownLeft className="h-3 w-3 text-emerald-500" />
-                <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Confirmed</span>
-                <span className="text-[10px] text-muted-foreground ml-auto">{log.confirmation.confirmedAt ? formatTime(log.confirmation.confirmedAt) : ""}</span>
+          {/* Confirmation Events Timeline — shows ALL status changes */}
+          {log.confirmationEvents && log.confirmationEvents.length > 0 ? (
+            log.confirmationEvents.map((evt, idx) => (
+              <div key={idx}>
+                {evt.status === "change_requested" && (
+                  <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-3">
+                    <div className="flex items-center gap-1.5">
+                      <ArrowDownLeft className="h-3 w-3 text-amber-500" />
+                      <span className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider">Change Requested</span>
+                      {evt.createdBy && <span className="text-[10px] text-muted-foreground/70">by {evt.createdBy.replace(/@.*$/, "")}</span>}
+                      <span className="text-[10px] text-muted-foreground ml-auto">{evt.changeRequestedAt ? formatTime(evt.changeRequestedAt) : ""}</span>
+                    </div>
+                    {evt.changeRemarks && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 italic mt-1">&ldquo;{evt.changeRemarks}&rdquo;</p>
+                    )}
+                  </div>
+                )}
+                {evt.status === "confirmed" && (
+                  <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3">
+                    <div className="flex items-center gap-1.5">
+                      <ArrowDownLeft className="h-3 w-3 text-emerald-500" />
+                      <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Confirmed</span>
+                      {evt.createdBy && <span className="text-[10px] text-muted-foreground/70">by {evt.createdBy.replace(/@.*$/, "")}</span>}
+                      <span className="text-[10px] text-muted-foreground ml-auto">{evt.confirmedAt ? formatTime(evt.confirmedAt) : ""}</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">✅ Employee confirmed their schedule</p>
+                  </div>
+                )}
               </div>
-              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">✅ Employee confirmed their schedule</p>
-            </div>
-          )}
-
-          {/* Change Requested */}
-          {log.confirmation?.status === "change_requested" && (
-            <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-3">
-              <div className="flex items-center gap-1.5">
-                <ArrowDownLeft className="h-3 w-3 text-amber-500" />
-                <span className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider">Change Requested</span>
-                <span className="text-[10px] text-muted-foreground ml-auto">{log.confirmation.changeRequestedAt ? formatTime(log.confirmation.changeRequestedAt) : ""}</span>
-              </div>
-              {log.confirmation.changeRemarks && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400 italic mt-1">&ldquo;{log.confirmation.changeRemarks}&rdquo;</p>
+            ))
+          ) : (
+            <>
+              {/* Fallback: single confirmation (backward compat) */}
+              {log.confirmation?.status === "confirmed" && (
+                <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <ArrowDownLeft className="h-3 w-3 text-emerald-500" />
+                    <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Confirmed</span>
+                    <span className="text-[10px] text-muted-foreground ml-auto">{log.confirmation.confirmedAt ? formatTime(log.confirmation.confirmedAt) : ""}</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">✅ Employee confirmed their schedule</p>
+                </div>
               )}
-            </div>
-          )}
 
-          {/* Reply (non-confirmation) */}
-          {log.replyContent && !log.confirmation && (
-            <div className="rounded-lg bg-violet-500/5 border border-violet-500/15 p-3">
-              <div className="flex items-center gap-1.5">
-                <ArrowDownLeft className="h-3 w-3 text-violet-500" />
-                <span className="text-[10px] font-semibold text-violet-500 uppercase tracking-wider">Reply</span>
-                <span className="text-[10px] text-muted-foreground ml-auto">{log.repliedAt ? formatTime(log.repliedAt) : ""}</span>
-              </div>
-              <p className="text-[11px] text-foreground/80 mt-1">{log.replyContent}</p>
-            </div>
+              {log.confirmation?.status === "change_requested" && (
+                <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <ArrowDownLeft className="h-3 w-3 text-amber-500" />
+                    <span className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider">Change Requested</span>
+                    <span className="text-[10px] text-muted-foreground ml-auto">{log.confirmation.changeRequestedAt ? formatTime(log.confirmation.changeRequestedAt) : ""}</span>
+                  </div>
+                  {log.confirmation.changeRemarks && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 italic mt-1">&ldquo;{log.confirmation.changeRemarks}&rdquo;</p>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {/* Error */}
@@ -1981,45 +2009,14 @@ export default function MessagingPanel({
     fetchedWeekRef.current = selectedWeek;
 
     // ── Clear stale data from previous week immediately ──
-    // This prevents old records from flashing in the UI while new data loads
+    // This prevents old records from flashing in the UI while new data loads.
+    // We do NOT fetch here because selectedDate is still stale (from the old week).
+    // The date-based re-fetch effect will handle the actual API call once
+    // selectedDate is correctly resolved for the new week.
     setEmployeesByTab({});
     prevFetchKeyRef.current = "";
-
-    // ── Fetch active tab first for fastest UX ──
     setLoadingTabs(new Set(SUB_TABS.map(t => t.id)));
 
-    fetchTabEmployees(resolvedTab, selectedWeek, selectedDate).then((emps) => {
-      if (activeWeekRef.current !== effectWeek) return;
-      setEmployeesByTab(prev => ({ ...prev, [resolvedTab]: emps }));
-      setLoadingTabs(prev => {
-        const next = new Set(prev);
-        next.delete(resolvedTab);
-        return next;
-      });
-    });
-
-    // Background-fetch remaining tabs after 100ms so active tab gets priority
-    const bgTimer = setTimeout(() => {
-      if (activeWeekRef.current !== effectWeek) return;
-
-      SUB_TABS
-        .filter(t => t.id !== resolvedTab)
-        .forEach((tab) => {
-          // For non-active tabs, pass date only if it's not week-schedule
-          const tabDate = tab.id !== "week-schedule" ? selectedDate : undefined;
-          fetchTabEmployees(tab.id, selectedWeek, tabDate).then((emps) => {
-            if (activeWeekRef.current !== effectWeek) return;
-            setEmployeesByTab(prev => ({ ...prev, [tab.id]: emps }));
-            setLoadingTabs(prev => {
-              const next = new Set(prev);
-              next.delete(tab.id);
-              return next;
-            });
-          });
-        });
-    }, 100);
-
-    return () => clearTimeout(bgTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWeek, fetchTabEmployees, refreshTrigger]); // re-run when week changes or refreshed
 
@@ -2028,11 +2025,14 @@ export default function MessagingPanel({
   useEffect(() => {
     if (!selectedWeek || !selectedDate) return;
     // Track both date AND tab to ensure re-fetch when either changes
-    const fetchKey = `${resolvedTab}:${selectedDate}`;
+    const fetchKey = `${resolvedTab}:${selectedDate}:${selectedWeek}`;
     if (prevFetchKeyRef.current === fetchKey) return;
     prevFetchKeyRef.current = fetchKey;
     // Don't re-fetch for week-schedule since it doesn't use date
     if (resolvedTab === "week-schedule") return;
+
+    // Check if this is a fresh week load (all tabs loading = week just changed)
+    const isWeekSwitch = loadingTabs.size === SUB_TABS.length;
 
     setLoadingTabs(prev => {
       const next = new Set(prev);
@@ -2041,7 +2041,10 @@ export default function MessagingPanel({
       if (resolvedTab === "future-shift") next.add("off-tomorrow");
       return next;
     });
+
+    // Fetch active tab first for fastest UX
     fetchTabEmployees(resolvedTab, selectedWeek, selectedDate).then((emps) => {
+      if (activeWeekRef.current !== selectedWeek) return;
       setEmployeesByTab(prev => ({ ...prev, [resolvedTab]: emps }));
       setLoadingTabs(prev => {
         const next = new Set(prev);
@@ -2049,9 +2052,11 @@ export default function MessagingPanel({
         return next;
       });
     });
+
     // Also re-fetch off-tomorrow data when date changes on future-shift tab
     if (resolvedTab === "future-shift") {
       fetchTabEmployees("off-tomorrow", selectedWeek, selectedDate).then((emps) => {
+        if (activeWeekRef.current !== selectedWeek) return;
         setEmployeesByTab(prev => ({ ...prev, ["off-tomorrow"]: emps }));
         setLoadingTabs(prev => {
           const next = new Set(prev);
@@ -2059,6 +2064,29 @@ export default function MessagingPanel({
           return next;
         });
       });
+    }
+
+    // If this is a week switch, also background-fetch remaining tabs
+    if (isWeekSwitch) {
+      const effectWeek = selectedWeek;
+      const effectDate = selectedDate;
+      setTimeout(() => {
+        if (activeWeekRef.current !== effectWeek) return;
+        SUB_TABS
+          .filter(t => t.id !== resolvedTab && t.id !== "off-tomorrow")
+          .forEach((tab) => {
+            const tabDate = tab.id !== "week-schedule" ? effectDate : undefined;
+            fetchTabEmployees(tab.id, effectWeek, tabDate).then((emps) => {
+              if (activeWeekRef.current !== effectWeek) return;
+              setEmployeesByTab(prev => ({ ...prev, [tab.id]: emps }));
+              setLoadingTabs(prev => {
+                const next = new Set(prev);
+                next.delete(tab.id);
+                return next;
+              });
+            });
+          });
+      }, 100);
     }
   }, [selectedDate, selectedWeek, resolvedTab, fetchTabEmployees]);
 
