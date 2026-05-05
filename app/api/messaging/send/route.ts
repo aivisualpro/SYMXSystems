@@ -6,6 +6,8 @@ import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
+export const dynamic = "force-dynamic";
+
 const QUO_API_BASE = "https://api.openphone.com/v1";
 
 export async function POST(req: NextRequest) {

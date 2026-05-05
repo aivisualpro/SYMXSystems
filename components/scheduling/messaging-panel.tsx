@@ -439,12 +439,10 @@ interface HistoryLog {
 function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate }: { messageType: string; selectedPhones?: string[]; yearWeek?: string; scheduleDate?: string }) {
   const [logs, setLogs] = useState<HistoryLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     const params = new URLSearchParams({ messageType, limit: "200" });
-    // For date-specific tabs, pass scheduleDate; for week-level tabs, pass yearWeek
     if (scheduleDate) {
       params.set("scheduleDate", scheduleDate);
     } else if (yearWeek) {
@@ -452,14 +450,11 @@ function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate
     }
     fetch(`/api/messaging/history?${params.toString()}`)
       .then((res) => res.json())
-      .then((data) => {
-        setLogs(data.logs || []);
-      })
+      .then((data) => setLogs(data.logs || []))
       .catch(() => setLogs([]))
       .finally(() => setLoading(false));
   }, [messageType, yearWeek, scheduleDate]);
 
-  // Filter by selected phones
   const filteredLogs = useMemo(() => {
     if (!selectedPhones || selectedPhones.length === 0) return logs;
     return logs.filter((log) => selectedPhones.includes(log.toNumber));
@@ -467,35 +462,8 @@ function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate
 
   const formatTime = (d: string) => {
     try {
-      return new Date(d).toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
-    } catch {
-      return d;
-    }
-  };
-
-  const getStatusConfig = (log: HistoryLog) => {
-    if (log.confirmation?.status === "confirmed") {
-      return { label: "Confirmed", color: "text-emerald-500", bg: "bg-emerald-500/10 ring-emerald-500/30", icon: CheckCircle2 };
-    }
-    if (log.confirmation?.status === "change_requested") {
-      return { label: "Change Requested", color: "text-amber-500", bg: "bg-amber-500/10 ring-amber-500/30", icon: RefreshCw };
-    }
-    if (log.status === "received_reply") {
-      return { label: "Reply Received", color: "text-violet-500", bg: "bg-violet-500/10 ring-violet-500/30", icon: MessageSquare };
-    }
-    if (log.status === "delivered") {
-      return { label: "Delivered", color: "text-blue-500", bg: "bg-blue-500/10 ring-blue-500/30", icon: CheckCircle2 };
-    }
-    if (log.status === "failed") {
-      return { label: "Failed", color: "text-red-500", bg: "bg-red-500/10 ring-red-500/30", icon: XCircle };
-    }
-    return { label: "Sent", color: "text-blue-400", bg: "bg-blue-400/10 ring-blue-400/30", icon: Send };
+      return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
+    } catch { return d; }
   };
 
   if (loading) {
@@ -511,147 +479,89 @@ function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate
       <div className="flex-1 flex flex-col items-center justify-center p-6 gap-2">
         <Clock className="h-8 w-8 text-muted-foreground/30" />
         <p className="text-sm text-muted-foreground">
-          {selectedPhones && selectedPhones.length > 0
-            ? "No messages found for selected employees"
-            : "No messages sent yet"}
+          {selectedPhones && selectedPhones.length > 0 ? "No messages found for selected employees" : "No messages sent yet"}
         </p>
-        {selectedPhones && selectedPhones.length > 0 && (
-          <p className="text-[10px] text-muted-foreground/60">Select employees on the left to filter</p>
-        )}
       </div>
     );
   }
 
   return (
     <div className="flex-1 overflow-auto">
-      {filteredLogs.map((log) => {
-        const config = getStatusConfig(log);
-        const StatusIcon = config.icon;
-        const isExpanded = expandedId === log._id;
-
-        return (
-          <div
-            key={log._id}
-            className="border-b border-border/30 last:border-0 hover:bg-muted/20 transition-colors"
-          >
-            {/* Summary Row */}
-            <div
-              className="flex items-center gap-3 px-3 py-2.5 cursor-pointer"
-              onClick={() => setExpandedId(isExpanded ? null : log._id)}
-            >
-              {/* Status Icon */}
-              <div className={cn("h-7 w-7 rounded-full flex items-center justify-center shrink-0 ring-1", config.bg)}>
-                <StatusIcon className={cn("h-3.5 w-3.5", config.color)} />
-              </div>
-
-              {/* Name + Phone */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold truncate">{log.recipientName}</span>
-                  <span className="text-[10px] text-muted-foreground">{log.toNumber}</span>
-                </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className={cn("text-[10px] font-medium", config.color)}>
-                    {config.label}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    • {formatTime(log.sentAt)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Expand indicator */}
-              <ChevronDown className={cn(
-                "h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform",
-                isExpanded && "rotate-180"
-              )} />
-            </div>
-
-            {/* Expanded Detail */}
-            {isExpanded && (
-              <div className="px-3 pb-3 space-y-2">
-                {/* Sent Message */}
-                <div className="rounded-lg bg-primary/5 border border-primary/10 p-3 ml-6">
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <ArrowUpRight className="h-3 w-3 text-primary" />
-                    <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Sent</span>
-                    {log.sentBy && (
-                      <span className="text-[10px] text-muted-foreground/70">by {log.sentBy.replace(/@.*$/, '')}</span>
-                    )}
-                    <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.sentAt)}</span>
-                  </div>
-                  <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">{log.content}</pre>
-                </div>
-
-                {/* Delivery Status */}
-                {log.deliveredAt && (
-                  <div className="flex items-center gap-2 ml-6 px-3 py-1.5 rounded-md bg-blue-500/5 border border-blue-500/10">
-                    <CheckCircle2 className="h-3 w-3 text-blue-500" />
-                    <span className="text-[10px] text-blue-500 font-medium">Delivered</span>
-                    <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.deliveredAt)}</span>
-                  </div>
-                )}
-
-                {/* Confirmation Response */}
-                {log.confirmation?.status === "confirmed" && (
-                  <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3 ml-6">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <ArrowDownLeft className="h-3 w-3 text-emerald-500" />
-                      <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Confirmed</span>
-                      <span className="text-[10px] text-muted-foreground ml-auto">
-                        {log.confirmation.confirmedAt ? formatTime(log.confirmation.confirmedAt) : ""}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
-                      ✅ Employee confirmed their schedule via confirmation link
-                    </p>
-                  </div>
-                )}
-
-                {/* Change Request Response */}
-                {log.confirmation?.status === "change_requested" && (
-                  <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-3 ml-6">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <ArrowDownLeft className="h-3 w-3 text-amber-500" />
-                      <span className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider">Change Requested</span>
-                      <span className="text-[10px] text-muted-foreground ml-auto">
-                        {log.confirmation.changeRequestedAt ? formatTime(log.confirmation.changeRequestedAt) : ""}
-                      </span>
-                    </div>
-                    {log.confirmation.changeRemarks && (
-                      <p className="text-[11px] text-amber-600 dark:text-amber-400 italic mt-1">
-                        &ldquo;{log.confirmation.changeRemarks}&rdquo;
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Reply Content (from webhook) */}
-                {log.replyContent && !log.confirmation && (
-                  <div className="rounded-lg bg-violet-500/5 border border-violet-500/15 p-3 ml-6">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <ArrowDownLeft className="h-3 w-3 text-violet-500" />
-                      <span className="text-[10px] font-semibold text-violet-500 uppercase tracking-wider">Reply</span>
-                      <span className="text-[10px] text-muted-foreground ml-auto">
-                        {log.repliedAt ? formatTime(log.repliedAt) : ""}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-foreground/80">{log.replyContent}</p>
-                  </div>
-                )}
-
-                {/* Failed */}
-                {log.status === "failed" && log.errorMessage && (
-                  <div className="flex items-center gap-2 ml-6 px-3 py-1.5 rounded-md bg-red-500/5 border border-red-500/10">
-                    <XCircle className="h-3 w-3 text-red-500" />
-                    <span className="text-[10px] text-red-500 font-medium">Error: {log.errorMessage}</span>
-                  </div>
-                )}
-              </div>
-            )}
+      {filteredLogs.map((log) => (
+        <div key={log._id} className="border-b border-border/30 last:border-0 px-3 py-3 space-y-2">
+          {/* Employee Header */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold truncate">{log.recipientName}</span>
+            <span className="text-[10px] text-muted-foreground">{log.toNumber}</span>
           </div>
-        );
-      })}
+
+          {/* Sent Card */}
+          <div className="rounded-lg bg-primary/5 border border-primary/10 p-3">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <ArrowUpRight className="h-3 w-3 text-primary" />
+              <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Sent</span>
+              {log.sentBy && <span className="text-[10px] text-muted-foreground/70">by {log.sentBy.replace(/@.*$/, "")}</span>}
+              <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.sentAt)}</span>
+            </div>
+            <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">{log.content}</pre>
+          </div>
+
+          {/* Delivered */}
+          {log.deliveredAt && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/5 border border-blue-500/10">
+              <CheckCircle2 className="h-3 w-3 text-blue-500" />
+              <span className="text-[10px] text-blue-500 font-medium">Delivered</span>
+              <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.deliveredAt)}</span>
+            </div>
+          )}
+
+          {/* Confirmed */}
+          {log.confirmation?.status === "confirmed" && (
+            <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3">
+              <div className="flex items-center gap-1.5">
+                <ArrowDownLeft className="h-3 w-3 text-emerald-500" />
+                <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Confirmed</span>
+                <span className="text-[10px] text-muted-foreground ml-auto">{log.confirmation.confirmedAt ? formatTime(log.confirmation.confirmedAt) : ""}</span>
+              </div>
+              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">✅ Employee confirmed their schedule</p>
+            </div>
+          )}
+
+          {/* Change Requested */}
+          {log.confirmation?.status === "change_requested" && (
+            <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-3">
+              <div className="flex items-center gap-1.5">
+                <ArrowDownLeft className="h-3 w-3 text-amber-500" />
+                <span className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider">Change Requested</span>
+                <span className="text-[10px] text-muted-foreground ml-auto">{log.confirmation.changeRequestedAt ? formatTime(log.confirmation.changeRequestedAt) : ""}</span>
+              </div>
+              {log.confirmation.changeRemarks && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 italic mt-1">&ldquo;{log.confirmation.changeRemarks}&rdquo;</p>
+              )}
+            </div>
+          )}
+
+          {/* Reply (non-confirmation) */}
+          {log.replyContent && !log.confirmation && (
+            <div className="rounded-lg bg-violet-500/5 border border-violet-500/15 p-3">
+              <div className="flex items-center gap-1.5">
+                <ArrowDownLeft className="h-3 w-3 text-violet-500" />
+                <span className="text-[10px] font-semibold text-violet-500 uppercase tracking-wider">Reply</span>
+                <span className="text-[10px] text-muted-foreground ml-auto">{log.repliedAt ? formatTime(log.repliedAt) : ""}</span>
+              </div>
+              <p className="text-[11px] text-foreground/80 mt-1">{log.replyContent}</p>
+            </div>
+          )}
+
+          {/* Error */}
+          {log.status === "failed" && log.errorMessage && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-500/5 border border-red-500/10">
+              <XCircle className="h-3 w-3 text-red-500" />
+              <span className="text-[10px] text-red-500 font-medium">Error: {log.errorMessage}</span>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

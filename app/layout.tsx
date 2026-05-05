@@ -10,6 +10,7 @@ import { ActiveThemeProvider } from "@/components/active-theme";
 import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration";
 import { Providers } from "@/app/providers";
+import VersionChecker from "@/components/version-checker";
 
 import { Poppins } from "next/font/google";
 
@@ -99,6 +100,7 @@ export default async function RootLayout({
             </Providers>
             <Toaster position="top-center" richColors />
             <ServiceWorkerRegistration />
+            <VersionChecker />
           </ActiveThemeProvider>
         </ThemeProvider>
       </body>

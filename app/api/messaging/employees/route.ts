@@ -8,6 +8,7 @@ import SYMXRoute from "@/lib/models/SYMXRoute";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 import RouteType from "@/lib/models/RouteType";
 
+export const dynamic = "force-dynamic";
 /** Business timezone — all "today" / "tomorrow" checks use Pacific Time. */
 const BUSINESS_TZ = "America/Los_Angeles";
 
@@ -399,10 +400,12 @@ export async function GET(req: NextRequest) {
       filtered = enrichedEmployees;
     }
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       employees: filtered,
       total: filtered.length,
     });
+    res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    return res;
   } catch (error: any) {
     console.error("Messaging Employees API Error:", error);
     return NextResponse.json(

@@ -343,7 +343,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter>
         <div className="flex items-center gap-1.5 px-3 py-1 group-data-[collapsible=icon]:hidden">
           <IconDashboard className="h-4 w-4 text-muted-foreground/60" />
-          <span className="text-xs font-semibold text-muted-foreground">Version: 1.24</span>
+          <span className="text-xs font-semibold text-muted-foreground">Version: 1.28</span>
         </div>
         <NavUser user={data.user} />
       </SidebarFooter>

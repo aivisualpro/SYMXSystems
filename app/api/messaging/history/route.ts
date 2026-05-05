@@ -5,6 +5,7 @@ import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
+export const dynamic = "force-dynamic";
 /**
  * GET /api/messaging/history
  *
@@ -133,7 +134,9 @@ export async function GET(req: NextRequest) {
         // Sort by sentAt descending
         logs.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
 
-        return NextResponse.json({ logs });
+        const res = NextResponse.json({ logs });
+        res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+        return res;
     } catch (error: any) {
         console.error("Message History API Error:", error);
         return NextResponse.json(
