@@ -89,6 +89,7 @@ export async function GET(req: NextRequest) {
             // Find key entries
             const sentEntry = sorted.find((e: any) => e.status === "sent");
             const deliveredEntry = sorted.find((e: any) => e.status === "delivered");
+            const receivedEntry = sorted.find((e: any) => e.status === "received");
 
             // Build ALL confirmation events (change_requested, confirmed, etc.) in order
             const confirmationEvents = sorted
@@ -123,6 +124,7 @@ export async function GET(req: NextRequest) {
                 sentBy: sentEntry?.createdBy || "",
                 sentAt: sentEntry?.createdAt || sorted[0]?.createdAt || sched.createdAt,
                 deliveredAt: deliveredEntry?.createdAt || undefined,
+                receivedAt: receivedEntry?.createdAt || undefined,
                 confirmationEvents,
                 confirmation,
             });

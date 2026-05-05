@@ -527,6 +527,15 @@ function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate
             </div>
           )}
 
+          {/* Received (employee opened/received the link) */}
+          {log.receivedAt && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-violet-500/5 border border-violet-500/10">
+              <ArrowDownLeft className="h-3 w-3 text-violet-500" />
+              <span className="text-[10px] text-violet-500 font-medium">Received</span>
+              <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.receivedAt)}</span>
+            </div>
+          )}
+
           {/* Confirmation Events Timeline — shows ALL status changes */}
           {log.confirmationEvents && log.confirmationEvents.length > 0 ? (
             log.confirmationEvents.map((evt, idx) => (
