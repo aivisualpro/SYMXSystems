@@ -3,12 +3,23 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import MessageLog from "@/lib/models/MessageLog";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
-import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
+import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 
 const QUO_API_BASE = "https://api.openphone.com/v1";
+
+/** Generate a short, URL-safe confirmation token (8 chars). */
+function generateToken(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let token = '';
+  const bytes = crypto.randomBytes(8);
+  for (let i = 0; i < 8; i++) {
+    token += chars[bytes[i] % chars.length];
+  }
+  return token;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -67,24 +78,13 @@ export async function POST(req: NextRequest) {
         let personalizedContent = recipient.message ?? message;
 
         // ── Generate confirmation link if template uses {confirmationLink} ──
-        let confirmationDoc: any = null;
+        let confirmationToken: string | null = null;
         if (personalizedContent.includes("{confirmationLink}") && recipient.transporterId) {
-          // IMPORTANT: VERCEL_URL is a preview/ephemeral URL — DO NOT use it.
-          // It has Vercel authentication enabled which blocks public access.
-          // Use NEXT_PUBLIC_APP_URL (e.g. https://symx-systems.vercel.app) or
-          // VERCEL_PROJECT_PRODUCTION_URL (auto-set by Vercel on production deployments).
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL
             || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null)
             || req.nextUrl.origin;
-          confirmationDoc = await ScheduleConfirmation.create({
-            transporterId: recipient.transporterId,
-            employeeName: recipient.name || "",
-            scheduleDate: recipient.scheduleDate || "",
-            yearWeek: recipient.yearWeek || "",
-            messageType,
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-          });
-          const confirmUrl = `${baseUrl}/c/${confirmationDoc.token}`;
+          confirmationToken = generateToken();
+          const confirmUrl = `${baseUrl}/c/${confirmationToken}`;
           personalizedContent = personalizedContent.replace(/\{confirmationLink\}/gi, confirmUrl);
         }
 
@@ -94,8 +94,6 @@ export async function POST(req: NextRequest) {
             from,
             to: [recipient.phone],
           };
-
-
 
           const res = await fetch(`${QUO_API_BASE}/messages`, {
             method: "POST",
@@ -132,12 +130,10 @@ export async function POST(req: NextRequest) {
             };
           }
 
-
-
           const openPhoneMessageId: string = responseData?.data?.id ?? "";
 
           // Persist to SYMXMessageLogs
-          const msgLog = await MessageLog.create({
+          await MessageLog.create({
             openPhoneMessageId,
             fromNumber: from,
             fromDisplay: responseData?.data?.from ?? from,
@@ -151,18 +147,12 @@ export async function POST(req: NextRequest) {
             sentAt: new Date(),
           }).catch(() => null);
 
-          // Link messageLog to confirmation record
-          if (confirmationDoc && msgLog) {
-            await ScheduleConfirmation.updateOne(
-              { _id: confirmationDoc._id },
-              { $set: { messageLogId: msgLog._id } }
-            ).catch(() => { });
-          }
-
           // ── Push "sent" status into the SymxEmployeeSchedule ──────────────
+          // Single source of truth: token, content, and all status data
+          // lives in the shiftNotification/futureShift/routeItinerary array.
+          // NO ScheduleConfirmation collection is used.
           if (scheduleField && recipient.transporterId) {
             try {
-              // Prefer exact date match; fall back to most recent schedule for this employee
               const scheduleQuery: Record<string, any> = { transporterId: recipient.transporterId };
               if (recipient.scheduleDate) {
                 scheduleQuery.date = new Date(recipient.scheduleDate);
@@ -171,29 +161,33 @@ export async function POST(req: NextRequest) {
               const targetSchedule = await SymxEmployeeSchedule.findOne(scheduleQuery).sort({ date: -1 });
 
               if (targetSchedule) {
+                const entryData: Record<string, any> = {
+                  status: "sent",
+                  createdAt: new Date(),
+                  createdBy: senderEmail,
+                  content: personalizedContent,
+                  openPhoneMessageId,
+                };
+
+                // Store token + expiry directly in the entry (replaces ScheduleConfirmation)
+                if (confirmationToken) {
+                  entryData.token = confirmationToken;
+                  entryData.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+                }
+
                 await SymxEmployeeSchedule.updateOne(
                   { _id: targetSchedule._id },
                   {
                     $push: {
-                      [scheduleField]: {
-                        status: "sent",
-                        createdAt: new Date(),
-                        createdBy: senderEmail,
-                        content: personalizedContent,
-                        openPhoneMessageId,
-                      },
+                      [scheduleField]: entryData,
                     },
                   }
                 );
-
-              } else {
-
               }
             } catch (schedErr: any) {
               console.error("[Messaging] Schedule update error:", schedErr.message);
             }
           }
-
 
           return {
             to: recipient.phone,
