@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
+import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import RouteType from "@/lib/models/RouteType";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
@@ -10,31 +11,58 @@ const TOKEN_FIELDS = ["shiftNotification", "futureShift", "routeItinerary"];
 
 /**
  * Find a schedule by confirmation token stored in its messaging arrays.
- * Returns { schedule, field, entry } or null.
+ * Falls back to legacy SYMXScheduleConfirmations for old tokens.
+ * Returns { schedule, field, entry, messageType } or null.
  */
 async function findByToken(token: string) {
-    // Search across all messaging array fields for the token
+    // 1. Try new system: token stored directly in schedule arrays
     const schedule = await SymxEmployeeSchedule.findOne({
         $or: TOKEN_FIELDS.map(f => ({ [`${f}.token`]: token })),
     }).lean() as any;
 
-    if (!schedule) return null;
-
-    // Find which field and entry contains this token
-    for (const field of TOKEN_FIELDS) {
-        const entries: any[] = schedule[field] || [];
-        const entry = entries.find((e: any) => e.token === token);
-        if (entry) {
-            // Derive messageType from field
-            const fieldToTab: Record<string, string> = {
-                shiftNotification: "shift",
-                futureShift: "future-shift",
-                routeItinerary: "route-itinerary",
-            };
-            return { schedule, field, entry, messageType: fieldToTab[field] || "shift" };
+    if (schedule) {
+        for (const field of TOKEN_FIELDS) {
+            const entries: any[] = schedule[field] || [];
+            const entry = entries.find((e: any) => e.token === token);
+            if (entry) {
+                const fieldToTab: Record<string, string> = {
+                    shiftNotification: "shift",
+                    futureShift: "future-shift",
+                    routeItinerary: "route-itinerary",
+                };
+                return { schedule, field, entry, messageType: fieldToTab[field] || "shift" };
+            }
         }
     }
-    return null;
+
+    // 2. Fallback: legacy ScheduleConfirmation collection (tokens created before refactor)
+    const legacyDoc = await ScheduleConfirmation.findOne({ token }).lean() as any;
+    if (!legacyDoc) return null;
+
+    // Resolve the schedule from legacy doc's transporterId + scheduleDate
+    const scheduleQuery: any = { transporterId: legacyDoc.transporterId };
+    if (legacyDoc.scheduleDate) {
+        scheduleQuery.date = new Date(legacyDoc.scheduleDate);
+    }
+    const legacySchedule = await SymxEmployeeSchedule.findOne(scheduleQuery).sort({ date: -1 }).lean() as any;
+
+    const fieldFromType = TAB_TO_SCHEDULE_FIELD[legacyDoc.messageType] || "shiftNotification";
+
+    // Build a synthetic entry from the legacy doc
+    const syntheticEntry = {
+        token: legacyDoc.token,
+        expiresAt: legacyDoc.expiresAt,
+        status: legacyDoc.status || "pending",
+        createdAt: legacyDoc.createdAt,
+    };
+
+    return {
+        schedule: legacySchedule || { _id: null, transporterId: legacyDoc.transporterId, yearWeek: legacyDoc.yearWeek },
+        field: fieldFromType,
+        entry: syntheticEntry,
+        messageType: legacyDoc.messageType || "shift",
+        legacyDoc, // carry the legacy doc for reference
+    };
 }
 
 // GET — Load confirmation data (public, no auth)
