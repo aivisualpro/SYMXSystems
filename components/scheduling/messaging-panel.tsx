@@ -234,20 +234,22 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
     ? getNextDay(baseDate)
     : baseDate;
 
+  // Helper: match a schedule entry's date against a YYYY-MM-DD target,
+  // robust to both Pacific-midnight and UTC-midnight storage formats
+  const matchDate = (s: { date: string | Date }, target: string) => {
+    const pacific = toPacificDate(s.date);
+    const raw = typeof s.date === "string" ? s.date.slice(0, 10) : "";
+    return pacific === target || raw === target;
+  };
+
   if (tabId === "shift" || tabId === "route-itinerary") {
-    const dayShift = emp.schedules?.find(
-      (s) => toPacificDate(s.date) === targetDate
-    );
+    const dayShift = emp.schedules?.find((s) => matchDate(s, targetDate));
     if (dayShift) targetShift = dayShift;
   } else if (tabId === "future-shift") {
-    const dayShift = emp.schedules?.find(
-      (s) => toPacificDate(s.date) === targetDate
-    );
+    const dayShift = emp.schedules?.find((s) => matchDate(s, targetDate));
     if (dayShift) targetShift = dayShift;
   } else if (tabId === "off-tomorrow") {
-    const dayShift = emp.schedules?.find(
-      (s) => toPacificDate(s.date) === targetDate
-    );
+    const dayShift = emp.schedules?.find((s) => matchDate(s, targetDate));
     if (dayShift) targetShift = dayShift;
   }
 
@@ -1187,19 +1189,20 @@ function MessagingSubTab({
               filteredEmployees.map((emp) => {
                 const isSelected = selectedIds.has(emp._id);
 
-                // For future-shift, display tomorrow's shift (selectedDate + 1)
+                // For future-shift/off-tomorrow, display tomorrow's shift info
+                // We use both toPacificDate and raw string comparison to handle
+                // any timezone storage edge cases in the DB date field
                 const baseDisplayDate = selectedDate || getTodayPacific();
                 const displayDate = (tab.id === "future-shift" || tab.id === "off-tomorrow")
                   ? getNextDay(baseDisplayDate)
                   : baseDisplayDate;
-                const nextShift = emp.schedules?.find(
-                  (s) => {
-                    if (displayDate) {
-                      return toPacificDate(s.date) === displayDate;
-                    }
-                    return true;
-                  }
-                );
+                const nextShift = emp.schedules?.find((s) => {
+                  if (!displayDate) return true;
+                  // Try both Pacific-converted date and raw ISO prefix match
+                  const pacificDate = toPacificDate(s.date);
+                  const rawPrefix = typeof s.date === "string" ? s.date.slice(0, 10) : "";
+                  return pacificDate === displayDate || rawPrefix === displayDate;
+                });
 
                 const sendResult = sendResults?.find(
                   (r) =>
