@@ -286,26 +286,23 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
     const sorted = [...emp.schedules].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
     const lines = sorted.map((s) => {
       const dn = s.weekDay || getDayOfWeek(s.date);
-      const df = formatDateMMDDYYYY(s.date);
+      // Short date: MM/DD (no year)
+      const fullDate = formatDateMMDDYYYY(s.date); // "MM/DD/YYYY"
+      const df = fullDate.split("/").slice(0, 2).join("/"); // "MM/DD"
 
       // Resolve working/off from typeId → RouteType.routeStatus, fallback to legacy status
       const routeStatus = ((s as any).routeStatus || "").trim().toLowerCase();
       const legacyStatus = (s.status || "").trim().toLowerCase();
       const isWorking = routeStatus ? routeStatus !== "off" : legacyStatus === "scheduled";
 
-      // Use scheduleType (resolved from typeId → RouteType.name), fallback to legacy type string
       const typeStr = ((s as any).scheduleType || s.type || "").trim();
-      const typeLower = typeStr.toLowerCase();
 
-      let typeDisplay = "";
-      if (typeLower && typeLower !== "route" && typeLower !== "off") {
-        typeDisplay = ` | ${typeStr}`;
-      }
-
-      if (isWorking) {
-        return ` ${dn} ${df} ✅ ${s.startTime || ""}${typeDisplay}`;
+      if (typeStr.toLowerCase() === "stand by") {
+        return ` ${dn} ${df} ⚠️ Stand by`;
+      } else if (isWorking) {
+        return ` ${dn} ${df} ✅ ${s.startTime || ""}`;
       } else {
-        return ` ${dn} ${df} ❌ OFF${typeDisplay}`;
+        return ` ${dn} ${df} ❌ OFF`;
       }
     });
     weekSchedule = lines.join("\n");
