@@ -8,6 +8,8 @@ export interface IMessageStatusEntry {
   content?: string; // the actual SMS content (stored on "sent" entries)
   openPhoneMessageId?: string;
   changeRemarks?: string; // only for change_requested
+  token?: string;       // confirmation link token (stored on "sent" entries with confirmationLink)
+  expiresAt?: Date;     // token expiry (7 days from send)
 }
 
 const MessageStatusEntrySchema = new Schema<IMessageStatusEntry>(
@@ -18,6 +20,8 @@ const MessageStatusEntrySchema = new Schema<IMessageStatusEntry>(
     content: { type: String },
     openPhoneMessageId: { type: String },
     changeRemarks: { type: String },
+    token: { type: String, index: true },    // confirmation link token
+    expiresAt: { type: Date },               // token expiry
   },
   { _id: false }
 );

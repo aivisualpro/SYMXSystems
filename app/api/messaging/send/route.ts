@@ -155,7 +155,10 @@ export async function POST(req: NextRequest) {
             try {
               const scheduleQuery: Record<string, any> = { transporterId: recipient.transporterId };
               if (recipient.scheduleDate) {
-                scheduleQuery.date = new Date(recipient.scheduleDate);
+                // Use day-range to handle timezone/midnight edge cases
+                const dayStart = new Date(recipient.scheduleDate + "T00:00:00.000Z");
+                const dayEnd = new Date(recipient.scheduleDate + "T23:59:59.999Z");
+                scheduleQuery.date = { $gte: dayStart, $lte: dayEnd };
               }
 
               const targetSchedule = await SymxEmployeeSchedule.findOne(scheduleQuery).sort({ date: -1 });
