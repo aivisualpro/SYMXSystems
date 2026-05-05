@@ -428,6 +428,7 @@ interface HistoryLog {
   sentBy?: string;
   sentAt: string;
   deliveredAt?: string;
+  receivedAt?: string;
   repliedAt?: string;
   replyContent?: string;
   errorMessage?: string;
