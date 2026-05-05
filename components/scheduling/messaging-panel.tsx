@@ -636,6 +636,7 @@ function MessagingSubTab({
   offTomorrowLoading,
   onSelectionReport,
   onEligibleReport,
+  onTemplateSave,
 }: {
   tab: SubTab;
   weeks: string[];
@@ -661,6 +662,7 @@ function MessagingSubTab({
   offTomorrowLoading: boolean;
   onSelectionReport?: (count: number) => void;
   onEligibleReport?: (count: number) => void;
+  onTemplateSave?: (tabId: string, content: string) => void;
 }) {
   // Use prefetched data from parent — stable reference to avoid infinite re-renders
   const EMPTY: EmployeeRecipient[] = useMemo(() => [], []);
@@ -892,6 +894,7 @@ function MessagingSubTab({
       });
       if (res.ok) {
         lastSavedRef.current = content;
+        onTemplateSave?.(tab.id, content);
       } else {
         const err = await res.json();
         console.error("Failed to save template:", err);
@@ -2258,7 +2261,7 @@ export default function MessagingPanel({
           {(() => {
             const tab = SUB_TABS.find(t => t.id === resolvedTab) || SUB_TABS[0];
             return (
-              <div key={tab.id} className="h-full">
+              <div key={`${tab.id}_${selectedWeek}`} className="h-full">
                 <MessagingSubTab
                   tab={tab}
                   weeks={weeks}
@@ -2284,6 +2287,7 @@ export default function MessagingPanel({
                   selectedDate={resolvedTab !== "week-schedule" ? selectedDate : undefined}
                   onSelectionReport={setActiveSelectedCount}
                   onEligibleReport={setActiveEligibleCount}
+                  onTemplateSave={(tabId, content) => setTemplatesByTab(prev => ({ ...prev, [tabId]: content }))}
                 />
               </div>
             );
