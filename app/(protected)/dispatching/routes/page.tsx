@@ -1159,9 +1159,7 @@ export default function RoutesPage() {
                                                                 {(() => {
                                                                     const rt = resolveRT(row);
                                                                     const rtColor = rt?.color || getTypeStyle(row.type).colorHex || "inherit";
-                                                                    const RtIcon = rt?.icon ? (LucideIcons as any)[rt.icon] : null;
                                                                     return (<>
-                                                                        {RtIcon && <RtIcon className="h-3 w-3 shrink-0" style={{ color: rtColor }} />}
                                                                         <span
                                                                             className="text-[13px] font-bold truncate flex-1 min-w-0"
                                                                             title={row.employeeName}
