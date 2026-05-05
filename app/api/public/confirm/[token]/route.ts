@@ -36,13 +36,21 @@ async function findByToken(token: string) {
     }
 
     // 2. Fallback: legacy ScheduleConfirmation collection (tokens created before refactor)
-    const legacyDoc = await ScheduleConfirmation.findOne({ token }).lean() as any;
+    let legacyDoc: any = null;
+    try {
+        legacyDoc = await ScheduleConfirmation.findOne({ token }).lean();
+    } catch (err: any) {
+        console.error("[findByToken] Legacy lookup error:", err.message);
+    }
     if (!legacyDoc) return null;
 
     // Resolve the schedule from legacy doc's transporterId + scheduleDate
     const scheduleQuery: any = { transporterId: legacyDoc.transporterId };
     if (legacyDoc.scheduleDate) {
-        scheduleQuery.date = new Date(legacyDoc.scheduleDate);
+        // Use day-range to handle timezone/midnight edge cases
+        const dayStart = new Date(legacyDoc.scheduleDate + "T00:00:00.000Z");
+        const dayEnd = new Date(legacyDoc.scheduleDate + "T23:59:59.999Z");
+        scheduleQuery.date = { $gte: dayStart, $lte: dayEnd };
     }
     const legacySchedule = await SymxEmployeeSchedule.findOne(scheduleQuery).sort({ date: -1 }).lean() as any;
 
@@ -57,11 +65,11 @@ async function findByToken(token: string) {
     };
 
     return {
-        schedule: legacySchedule || { _id: null, transporterId: legacyDoc.transporterId, yearWeek: legacyDoc.yearWeek },
+        schedule: legacySchedule || { _id: null, transporterId: legacyDoc.transporterId, yearWeek: legacyDoc.yearWeek || "" },
         field: fieldFromType,
         entry: syntheticEntry,
         messageType: legacyDoc.messageType || "shift",
-        legacyDoc, // carry the legacy doc for reference
+        legacyDoc,
     };
 }
 
