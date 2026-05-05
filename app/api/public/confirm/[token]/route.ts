@@ -106,7 +106,9 @@ export async function GET(
         // Fetch schedule info for display
         let scheduleInfo: any = null;
         let weekSchedules: any[] = [];
-        const scheduleDate = schedule.date
+        // scheduleDate will be computed below, after scheduleInfo is resolved,
+        // so that future-shift uses tomorrow's date rather than today's token-schedule date.
+        let scheduleDate = schedule.date
             ? new Date(schedule.date).toISOString().split("T")[0]
             : "";
 
@@ -199,7 +201,11 @@ export async function GET(
             };
         }
 
-        // Get message content from the sent entry
+        // For future-shift/off-tomorrow, override scheduleDate to reflect tomorrow's display date
+        if (scheduleInfo?.date) {
+            scheduleDate = new Date(scheduleInfo.date).toISOString().split("T")[0];
+        }
+
         const messageContent = entry.content || null;
 
         // Derive current confirmation status from the schedule's messaging array
