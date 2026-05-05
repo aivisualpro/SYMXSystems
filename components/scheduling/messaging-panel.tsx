@@ -287,13 +287,17 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
     const lines = sorted.map((s) => {
       const dn = s.weekDay || getDayOfWeek(s.date);
       const df = formatDateMMDDYYYY(s.date);
-      const isWorking = (s.status || "").trim().toLowerCase() === "scheduled";
-      
-      let typeDisplay = "";
-      // Use scheduleType (resolved from typeId → RouteType name), fallback to legacy type string
+
+      // Resolve working/off from typeId → RouteType.routeStatus, fallback to legacy status
+      const routeStatus = ((s as any).routeStatus || "").trim().toLowerCase();
+      const legacyStatus = (s.status || "").trim().toLowerCase();
+      const isWorking = routeStatus ? routeStatus !== "off" : legacyStatus === "scheduled";
+
+      // Use scheduleType (resolved from typeId → RouteType.name), fallback to legacy type string
       const typeStr = ((s as any).scheduleType || s.type || "").trim();
       const typeLower = typeStr.toLowerCase();
-      
+
+      let typeDisplay = "";
       if (typeLower && typeLower !== "route" && typeLower !== "off") {
         typeDisplay = ` | ${typeStr}`;
       }

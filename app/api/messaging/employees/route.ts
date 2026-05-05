@@ -314,7 +314,12 @@ export async function GET(req: NextRequest) {
             type: s.type || "",                     // legacy fallback
             subType: s.subType || "",
             status: s.status || "",
-            routeStatus: s.routeStatus || "",
+            routeStatus: (() => {
+              // Resolve from typeId → RouteType.routeStatus; fallback to stored value
+              const meta = resolveRTMeta(s);
+              if (meta) return meta.routeStatus === "off" ? "Off" : "Scheduled";
+              return s.routeStatus || "";
+            })(),
             startTime: s.startTime || "",
             van: routeInfo.van || s.van || "",
             routeNumber: routeInfo.routeNumber || "",
