@@ -84,7 +84,7 @@ export function MessageStatusBadge({
   changeRemarks?: string;
   isLiveUpdate?: boolean;
   iconOnly?: boolean;
-  history?: Array<{ status: string; changeRemarks?: string; updatedAt?: string; messageType?: string }>;
+  history?: Array<{ status: string; changeRemarks?: string; updatedAt?: string; createdBy?: string; messageType?: string }>;
 }) {
   const config = STATUS_CONFIG[status];
   if (!config) return null;
@@ -132,18 +132,15 @@ export function MessageStatusBadge({
       </TooltipTrigger>
       <TooltipContent side="top" className="text-xs max-w-[300px] p-0">
         <div className="p-2">
-          <span className="font-semibold">{config.label}</span>
+          <span className="font-semibold text-white">{config.label}</span>
           {isLiveUpdate && <span className="text-emerald-400 ml-1">• Live</span>}
-          {timeAgo && <span className="text-white/80 ml-1 tracking-wide">• {timeAgo}</span>}
-          {changeRemarks && (
-            <p className="text-white/95 mt-1.5 italic">&ldquo;{changeRemarks}&rdquo;</p>
-          )}
+          {timeAgo && <span className="text-white ml-1 tracking-wide">• {timeAgo}</span>}
         </div>
 
-        {/* History Timeline */}
+        {/* History Timeline — status, createdBy, createdAt only */}
         {history && history.length > 1 && (
           <div className="border-t border-white/10 px-2 py-1.5 space-y-0">
-            <p className="text-[10px] uppercase tracking-wider text-white/40 font-semibold mb-1">History</p>
+            <p className="text-[10px] uppercase tracking-wider text-white/50 font-semibold mb-1">History</p>
             {[...history].reverse().map((h, i) => {
               const hConfig = STATUS_CONFIG[h.status];
               if (!hConfig) return null;
@@ -161,14 +158,11 @@ export function MessageStatusBadge({
                 <div key={i} className="flex items-start gap-1.5 py-0.5">
                   <HIcon className={cn("h-3 w-3 mt-0.5 shrink-0", hConfig.color)} />
                   <div className="min-w-0">
-                    <span className={cn("font-medium", hConfig.color)}>{hConfig.label}</span>
-                    {h.messageType && (
-                      <span className="text-white/40 ml-1">({formatMessageType(h.messageType)})</span>
+                    <span className={cn("font-medium text-white")}>{hConfig.label}</span>
+                    {h.createdBy && (
+                      <span className="text-white ml-1">— {h.createdBy}</span>
                     )}
-                    {hTime && <span className="text-white/50 ml-1">{hTime}</span>}
-                    {h.changeRemarks && (
-                      <p className="text-white/70 italic text-[10px] truncate">&ldquo;{h.changeRemarks}&rdquo;</p>
-                    )}
+                    {hTime && <span className="text-white ml-1">{hTime}</span>}
                   </div>
                 </div>
               );

@@ -212,7 +212,7 @@ interface RouteRow {
     driverEfficiency: number;
     employeeName: string;
     hiredDate?: string | null;
-    confirmationStatus?: { status: string; changeRemarks?: string; updatedAt?: string; history?: Array<{ status: string; changeRemarks?: string; updatedAt?: string; messageType?: string }> } | null;
+    confirmationStatus?: { status: string; changeRemarks?: string; updatedAt?: string; history?: Array<{ status: string; changeRemarks?: string; updatedAt?: string; createdBy?: string; messageType?: string }> } | null;
     phone: string;
     rate: number;
     routesCompleted: number;

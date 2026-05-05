@@ -6,7 +6,7 @@
  *   shiftNotification  — shift messages
  *   futureShift        — future-shift AND off-tomorrow messages (merged)
  *   routeItinerary     — route-itinerary messages
- *   weekSchedule       — week-schedule (lives in SYMXScheduleConfirmations only)
+ *   weekSchedule       — week-schedule (no schedule array, token-only in SYMXScheduleConfirmations)
  */
 export const TAB_TO_SCHEDULE_FIELD: Record<string, string> = {
     "shift": "shiftNotification",

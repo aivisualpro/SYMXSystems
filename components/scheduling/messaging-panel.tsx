@@ -441,6 +441,7 @@ function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLogs([]);
     setLoading(true);
     const params = new URLSearchParams({ messageType, limit: "200" });
     if (scheduleDate) {
@@ -1978,6 +1979,11 @@ export default function MessagingPanel({
     // ── Skip if we already fetched/hydrated this week (unless forced) ──
     if (!forced && fetchedWeekRef.current === selectedWeek) return;
     fetchedWeekRef.current = selectedWeek;
+
+    // ── Clear stale data from previous week immediately ──
+    // This prevents old records from flashing in the UI while new data loads
+    setEmployeesByTab({});
+    prevFetchKeyRef.current = "";
 
     // ── Fetch active tab first for fastest UX ──
     setLoadingTabs(new Set(SUB_TABS.map(t => t.id)));

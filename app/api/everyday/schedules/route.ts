@@ -73,17 +73,17 @@ export async function GET(req: NextRequest) {
 
         let confirmedIds = new Set<string>();
         if (yearWeek) {
-            import("@/lib/models/ScheduleConfirmation").then(async ({ default: ScheduleConfirmation }) => {
-                // Ensure model is loaded but avoid duplicate imports for now.
-                // Or simply:
-            });
-            // Actually let's just do it directly.
-            const ScheduleConfirmation = (await import("@/lib/models/ScheduleConfirmation")).default;
-            const weekConfirmations = await ScheduleConfirmation.find(
-                { yearWeek, messageType: "future-shift", status: "confirmed" },
-                { transporterId: 1 }
+            // Read confirmation status from the schedule's futureShift array (single source of truth)
+            const weekSchedules = await SymxEmployeeSchedule.find(
+                { yearWeek, futureShift: { $exists: true, $ne: [] } },
+                { transporterId: 1, futureShift: 1 }
             ).lean() as any[];
-            weekConfirmations.forEach((c: any) => confirmedIds.add(c.transporterId));
+            weekSchedules.forEach((s: any) => {
+                const entries: any[] = Array.isArray(s.futureShift) ? s.futureShift : [];
+                if (entries.some((e: any) => e.status === "confirmed")) {
+                    confirmedIds.add(s.transporterId);
+                }
+            });
         }
 
         const enrichedSchedules = schedules.map(s => {

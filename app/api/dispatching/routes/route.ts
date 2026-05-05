@@ -251,6 +251,7 @@ export async function GET(req: NextRequest) {
                 status: entry.status || "pending",
                 changeRemarks: entry.changeRemarks || "",
                 updatedAt: entry.createdAt || new Date(),
+                createdBy: entry.createdBy || "",
                 messageType: "shift",
             })).sort((a: any, b: any) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
 

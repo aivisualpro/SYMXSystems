@@ -170,16 +170,43 @@ export async function GET(
             if (sentEntry?.content) messageContent = sentEntry.content;
         }
 
+        // Derive current confirmation status from the schedule's messaging array (single source of truth)
+        let currentStatus = confirmation.status || "pending";
+        let confirmedAt = confirmation.confirmedAt;
+        let changeRequestedAt = confirmation.changeRequestedAt;
+        let changeRemarks = confirmation.changeRemarks;
+
+        if (scheduleField && targetSched) {
+            const entries: any[] = (targetSched as any)[scheduleField] || [];
+            if (entries.length > 0) {
+                const statusPriority: Record<string, number> = {
+                    confirmed: 5, change_requested: 4, received: 3, delivered: 2, sent: 1, pending: 0,
+                };
+                let bestEntry = entries[entries.length - 1];
+                let bestPriority = -1;
+                for (const entry of entries) {
+                    const p = statusPriority[entry.status] ?? -1;
+                    if (p > bestPriority) { bestPriority = p; bestEntry = entry; }
+                }
+                currentStatus = bestEntry.status || currentStatus;
+                if (bestEntry.status === "confirmed") confirmedAt = bestEntry.createdAt;
+                if (bestEntry.status === "change_requested") {
+                    changeRequestedAt = bestEntry.createdAt;
+                    changeRemarks = bestEntry.changeRemarks || "";
+                }
+            }
+        }
+
         return NextResponse.json({
             token: confirmation.token,
             employeeName: confirmation.employeeName,
-            status: confirmation.status,
+            status: currentStatus,
             yearWeek: confirmation.yearWeek,
             messageType: confirmation.messageType,
             scheduleDate: confirmation.scheduleDate,
-            confirmedAt: confirmation.confirmedAt,
-            changeRequestedAt: confirmation.changeRequestedAt,
-            changeRemarks: confirmation.changeRemarks,
+            confirmedAt,
+            changeRequestedAt,
+            changeRemarks,
             schedule: scheduleInfo,
             weekSchedules,
             messageContent,
@@ -217,11 +244,6 @@ export async function POST(
         const isWeekSchedule = confirmation.messageType === "week-schedule";
 
         if (action === "confirm") {
-            // Always update the ScheduleConfirmation doc (it holds the token state)
-            confirmation.status = "confirmed";
-            confirmation.confirmedAt = new Date();
-            await confirmation.save();
-
             // Update the schedule entry status
             if (confirmation.scheduleDate && confirmation.transporterId) {
                 await SymxEmployeeSchedule.updateOne(
@@ -233,9 +255,7 @@ export async function POST(
                 );
             }
 
-
-
-            // Push "confirmed" into the schedule's messaging array (not "received")
+            // Push "confirmed" into the schedule's messaging array (single source of truth)
             if (!isWeekSchedule) {
                 await pushConfirmationToSchedule(
                     confirmation.transporterId,
@@ -250,11 +270,6 @@ export async function POST(
             return NextResponse.json({ success: true, status: "confirmed" });
 
         } else if (action === "change_request") {
-            confirmation.status = "change_requested";
-            confirmation.changeRequestedAt = new Date();
-            confirmation.changeRemarks = remarks || "";
-            await confirmation.save();
-
             // Update schedule entry
             if (confirmation.scheduleDate && confirmation.transporterId) {
                 await SymxEmployeeSchedule.updateOne(
@@ -266,9 +281,7 @@ export async function POST(
                 );
             }
 
-
-
-            // Push "change_requested" into the schedule's messaging array
+            // Push "change_requested" into the schedule's messaging array (single source of truth)
             if (!isWeekSchedule) {
                 await pushConfirmationToSchedule(
                     confirmation.transporterId,
