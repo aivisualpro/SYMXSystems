@@ -1026,14 +1026,14 @@ function MessagingSubTab({
       : baseDateForSend;
 
     const recipients = selectedEmployees.map((emp) => {
-      // Determine the correct schedule date based on selected date or tab context
-      let targetScheduleDate: string | undefined = targetDateForSend || undefined;
+      // scheduleDate for the API = the date of the SCHEDULE DOCUMENT (not the shift day)
+      // For future-shift, the schedule doc date = selectedDate (today),
+      // even though the shift being notified is tomorrow (targetDateForSend)
+      let targetScheduleDate: string | undefined = selectedDate || undefined;
 
-      // Find matching schedule for the target date to get shift details
-      const matchingShift = targetDateForSend
-        ? emp.schedules?.find((s) => {
-            return toPacificDate(s.date) === targetDateForSend;
-          })
+      // Try to find the matching schedule document using selectedDate
+      const matchingShift = selectedDate
+        ? emp.schedules?.find((s) => toPacificDate(s.date) === selectedDate)
         : emp.schedules?.find(
             (s) => s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
           );
@@ -1042,7 +1042,7 @@ function MessagingSubTab({
         targetScheduleDate = toPacificDate(matchingShift.date);
       }
 
-      // Build personalized message and append attachment links for flyer
+      // Build personalized message (uses targetDateForSend for shift day placeholders)
       let finalMessage = personalizeMessage(message.trim(), emp, tab.id, selectedWeek, routeIconMap, selectedDate);
       if (tab.id === "flyer" && attachments.length > 0) {
         finalMessage += "\n\n📎 Attachments:";
