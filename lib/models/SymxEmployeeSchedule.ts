@@ -2,20 +2,22 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 
 // ── Messaging status entry (one per event in the lifecycle) ──
 export interface IMessageStatusEntry {
-  status: 'pending' | 'sent' | 'delivered' | 'received';
+  status: 'pending' | 'sent' | 'delivered' | 'received' | 'confirmed' | 'change_requested';
   createdAt: Date;
-  createdBy: string; // user email / "system" / "quo" (webhook)
-  messageLogId?: mongoose.Types.ObjectId; // links to SYMXMessageLogs
+  createdBy: string; // user email / "system" / "quo" (webhook) / "employee" / "migration"
+  content?: string; // the actual SMS content (stored on "sent" entries)
   openPhoneMessageId?: string;
+  changeRemarks?: string; // only for change_requested
 }
 
 const MessageStatusEntrySchema = new Schema<IMessageStatusEntry>(
   {
-    status: { type: String, enum: ['pending', 'sent', 'delivered', 'received'], required: true },
+    status: { type: String, enum: ['pending', 'sent', 'delivered', 'received', 'confirmed', 'change_requested'], required: true },
     createdAt: { type: Date, default: Date.now },
     createdBy: { type: String, default: 'system' },
-    messageLogId: { type: Schema.Types.ObjectId, ref: 'MessageLog' },
+    content: { type: String },
     openPhoneMessageId: { type: String },
+    changeRemarks: { type: String },
   },
   { _id: false }
 );
@@ -35,11 +37,9 @@ export interface ISymxEmployeeSchedule extends Document {
   createdBy?: mongoose.Types.ObjectId;
 
   // ── Messaging status tracking arrays ──
-  futureShift: IMessageStatusEntry[];
-  shiftNotification: IMessageStatusEntry[];
-  offTodayScheduleTom: IMessageStatusEntry[];
-  weekSchedule: IMessageStatusEntry[];
-  routeItinerary: IMessageStatusEntry[];
+  futureShift: IMessageStatusEntry[];       // future-shift + off-tomorrow (merged)
+  shiftNotification: IMessageStatusEntry[]; // shift
+  routeItinerary: IMessageStatusEntry[];    // route-itinerary
 }
 
 const SymxEmployeeScheduleSchema: Schema = new Schema({
@@ -57,11 +57,9 @@ const SymxEmployeeScheduleSchema: Schema = new Schema({
   createdBy: { type: Schema.Types.ObjectId, ref: 'SymxUser' },
 
   // ── Messaging status arrays ──
-  futureShift: { type: [MessageStatusEntrySchema], default: [] },
-  shiftNotification: { type: [MessageStatusEntrySchema], default: [] },
-  offTodayScheduleTom: { type: [MessageStatusEntrySchema], default: [] },
-  weekSchedule: { type: [MessageStatusEntrySchema], default: [] },
-  routeItinerary: { type: [MessageStatusEntrySchema], default: [] },
+  futureShift: { type: [MessageStatusEntrySchema], default: [] },       // future-shift + off-tomorrow
+  shiftNotification: { type: [MessageStatusEntrySchema], default: [] }, // shift
+  routeItinerary: { type: [MessageStatusEntrySchema], default: [] },    // route-itinerary
 }, { timestamps: { createdAt: true, updatedAt: false }, collection: 'SYMXEmployeeSchedules' });
 
 // Compound index for upsert

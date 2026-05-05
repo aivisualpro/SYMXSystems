@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
-import MessageLog from "@/lib/models/MessageLog";
+import RouteType from "@/lib/models/RouteType";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
 // GET — Load confirmation data (public, no auth)
@@ -27,11 +27,12 @@ export async function GET(
         // Fetch schedule info for display
         let scheduleInfo: any = null;
         let weekSchedules: any[] = [];
+        let schedules: any[] = [];
+        let singleSchedule: any = null;
 
         const isWeekSchedule = confirmation.messageType === "week-schedule";
 
         if (isWeekSchedule && confirmation.transporterId) {
-            let schedules: any[] = [];
 
             // ── Strategy 1: Find by yearWeek (exact match + alternate formats) ──
             if (confirmation.yearWeek) {
@@ -105,44 +106,68 @@ export async function GET(
                 console.log(`[Confirm] Strategy 3 (latest 7): found ${schedules.length} schedules`);
             }
 
+        } else if (confirmation.scheduleDate && confirmation.transporterId) {
+            // Non-week-schedule: fetch single schedule by date
+            singleSchedule = await SymxEmployeeSchedule.findOne({
+                transporterId: confirmation.transporterId,
+                date: new Date(confirmation.scheduleDate),
+            }).lean();
+        }
+
+        // Build typeId → name map for resolving schedule types
+        const allTypeIds = new Set<string>();
+        if (schedules && schedules.length > 0) {
+            schedules.forEach((s: any) => { if (s.typeId) allTypeIds.add(String(s.typeId)); });
+        }
+        if (singleSchedule && (singleSchedule as any).typeId) {
+            allTypeIds.add(String((singleSchedule as any).typeId));
+        }
+
+        const routeTypes = allTypeIds.size > 0
+            ? await RouteType.find({ _id: { $in: [...allTypeIds] } }, { _id: 1, name: 1 }).lean() as any[]
+            : [];
+        const rtMap = new Map<string, string>();
+        routeTypes.forEach((rt: any) => rtMap.set(String(rt._id), rt.name || ""));
+
+        const resolveType = (s: any) => {
+            if (s?.typeId) return rtMap.get(String(s.typeId)) || (s as any).type || "OFF";
+            return (s as any).type || "OFF";
+        };
+
+        if (isWeekSchedule && schedules.length > 0) {
             weekSchedules = schedules.map((s: any) => ({
                 date: s.date,
                 weekDay: s.weekDay || "",
-                type: (s as any).type || "OFF",
+                type: resolveType(s),
                 startTime: s.startTime || "",
                 van: s.van || "",
             }));
 
-            if (schedules.length > 0) {
-                scheduleInfo = {
-                    date: schedules[0].date,
-                    weekDay: schedules[0].weekDay,
-                    type: (schedules[0] as any).type,
-                    startTime: schedules[0].startTime,
-                    van: schedules[0].van,
-                };
-            }
-        } else if (confirmation.scheduleDate && confirmation.transporterId) {
-            const schedule = await SymxEmployeeSchedule.findOne({
-                transporterId: confirmation.transporterId,
-                date: new Date(confirmation.scheduleDate),
-            }).lean();
-            if (schedule) {
-                scheduleInfo = {
-                    date: schedule.date,
-                    weekDay: schedule.weekDay,
-                    type: (schedule as any).type,
-                    startTime: schedule.startTime,
-                    van: schedule.van,
-                };
-            }
+            scheduleInfo = {
+                date: schedules[0].date,
+                weekDay: schedules[0].weekDay,
+                type: resolveType(schedules[0]),
+                startTime: schedules[0].startTime,
+                van: schedules[0].van,
+            };
+        } else if (singleSchedule) {
+            scheduleInfo = {
+                date: singleSchedule.date,
+                weekDay: singleSchedule.weekDay,
+                type: resolveType(singleSchedule),
+                startTime: singleSchedule.startTime,
+                van: singleSchedule.van,
+            };
         }
 
-        // Fetch the original sent message from MessageLog
+        // Get message content from the shiftNotification array (single source of truth)
         let messageContent: string | null = null;
-        if (confirmation.messageLogId) {
-            const log = await MessageLog.findById(confirmation.messageLogId, { content: 1 }).lean();
-            if (log) messageContent = (log as any).content || null;
+        const scheduleField = TAB_TO_SCHEDULE_FIELD[confirmation.messageType];
+        const targetSched = singleSchedule || (schedules && schedules.length > 0 ? schedules[0] : null);
+        if (scheduleField && targetSched) {
+            const entries = (targetSched as any)[scheduleField] || [];
+            const sentEntry = entries.find((e: any) => e.status === "sent");
+            if (sentEntry?.content) messageContent = sentEntry.content;
         }
 
         return NextResponse.json({
@@ -166,52 +191,8 @@ export async function GET(
 }
 
 // Helper: update the messaging status array in the schedule document
-async function updateScheduleMessagingStatus(
-    transporterId: string,
-    scheduleDate: string,
-    messageType: string,
-    newStatus: string,
-    replyContent: string,
-    yearWeek?: string
-) {
-    const field = TAB_TO_SCHEDULE_FIELD[messageType];
-    if (!field || !transporterId) return;
 
-    try {
-        let schedule;
 
-        if (scheduleDate) {
-            // Look up by specific date
-            schedule = await SymxEmployeeSchedule.findOne({
-                transporterId,
-                date: new Date(scheduleDate),
-            });
-        }
-
-        // Fallback: for week-level messages (no date), find any schedule in the yearWeek
-        if (!schedule && yearWeek) {
-            schedule = await SymxEmployeeSchedule.findOne({
-                transporterId,
-                yearWeek,
-            });
-        }
-
-        if (!schedule) return;
-
-        const entries = (schedule as any)[field];
-        if (Array.isArray(entries) && entries.length > 0) {
-            // Update the last entry's status
-            entries[entries.length - 1].status = newStatus;
-            entries[entries.length - 1].repliedAt = new Date();
-            entries[entries.length - 1].replyContent = replyContent;
-            (schedule as any)[field] = entries;
-            schedule.markModified(field);
-            await schedule.save();
-        }
-    } catch (err: any) {
-        console.error("Failed to update schedule messaging status:", err.message);
-    }
-}
 
 // POST — Submit confirmation or change request (public, no auth)
 export async function POST(
@@ -233,7 +214,10 @@ export async function POST(
             return NextResponse.json({ error: "This confirmation link has expired" }, { status: 410 });
         }
 
+        const isWeekSchedule = confirmation.messageType === "week-schedule";
+
         if (action === "confirm") {
+            // Always update the ScheduleConfirmation doc (it holds the token state)
             confirmation.status = "confirmed";
             confirmation.confirmedAt = new Date();
             await confirmation.save();
@@ -249,23 +233,19 @@ export async function POST(
                 );
             }
 
-            // Update message log if exists
-            if (confirmation.messageLogId) {
-                await MessageLog.updateOne(
-                    { _id: confirmation.messageLogId },
-                    { $set: { status: "received_reply", replyContent: "✅ Confirmed via link", repliedAt: new Date() } }
+
+
+            // Push "confirmed" into the schedule's messaging array (not "received")
+            if (!isWeekSchedule) {
+                await pushConfirmationToSchedule(
+                    confirmation.transporterId,
+                    confirmation.scheduleDate || "",
+                    confirmation.messageType,
+                    "confirmed",
+                    "",
+                    confirmation.yearWeek
                 );
             }
-
-            // Update messaging status array in schedule → shows "received" in messaging panel
-            await updateScheduleMessagingStatus(
-                confirmation.transporterId,
-                confirmation.scheduleDate || "",
-                confirmation.messageType,
-                "received",
-                "✅ Confirmed via link",
-                confirmation.yearWeek
-            );
 
             return NextResponse.json({ success: true, status: "confirmed" });
 
@@ -286,29 +266,19 @@ export async function POST(
                 );
             }
 
-            // Update message log
-            if (confirmation.messageLogId) {
-                await MessageLog.updateOne(
-                    { _id: confirmation.messageLogId },
-                    {
-                        $set: {
-                            status: "received_reply",
-                            replyContent: `🔄 Change Requested: ${remarks || "No remarks"}`,
-                            repliedAt: new Date(),
-                        },
-                    }
+
+
+            // Push "change_requested" into the schedule's messaging array
+            if (!isWeekSchedule) {
+                await pushConfirmationToSchedule(
+                    confirmation.transporterId,
+                    confirmation.scheduleDate || "",
+                    confirmation.messageType,
+                    "change_requested",
+                    remarks || "",
+                    confirmation.yearWeek
                 );
             }
-
-            // Update messaging status array in schedule → shows "received" in messaging panel
-            await updateScheduleMessagingStatus(
-                confirmation.transporterId,
-                confirmation.scheduleDate || "",
-                confirmation.messageType,
-                "received",
-                `🔄 Change Requested: ${remarks || "No remarks"}`,
-                confirmation.yearWeek
-            );
 
             return NextResponse.json({ success: true, status: "change_requested" });
         }
@@ -319,3 +289,57 @@ export async function POST(
         return NextResponse.json({ error: "Server error" }, { status: 500 });
     }
 }
+
+/**
+ * Push a new confirmation entry (confirmed / change_requested) into the
+ * schedule's messaging array (e.g. shiftNotification, futureShift).
+ * This is a $push (new entry), NOT a mutation of the last entry.
+ */
+async function pushConfirmationToSchedule(
+    transporterId: string,
+    scheduleDate: string,
+    messageType: string,
+    status: string,
+    changeRemarks: string,
+    yearWeek?: string
+) {
+    const field = TAB_TO_SCHEDULE_FIELD[messageType];
+    if (!field || !transporterId) return;
+
+    try {
+        let schedule;
+
+        if (scheduleDate) {
+            schedule = await SymxEmployeeSchedule.findOne({
+                transporterId,
+                date: new Date(scheduleDate),
+            });
+        }
+
+        if (!schedule && yearWeek) {
+            schedule = await SymxEmployeeSchedule.findOne({
+                transporterId,
+                yearWeek,
+            });
+        }
+
+        if (!schedule) return;
+
+        await SymxEmployeeSchedule.updateOne(
+            { _id: schedule._id },
+            {
+                $push: {
+                    [field]: {
+                        status,
+                        createdAt: new Date(),
+                        createdBy: "employee",
+                        changeRemarks: changeRemarks || undefined,
+                    },
+                },
+            }
+        );
+    } catch (err: any) {
+        console.error("Failed to push confirmation to schedule:", err.message);
+    }
+}
+

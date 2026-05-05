@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
-import MessageLog from "@/lib/models/MessageLog";
-import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
+import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+import SymxEmployee from "@/lib/models/SymxEmployee";
+import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
+/**
+ * GET /api/messaging/history
+ *
+ * Single source of truth: reads messaging history from
+ * SYMXEmployeeSchedules messaging arrays only.
+ * No MessageLog or ScheduleConfirmation joins.
+ */
 export async function GET(req: NextRequest) {
     try {
         const session = await getSession();
@@ -12,129 +20,120 @@ export async function GET(req: NextRequest) {
         }
 
         const { searchParams } = new URL(req.url);
-        const messageType = searchParams.get("messageType"); // week-schedule, shift, etc.
+        const messageType = searchParams.get("messageType");
+        const scheduleDate = searchParams.get("scheduleDate");
         const yearWeek = searchParams.get("yearWeek");
-        const scheduleDate = searchParams.get("scheduleDate"); // YYYY-MM-DD for date-specific tabs
-        const limit = parseInt(searchParams.get("limit") || "100");
+
+        if (!messageType) {
+            return NextResponse.json({ error: "messageType is required" }, { status: 400 });
+        }
 
         await connectToDatabase();
 
-        // Build query
-        const query: any = {};
-        if (messageType) query.messageType = messageType;
-
-        // If scheduleDate is specified, find logs via two paths:
-        // 1) MessageLog records that have scheduleDate matching (new records)
-        // 2) MessageLog records linked from ScheduleConfirmation records with matching scheduleDate (old records)
-        let logs: any[] = [];
-
-        if (scheduleDate) {
-            const dateRegex = { $regex: new RegExp("^" + scheduleDate) };
-
-            // Path 1: MessageLogs with scheduleDate field
-            const directQuery: any = { ...query, scheduleDate: dateRegex };
-
-            // Path 2: Find messageLogIds from ScheduleConfirmation records that have this scheduleDate
-            const confirmQuery: any = {
-                scheduleDate: dateRegex,
-                messageLogId: { $exists: true },
-            };
-            if (messageType) confirmQuery.messageType = messageType;
-            const confirmations = await ScheduleConfirmation.find(
-                confirmQuery,
-                { messageLogId: 1 }
-            ).lean();
-            const confirmLogIds = confirmations.map((c: any) => c.messageLogId);
-
-            // Combine: logs matching directly OR linked via confirmations
-            if (confirmLogIds.length > 0) {
-                logs = await MessageLog.find({
-                    $or: [
-                        directQuery,
-                        { _id: { $in: confirmLogIds }, ...(messageType ? { messageType } : {}) },
-                    ],
-                })
-                    .sort({ sentAt: -1 })
-                    .limit(limit)
-                    .lean();
-            } else {
-                logs = await MessageLog.find(directQuery)
-                    .sort({ sentAt: -1 })
-                    .limit(limit)
-                    .lean();
-            }
-        } else if (yearWeek) {
-            // For week-level tabs (week-schedule), use the yearWeek field if stored,
-            // otherwise fall back to sentAt date range
-            query.$or = [
-                { yearWeek },
-                // Fallback: filter by date range of that ISO week (for older records)
-                (() => {
-                    const weekMatch = yearWeek.match(/(\d{4})-W?(\d{1,2})/);
-                    if (weekMatch) {
-                        const year = parseInt(weekMatch[1]);
-                        const week = parseInt(weekMatch[2]);
-                        const jan4 = new Date(Date.UTC(year, 0, 4));
-                        const dayOfWeek = jan4.getUTCDay() || 7;
-                        const startOfWeek1 = new Date(jan4);
-                        startOfWeek1.setUTCDate(jan4.getUTCDate() - dayOfWeek + 1);
-                        const startOfTargetWeek = new Date(startOfWeek1);
-                        startOfTargetWeek.setUTCDate(startOfWeek1.getUTCDate() + (week - 1) * 7);
-                        const rangeStart = new Date(startOfTargetWeek);
-                        rangeStart.setUTCDate(rangeStart.getUTCDate() - 1);
-                        const rangeEnd = new Date(startOfTargetWeek);
-                        rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 7);
-                        return { sentAt: { $gte: rangeStart, $lt: rangeEnd } };
-                    }
-                    return {};
-                })(),
-            ];
-            logs = await MessageLog.find(query)
-                .sort({ sentAt: -1 })
-                .limit(limit)
-                .lean();
-        } else {
-            logs = await MessageLog.find(query)
-                .sort({ sentAt: -1 })
-                .limit(limit)
-                .lean();
+        const scheduleField = TAB_TO_SCHEDULE_FIELD[messageType];
+        if (!scheduleField) {
+            return NextResponse.json({ logs: [] });
         }
 
-        // Get associated confirmations for these logs
-        const logIds = logs.map((l: any) => l._id);
-        const confirmations = await ScheduleConfirmation.find({
-            messageLogId: { $in: logIds },
-        }).lean();
+        // Build schedule query
+        const scheduleQuery: Record<string, any> = {};
+        if (scheduleDate) {
+            scheduleQuery.date = new Date(scheduleDate);
+        } else if (yearWeek) {
+            scheduleQuery.yearWeek = yearWeek;
+        } else {
+            return NextResponse.json({ logs: [] });
+        }
 
-        // Map confirmations by messageLogId
-        const confirmMap: Record<string, any> = {};
-        confirmations.forEach((c: any) => {
-            confirmMap[c.messageLogId.toString()] = {
-                status: c.status,
-                confirmedAt: c.confirmedAt,
-                changeRequestedAt: c.changeRequestedAt,
-                changeRemarks: c.changeRemarks,
-                token: c.token,
-            };
-        });
+        // Only fetch schedules that have entries in the messaging array
+        scheduleQuery[`${scheduleField}.0`] = { $exists: true };
 
-        // Enrich logs with confirmation data
-        const enrichedLogs = logs.map((log: any) => ({
-            _id: log._id,
-            recipientName: log.recipientName,
-            toNumber: log.toNumber,
-            messageType: log.messageType,
-            content: log.content,
-            status: log.status,
-            sentAt: log.sentAt,
-            deliveredAt: log.deliveredAt,
-            repliedAt: log.repliedAt,
-            replyContent: log.replyContent,
-            errorMessage: log.errorMessage,
-            confirmation: confirmMap[log._id.toString()] || null,
-        }));
+        const schedules = await SymxEmployeeSchedule.find(
+            scheduleQuery,
+            { transporterId: 1, date: 1, [scheduleField]: 1 }
+        ).lean() as any[];
 
-        return NextResponse.json({ logs: enrichedLogs });
+        if (schedules.length === 0) {
+            return NextResponse.json({ logs: [] });
+        }
+
+        // Employee name lookup
+        const transporterIds = [...new Set(schedules.map(s => s.transporterId))];
+        const employees = await SymxEmployee.find(
+            { transporterId: { $in: transporterIds } },
+            { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1 }
+        ).lean() as any[];
+
+        const empMap = new Map<string, any>();
+        for (const emp of employees) {
+            empMap.set(emp.transporterId, emp);
+        }
+
+        // Build log entries from the arrays
+        const logs: any[] = [];
+
+        for (const sched of schedules) {
+            const entries: any[] = sched[scheduleField] || [];
+            if (entries.length === 0) continue;
+
+            const emp = empMap.get(sched.transporterId);
+            const empName = emp ? `${emp.firstName} ${emp.lastName}`.toUpperCase() : sched.transporterId;
+            const empPhone = emp?.phoneNumber || "";
+
+            // Sort entries chronologically
+            const sorted = [...entries].sort((a, b) =>
+                new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+
+            // Find key entries
+            const sentEntry = sorted.find((e: any) => e.status === "sent");
+            const deliveredEntry = sorted.find((e: any) => e.status === "delivered");
+            const confirmedEntry = sorted.find((e: any) => e.status === "confirmed");
+            const changeEntry = sorted.find((e: any) => e.status === "change_requested");
+
+            // Determine overall status
+            let overallStatus = sorted[sorted.length - 1]?.status || "sent";
+            let confirmation: any = null;
+
+            if (confirmedEntry) {
+                overallStatus = "received_reply";
+                confirmation = {
+                    status: "confirmed",
+                    confirmedAt: confirmedEntry.createdAt,
+                };
+            } else if (changeEntry) {
+                overallStatus = "received_reply";
+                confirmation = {
+                    status: "change_requested",
+                    changeRequestedAt: changeEntry.createdAt,
+                    changeRemarks: changeEntry.changeRemarks || "",
+                };
+            }
+
+            logs.push({
+                _id: `${sched._id}_${messageType}`,
+                recipientName: empName,
+                toNumber: empPhone.startsWith("+") ? empPhone : `+1${empPhone.replace(/\D/g, "")}`,
+                messageType,
+                content: sentEntry?.content || "",
+                status: overallStatus,
+                sentBy: sentEntry?.createdBy || "",
+                sentAt: sentEntry?.createdAt || sorted[0]?.createdAt || sched.createdAt,
+                deliveredAt: deliveredEntry?.createdAt || undefined,
+                repliedAt: confirmedEntry?.createdAt || changeEntry?.createdAt || undefined,
+                replyContent: confirmedEntry
+                    ? "✅ Confirmed via link"
+                    : changeEntry
+                        ? `🔄 Change Requested: ${changeEntry.changeRemarks || "No remarks"}`
+                        : undefined,
+                confirmation,
+            });
+        }
+
+        // Sort by sentAt descending
+        logs.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+
+        return NextResponse.json({ logs });
     } catch (error: any) {
         console.error("Message History API Error:", error);
         return NextResponse.json(
@@ -143,4 +142,3 @@ export async function GET(req: NextRequest) {
         );
     }
 }
-

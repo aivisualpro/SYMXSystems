@@ -24,7 +24,7 @@ if (!MONGO_URI) { console.error("No MONGODB_URI in .env"); process.exit(1); }
 const MESSAGE_TYPE_TO_FIELD = {
     "future-shift": "futureShift",
     "shift": "shiftNotification",
-    "off-tomorrow": "offTodayScheduleTom",
+    "off-tomorrow": "futureShift",  // merged into futureShift
 };
 
 async function migrate() {

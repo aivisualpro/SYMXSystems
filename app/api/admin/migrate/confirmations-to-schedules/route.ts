@@ -10,7 +10,7 @@ import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
  * the corresponding SYMXEmployeeSchedules messaging arrays:
  *   - messageType "future-shift" → futureShift
  *   - messageType "shift"        → shiftNotification
- *   - messageType "off-tomorrow" → offTodayScheduleTom
+ *   - messageType "off-tomorrow" → futureShift (merged)
  *
  * "week-schedule" stays in SYMXScheduleConfirmations only.
  *
@@ -21,7 +21,7 @@ import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 const MESSAGE_TYPE_TO_FIELD: Record<string, string> = {
     "future-shift": "futureShift",
     "shift": "shiftNotification",
-    "off-tomorrow": "offTodayScheduleTom",
+    "off-tomorrow": "futureShift",  // merged into futureShift
 };
 
 async function runMigration() {

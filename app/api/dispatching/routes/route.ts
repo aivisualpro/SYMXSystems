@@ -387,7 +387,12 @@ export async function POST(req: NextRequest) {
                         weekDay: s.weekDay,
                         yearWeek,
                         typeId: s.typeId ? String(s.typeId) : "",
+                    },
+                    // Only set van on NEW inserts — never overwrite existing van assignments
+                    $setOnInsert: {
                         van: s.van || "",
+                        serviceType: "",
+                        dashcam: "",
                     },
                 },
                 upsert: true,

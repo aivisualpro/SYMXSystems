@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     await connectToDatabase();
 
-    const senderEmail = (session as any)?.user?.email || "system";
+    const senderEmail = (session as any)?.email || "system";
     const scheduleField = TAB_TO_SCHEDULE_FIELD[messageType];
 
     // Send messages in parallel
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
                         status: "sent",
                         createdAt: new Date(),
                         createdBy: senderEmail,
-                        messageLogId: msgLog?._id,
+                        content: personalizedContent,
                         openPhoneMessageId,
                       },
                     },

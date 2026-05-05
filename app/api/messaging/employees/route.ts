@@ -4,8 +4,7 @@ import connectToDatabase from "@/lib/db";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SYMXRoute from "@/lib/models/SYMXRoute";
-import MessageLog from "@/lib/models/MessageLog";
-import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
+
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 import RouteType from "@/lib/models/RouteType";
 
@@ -135,7 +134,7 @@ export async function GET(req: NextRequest) {
     const schedulePromise = scheduleQuery
       ? SymxEmployeeSchedule.find(
         scheduleQuery,
-        { transporterId: 1, date: 1, weekDay: 1, type: 1, typeId: 1, subType: 1, status: 1, routeStatus: 1, startTime: 1, van: 1 }
+        { transporterId: 1, date: 1, weekDay: 1, type: 1, typeId: 1, subType: 1, status: 1, routeStatus: 1, startTime: 1, van: 1, shiftNotification: 1, futureShift: 1, routeItinerary: 1 }
       )
         .sort({ date: 1 })
         .lean()
@@ -156,148 +155,13 @@ export async function GET(req: NextRequest) {
         ).lean()
       : Promise.resolve(null);
 
-    // ── Messaging status — single optimized aggregation ──
-    // Combines ScheduleConfirmation + MessageLog lookups into one pipeline
-    // For date-specific tabs (shift, future-shift, etc.) scope by scheduleDate;
-    // for week-schedule, scope by yearWeek only.
-    // If `date` param is provided by frontend, use it; otherwise compute from tab type.
-    const DATE_SPECIFIC_TABS = ["shift", "future-shift", "route-itinerary", "off-tomorrow", "flyer"];
-    let targetScheduleDate = "";
-    if (date) {
-      // Frontend explicitly selected a date
-      targetScheduleDate = date;
-    } else if (filter && DATE_SPECIFIC_TABS.includes(filter)) {
-      if (filter === "shift" || filter === "route-itinerary") {
-        targetScheduleDate = getTodayPacific();
-      } else if (filter === "future-shift" || filter === "off-tomorrow") {
-        targetScheduleDate = getTomorrowPacific();
-      }
-    }
+    // ── Messaging status — read directly from schedule arrays (single source of truth) ──
+    const scheduleField = filter ? TAB_TO_SCHEDULE_FIELD[filter] : null;
 
-    const messagingStatusPromise = (filter && yearWeek)
-      ? (async () => {
-        // Step 1: Get messageLogIds scoped to this week+messageType
-        // For date-specific tabs, additionally scope by scheduleDate
-        const confirmQuery: Record<string, any> = {
-          yearWeek, messageType: filter, messageLogId: { $exists: true },
-        };
-        if (targetScheduleDate) {
-          confirmQuery.scheduleDate = { $regex: new RegExp("^" + targetScheduleDate) };
-        }
-        const weekConfirmations = await ScheduleConfirmation.find(
-          confirmQuery,
-          { messageLogId: 1, status: 1, changeRemarks: 1 }
-        ).lean();
-
-        const wkLogIds = weekConfirmations.map((c: any) => c.messageLogId);
-
-        // If no confirmations found via scheduleDate, also try querying MessageLog directly
-        // (handles older records that may not have scheduleDate on ScheduleConfirmation)
-        let latestLogs: any[];
-
-        if (wkLogIds.length === 0 && targetScheduleDate) {
-          // Fallback: query MessageLog by scheduleDate directly
-          const logMatch: any = { messageType: filter, scheduleDate: { $regex: new RegExp("^" + targetScheduleDate) } };
-          latestLogs = await MessageLog.aggregate([
-            { $match: logMatch },
-            { $sort: { sentAt: -1 } },
-            {
-              $group: {
-                _id: "$toNumber",
-                status: { $first: "$status" },
-                sentAt: { $first: "$sentAt" },
-                messageLogId: { $first: "$_id" },
-              }
-            },
-          ]);
-
-          if (latestLogs.length === 0) {
-            return { logMap: {} as Record<string, any>, confirmMap: {} as Record<string, any> };
-          }
-
-          // Look up confirmations for these specific log IDs
-          const fallbackLogIds = latestLogs.map((l: any) => l.messageLogId);
-          const fallbackConfirmations = await ScheduleConfirmation.find(
-            { messageLogId: { $in: fallbackLogIds } },
-            { messageLogId: 1, status: 1, changeRemarks: 1 }
-          ).lean();
-
-          const confirmMap: Record<string, any> = {};
-          fallbackConfirmations.forEach((c: any) => {
-            confirmMap[c.messageLogId.toString()] = c;
-          });
-
-          const logMap: Record<string, any> = {};
-          latestLogs.forEach((log: any) => {
-            const confirmation = confirmMap[log.messageLogId.toString()];
-            let finalStatus = log.status;
-            let changeRemarks = "";
-            if (confirmation?.status === "confirmed") finalStatus = "confirmed";
-            else if (confirmation?.status === "change_requested") {
-              finalStatus = "change_requested";
-              changeRemarks = confirmation.changeRemarks || "";
-            }
-            logMap[log._id] = {
-              status: finalStatus,
-              createdAt: log.sentAt?.toISOString?.() || log.sentAt,
-              ...(changeRemarks ? { changeRemarks } : {}),
-            };
-          });
-
-          return { logMap, confirmMap };
-        }
-
-        if (wkLogIds.length === 0) {
-          return { logMap: {} as Record<string, any>, confirmMap: {} as Record<string, any> };
-        }
-
-        // Step 2: Get latest log per phone — scoped to week's messageLogIds
-        latestLogs = await MessageLog.aggregate([
-          { $match: { _id: { $in: wkLogIds }, messageType: filter } },
-          { $sort: { sentAt: -1 } },
-          {
-            $group: {
-              _id: "$toNumber",
-              status: { $first: "$status" },
-              sentAt: { $first: "$sentAt" },
-              messageLogId: { $first: "$_id" },
-            }
-          },
-        ]);
-
-        // Build confirmation map from the already-fetched confirmations
-        const confirmMap: Record<string, any> = {};
-        weekConfirmations.forEach((c: any) => {
-          confirmMap[c.messageLogId.toString()] = c;
-        });
-
-        // Build log map keyed by phone number
-        const logMap: Record<string, any> = {};
-        latestLogs.forEach((log: any) => {
-          const confirmation = confirmMap[log.messageLogId.toString()];
-          let finalStatus = log.status;
-          let changeRemarks = "";
-          if (confirmation?.status === "confirmed") finalStatus = "confirmed";
-          else if (confirmation?.status === "change_requested") {
-            finalStatus = "change_requested";
-            changeRemarks = confirmation.changeRemarks || "";
-          }
-          logMap[log._id] = {
-            status: finalStatus,
-            createdAt: log.sentAt?.toISOString?.() || log.sentAt,
-            ...(changeRemarks ? { changeRemarks } : {}),
-          };
-        });
-
-        return { logMap, confirmMap };
-      })()
-      : Promise.resolve({ logMap: {} as Record<string, any>, confirmMap: {} as Record<string, any> });
-
-    const [employees, schedules, routes, { logMap: messageLogStatusMap }, routeTypesList] = await Promise.all([
+    const [employees, schedules, routes, routeTypesList] = await Promise.all([
       employeePromise,
       schedulePromise,
       routePromise,
-      messagingStatusPromise,
       routeTypePromise,
     ]);
 
@@ -409,10 +273,22 @@ export async function GET(req: NextRequest) {
       const empSchedules = scheduleMap[emp.transporterId] || [];
       const normalizedPhone = emp.phoneNumber.startsWith("+") ? emp.phoneNumber : `+1${emp.phoneNumber.replace(/\D/g, "")}`;
 
-      // Get messaging status from MessageLog (source of truth)
+      // Get messaging status from schedule arrays (single source of truth)
       const messagingStatus: Record<string, { status: string; createdAt: string } | null> = {};
-      if (filter) {
-        messagingStatus[filter] = messageLogStatusMap[normalizedPhone] || null;
+      if (filter && scheduleField) {
+        // Find the schedule for the target date
+        const targetDate = date || (filter === "shift" || filter === "route-itinerary" ? getTodayPacific() : getTomorrowPacific());
+        const targetSched = empSchedules.find((s: any) => toPacificDate(s.date) === targetDate);
+        if (targetSched) {
+          const entries = targetSched[scheduleField] || [];
+          if (entries.length > 0) {
+            const lastEntry = entries[entries.length - 1];
+            messagingStatus[filter] = {
+              status: lastEntry.status,
+              createdAt: lastEntry.createdAt?.toISOString?.() || lastEntry.createdAt || "",
+            };
+          }
+        }
       }
 
       return {

@@ -47,6 +47,12 @@ function formatDate(d: string) {
     } catch { return d; }
 }
 
+function formatDateOnly(d: string) {
+    try {
+        return safeDate(d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" });
+    } catch { return d; }
+}
+
 function formatShortDate(d: string) {
     try {
         return safeDate(d).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
@@ -264,41 +270,29 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
             return <WeeklyScheduleCard weekSchedules={data.weekSchedules} yearWeek={data.yearWeek} />;
         }
         if (data?.schedule) {
+            const config = getShiftConfig(data.schedule.type);
             return (
                 <div className="bg-zinc-800/60 rounded-2xl p-5 border border-zinc-700/50 mb-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                        </div>
-                        <span className="text-zinc-200 text-sm font-semibold">Schedule Details</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-xs">
-                        <div>
-                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Day</span>
-                            <p className="text-zinc-200 font-medium mt-1">{data.schedule.weekDay || "—"}</p>
-                        </div>
-                        <div>
+                    <div className="grid grid-cols-2 gap-5 text-sm">
+                        <div className="text-center">
                             <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Date</span>
-                            <p className="text-zinc-200 font-medium mt-1">{data.scheduleDate ? formatDate(data.scheduleDate) : "—"}</p>
+                            <p className="text-zinc-100 font-semibold mt-1.5 text-base">{data.scheduleDate ? formatDateOnly(data.scheduleDate) : "—"}</p>
                         </div>
-                        <div>
+                        <div className="text-center">
+                            <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Day</span>
+                            <p className="text-zinc-100 font-semibold mt-1.5 text-base">{data.schedule.weekDay || "—"}</p>
+                        </div>
+                        <div className="text-center">
                             <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Shift Type</span>
-                            <div className="mt-1">
-                                {(() => {
-                                    const cfg = getShiftConfig(data.schedule.type);
-                                    return (
-                                        <span className={`inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${cfg.bg} ${cfg.color}`}>
-                                            {cfg.label}
-                                        </span>
-                                    );
-                                })()}
+                            <div className="mt-1.5 flex justify-center">
+                                <span className={`inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${config.bg} ${config.color}`}>
+                                    {config.label}
+                                </span>
                             </div>
                         </div>
-                        <div>
+                        <div className="text-center">
                             <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Start Time</span>
-                            <p className="text-zinc-200 font-medium mt-1">{formatTime(data.schedule.startTime) || "—"}</p>
+                            <p className="text-zinc-100 font-semibold mt-1.5 text-base">{formatTime(data.schedule.startTime) || "—"}</p>
                         </div>
                     </div>
                 </div>
@@ -325,7 +319,7 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                         <div className="relative">
                             <h1 className="text-xl font-bold text-white tracking-tight">{getMessageTitle(data?.messageType || "")}</h1>
                             {data?.employeeName && (
-                                <p className="text-sm text-zinc-400 mt-1.5">{data.employeeName}</p>
+                                <p className="text-lg font-bold text-zinc-200 mt-2">{data.employeeName}</p>
                             )}
                         </div>
                     </div>
@@ -494,11 +488,10 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                     )}
 
                     {/* Footer with Logo */}
-                    <div className="px-6 py-4 border-t border-zinc-800/80 flex flex-col items-center gap-2">
+                    <div className="px-6 py-4 border-t border-zinc-800/80 flex items-center justify-center">
                         <div className="bg-white rounded-xl px-4 py-2 shadow-lg shadow-blue-500/10">
                             <img src="/symx-logo.png" alt="SYMX Logistics" className="h-6 object-contain" />
                         </div>
-                        <p className="text-zinc-600 text-[10px]">Powered by SYMX Systems</p>
                     </div>
                 </div>
             </div>

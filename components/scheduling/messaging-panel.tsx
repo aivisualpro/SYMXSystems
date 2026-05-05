@@ -421,6 +421,7 @@ interface HistoryLog {
   messageType: string;
   content: string;
   status: string;
+  sentBy?: string;
   sentAt: string;
   deliveredAt?: string;
   repliedAt?: string;
@@ -574,6 +575,9 @@ function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <ArrowUpRight className="h-3 w-3 text-primary" />
                     <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Sent</span>
+                    {log.sentBy && (
+                      <span className="text-[10px] text-muted-foreground/70">by {log.sentBy.replace(/@.*$/, '')}</span>
+                    )}
                     <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.sentAt)}</span>
                   </div>
                   <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">{log.content}</pre>
