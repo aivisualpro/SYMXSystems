@@ -272,9 +272,27 @@ export async function GET(req: NextRequest) {
                 history,
             };
         });
+        // ── Enrich routes with resolved type name from typeId ──
+        const rtIdToName = new Map<string, string>();
+        for (const rt of allRouteTypes) {
+            rtIdToName.set(String(rt._id), rt.name || "");
+        }
+
+        const enrichedRoutes = routes.map((r: any) => {
+            const typeId = r.typeId ? String(r.typeId) : "";
+            const resolvedType = typeId ? (rtIdToName.get(typeId) || r.type || "") : (r.type || "");
+            const emp = employeeMap[(r.transporterId || "").trim().toUpperCase()] || {};
+            return {
+                ...r,
+                type: resolvedType,
+                employeeName: emp.name || r.transporterId,
+                profileImage: emp.profileImage || "",
+                phone: emp.phoneNumber || "",
+            };
+        });
 
         return NextResponse.json({
-            routes,
+            routes: enrichedRoutes,
             employees: employeeMap,
             routeCounts: routeCountMap,
             routeCountsByDate: routeDateMap,

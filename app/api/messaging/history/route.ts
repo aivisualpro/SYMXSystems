@@ -3,15 +3,16 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
+import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 
 export const dynamic = "force-dynamic";
 /**
  * GET /api/messaging/history
  *
- * Single source of truth: reads messaging history from
- * SYMXEmployeeSchedules messaging arrays only.
- * No MessageLog or ScheduleConfirmation joins.
+ * Reads messaging history from:
+ * - SYMXEmployeeSchedules messaging arrays (shift, future-shift, etc.)
+ * - SYMXScheduleConfirmations collection (week-schedule)
  */
 export async function GET(req: NextRequest) {
     try {
@@ -31,6 +32,75 @@ export async function GET(req: NextRequest) {
 
         await connectToDatabase();
 
+        // ── week-schedule: read from SYMXScheduleConfirmations ──
+        if (messageType === "week-schedule") {
+            if (!yearWeek) {
+                return NextResponse.json({ logs: [] });
+            }
+
+            const confirmations = await ScheduleConfirmation.find({
+                yearWeek,
+                messageType: "week-schedule",
+            }).sort({ createdAt: -1 }).lean() as any[];
+
+            if (confirmations.length === 0) {
+                return NextResponse.json({ logs: [] });
+            }
+
+            // Employee name lookup
+            const transporterIds = [...new Set(confirmations.map((c: any) => c.transporterId))];
+            const employees = await SymxEmployee.find(
+                { transporterId: { $in: transporterIds } },
+                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1 }
+            ).lean() as any[];
+
+            const empMap = new Map<string, any>();
+            for (const emp of employees) {
+                empMap.set(emp.transporterId, emp);
+            }
+
+            const logs = confirmations.map((c: any) => {
+                const emp = empMap.get(c.transporterId);
+                const empName = c.employeeName || (emp ? `${emp.firstName} ${emp.lastName}`.toUpperCase() : c.transporterId);
+                const empPhone = emp?.phoneNumber || "";
+
+                return {
+                    _id: String(c._id),
+                    recipientName: empName,
+                    toNumber: empPhone.startsWith("+") ? empPhone : `+1${empPhone.replace(/\D/g, "")}`,
+                    messageType: "week-schedule",
+                    content: c.content || "",
+                    status: c.status === "confirmed" ? "received_reply"
+                        : c.status === "change_requested" ? "received_reply"
+                        : "sent",
+                    sentBy: c.createdBy || "",
+                    sentAt: c.createdAt,
+                    confirmationEvents: c.status !== "pending" ? [{
+                        status: c.status,
+                        ...(c.status === "confirmed" ? { confirmedAt: c.confirmedAt } : {}),
+                        ...(c.status === "change_requested" ? {
+                            changeRequestedAt: c.changeRequestedAt,
+                            changeRemarks: c.changeRemarks || "",
+                        } : {}),
+                        createdBy: "employee",
+                    }] : [],
+                    confirmation: c.status !== "pending" ? {
+                        status: c.status,
+                        ...(c.status === "confirmed" ? { confirmedAt: c.confirmedAt } : {}),
+                        ...(c.status === "change_requested" ? {
+                            changeRequestedAt: c.changeRequestedAt,
+                            changeRemarks: c.changeRemarks || "",
+                        } : {}),
+                    } : null,
+                };
+            });
+
+            const res = NextResponse.json({ logs });
+            res.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+            return res;
+        }
+
+        // ── Other tabs: read from SYMXEmployeeSchedules arrays ──
         const scheduleField = TAB_TO_SCHEDULE_FIELD[messageType];
         if (!scheduleField) {
             return NextResponse.json({ logs: [] });

@@ -7,6 +7,7 @@ import SYMXRoute from "@/lib/models/SYMXRoute";
 
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 import RouteType from "@/lib/models/RouteType";
+import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 
 export const dynamic = "force-dynamic";
 /** Business timezone — all "today" / "tomorrow" checks use Pacific Time. */
@@ -270,14 +271,40 @@ export async function GET(req: NextRequest) {
       seenTransporterIds.add(emp.transporterId);
       return true;
     });
+    // ── Pre-fetch week-schedule confirmations from SYMXScheduleConfirmations ──
+    let weekScheduleConfMap: Map<string, any> | null = null;
+    if (filter === "week-schedule" && yearWeek) {
+      const confirmations = await ScheduleConfirmation.find(
+        { yearWeek, messageType: "week-schedule" },
+        { transporterId: 1, status: 1, createdAt: 1 }
+      ).sort({ createdAt: -1 }).lean() as any[];
+
+      weekScheduleConfMap = new Map<string, any>();
+      // Keep only the latest per transporterId
+      for (const c of confirmations) {
+        if (!weekScheduleConfMap.has(c.transporterId)) {
+          weekScheduleConfMap.set(c.transporterId, c);
+        }
+      }
+    }
+
     const enrichedEmployees = uniqueEmployees.map((emp: any) => {
       const empSchedules = scheduleMap[emp.transporterId] || [];
       const normalizedPhone = emp.phoneNumber.startsWith("+") ? emp.phoneNumber : `+1${emp.phoneNumber.replace(/\D/g, "")}`;
 
-      // Get messaging status from schedule arrays (single source of truth)
+      // Get messaging status
       const messagingStatus: Record<string, { status: string; createdAt: string } | null> = {};
-      if (filter && scheduleField) {
-        // Find the schedule for the target date
+      if (filter === "week-schedule" && weekScheduleConfMap) {
+        // week-schedule: look up from SYMXScheduleConfirmations
+        const conf = weekScheduleConfMap.get(emp.transporterId);
+        if (conf) {
+          messagingStatus[filter] = {
+            status: conf.status,
+            createdAt: conf.createdAt?.toISOString?.() || conf.createdAt || "",
+          };
+        }
+      } else if (filter && scheduleField) {
+        // Other tabs: from schedule arrays (single source of truth)
         const targetDate = date || (filter === "shift" || filter === "route-itinerary" ? getTodayPacific() : getTomorrowPacific());
         const targetSched = empSchedules.find((s: any) => toPacificDate(s.date) === targetDate);
         if (targetSched) {

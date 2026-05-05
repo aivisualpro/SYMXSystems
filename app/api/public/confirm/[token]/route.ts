@@ -206,30 +206,42 @@ export async function GET(
             scheduleDate = new Date(scheduleInfo.date).toISOString().split("T")[0];
         }
 
-        const messageContent = entry.content || null;
+        const messageContent = entry.content || (result as any).legacyDoc?.content || null;
 
-        // Derive current confirmation status from the schedule's messaging array
-        const entries: any[] = schedule[field] || [];
+        // Derive current confirmation status
         let currentStatus = "pending";
         let confirmedAt: any = undefined;
         let changeRequestedAt: any = undefined;
         let changeRemarks: any = undefined;
 
-        if (entries.length > 0) {
-            const statusPriority: Record<string, number> = {
-                confirmed: 5, change_requested: 4, received: 3, delivered: 2, sent: 1, pending: 0,
-            };
-            let bestEntry = entries[entries.length - 1];
-            let bestPriority = -1;
-            for (const e of entries) {
-                const p = statusPriority[e.status] ?? -1;
-                if (p > bestPriority) { bestPriority = p; bestEntry = e; }
+        if ((result as any).legacyDoc) {
+            // week-schedule: status lives on the SYMXScheduleConfirmations doc
+            const ld = (result as any).legacyDoc;
+            currentStatus = ld.status || "pending";
+            if (ld.status === "confirmed") confirmedAt = ld.confirmedAt;
+            if (ld.status === "change_requested") {
+                changeRequestedAt = ld.changeRequestedAt;
+                changeRemarks = ld.changeRemarks || "";
             }
-            currentStatus = bestEntry.status || "pending";
-            if (bestEntry.status === "confirmed") confirmedAt = bestEntry.createdAt;
-            if (bestEntry.status === "change_requested") {
-                changeRequestedAt = bestEntry.createdAt;
-                changeRemarks = bestEntry.changeRemarks || "";
+        } else {
+            // Other tabs: derive from the schedule's messaging array
+            const entries: any[] = schedule[field] || [];
+            if (entries.length > 0) {
+                const statusPriority: Record<string, number> = {
+                    confirmed: 5, change_requested: 4, received: 3, delivered: 2, sent: 1, pending: 0,
+                };
+                let bestEntry = entries[entries.length - 1];
+                let bestPriority = -1;
+                for (const e of entries) {
+                    const p = statusPriority[e.status] ?? -1;
+                    if (p > bestPriority) { bestPriority = p; bestEntry = e; }
+                }
+                currentStatus = bestEntry.status || "pending";
+                if (bestEntry.status === "confirmed") confirmedAt = bestEntry.createdAt;
+                if (bestEntry.status === "change_requested") {
+                    changeRequestedAt = bestEntry.createdAt;
+                    changeRemarks = bestEntry.changeRemarks || "";
+                }
             }
         }
 
@@ -269,13 +281,32 @@ export async function POST(
             return NextResponse.json({ error: "Invalid or expired link" }, { status: 404 });
         }
 
-        const { schedule, field, entry } = result;
+        const { schedule, field, entry, legacyDoc } = result;
 
         // Check expiry
         if (entry.expiresAt && new Date() > new Date(entry.expiresAt)) {
             return NextResponse.json({ error: "This confirmation link has expired" }, { status: 410 });
         }
 
+        // ── week-schedule (SYMXScheduleConfirmations): update the confirmation doc directly ──
+        if (legacyDoc) {
+            if (action === "confirm") {
+                await ScheduleConfirmation.updateOne(
+                    { _id: legacyDoc._id },
+                    { $set: { status: "confirmed", confirmedAt: new Date() } }
+                );
+                return NextResponse.json({ success: true, status: "confirmed" });
+            } else if (action === "change_request") {
+                await ScheduleConfirmation.updateOne(
+                    { _id: legacyDoc._id },
+                    { $set: { status: "change_requested", changeRequestedAt: new Date(), changeRemarks: remarks || "" } }
+                );
+                return NextResponse.json({ success: true, status: "change_requested" });
+            }
+            return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+        }
+
+        // ── Other tabs: update SymxEmployeeSchedule arrays ──
         if (action === "confirm") {
             // Update the schedule entry status
             await SymxEmployeeSchedule.updateOne(

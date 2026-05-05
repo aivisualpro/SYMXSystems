@@ -147,11 +147,27 @@ export async function POST(req: NextRequest) {
             sentAt: new Date(),
           }).catch(() => null);
 
-          // ── Push "sent" status into the SymxEmployeeSchedule ──────────────
-          // Single source of truth: token, content, and all status data
-          // lives in the shiftNotification/futureShift/routeItinerary array.
-          // NO ScheduleConfirmation collection is used.
-          if (scheduleField && recipient.transporterId) {
+          // ── Persist status to the appropriate data store ──────────────
+          if (messageType === "week-schedule" && recipient.transporterId && confirmationToken) {
+            // week-schedule: store in SYMXScheduleConfirmations collection
+            try {
+              const ScheduleConfirmation = (await import("@/lib/models/ScheduleConfirmation")).default;
+              await ScheduleConfirmation.create({
+                token: confirmationToken,
+                transporterId: recipient.transporterId,
+                employeeName: recipient.name || "",
+                yearWeek: recipient.yearWeek || "",
+                messageType: "week-schedule",
+                status: "pending",
+                createdBy: senderEmail,
+                content: personalizedContent,
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+              });
+            } catch (schedErr: any) {
+              console.error("[Messaging] ScheduleConfirmation create error:", schedErr.message);
+            }
+          } else if (scheduleField && recipient.transporterId) {
+            // Other tabs: push "sent" status into the SymxEmployeeSchedule array
             try {
               const scheduleQuery: Record<string, any> = { transporterId: recipient.transporterId };
               if (recipient.scheduleDate) {
@@ -172,7 +188,7 @@ export async function POST(req: NextRequest) {
                   openPhoneMessageId,
                 };
 
-                // Store token + expiry directly in the entry (replaces ScheduleConfirmation)
+                // Store token + expiry directly in the entry
                 if (confirmationToken) {
                   entryData.token = confirmationToken;
                   entryData.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days

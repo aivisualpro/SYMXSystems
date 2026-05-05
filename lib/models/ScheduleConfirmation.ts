@@ -9,6 +9,8 @@ export interface IScheduleConfirmation extends Document {
     yearWeek: string;
     messageType: string;
     messageLogId?: mongoose.Types.ObjectId;
+    createdBy: string;    // sender email
+    content?: string;     // SMS content for history display
 
     // Confirmation state
     status: "pending" | "confirmed" | "change_requested";
@@ -44,6 +46,8 @@ const ScheduleConfirmationSchema = new Schema<IScheduleConfirmation>(
         yearWeek: { type: String, default: "" },
         messageType: { type: String, required: true },
         messageLogId: { type: Schema.Types.ObjectId, ref: "MessageLog" },
+        createdBy: { type: String, default: "" },
+        content: { type: String, default: "" },
         status: {
             type: String,
             enum: ["pending", "confirmed", "change_requested"],

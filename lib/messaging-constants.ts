@@ -13,5 +13,5 @@ export const TAB_TO_SCHEDULE_FIELD: Record<string, string> = {
     "future-shift": "futureShift",
     "off-tomorrow": "futureShift",       // merged into futureShift
     "route-itinerary": "routeItinerary",
-    // "week-schedule" — lives in SYMXScheduleConfirmations only, no schedule array
+    // "week-schedule" — uses SYMXScheduleConfirmations collection (not a schedule array)
 };
