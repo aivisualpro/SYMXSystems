@@ -86,48 +86,63 @@ export async function GET(req: NextRequest) {
                 new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
             );
 
-            // Find key entries
-            const sentEntry = sorted.find((e: any) => e.status === "sent");
-            const deliveredEntry = sorted.find((e: any) => e.status === "delivered");
-            const receivedEntry = sorted.find((e: any) => e.status === "received");
+            // Split into sessions: each "sent" entry starts a new group,
+            // subsequent entries (delivered, received, confirmed, change_requested)
+            // belong to that session until the next "sent".
+            const sessions: any[][] = [];
+            for (const entry of sorted) {
+                if (entry.status === "sent") {
+                    sessions.push([entry]);
+                } else if (sessions.length > 0) {
+                    sessions[sessions.length - 1].push(entry);
+                } else {
+                    // Orphaned entry before any sent — start a session anyway
+                    sessions.push([entry]);
+                }
+            }
 
-            // Build ALL confirmation events (change_requested, confirmed, etc.) in order
-            const confirmationEvents = sorted
-                .filter((e: any) => e.status === "confirmed" || e.status === "change_requested")
-                .map((e: any) => ({
-                    status: e.status,
-                    ...(e.status === "confirmed" ? { confirmedAt: e.createdAt } : {}),
-                    ...(e.status === "change_requested" ? {
-                        changeRequestedAt: e.createdAt,
-                        changeRemarks: e.changeRemarks || "",
-                    } : {}),
-                    createdBy: e.createdBy || "",
-                }));
+            // Build a log entry for each session
+            for (let si = 0; si < sessions.length; si++) {
+                const session = sessions[si];
+                const sentEntry = session.find((e: any) => e.status === "sent");
+                const deliveredEntry = session.find((e: any) => e.status === "delivered");
+                const receivedEntry = session.find((e: any) => e.status === "received");
 
-            // Determine overall status (latest confirmation wins)
-            const lastConfEvent = confirmationEvents.length > 0
-                ? confirmationEvents[confirmationEvents.length - 1]
-                : null;
-            let overallStatus = sorted[sorted.length - 1]?.status || "sent";
-            if (lastConfEvent) overallStatus = "received_reply";
+                const confirmationEvents = session
+                    .filter((e: any) => e.status === "confirmed" || e.status === "change_requested")
+                    .map((e: any) => ({
+                        status: e.status,
+                        ...(e.status === "confirmed" ? { confirmedAt: e.createdAt } : {}),
+                        ...(e.status === "change_requested" ? {
+                            changeRequestedAt: e.createdAt,
+                            changeRemarks: e.changeRemarks || "",
+                        } : {}),
+                        createdBy: e.createdBy || "",
+                    }));
 
-            // Single confirmation object for backward compat (last event)
-            let confirmation: any = lastConfEvent || null;
+                const lastConfEvent = confirmationEvents.length > 0
+                    ? confirmationEvents[confirmationEvents.length - 1]
+                    : null;
+                let overallStatus = session[session.length - 1]?.status || "sent";
+                if (lastConfEvent) overallStatus = "received_reply";
 
-            logs.push({
-                _id: `${sched._id}_${messageType}`,
-                recipientName: empName,
-                toNumber: empPhone.startsWith("+") ? empPhone : `+1${empPhone.replace(/\D/g, "")}`,
-                messageType,
-                content: sentEntry?.content || "",
-                status: overallStatus,
-                sentBy: sentEntry?.createdBy || "",
-                sentAt: sentEntry?.createdAt || sorted[0]?.createdAt || sched.createdAt,
-                deliveredAt: deliveredEntry?.createdAt || undefined,
-                receivedAt: receivedEntry?.createdAt || undefined,
-                confirmationEvents,
-                confirmation,
-            });
+                const confirmation: any = lastConfEvent || null;
+
+                logs.push({
+                    _id: `${sched._id}_${messageType}_${si}`,
+                    recipientName: empName,
+                    toNumber: empPhone.startsWith("+") ? empPhone : `+1${empPhone.replace(/\D/g, "")}`,
+                    messageType,
+                    content: sentEntry?.content || "",
+                    status: overallStatus,
+                    sentBy: sentEntry?.createdBy || "",
+                    sentAt: sentEntry?.createdAt || session[0]?.createdAt || sched.createdAt,
+                    deliveredAt: deliveredEntry?.createdAt || undefined,
+                    receivedAt: receivedEntry?.createdAt || undefined,
+                    confirmationEvents,
+                    confirmation,
+                });
+            }
         }
 
         // Sort by sentAt descending
