@@ -3,6 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../layout";
+import { useRouteTypes } from "@/lib/query/hooks/useShared";
+import { getContrastText } from "@/lib/route-types";
 
 import { cn } from "@/lib/utils";
 import {
@@ -57,10 +59,20 @@ function toPacificDate(d: string | Date): string {
 // ── Type Options (colored pills) ──
 import { getTypeStyle, TYPE_OPTIONS, TYPE_MAP } from "@/lib/route-types";
 
+/** Strip trailing seconds from time strings: "6:30:00" → "6:30" */
+function stripSec(v: string): string {
+    if (!v) return v;
+    if ((v.match(/:/g) || []).length === 2) return v.replace(/:\d{2}$/, "");
+    return v;
+}
+function isDelayPositive(d: string): boolean {
+    return !!d && !d.startsWith("-") && d !== "0:00" && d !== "00:00";
+}
+
 // ── Column Definitions ──
 const COLUMNS = [
-    { key: "employee", label: "Employee", width: "w-[150px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold" },
-    { key: "type", label: "Type", width: "w-[95px] shrink-0" },
+    { key: "employee", label: "Employee", width: "w-[200px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold pl-3" },
+    { key: "type", label: "Type", width: "w-[115px] shrink-0" },
     { key: "routeNumber", label: "Route #", width: "w-[80px] shrink-0" },
     { key: "stopCount", label: "Stops", width: "w-[70px] shrink-0" },
     { key: "routeDuration", label: "Duration", width: "w-[80px] shrink-0" },
@@ -142,6 +154,8 @@ interface RouteRow {
     deliveryCompletionTime: string;
     dctDelay: string;
     stopsRescued: number;
+    typeId: string;
+    typeColor: string;
     driverEfficiency: number;
 }
 
@@ -159,6 +173,23 @@ export default function EfficiencyPage() {
     // ── Quick Edit Modal State ──
     const [quickEditRow, setQuickEditRow] = useState<RouteRow | null>(null);
     const [quickEditForm, setQuickEditForm] = useState<Partial<RouteRow>>({});
+
+    // ── Route Types for dynamic color resolution ──
+    const { data: storeRouteTypes } = useRouteTypes();
+    const routeTypeIdMap = useMemo(() => {
+        const map = new Map<string, any>();
+        if (Array.isArray(storeRouteTypes)) storeRouteTypes.forEach((rt: any) => map.set(String(rt._id), rt));
+        return map;
+    }, [storeRouteTypes]);
+    const routeTypeNameMap = useMemo(() => {
+        const map = new Map<string, any>();
+        if (Array.isArray(storeRouteTypes)) storeRouteTypes.forEach((rt: any) => map.set((rt.name || "").trim().toLowerCase(), rt));
+        return map;
+    }, [storeRouteTypes]);
+    const resolveRT = useCallback((row: { typeId?: string; type: string }) => {
+        if (row.typeId) { const rt = routeTypeIdMap.get(row.typeId); if (rt) return rt; }
+        return routeTypeNameMap.get((row.type || "").trim().toLowerCase()) || null;
+    }, [routeTypeIdMap, routeTypeNameMap]);
 
     // ── Parse Smart Time ──
     const parseSmartTime = (val: string) => {
@@ -194,6 +225,8 @@ export default function EfficiencyPage() {
                 weekDay: rec.weekDay || "",
                 employeeName: emp?.name || rec.transporterId,
                 type: rec.type || "",
+                typeId: rec.typeId || "",
+                typeColor: "", // resolved below via routeTypeIdMap
                 routeNumber: rec.routeNumber || "",
                 stopCount: rec.stopCount || 0,
                 routeDuration: rec.routeDuration || "",
@@ -221,9 +254,14 @@ export default function EfficiencyPage() {
                 driverEfficiency: rec.driverEfficiency || 0,
             };
         });
-        setAllRoutes(rows);
+        // Resolve typeColor from DB types
+        const resolvedRows = rows.map(row => {
+            const rt = row.typeId ? routeTypeIdMap.get(row.typeId) : routeTypeNameMap.get((row.type || "").trim().toLowerCase());
+            return { ...row, typeColor: rt?.color || "" };
+        });
+        setAllRoutes(resolvedRows);
         setLoading(false);
-    }, [rawRouteData, rawRouteDataLoading]);
+    }, [rawRouteData, rawRouteDataLoading, routeTypeIdMap, routeTypeNameMap]);
 
     // ── Helper: patch TanStack cache directly for instant cross-tab sync ──
     const patchRouteCache = useCallback((routeId: string, updates: Record<string, any>) => {
@@ -383,10 +421,11 @@ export default function EfficiencyPage() {
     const renderCell = (row: RouteRow, field: keyof RouteRow, value: any) => {
         const isEditable = EDITABLE_FIELDS.has(field);
         const raw = value === 0 || value === "" ? "—" : String(value);
-        const displayVal = raw === "—" ? raw : raw.replace(/:\d{2}$/, "");
+        const displayVal = raw === "—" ? raw : stripSec(raw);
 
         const isTimeField = field.toLowerCase().includes("time") || field.toLowerCase().includes("delay") || field.toLowerCase().includes("duration") || field.toLowerCase().includes("stem") || field.toLowerCase().includes("stop");
         const isNumeric = ["stopCount", "stopsPerHour", "stopsRescued", "driverEfficiency"].includes(field);
+        const isDelayField = field.toLowerCase().includes("delay");
 
         const handleInputKey = (val: string) => isTimeField ? parseSmartTime(val) : val;
 
@@ -394,26 +433,26 @@ export default function EfficiencyPage() {
         let Icon = null;
         if (displayVal === "—") {
             customBg = "text-muted-foreground/40";
-        } else {
-            if (field === "lastStopDelay") {
+        } else if (isDelayField) {
+            // Color all delay fields green/red like Routes page
+            customBg = isDelayPositive(String(value)) ? "text-red-400" : "text-emerald-500";
+            // Extra alert styling for critical delays
+            if (field === "lastStopDelay" || field === "dctDelay") {
                 const parts = String(value).split(":");
                 if (parts.length >= 2) {
                     const mins = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-                    if (mins >= 105) { customBg = "bg-red-600 text-white font-bold px-1.5 py-0.5 rounded shadow-sm"; Icon = AlertCircle; }
+                    const threshold = field === "lastStopDelay" ? 105 : 5;
+                    if (mins >= threshold) { customBg = "bg-red-600 text-white font-bold px-1.5 py-0.5 rounded shadow-sm"; Icon = AlertCircle; }
                 }
-            } else if (field === "actualDepartureTime") {
+            }
+        } else {
+            if (field === "actualDepartureTime") {
                 const actDepParts = String(value).split(":");
                 const waveParts = String(row.waveTime || "").split(":");
                 if (actDepParts.length >= 2 && waveParts.length >= 2) {
                     const actMins = parseInt(actDepParts[0], 10) * 60 + parseInt(actDepParts[1], 10);
                     const waveMins = parseInt(waveParts[0], 10) * 60 + parseInt(waveParts[1], 10);
                     if (actMins >= waveMins + 80) { customBg = "bg-red-600 text-white font-bold px-1.5 py-0.5 rounded shadow-sm"; Icon = AlertCircle; }
-                }
-            } else if (field === "dctDelay") {
-                const parts = String(value).split(":");
-                if (parts.length >= 2) {
-                    const mins = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-                    if (mins >= 5) { customBg = "bg-red-600 text-white font-bold px-1.5 py-0.5 rounded shadow-sm"; Icon = AlertCircle; }
                 }
             }
         }
@@ -440,7 +479,7 @@ export default function EfficiencyPage() {
             );
         }
 
-        // Read-only display (no per-cell pencil icons)
+        // Read-only display
         const CellContent = Icon ? (
             <div className={cn("flex items-center gap-1 w-max", customBg)}>
                 <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -457,15 +496,21 @@ export default function EfficiencyPage() {
         );
     };
 
-    // ── Type pill ──
+    // ── Type pill — uses DB color via resolveRT ──
     const renderType = (row: RouteRow) => {
-        const typeStyle = getTypeStyle(row.type);
-        const matched = TYPE_MAP.get((row.type || "").trim().toLowerCase());
-        const CellIcon = matched?.icon;
+        const rt = resolveRT(row);
+        const color = rt?.color || getTypeStyle(row.type).colorHex || "#6B7280";
+        const label = row.type || "—";
         return (
-            <div className={cn("relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold border select-none px-1.5", typeStyle.bg, typeStyle.text, typeStyle.border)}>
-                {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
-                <span className="truncate">{row.type || <Minus className="h-3 w-3 opacity-40" />}</span>
+            <div
+                className="relative flex items-center justify-center gap-1 h-7 rounded-md text-[11px] font-semibold border select-none px-1.5"
+                style={{
+                    backgroundColor: color,
+                    color: getContrastText(color),
+                    borderColor: color,
+                }}
+            >
+                <span className="truncate">{label}</span>
             </div>
         );
     };
@@ -483,7 +528,7 @@ export default function EfficiencyPage() {
                 <div className="flex-1 overflow-auto w-full relative">
                     <div className="w-max min-w-full flex flex-col min-h-full">
                         {/* Header */}
-                        <div className="flex items-center gap-1 px-3 py-2.5 border-b border-border/50 bg-card sticky top-0 z-30 shadow-sm">
+                        <div className="flex items-center gap-1 py-2.5 border-b border-border/50 bg-card sticky top-0 z-30 shadow-sm">
                             {COLUMNS.map((col) => {
                                 const isSticky = col.key === "employee";
                                 return (
@@ -491,7 +536,7 @@ export default function EfficiencyPage() {
                                         className={cn(
                                             "flex items-center gap-0.5 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold hover:text-foreground transition-colors text-left",
                                             col.width,
-                                            isSticky ? "bg-card hover:bg-muted/40 z-30" : ""
+                                            isSticky ? "bg-card self-stretch" : ""
                                         )}>
                                         {col.label}
                                         {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />)}
@@ -503,18 +548,16 @@ export default function EfficiencyPage() {
                         {/* Rows */}
                         <div className="flex-1">
                             {displayRows.map((row) => (
-                                <div key={row._id} className="flex items-center gap-1 px-3 py-1.5 border-b border-border/20 hover:bg-muted/20 transition-colors group/row">
-                                    <div className="w-[150px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold group-hover/row:bg-muted/20 transition-colors flex items-center gap-1.5 min-w-0 pr-2">
-                                        {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
-                                        {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
+                                <div key={row._id} className="flex items-center gap-1 py-1.5 border-b border-border/20 hover:bg-muted/20 transition-colors group/row">
+                                    <div className="w-[200px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold flex items-center gap-1.5 min-w-0 pl-3 pr-2 overflow-hidden self-stretch">
                                         <span
                                             className="text-[11px] font-semibold truncate"
-                                            style={{ color: getTypeStyle(row.type).colorHex || "inherit" }}
+                                            style={{ color: row.typeColor || getTypeStyle(row.type).colorHex || "inherit" }}
                                         >
                                             {row.employeeName}
                                         </span>
                                     </div>
-                                    <div className="w-[95px] shrink-0 pr-2">
+                                    <div className="w-[115px] shrink-0 pr-2">
                                         {renderType(row)}
                                     </div>
                                     <div className="w-[80px] shrink-0">{renderCell(row, "routeNumber", row.routeNumber)}</div>
@@ -564,10 +607,6 @@ export default function EfficiencyPage() {
                         </div>
                     </div>
 
-                    {/* Footer */}
-                    <div className="flex items-center justify-between p-2.5 border-t border-border/50 bg-muted/20 z-10 sticky bottom-0">
-                        <span className="text-[11px] text-muted-foreground">{totalFiltered} of {totalForDate} employees</span>
-                    </div>
                 </div>
 
                 {/* ── Quick Edit Modal ── */}

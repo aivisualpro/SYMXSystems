@@ -40,7 +40,7 @@ const COLUMNS: ColumnDef[] = [
     { key: "routeDuration", label: "Duration", width: 80, type: "text" },
     { key: "waveTime", label: "Wave", width: 80, type: "dropdown", dropdownKind: "waveTime" },
     { key: "pad", label: "PAD", width: 70, type: "dropdown", dropdownKind: "pad" },
-    { key: "wst", label: "WST", width: 80, type: "dropdown", dropdownKind: "wst" },
+    { key: "wst", label: "WST", width: 110, type: "dropdown", dropdownKind: "wst" },
     { key: "wstDuration", label: "WST Dur", width: 72, type: "text" },
     { key: "bags", label: "Bags", width: 60, type: "text" },
     { key: "ov", label: "OV", width: 55, type: "text" },
@@ -361,6 +361,8 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             if (!res.ok) throw new Error(data.error);
             toast.success(`Saved ${data.saved} rows${data.synced > 0 ? `, synced ${data.synced} to Routes` : ""}`);
             setDirtyRows(new Set());
+            // Small delay to ensure DB writes are fully committed before refetch
+            await new Promise(r => setTimeout(r, 500));
             refreshRoutes();
         } catch (err: any) {
             toast.error(err.message || "Failed to save");
@@ -1202,7 +1204,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
 
         if (col.dropdownKind === "driver") {
             return (
-                <div className="absolute top-full left-0 mt-1 w-64 max-h-[240px] bg-card border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-150">
+                <div className="absolute top-full left-0 mt-1 w-full max-h-[240px] bg-card border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-150">
                     {/* Search */}
                     <div className="p-1.5 border-b border-border">
                         <div className="relative">
@@ -1244,7 +1246,6 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                 >
                                     <div className="flex-1 min-w-0">
                                         <div className="font-medium truncate">{emp.name}</div>
-                                        <div className="text-[9px] text-muted-foreground">{emp.transporterId}</div>
                                     </div>
                                     {isSelected && <Check className="h-3 w-3 text-primary shrink-0" />}
                                 </button>
@@ -1267,7 +1268,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             const label = col.dropdownKind === "waveTime" ? "wave time" : "PAD";
 
             return (
-                <div className="absolute top-full left-0 mt-1 w-48 max-h-[240px] bg-card border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-150">
+                <div className="absolute top-full left-0 mt-1 w-full max-h-[240px] bg-card border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-150">
                     {totalCount > 5 && (
                         <div className="p-1.5 border-b border-border">
                             <div className="relative">
@@ -1326,7 +1327,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
 
         // WST dropdown (shows wst name + revenue)
         return (
-            <div className="absolute top-full left-0 mt-1 w-52 max-h-[240px] bg-card border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-150">
+            <div className="absolute top-full left-0 mt-1 w-full max-h-[240px] bg-card border border-border rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in-0 zoom-in-95 duration-150">
                 {wstOptions.length > 5 && (
                     <div className="p-1.5 border-b border-border">
                         <div className="relative">
@@ -1419,9 +1420,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                                         {formattedDate}
                                     </span>
                                 </h2>
-                                <span className="text-[10px] text-muted-foreground">
-                                    {TOTAL_ROWS} rows
-                                </span>
+
                             </div>
                         </div>
                         <div className="flex items-center gap-2">

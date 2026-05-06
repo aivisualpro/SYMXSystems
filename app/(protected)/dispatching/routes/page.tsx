@@ -396,10 +396,16 @@ export default function RoutesPage() {
             }
         });
 
-        return vehicles.filter(v => {
+        const filtered = vehicles.filter(v => {
             if (v.vehicleName === currentVan) return true;
             return !assignedOnDay.has(v.vehicleName);
         });
+
+        // Active vans first (sorted), inactive/non-active vans at the bottom (sorted separately)
+        const isInactive = (v: any) => v.status && v.status.toLowerCase() !== "active";
+        const active = filtered.filter(v => !isInactive(v)).sort((a, b) => (a.vehicleName || "").localeCompare(b.vehicleName || "", undefined, { numeric: true }));
+        const inactive = filtered.filter(v => isInactive(v)).sort((a, b) => (a.vehicleName || "").localeCompare(b.vehicleName || "", undefined, { numeric: true }));
+        return [...active, ...inactive];
     }, [vehicles, allRoutes]);
 
     // ── Helper: patch TanStack cache directly for instant cross-tab sync ──

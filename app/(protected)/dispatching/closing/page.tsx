@@ -93,6 +93,22 @@ function ClosingPageContent() {
     // Modal & Highlight State
     const [inspectingRoute, setInspectingRoute] = useState<RouteRow | null>(null);
     const [highlightId, setHighlightId] = useState<string | null>(null);
+    const [systemTimezone, setSystemTimezone] = useState<string>("America/Los_Angeles");
+
+    // ── Fetch system timezone ──
+    useEffect(() => {
+        fetch("/api/admin/settings/general")
+            .then(r => r.json())
+            .then(d => { if (d?.system_timezone) setSystemTimezone(d.system_timezone); })
+            .catch(() => {});
+    }, []);
+
+    // ── Future date check ──
+    const isFutureDate = useMemo(() => {
+        if (!selectedDate) return false;
+        const todayInTz = new Intl.DateTimeFormat("en-CA", { timeZone: systemTimezone }).format(new Date());
+        return selectedDate > todayInTz;
+    }, [selectedDate, systemTimezone]);
 
     // ── Handle highlight timer ──
     useEffect(() => {
@@ -207,9 +223,9 @@ function ClosingPageContent() {
                 : String(bVal).localeCompare(String(aVal));
         });
 
-        // Split into pending and done
-        const pending = sorted.filter(r => !r.inspectionTime || r.inspectionTime.trim() === "");
-        const done = sorted.filter(r => r.inspectionTime && r.inspectionTime.trim() !== "");
+        // Split into pending and done — require BOTH inspectionTime AND inspectionId
+        const pending = sorted.filter(r => !r.inspectionTime || r.inspectionTime.trim() === "" || !r.inspectionId);
+        const done = sorted.filter(r => r.inspectionTime && r.inspectionTime.trim() !== "" && !!r.inspectionId);
 
         return { pendingRows: pending, doneRows: done, totalFiltered: sorted.length };
     }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir]);
@@ -282,12 +298,16 @@ function ClosingPageContent() {
                             <button
                                 key={row._id}
                                 onClick={() => {
+                                    if (isFutureDate) return;
                                     setInspectingRoute({
                                         ...row,
                                         genuineVin: (row.van && vehiclesMap[row.van]) ? vehiclesMap[row.van] : ""
                                     } as any);
                                 }}
-                                className="w-full text-left p-3 rounded-xl border border-border/40 bg-zinc-500/5 hover:bg-zinc-500/10 hover:border-primary/40 transition-all flex items-center gap-3 group relative overflow-hidden"
+                                className={cn(
+                                        "w-full text-left p-3 rounded-xl border border-border/40 bg-zinc-500/5 hover:bg-zinc-500/10 hover:border-primary/40 transition-all flex items-center gap-3 group relative overflow-hidden",
+                                        isFutureDate && "opacity-50 cursor-not-allowed hover:border-border/40"
+                                    )}
                             >
                                 {/* Hover sweep effect */}
                                 <div className="absolute inset-x-0 bottom-0 h-0.5 bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
@@ -333,9 +353,15 @@ function ClosingPageContent() {
 
                                 {/* Action Buttons */}
                                 <div className="flex items-center gap-2 pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <div className="px-2.5 py-1.5 rounded-md bg-primary/10 text-primary border border-primary/30 font-bold text-[10px] uppercase tracking-wider transition-colors z-10">
-                                        Inspect
-                                    </div>
+                                    {isFutureDate ? (
+                                        <div className="px-2.5 py-1.5 rounded-md bg-muted text-muted-foreground border border-border font-bold text-[10px] uppercase tracking-wider">
+                                            Future Date
+                                        </div>
+                                    ) : (
+                                        <div className="px-2.5 py-1.5 rounded-md bg-primary/10 text-primary border border-primary/30 font-bold text-[10px] uppercase tracking-wider transition-colors z-10">
+                                            Inspect
+                                        </div>
+                                    )}
                                 </div>
                             </button>
                         );
@@ -447,9 +473,18 @@ function ClosingPageContent() {
                                     {renderCell(row.routeDuration)}
                                     {renderCell(row.waveTime)}
 
-                                    {/* Highlighted Inspection Time */}
+                                    {/* Highlighted Inspection Time — AM/PM format */}
                                     <span className="inline-flex items-center justify-start px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-500 w-fit">
-                                        {row.inspectionTime}
+                                        {row.inspectionTime
+                                            ? (() => {
+                                                const [h, m] = row.inspectionTime.split(":").map(Number);
+                                                if (isNaN(h) || isNaN(m)) return row.inspectionTime;
+                                                const suffix = h >= 12 ? "PM" : "AM";
+                                                const hour12 = h % 12 === 0 ? 12 : h % 12;
+                                                return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
+                                            })()
+                                            : "—"
+                                        }
                                     </span>
 
                                     {renderCell(row.actualDepartureTime)}
