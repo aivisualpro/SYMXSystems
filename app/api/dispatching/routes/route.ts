@@ -343,10 +343,15 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // If regenerating, delete existing routes first so they are re-created from fresh schedule data
+        // ══════════════════════════════════════════════════════════
+        // SAFE REGENERATION — NO MORE deleteMany()!
+        // Instead of deleting all routes and recreating them (which
+        // permanently destroys time data, attendance, van assignments,
+        // and all other manually-entered fields), we now upsert only
+        // the schedule-level fields. Existing data is preserved.
+        // ══════════════════════════════════════════════════════════
         if (existingCount > 0 && regenerate) {
-            console.log(`[Generate Routes] Regenerating: deleting ${existingCount} existing routes for ${yearWeek}`);
-            await SYMXRoute.deleteMany({ yearWeek });
+            console.log(`[Generate Routes] Safe regeneration: updating ${existingCount} existing routes for ${yearWeek} (preserving all manual data)`);
         }
 
         // Fetch all schedules for this week — only fields needed for route generation
@@ -392,8 +397,10 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // Create route records — one per working schedule entry (typeId only, no type/subType)
-        // Use bulkWrite with upserts to handle the unique {transporterId, date} index gracefully
+        // Create/update route records — SAFE UPSERT approach
+        // Only schedule-level fields are updated ($set). All manually-entered
+        // fields (time data, attendance, van, route info) are NEVER overwritten.
+        // New routes get default empty values via $setOnInsert.
         const db = mongoose.connection.db!;
         const routesCol = db.collection("SYMXRoutes");
 
@@ -407,7 +414,7 @@ export async function POST(req: NextRequest) {
                         yearWeek,
                         typeId: s.typeId ? String(s.typeId) : "",
                     },
-                    // Only set van on NEW inserts — never overwrite existing van assignments
+                    // Only set these on NEW inserts — never overwrite existing data
                     $setOnInsert: {
                         van: s.van || "",
                         serviceType: "",
