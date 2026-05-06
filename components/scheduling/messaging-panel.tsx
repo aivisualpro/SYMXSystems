@@ -108,7 +108,8 @@ interface QuoPhoneNumber {
 // ── Helpers ──
 const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const BUSINESS_TZ = "America/Los_Angeles";
+const DEFAULT_BUSINESS_TZ = "America/Los_Angeles";
+let BUSINESS_TZ = DEFAULT_BUSINESS_TZ;
 
 /** Format a raw phone number to (XXX) XXX-XXXX display format. */
 function formatPhone(raw: string): string {
@@ -449,7 +450,7 @@ interface HistoryLog {
   }>;
 }
 
-function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate }: { messageType: string; selectedPhones?: string[]; yearWeek?: string; scheduleDate?: string }) {
+function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate, timezone }: { messageType: string; selectedPhones?: string[]; yearWeek?: string; scheduleDate?: string; timezone?: string }) {
   const [logs, setLogs] = useState<HistoryLog[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -476,8 +477,47 @@ function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate
 
   const formatTime = (d: string) => {
     try {
-      return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
+      return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: timezone || BUSINESS_TZ });
     } catch { return d; }
+  };
+
+  // ── Group logs by employee (toNumber), sorted oldest → newest ──
+  const groupedLogs = useMemo(() => {
+    const map = new Map<string, { name: string; phone: string; logs: HistoryLog[] }>();
+    filteredLogs.forEach((log) => {
+      const key = log.toNumber;
+      if (!map.has(key)) {
+        map.set(key, { name: log.recipientName, phone: log.toNumber, logs: [] });
+      }
+      map.get(key)!.logs.push(log);
+    });
+    // Sort each group's logs oldest → newest
+    for (const group of map.values()) {
+      group.logs.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+    }
+    return Array.from(map.values());
+  }, [filteredLogs]);
+
+  // Default open state: open when exactly 1 employee group
+  const isSingleEmployee = groupedLogs.length === 1;
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+
+  // Auto-open when there's only 1 employee
+  useEffect(() => {
+    if (isSingleEmployee && groupedLogs.length === 1) {
+      setOpenGroups(new Set([groupedLogs[0].phone]));
+    } else {
+      setOpenGroups(new Set());
+    }
+  }, [isSingleEmployee, groupedLogs.length]);
+
+  const toggleGroup = (phone: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(phone)) next.delete(phone);
+      else next.add(phone);
+      return next;
+    });
   };
 
   if (loading) {
@@ -501,111 +541,140 @@ function MessageHistoryTab({ messageType, selectedPhones, yearWeek, scheduleDate
 
   return (
     <div className="flex-1 overflow-auto">
-      {filteredLogs.map((log) => (
-        <div key={log._id} className="border-b border-border/30 last:border-0 px-3 py-3 space-y-2">
-          {/* Employee Header */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold truncate">{log.recipientName}</span>
-            <span className="text-[10px] text-muted-foreground">{log.toNumber}</span>
-          </div>
+      {groupedLogs.map((group) => {
+        const isOpen = openGroups.has(group.phone);
+        // Derive latest status for the summary badge
+        const latestLog = group.logs[0];
+        const latestStatus = latestLog?.confirmation?.status || latestLog?.status || "sent";
 
-          {/* Sent Card */}
-          <div className="rounded-lg bg-primary/5 border border-primary/10 p-3">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <ArrowUpRight className="h-3 w-3 text-primary" />
-              <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Sent</span>
-              {log.sentBy && <span className="text-[10px] text-muted-foreground/70">by {log.sentBy.replace(/@.*$/, "")}</span>}
-              <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.sentAt)}</span>
-            </div>
-            <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">{log.content}</pre>
-          </div>
+        return (
+          <div key={group.phone} className="border-b border-border/30 last:border-0">
+            {/* ── Accordion Header — Employee Name + Number (shown once) ── */}
+            <button
+              type="button"
+              onClick={() => toggleGroup(group.phone)}
+              className="flex items-center gap-2 w-full px-3 py-2.5 hover:bg-muted/30 transition-colors text-left"
+            >
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200",
+                  isOpen && "rotate-180"
+                )}
+              />
+              <span className="text-xs font-semibold truncate">{group.name}</span>
+              <span className="text-[10px] text-muted-foreground">{group.phone}</span>
+              <span className="ml-auto text-[9px] text-muted-foreground/70 tabular-nums">
+                {group.logs.length} msg{group.logs.length !== 1 ? "s" : ""}
+              </span>
+            </button>
 
-          {/* Delivered */}
-          {log.deliveredAt && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/5 border border-blue-500/10">
-              <CheckCircle2 className="h-3 w-3 text-blue-500" />
-              <span className="text-[10px] text-blue-500 font-medium">Delivered</span>
-              <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.deliveredAt)}</span>
-            </div>
-          )}
-
-          {/* Received (employee opened/received the link) */}
-          {log.receivedAt && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-violet-500/5 border border-violet-500/10">
-              <ArrowDownLeft className="h-3 w-3 text-violet-500" />
-              <span className="text-[10px] text-violet-500 font-medium">Received</span>
-              <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.receivedAt)}</span>
-            </div>
-          )}
-
-          {/* Confirmation Events Timeline — shows ALL status changes */}
-          {log.confirmationEvents && log.confirmationEvents.length > 0 ? (
-            log.confirmationEvents.map((evt, idx) => (
-              <div key={idx}>
-                {evt.status === "change_requested" && (
-                  <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-3">
-                    <div className="flex items-center gap-1.5">
-                      <ArrowDownLeft className="h-3 w-3 text-amber-500" />
-                      <span className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider">Change Requested</span>
-                      {evt.createdBy && <span className="text-[10px] text-muted-foreground/70">by {evt.createdBy.replace(/@.*$/, "")}</span>}
-                      <span className="text-[10px] text-muted-foreground ml-auto">{evt.changeRequestedAt ? formatTime(evt.changeRequestedAt) : ""}</span>
+            {/* ── Accordion Body — Message Cards ── */}
+            {isOpen && (
+              <div className="px-3 pb-3 space-y-2">
+                {group.logs.map((log) => (
+                  <div key={log._id} className="space-y-2">
+                    {/* Sent Card */}
+                    <div className="rounded-lg bg-primary/5 border border-primary/10 p-3">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <ArrowUpRight className="h-3 w-3 text-primary" />
+                        <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Sent</span>
+                        {log.sentBy && <span className="text-[10px] text-muted-foreground/70">by {log.sentBy.replace(/@.*$/, "")}</span>}
+                        <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.sentAt)}</span>
+                      </div>
+                      <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">{log.content}</pre>
                     </div>
-                    {evt.changeRemarks && (
-                      <p className="text-[11px] text-amber-600 dark:text-amber-400 italic mt-1">&ldquo;{evt.changeRemarks}&rdquo;</p>
+
+                    {/* Delivered */}
+                    {log.deliveredAt && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/5 border border-blue-500/10">
+                        <CheckCircle2 className="h-3 w-3 text-blue-500" />
+                        <span className="text-[10px] text-blue-500 font-medium">Delivered</span>
+                        <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.deliveredAt)}</span>
+                      </div>
+                    )}
+
+                    {/* Received */}
+                    {log.receivedAt && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-violet-500/5 border border-violet-500/10">
+                        <ArrowDownLeft className="h-3 w-3 text-violet-500" />
+                        <span className="text-[10px] text-violet-500 font-medium">Received</span>
+                        <span className="text-[10px] text-muted-foreground ml-auto">{formatTime(log.receivedAt)}</span>
+                      </div>
+                    )}
+
+                    {/* Confirmation Events Timeline */}
+                    {log.confirmationEvents && log.confirmationEvents.length > 0 ? (
+                      log.confirmationEvents.map((evt, idx) => (
+                        <div key={idx}>
+                          {evt.status === "change_requested" && (
+                            <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-3">
+                              <div className="flex items-center gap-1.5">
+                                <ArrowDownLeft className="h-3 w-3 text-amber-500" />
+                                <span className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider">Change Requested</span>
+                                {evt.createdBy && <span className="text-[10px] text-muted-foreground/70">by {evt.createdBy.replace(/@.*$/, "")}</span>}
+                                <span className="text-[10px] text-muted-foreground ml-auto">{evt.changeRequestedAt ? formatTime(evt.changeRequestedAt) : ""}</span>
+                              </div>
+                              {evt.changeRemarks && (
+                                <p className="text-[11px] text-amber-600 dark:text-amber-400 italic mt-1">&ldquo;{evt.changeRemarks}&rdquo;</p>
+                              )}
+                            </div>
+                          )}
+                          {evt.status === "confirmed" && (
+                            <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3">
+                              <div className="flex items-center gap-1.5">
+                                <ArrowDownLeft className="h-3 w-3 text-emerald-500" />
+                                <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Confirmed</span>
+                                {evt.createdBy && <span className="text-[10px] text-muted-foreground/70">by {evt.createdBy.replace(/@.*$/, "")}</span>}
+                                <span className="text-[10px] text-muted-foreground ml-auto">{evt.confirmedAt ? formatTime(evt.confirmedAt) : ""}</span>
+                              </div>
+                              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">✅ Employee confirmed their schedule</p>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <>
+                        {/* Fallback: single confirmation (backward compat) */}
+                        {log.confirmation?.status === "confirmed" && (
+                          <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3">
+                            <div className="flex items-center gap-1.5">
+                              <ArrowDownLeft className="h-3 w-3 text-emerald-500" />
+                              <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Confirmed</span>
+                              <span className="text-[10px] text-muted-foreground ml-auto">{log.confirmation.confirmedAt ? formatTime(log.confirmation.confirmedAt) : ""}</span>
+                            </div>
+                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">✅ Employee confirmed their schedule</p>
+                          </div>
+                        )}
+
+                        {log.confirmation?.status === "change_requested" && (
+                          <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-3">
+                            <div className="flex items-center gap-1.5">
+                              <ArrowDownLeft className="h-3 w-3 text-amber-500" />
+                              <span className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider">Change Requested</span>
+                              <span className="text-[10px] text-muted-foreground ml-auto">{log.confirmation.changeRequestedAt ? formatTime(log.confirmation.changeRequestedAt) : ""}</span>
+                            </div>
+                            {log.confirmation.changeRemarks && (
+                              <p className="text-[11px] text-amber-600 dark:text-amber-400 italic mt-1">&ldquo;{log.confirmation.changeRemarks}&rdquo;</p>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Error */}
+                    {log.status === "failed" && log.errorMessage && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-500/5 border border-red-500/10">
+                        <XCircle className="h-3 w-3 text-red-500" />
+                        <span className="text-[10px] text-red-500 font-medium">Error: {log.errorMessage}</span>
+                      </div>
                     )}
                   </div>
-                )}
-                {evt.status === "confirmed" && (
-                  <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3">
-                    <div className="flex items-center gap-1.5">
-                      <ArrowDownLeft className="h-3 w-3 text-emerald-500" />
-                      <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Confirmed</span>
-                      {evt.createdBy && <span className="text-[10px] text-muted-foreground/70">by {evt.createdBy.replace(/@.*$/, "")}</span>}
-                      <span className="text-[10px] text-muted-foreground ml-auto">{evt.confirmedAt ? formatTime(evt.confirmedAt) : ""}</span>
-                    </div>
-                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">✅ Employee confirmed their schedule</p>
-                  </div>
-                )}
+                ))}
               </div>
-            ))
-          ) : (
-            <>
-              {/* Fallback: single confirmation (backward compat) */}
-              {log.confirmation?.status === "confirmed" && (
-                <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3">
-                  <div className="flex items-center gap-1.5">
-                    <ArrowDownLeft className="h-3 w-3 text-emerald-500" />
-                    <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Confirmed</span>
-                    <span className="text-[10px] text-muted-foreground ml-auto">{log.confirmation.confirmedAt ? formatTime(log.confirmation.confirmedAt) : ""}</span>
-                  </div>
-                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">✅ Employee confirmed their schedule</p>
-                </div>
-              )}
-
-              {log.confirmation?.status === "change_requested" && (
-                <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-3">
-                  <div className="flex items-center gap-1.5">
-                    <ArrowDownLeft className="h-3 w-3 text-amber-500" />
-                    <span className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider">Change Requested</span>
-                    <span className="text-[10px] text-muted-foreground ml-auto">{log.confirmation.changeRequestedAt ? formatTime(log.confirmation.changeRequestedAt) : ""}</span>
-                  </div>
-                  {log.confirmation.changeRemarks && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400 italic mt-1">&ldquo;{log.confirmation.changeRemarks}&rdquo;</p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Error */}
-          {log.status === "failed" && log.errorMessage && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-500/5 border border-red-500/10">
-              <XCircle className="h-3 w-3 text-red-500" />
-              <span className="text-[10px] text-red-500 font-medium">Error: {log.errorMessage}</span>
-            </div>
-          )}
-        </div>
-      ))}
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -637,6 +706,7 @@ function MessagingSubTab({
   onSelectionReport,
   onEligibleReport,
   onTemplateSave,
+  timezone,
 }: {
   tab: SubTab;
   weeks: string[];
@@ -663,6 +733,7 @@ function MessagingSubTab({
   onSelectionReport?: (count: number) => void;
   onEligibleReport?: (count: number) => void;
   onTemplateSave?: (tabId: string, content: string) => void;
+  timezone?: string;
 }) {
   // Use prefetched data from parent — stable reference to avoid infinite re-renders
   const EMPTY: EmployeeRecipient[] = useMemo(() => [], []);
@@ -1277,6 +1348,7 @@ function MessagingSubTab({
                               createdAt={liveStatus.createdAt}
                               changeRemarks={liveStatus.changeRemarks}
                               isLiveUpdate={isLiveHighlight}
+                              timezone={timezone}
                             />
                           );
                         }
@@ -1288,13 +1360,14 @@ function MessagingSubTab({
                               status={msgStatus.status}
                               createdAt={msgStatus.createdAt}
                               changeRemarks={(msgStatus as any).changeRemarks}
+                              timezone={timezone}
                             />
                           );
                         }
                         // 3. Fallback: show live send result from this session
                         if (sendResult) {
                           return sendResult.success ? (
-                            <MessageStatusBadge status="sent" />
+                            <MessageStatusBadge status="sent" timezone={timezone} />
                           ) : (
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -1749,6 +1822,7 @@ function MessagingSubTab({
                     .map((e) => e.phoneNumber.startsWith("+") ? e.phoneNumber : `+1${e.phoneNumber.replace(/\D/g, "")}`)
                   : undefined
               }
+              timezone={timezone}
             />
           )}
 
@@ -1888,6 +1962,20 @@ export default function MessagingPanel({
         }
         setRouteTypeMap(cMap);
         setRouteIconMap(iMap);
+      })
+      .catch(() => {});
+  }, []);
+
+  // ── System Timezone fetched ONCE here, shared to all sub-tabs via props ──
+  const [systemTimezone, setSystemTimezone] = useState<string>(DEFAULT_BUSINESS_TZ);
+  useEffect(() => {
+    fetch("/api/admin/settings/general?key=system_timezone")
+      .then(r => r.json())
+      .then(data => {
+        if (data?.value) {
+          BUSINESS_TZ = data.value;
+          setSystemTimezone(data.value);
+        }
       })
       .catch(() => {});
   }, []);
@@ -2288,6 +2376,7 @@ export default function MessagingPanel({
                   onSelectionReport={setActiveSelectedCount}
                   onEligibleReport={setActiveEligibleCount}
                   onTemplateSave={(tabId, content) => setTemplatesByTab(prev => ({ ...prev, [tabId]: content }))}
+                  timezone={systemTimezone}
                 />
               </div>
             );

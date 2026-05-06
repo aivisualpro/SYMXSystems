@@ -11,6 +11,17 @@ const SETTING_KEY = "routes_completion_types";
 const RTS_SETTING_KEY = "everyday_logic_rts";
 const ATTENDANCE_SETTING_KEY = "everyday_logic_attendance";
 const DISPATCHING_DETAILS_SETTING_KEY = "dispatching_logic_details";
+const TIMEZONE_SETTING_KEY = "system_timezone";
+
+const TIMEZONE_OPTIONS = [
+    { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
+    { value: "America/Denver", label: "Mountain Time (MT)" },
+    { value: "America/Chicago", label: "Central Time (CT)" },
+    { value: "America/New_York", label: "Eastern Time (ET)" },
+    { value: "America/Anchorage", label: "Alaska Time (AKT)" },
+    { value: "Pacific/Honolulu", label: "Hawaii Time (HT)" },
+    { value: "America/Phoenix", label: "Arizona (no DST)" },
+];
 
 export default function GeneralSettingsPage() {
     const [routeTypes, setRouteTypes] = useState<string[]>([]);
@@ -18,6 +29,9 @@ export default function GeneralSettingsPage() {
     const [rtsEnabled, setRtsEnabled] = useState(false);
     const [attendanceEnabled, setAttendanceEnabled] = useState(true);
     const [dispatchingDetailsEnabled, setDispatchingDetailsEnabled] = useState(true);
+    const [selectedTimezone, setSelectedTimezone] = useState("America/Los_Angeles");
+    const [tzOpen, setTzOpen] = useState(false);
+    const tzDropdownRef = useRef<HTMLDivElement>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [dirty, setDirty] = useState(false);
@@ -35,6 +49,17 @@ export default function GeneralSettingsPage() {
         return () => document.removeEventListener("mousedown", handler);
     }, []);
 
+    // Close timezone dropdown on outside click
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (tzDropdownRef.current && !tzDropdownRef.current.contains(e.target as Node)) {
+                setTzOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, []);
+
     // Fetch route types from Default Routes + current setting in parallel
     useEffect(() => {
         setLoading(true);
@@ -44,8 +69,9 @@ export default function GeneralSettingsPage() {
             fetch(`/api/admin/settings/general?key=${RTS_SETTING_KEY}`).then(r => r.json()),
             fetch(`/api/admin/settings/general?key=${ATTENDANCE_SETTING_KEY}`).then(r => r.json()),
             fetch(`/api/admin/settings/general?key=${DISPATCHING_DETAILS_SETTING_KEY}`).then(r => r.json()),
+            fetch(`/api/admin/settings/general?key=${TIMEZONE_SETTING_KEY}`).then(r => r.json()),
         ])
-            .then(([types, setting, rtsSetting, attendanceSetting, dispatchingSetting]) => {
+            .then(([types, setting, rtsSetting, attendanceSetting, dispatchingSetting, timezoneSetting]) => {
                 const names = Array.isArray(types) ? types.map((t: any) => t.name) : [];
                 setRouteTypes(names);
                 const saved = Array.isArray(setting?.value) ? setting.value : [];
@@ -54,6 +80,7 @@ export default function GeneralSettingsPage() {
                 // Default attendance to true if no setting saved yet
                 setAttendanceEnabled(attendanceSetting?.value === false || attendanceSetting?.value === "false" ? false : true);
                 setDispatchingDetailsEnabled(dispatchingSetting?.value === false || dispatchingSetting?.value === "false" ? false : true);
+                if (timezoneSetting?.value) setSelectedTimezone(timezoneSetting.value);
             })
             .catch(() => {
                 setRouteTypes([]);
@@ -310,6 +337,87 @@ export default function GeneralSettingsPage() {
                         checked={dispatchingDetailsEnabled}
                         onCheckedChange={handleSaveDispatching}
                     />
+                </div>
+            </div>
+
+            {/* System Timezone */}
+            <div className="rounded-xl border border-border/50 bg-card p-5 space-y-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-sm font-bold">System Timezone</h3>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Default timezone used across Scheduling, Messaging, and Dispatching modules
+                        </p>
+                    </div>
+                </div>
+
+                <div ref={tzDropdownRef} className="relative">
+                    <div
+                        onClick={() => setTzOpen(!tzOpen)}
+                        className={cn(
+                            "flex items-center justify-between w-full min-h-[40px] px-3 py-2 rounded-lg border bg-background text-sm transition-colors cursor-pointer",
+                            tzOpen ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-border/80"
+                        )}
+                    >
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold">
+                                {TIMEZONE_OPTIONS.find(tz => tz.value === selectedTimezone)?.label || selectedTimezone}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono">{selectedTimezone}</span>
+                        </div>
+                        <ChevronDown className={cn("h-4 w-4 text-muted-foreground shrink-0 ml-2 transition-transform", tzOpen && "rotate-180")} />
+                    </div>
+
+                    {tzOpen && (
+                        <div className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-lg py-1 max-h-[240px] overflow-auto">
+                            {TIMEZONE_OPTIONS.map((tz) => {
+                                const isSelected = selectedTimezone === tz.value;
+                                return (
+                                    <button
+                                        key={tz.value}
+                                        type="button"
+                                        onClick={async () => {
+                                            setSelectedTimezone(tz.value);
+                                            setTzOpen(false);
+                                            try {
+                                                const res = await fetch("/api/admin/settings/general", {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({
+                                                        key: TIMEZONE_SETTING_KEY,
+                                                        value: tz.value,
+                                                        description: "System default timezone for time display",
+                                                    }),
+                                                });
+                                                if (!res.ok) throw new Error("Failed to save timezone");
+                                                toast.success(`Timezone set to ${tz.label}`);
+                                            } catch (err: any) {
+                                                toast.error(err.message || "Failed to save timezone");
+                                                setSelectedTimezone(selectedTimezone);
+                                            }
+                                        }}
+                                        className={cn(
+                                            "flex items-center justify-between w-full px-3 py-2.5 text-xs text-left transition-colors",
+                                            isSelected
+                                                ? "bg-primary/5 text-primary font-semibold"
+                                                : "text-foreground hover:bg-muted/50"
+                                        )}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <div className={cn(
+                                                "w-4 h-4 rounded border flex items-center justify-center shrink-0",
+                                                isSelected ? "bg-primary border-primary" : "border-border"
+                                            )}>
+                                                {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
+                                            </div>
+                                            {tz.label}
+                                        </div>
+                                        <span className="text-[10px] text-muted-foreground font-mono">{tz.value}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

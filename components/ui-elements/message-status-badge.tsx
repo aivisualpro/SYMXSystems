@@ -78,6 +78,7 @@ export function MessageStatusBadge({
   isLiveUpdate,
   iconOnly,
   history,
+  timezone,
 }: {
   status: string;
   createdAt?: string;
@@ -85,14 +86,16 @@ export function MessageStatusBadge({
   isLiveUpdate?: boolean;
   iconOnly?: boolean;
   history?: Array<{ status: string; changeRemarks?: string; updatedAt?: string; createdBy?: string; messageType?: string }>;
+  timezone?: string;
 }) {
   const config = STATUS_CONFIG[status];
   if (!config) return null;
 
   const Icon = config.icon;
+  const tz = timezone || "America/Los_Angeles";
   const timeAgo = createdAt
     ? new Date(createdAt).toLocaleString("en-US", {
-      timeZone: "America/Los_Angeles",
+      timeZone: tz,
       month: "short",
       day: "numeric",
       hour: "numeric",
@@ -139,7 +142,7 @@ export function MessageStatusBadge({
             const HIcon = hConfig.icon;
             const hTime = h.updatedAt
               ? new Date(h.updatedAt).toLocaleString("en-US", {
-                  timeZone: "America/Los_Angeles",
+                  timeZone: tz,
                   month: "short",
                   day: "numeric",
                   hour: "numeric",
