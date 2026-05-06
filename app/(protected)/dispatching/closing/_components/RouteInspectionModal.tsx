@@ -87,6 +87,7 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
     const [repairStatuses, setRepairStatuses] = useState<{description: string; color?: string; icon?: string}[]>([]);
     const [lastMileage, setLastMileage] = useState<number | null>(null);
     const [mileageLoading, setMileageLoading] = useState(false);
+    const [saveError, setSaveError] = useState("");
 
     // Fetch repair statuses from dropdown settings
     useEffect(() => {
@@ -153,8 +154,6 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
     const updateForm = (key: string, value: any) => {
         setFormData((prev: any) => ({ ...prev, [key]: value }));
     };
-
-    const [saveError, setSaveError] = useState("");
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
