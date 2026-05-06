@@ -315,28 +315,17 @@ export async function POST(req: NextRequest) {
 const ROUTE_INFO_FIELDS = ["routeNumber", "stopCount", "packageCount", "routeDuration", "waveTime", "pad", "wst", "wstDuration", "bags", "ov", "stagingLocation", "commercialPackages"];
 
 // Build a blank set of route info fields (to clear from old driver)
+// IMPORTANT: Only clears RoutesInfo-owned fields. Time, Closing, and
+// Efficiency fields (amazonAppLogout, actualDepartureTime, stopsPerHour,
+// etc.) are NEVER touched — they belong to other tabs.
 function blankRouteInfoForRoute(): Record<string, any> {
-    return {
-        routeNumber: "",
-        stopCount: 0,
-        packageCount: 0,
-        routeDuration: "",
-        waveTime: "",
-        pad: "",
-        wst: "",
-        wstDuration: 0,
-        bags: "",
-        ov: "",
-        stagingLocation: "",
-        actualDepartureTime: "",
-        actualFirstStop: "",
-        actualLastStop: "",
-        deliveryCompletionTime: "",
-        actualOutboundStem: "",
-        amazonAppLogout: "",
-        stopsPerHour: 0,
-        plannedFirstStop: "",
-    };
+    const blank: Record<string, any> = {};
+    ROUTE_INFO_FIELDS.forEach(f => {
+        blank[f] = (f === "stopCount" || f === "packageCount" || f === "wstDuration")
+            ? 0
+            : "";
+    });
+    return blank;
 }
 
 // Build a sync payload from a RoutesInfo row → SYMXRoute format
