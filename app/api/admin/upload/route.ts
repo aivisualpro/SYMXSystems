@@ -2,6 +2,15 @@ import { getSession } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 
+// Increase Next.js body size limit — default 4MB is too small for document uploads (PDFs, license scans)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "20mb",
+    },
+  },
+};
+
 // Configure Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,

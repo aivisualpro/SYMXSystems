@@ -57,10 +57,20 @@ export function FileUpload({
           body: formData,
         });
 
-        const data = await res.json();
+        // Safely parse — server may return HTML/text on size or auth errors
+        let data: any = {};
+        try {
+          data = await res.json();
+        } catch {
+          const text = await res.text().catch(() => "");
+          if (text.toLowerCase().includes("too large") || text.toLowerCase().includes("entity")) {
+            throw new Error(`File "${file.name}" is too large for the server. Please reduce the file size and try again.`);
+          }
+          throw new Error(`Upload failed: unexpected server response. Please try again.`);
+        }
 
         if (!res.ok) {
-            throw new Error(data.error || "Upload failed");
+          throw new Error(data?.error || `Upload failed (${res.status})`);
         }
 
         uploadedUrls.push(data.secure_url);

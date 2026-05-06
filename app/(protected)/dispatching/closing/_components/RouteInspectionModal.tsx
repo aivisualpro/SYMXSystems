@@ -85,6 +85,8 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
     const [formData, setFormData] = useState<any>({});
     const [sessionEmail, setSessionEmail] = useState("");
     const [repairStatuses, setRepairStatuses] = useState<{description: string; color?: string; icon?: string}[]>([]);
+    const [lastMileage, setLastMileage] = useState<number | null>(null);
+    const [mileageLoading, setMileageLoading] = useState(false);
 
     // Fetch repair statuses from dropdown settings
     useEffect(() => {
@@ -107,23 +109,42 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
             fetch("/api/auth/session")
                 .then(r => r.json())
                 .then(d => {
-                    if (d?.user?.email) {
-                        setSessionEmail(d.user.email);
-                    }
+                    if (d?.user?.email) setSessionEmail(d.user.email);
                 })
-                .catch(() => { });
+                .catch(() => {});
 
+            const vin = route.genuineVin || "";
             setFormData({
-                type: "Route Inspection", // Pre-filled default
+                type: "Route Inspection",
                 driver: route.transporterId || "",
                 employeeName: route.employeeName || "",
-                vin: route.genuineVin || route.van || "",
+                vin,
                 vanDisplay: route.van ? `Van ${route.van}` : "",
                 routeDate: route.date ? toPacificDate(route.date) : "",
-                mileage: 0,
+                mileage: "",
                 anyRepairs: "",
                 comments: "",
             });
+
+            // Auto-fetch last mileage for this VIN
+            if (vin && vin.length >= 3) {
+                setLastMileage(null);
+                setMileageLoading(true);
+                fetch(`/api/fleet/inspections?q=${encodeURIComponent(vin)}&limit=1`)
+                    .then(r => r.json())
+                    .then(d => {
+                        const last = d?.inspections?.[0];
+                        if (last?.mileage) {
+                            const m = Number(last.mileage);
+                            if (!isNaN(m) && m > 0) {
+                                setLastMileage(m);
+                                setFormData((prev: any) => ({ ...prev, mileage: m }));
+                            }
+                        }
+                    })
+                    .catch(() => {})
+                    .finally(() => setMileageLoading(false));
+            }
         }
     }, [open, route]);
 
@@ -133,25 +154,35 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
         setFormData((prev: any) => ({ ...prev, [key]: value }));
     };
 
+    const [saveError, setSaveError] = useState("");
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
+        setSaveError("");
         try {
+            if (!formData.mileage && formData.mileage !== 0) throw new Error("Mileage is required");
+
             const finalData = {
                 ...formData,
+                mileage: Number(formData.mileage) || 0,
+                routeId: route._id || "",
                 inspectedBy: sessionEmail || ""
             };
 
             // 1. Submit to Fleet Inspections
-            const inspectionRes = await fetch("/api/fleet", {
+            const inspectionRes = await fetch("/api/fleet/inspections", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ type: "inspection", data: finalData }),
+                body: JSON.stringify(finalData),
             });
-            if (!inspectionRes.ok) throw new Error("Failed to save inspection");
+            if (!inspectionRes.ok) {
+                const errData = await inspectionRes.json().catch(() => ({}));
+                throw new Error(errData?.error || "Failed to save inspection");
+            }
 
             const dataResponse = await inspectionRes.json();
-            const inspectionId = dataResponse.inspection?._id;
+            const inspectionId = dataResponse.inspection?._id || dataResponse._id;
 
             // 2. Update Route with inspectionTime and inspectionId
             const nowTime = new Date().toLocaleTimeString("en-US", { hour12: false, hour: '2-digit', minute: '2-digit' });
@@ -170,9 +201,9 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
 
             onSaved(route._id, inspectionId);
             onClose();
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            alert("Error saving inspection");
+            setSaveError(err?.message || "Error saving inspection. Please try again.");
         } finally {
             setSaving(false);
         }
@@ -212,9 +243,62 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
 
                         {/* Editable Fields */}
                         <div className="grid grid-cols-2 gap-3">
-                            <FormField label="Mileage">
-                                <input type="number" className={inputClass} value={formData.mileage || ""} onChange={e => updateForm("mileage", parseInt(e.target.value) || 0)} required />
-                            </FormField>
+                            {/* Mileage with stepper buttons */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <label className="block text-[11px] font-medium text-muted-foreground">Mileage</label>
+                                {mileageLoading && (
+                                    <span className="text-[10px] text-muted-foreground/60 animate-pulse">Fetching last…</span>
+                                )}
+                                {!mileageLoading && lastMileage !== null && (
+                                    <span className="text-[10px] text-muted-foreground/70">
+                                        Last: <span className="font-semibold text-foreground/80">{lastMileage.toLocaleString()} mi</span>
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex items-stretch gap-1.5">
+                                {/* Decrement buttons */}
+                                <div className="flex flex-col gap-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => updateForm("mileage", Math.max(0, (Number(formData.mileage) || 0) + 50))}
+                                        className="flex-1 px-2 rounded-md bg-muted/60 hover:bg-primary/20 hover:text-primary border border-border text-muted-foreground text-[10px] font-bold transition-colors flex items-center justify-center"
+                                        title="+50 miles"
+                                    >+50</button>
+                                    <button
+                                        type="button"
+                                        onClick={() => updateForm("mileage", Math.max(0, (Number(formData.mileage) || 0) - 50))}
+                                        className="flex-1 px-2 rounded-md bg-muted/60 hover:bg-red-500/20 hover:text-red-400 border border-border text-muted-foreground text-[10px] font-bold transition-colors flex items-center justify-center"
+                                        title="-50 miles"
+                                    >-50</button>
+                                </div>
+                                {/* Main input */}
+                                <input
+                                    type="number"
+                                    className={inputClass + " flex-1 text-center font-semibold text-base"}
+                                    value={formData.mileage ?? ""}
+                                    onChange={e => updateForm("mileage", e.target.value)}
+                                    placeholder="e.g. 46000"
+                                    min={0}
+                                    required
+                                />
+                                {/* Increment buttons */}
+                                <div className="flex flex-col gap-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => updateForm("mileage", (Number(formData.mileage) || 0) + 1)}
+                                        className="flex-1 px-2 rounded-md bg-muted/60 hover:bg-primary/20 hover:text-primary border border-border text-muted-foreground text-[11px] font-bold transition-colors flex items-center justify-center"
+                                        title="+1 mile"
+                                    >+</button>
+                                    <button
+                                        type="button"
+                                        onClick={() => updateForm("mileage", Math.max(0, (Number(formData.mileage) || 0) - 1))}
+                                        className="flex-1 px-2 rounded-md bg-muted/60 hover:bg-red-500/20 hover:text-red-400 border border-border text-muted-foreground text-[11px] font-bold transition-colors flex items-center justify-center"
+                                        title="-1 mile"
+                                    >−</button>
+                                </div>
+                            </div>
+                        </div>
                             <FormField label="Any Repairs?">
                                 <select className={inputClass} value={formData.anyRepairs || ""} onChange={e => {
                                     updateForm("anyRepairs", e.target.value);
@@ -257,6 +341,11 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
                         </FormField>
                     </div>
 
+                    {saveError && (
+                        <div className="mx-5 mb-3 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-[11px] font-medium">
+                            {saveError}
+                        </div>
+                    )}
                     <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border shrink-0 bg-card">
                         <button type="button" onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted transition-colors">Cancel</button>
                         <button type="submit" disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium transition-colors disabled:opacity-50">
