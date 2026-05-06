@@ -240,65 +240,35 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
                             </FormField>
                         </div>
 
-                        {/* Editable Fields */}
-                        <div className="grid grid-cols-2 gap-3">
-                            {/* Mileage with stepper buttons */}
-                        <div className="space-y-1.5">
-                            <div className="flex items-center justify-between">
-                                <label className="block text-[11px] font-medium text-muted-foreground">Mileage</label>
-                                {mileageLoading && (
-                                    <span className="text-[10px] text-muted-foreground/60 animate-pulse">Fetching last…</span>
-                                )}
-                                {!mileageLoading && lastMileage !== null && (
-                                    <span className="text-[10px] text-muted-foreground/70">
-                                        Last: <span className="font-semibold text-foreground/80">{lastMileage.toLocaleString()} mi</span>
-                                    </span>
-                                )}
-                            </div>
-                            <div className="flex items-stretch gap-1.5">
-                                {/* Decrement buttons */}
-                                <div className="flex flex-col gap-0.5">
-                                    <button
-                                        type="button"
-                                        onClick={() => updateForm("mileage", Math.max(0, (Number(formData.mileage) || 0) + 50))}
-                                        className="flex-1 px-2 rounded-md bg-muted/60 hover:bg-primary/20 hover:text-primary border border-border text-muted-foreground text-[10px] font-bold transition-colors flex items-center justify-center"
-                                        title="+50 miles"
-                                    >+50</button>
-                                    <button
-                                        type="button"
-                                        onClick={() => updateForm("mileage", Math.max(0, (Number(formData.mileage) || 0) - 50))}
-                                        className="flex-1 px-2 rounded-md bg-muted/60 hover:bg-red-500/20 hover:text-red-400 border border-border text-muted-foreground text-[10px] font-bold transition-colors flex items-center justify-center"
-                                        title="-50 miles"
-                                    >-50</button>
-                                </div>
-                                {/* Main input */}
-                                <input
-                                    type="number"
-                                    className={inputClass + " flex-1 text-center font-semibold text-base"}
-                                    value={formData.mileage ?? ""}
-                                    onChange={e => updateForm("mileage", e.target.value)}
-                                    placeholder="e.g. 46000"
-                                    min={0}
-                                    required
-                                />
-                                {/* Increment buttons */}
-                                <div className="flex flex-col gap-0.5">
-                                    <button
-                                        type="button"
-                                        onClick={() => updateForm("mileage", (Number(formData.mileage) || 0) + 1)}
-                                        className="flex-1 px-2 rounded-md bg-muted/60 hover:bg-primary/20 hover:text-primary border border-border text-muted-foreground text-[11px] font-bold transition-colors flex items-center justify-center"
-                                        title="+1 mile"
-                                    >+</button>
-                                    <button
-                                        type="button"
+                        {/* Mileage + Any Repairs — single inline row */}
+                        <div className="flex items-end gap-3">
+                            {/* Mileage */}
+                            <div className="flex-1 space-y-1.5">
+                                <label className="block text-[11px] font-medium text-muted-foreground">Mileage *</label>
+                                <div className="flex items-stretch gap-1.5">
+                                    <button type="button"
                                         onClick={() => updateForm("mileage", Math.max(0, (Number(formData.mileage) || 0) - 1))}
-                                        className="flex-1 px-2 rounded-md bg-muted/60 hover:bg-red-500/20 hover:text-red-400 border border-border text-muted-foreground text-[11px] font-bold transition-colors flex items-center justify-center"
-                                        title="-1 mile"
+                                        className="w-9 h-9 rounded-lg bg-muted/60 hover:bg-red-500/15 hover:text-red-400 border border-border text-muted-foreground text-sm font-bold transition-colors flex items-center justify-center shrink-0"
                                     >−</button>
+                                    <input
+                                        type="number"
+                                        className={inputClass + " flex-1 text-center font-semibold"}
+                                        value={formData.mileage ?? ""}
+                                        onChange={e => updateForm("mileage", e.target.value)}
+                                        placeholder="0"
+                                        min={0}
+                                        required
+                                    />
+                                    <button type="button"
+                                        onClick={() => updateForm("mileage", (Number(formData.mileage) || 0) + 1)}
+                                        className="w-9 h-9 rounded-lg bg-muted/60 hover:bg-primary/15 hover:text-primary border border-border text-muted-foreground text-sm font-bold transition-colors flex items-center justify-center shrink-0"
+                                    >+</button>
                                 </div>
                             </div>
-                        </div>
-                            <FormField label="Any Repairs?">
+
+                            {/* Any Repairs */}
+                            <div className="w-[130px] shrink-0 space-y-1.5">
+                                <label className="block text-[11px] font-medium text-muted-foreground">Any Repairs?</label>
                                 <select className={inputClass} value={formData.anyRepairs || ""} onChange={e => {
                                     updateForm("anyRepairs", e.target.value);
                                     if (e.target.value === "TRUE" && !formData.repairCurrentStatus) {
@@ -308,8 +278,9 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
                                     <option value="">No</option>
                                     <option value="TRUE">Yes</option>
                                 </select>
-                            </FormField>
+                            </div>
                         </div>
+
 
                         {formData.anyRepairs === "TRUE" && (
                             <div className="space-y-3 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
