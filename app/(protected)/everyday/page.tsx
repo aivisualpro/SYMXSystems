@@ -138,6 +138,14 @@ export default function EverydayAfterDispatchingPage() {
 
     const [debounceNotes, setDebounceNotes] = useState(notes);
 
+    // ── Refs to prevent auto-save race conditions on date switch ──
+    const isFetchingRef = useRef(false);          // true while fetchData is in-flight
+    const lastFetchedNotesRef = useRef("");        // notes value from the last fetch
+    const dateRef = useRef(date);                  // stable ref for date (avoids saveNotesToDB identity changes)
+    const attachmentsRef = useRef(attachments);    // stable ref for attachments
+    dateRef.current = date;
+    attachmentsRef.current = attachments;
+
     const [rtsModalOpen, setRtsModalOpen] = useState(false);
     const [rtsModalEditId, setRtsModalEditId] = useState<string | null>(null);
     const [rtsModalRoute, setRtsModalRoute] = useState<RoutesTableRow | null>(null);
@@ -565,6 +573,7 @@ export default function EverydayAfterDispatchingPage() {
     // Fetch data whenever date changes
     const fetchData = useCallback(async () => {
         if (!date || !selectedWeek) return;
+        isFetchingRef.current = true;
         setLoading(true);
         try {
             // 1. Fetch notes
@@ -574,9 +583,13 @@ export default function EverydayAfterDispatchingPage() {
                 const fetchedNotes = notesData.notes || "";
                 setNotes(fetchedNotes);
                 setDebounceNotes(fetchedNotes); // prevent instant auto-save on load
+                lastFetchedNotesRef.current = fetchedNotes; // remember what came from DB
                 setAttachments(notesData.attachments || []);
                 setEndDay(notesData.endDay || false);
             } else {
+                setNotes("");
+                setDebounceNotes("");
+                lastFetchedNotesRef.current = "";
                 setEndDay(false);
             }
 
@@ -698,6 +711,7 @@ export default function EverydayAfterDispatchingPage() {
             toast.error("Failed to load dashboard data");
         } finally {
             setLoading(false);
+            isFetchingRef.current = false;
         }
     }, [date, selectedWeek]);
 
@@ -705,15 +719,18 @@ export default function EverydayAfterDispatchingPage() {
         fetchData();
     }, [fetchData]);
 
-    // Auto-save logic
-    const saveNotesToDB = useCallback(async (notesToSave: string, attsToSave: string[] = attachments) => {
-        if (!date) return;
+    // Auto-save logic — uses refs for date/attachments to avoid re-creating the callback
+    // when date changes, which would trigger a spurious save of old notes to the new date.
+    const saveNotesToDB = useCallback(async (notesToSave: string, attsToSave?: string[]) => {
+        const currentDate = dateRef.current;
+        if (!currentDate) return;
+        const finalAtts = attsToSave ?? attachmentsRef.current;
         setSavingNotes(true);
         try {
             const res = await fetch("/api/everyday", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ date, notes: notesToSave, attachments: attsToSave })
+                body: JSON.stringify({ date: currentDate, notes: notesToSave, attachments: finalAtts })
             });
             if (!res.ok) throw new Error("Failed to save notes");
         } catch (error) {
@@ -721,18 +738,23 @@ export default function EverydayAfterDispatchingPage() {
         } finally {
             setSavingNotes(false);
         }
-    }, [date, attachments]);
+    }, []); // stable — uses refs, no deps change
 
     useEffect(() => {
-        // If debounceNotes differs from initial load, trigger save
-        if (debounceNotes !== notes) return; // Wait until they match (debouncing active)
-        // We need a ref to prevent saving on initial mount, but simpler:
+        // Guard: don't auto-save while a fetch is in-flight (date is switching)
+        if (isFetchingRef.current) return;
+        // Guard: don't auto-save until the debounce has settled
+        if (debounceNotes !== notes) return;
+        // Guard: don't auto-save if notes haven't actually changed from what we fetched
+        if (debounceNotes === lastFetchedNotesRef.current) return;
+        lastFetchedNotesRef.current = debounceNotes; // mark as persisted
         saveNotesToDB(debounceNotes);
-    }, [debounceNotes, saveNotesToDB]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [debounceNotes, notes, saveNotesToDB]);
 
     // manual save override
     const handleSaveNotes = () => {
         setDebounceNotes(notes);
+        lastFetchedNotesRef.current = notes; // mark as persisted to prevent redundant auto-save
         saveNotesToDB(notes);
         toast.success("Notes saved successfully");
     };
