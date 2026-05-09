@@ -212,7 +212,7 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
     // ── Fetch route types for dynamic colors ──
     const [routeTypes, setRouteTypes] = useState<{ name: string; color: string; icon?: string; routeStatus?: string }[]>([]);
     useEffect(() => {
-        fetch("/api/admin/settings/route-types")
+        fetch("/api/public/route-types")
             .then(r => r.json())
             .then((data: any[]) => {
                 if (Array.isArray(data)) setRouteTypes(data.filter(t => t.name));
