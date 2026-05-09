@@ -67,6 +67,7 @@ class AuthRepository {
     final response = await _dio.post(
       '/api/mobile/badge-login',
       data: {'badgeNumber': badgeNumber.trim()},
+      options: Options(validateStatus: (_) => true),
     );
 
     final data = response.data;

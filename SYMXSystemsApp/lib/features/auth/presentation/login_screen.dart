@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -77,8 +78,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         context.go('/home');
       }
     } catch (e) {
-      ref.read(_loginErrorProvider.notifier).state =
-          'Invalid badge number. Please try again.';
+      String msg = 'Invalid badge number. Please try again.';
+      if (e is DioException && e.response?.data != null) {
+        final serverMsg = e.response?.data['error'];
+        if (serverMsg != null) msg = serverMsg.toString();
+      } else if (e is DioException) {
+        msg = 'Network error — check your connection.';
+      }
+      ref.read(_loginErrorProvider.notifier).state = msg;
       _pinController.clear();
       _pinFocusNode.requestFocus();
     } finally {
