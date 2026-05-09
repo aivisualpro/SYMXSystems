@@ -90,6 +90,7 @@ function getShiftConfig(type: string, rtMap?: Map<string, { color: string; icon?
     const rt = rtMap?.get(t);
     if (rt) {
         const isOff = (rt.routeStatus || "").toLowerCase() === "off";
+        // Always use the DB color — isOff only affects row opacity & working-day count
         return { label: type, hexColor: rt.color, isOff, icon: resolveIcon(rt.icon) };
     }
     return { label: type, hexColor: "#52525b", isOff: false, icon: null as any };
@@ -179,8 +180,8 @@ function WeeklyScheduleCard({ weekSchedules, yearWeek, rtMap }: { weekSchedules:
                                 <span
                                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
                                     style={{
-                                        backgroundColor: config.isOff ? '#3f3f46' : config.hexColor,
-                                        color: config.isOff ? '#a1a1aa' : '#fff',
+                                        backgroundColor: config.hexColor,
+                                        color: '#fff',
                                     }}
                                 >
                                     {config.icon && <config.icon className="w-3 h-3" />}
@@ -311,8 +312,8 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                                 <span
                                     className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider"
                                     style={{
-                                        backgroundColor: config.isOff ? '#3f3f46' : config.hexColor,
-                                        color: config.isOff ? '#a1a1aa' : '#fff',
+                                        backgroundColor: config.hexColor,
+                                        color: '#fff',
                                     }}
                                 >
                                     {config.icon && <config.icon className="w-3.5 h-3.5" />}
