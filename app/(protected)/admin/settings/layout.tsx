@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Settings, Upload } from "lucide-react";
+import { Settings, Upload, Database } from "lucide-react";
 
 interface SettingsLayoutProps {
   children: React.ReactNode;
@@ -19,6 +19,11 @@ const tabs = [
     title: "Imports",
     href: "/admin/settings/imports",
     icon: Upload,
+  },
+  {
+    title: "Backups",
+    href: "/admin/settings/backups",
+    icon: Database,
   },
 ];
 
