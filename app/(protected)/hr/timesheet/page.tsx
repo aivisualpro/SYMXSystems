@@ -256,7 +256,7 @@ async function generateTimesheetPDF(
     // Week 2 (days 7-13)
     for (let i = 7; i < 14; i++) {
       const d = days[i];
-      const h = drawRow(y, [fmtDate(d), DAY_NAMES[d.getDay()], "", "", "", "", "", ""], false, i === 7);
+      const h = drawRow(y, [fmtDate(d), DAY_NAMES[d.getDay()], "", "", "", "", "", ""], false, false);
       y += h;
     }
 
