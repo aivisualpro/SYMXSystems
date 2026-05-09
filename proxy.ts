@@ -12,6 +12,7 @@ const publicPaths = [
   "/api/auth/logout",
   "/api/auth/forgot-password",
   "/api/public/",
+  "/api/mobile/",
   "/api/messaging/webhook",
   "/c/",
   "/confirm/",
