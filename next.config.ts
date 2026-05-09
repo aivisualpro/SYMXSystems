@@ -67,6 +67,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      // Flutter web SPA — serve index.html for all /app/* deep-link routes.
+      // The regex negative lookahead skips paths containing a dot (file extensions)
+      // so static assets (.js, .css, .png etc.) are served normally.
+      { source: "/app", destination: "/app/index.html" },
+      { source: "/app/:path((?!.*\\.).*)", destination: "/app/index.html" },
+    ];
+  },
 };
 
 export default nextConfig;
