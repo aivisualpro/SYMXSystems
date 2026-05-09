@@ -104,15 +104,30 @@ export async function GET(req: NextRequest) {
           adjacentWeeks.push(getPrevYearWeek(yearWeek));
         }
       }
-      // For off-tomorrow, also check the previous day which might be in a different week
-      if (filter === "off-tomorrow" && checkDate) {
-        const prevDay = new Date(checkDate + "T12:00:00.000Z");
-        prevDay.setUTCDate(prevDay.getUTCDate() - 1);
-        const prevDayStr = prevDay.toISOString().split("T")[0];
-        const weekDates = getWeekDateStrings(yearWeek);
-        if (!weekDates.includes(prevDayStr)) {
-          const prev = getPrevYearWeek(yearWeek);
-          if (!adjacentWeeks.includes(prev)) adjacentWeeks.push(prev);
+      // For off-tomorrow / future-shift, the filter logic internally computes
+      // "tomorrow" (checkDate + 1).  When checkDate is the last day of the
+      // selected week, tomorrow lands in the *next* week, so we must fetch it.
+      if ((filter === "off-tomorrow" || filter === "future-shift") && checkDate) {
+        const weekDates2 = getWeekDateStrings(yearWeek);
+
+        // Next day — needed because the filter always looks at "tomorrow"
+        const nextDay = new Date(checkDate + "T12:00:00.000Z");
+        nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+        const nextDayStr = nextDay.toISOString().split("T")[0];
+        if (!weekDates2.includes(nextDayStr)) {
+          const next = getNextYearWeek(yearWeek);
+          if (!adjacentWeeks.includes(next)) adjacentWeeks.push(next);
+        }
+
+        // Previous day — for off-tomorrow when "today" is the first day of the week
+        if (filter === "off-tomorrow") {
+          const prevDay = new Date(checkDate + "T12:00:00.000Z");
+          prevDay.setUTCDate(prevDay.getUTCDate() - 1);
+          const prevDayStr = prevDay.toISOString().split("T")[0];
+          if (!weekDates2.includes(prevDayStr)) {
+            const prev = getPrevYearWeek(yearWeek);
+            if (!adjacentWeeks.includes(prev)) adjacentWeeks.push(prev);
+          }
         }
       }
     }
