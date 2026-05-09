@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useMemo, use } from "react";
 
 type Status = "loading" | "pending" | "confirmed" | "change_requested" | "error" | "expired" | "submitting";
 
@@ -76,23 +76,17 @@ function formatTime(t: string) {
     return t;
 }
 
-function getShiftConfig(type: string) {
+/** Build shift config from a dynamic route types map */
+function getShiftConfig(type: string, rtMap?: Map<string, { color: string; routeStatus?: string }>) {
     const t = (type || "").toLowerCase().trim();
-    if (t === "off" || !type) return { label: "OFF", color: "text-zinc-400", bg: "bg-zinc-700", isOff: true };
-    if (t === "route") return { label: "Route", color: "text-white", bg: "bg-emerald-600", isOff: false };
-    if (t === "open") return { label: "Open", color: "text-white", bg: "bg-amber-500", isOff: false };
-    if (t === "close") return { label: "Close", color: "text-white", bg: "bg-rose-500", isOff: false };
-    if (t === "fleet") return { label: "Fleet", color: "text-white", bg: "bg-blue-600", isOff: false };
-    if (t === "call out") return { label: "Call Out", color: "text-white", bg: "bg-yellow-500", isOff: false };
-    if (t === "request off") return { label: "Request Off", color: "text-white", bg: "bg-purple-600", isOff: true };
-    if (t === "amz training") return { label: "AMZ Training", color: "text-white", bg: "bg-indigo-600", isOff: false };
-    if (t === "trainer") return { label: "Trainer", color: "text-white", bg: "bg-teal-600", isOff: false };
-    if (t === "training otr") return { label: "Training OTR", color: "text-white", bg: "bg-violet-600", isOff: false };
-    if (t.includes("modified")) return { label: "Modified Duty", color: "text-white", bg: "bg-amber-600", isOff: false };
-    if (t.includes("stand")) return { label: "Stand By", color: "text-white", bg: "bg-cyan-600", isOff: false };
-    if (t.includes("suspend")) return { label: "Suspension", color: "text-white", bg: "bg-rose-700", isOff: true };
-    if (t.includes("pending")) return { label: type, color: "text-white", bg: "bg-amber-500", isOff: false };
-    return { label: type, color: "text-white", bg: "bg-zinc-600", isOff: false };
+    if (!type || t === "off") return { label: "OFF", hexColor: "#71717a", isOff: true };
+    const rt = rtMap?.get(t);
+    if (rt) {
+        const isOff = (rt.routeStatus || "").toLowerCase() === "off";
+        return { label: type, hexColor: rt.color, isOff };
+    }
+    // Fallback for unknown types
+    return { label: type, hexColor: "#52525b", isOff: false };
 }
 
 function getMessageTitle(messageType: string) {
@@ -106,14 +100,14 @@ function getMessageTitle(messageType: string) {
     return MAP[messageType] || "Schedule Notification";
 }
 
-function WeeklyScheduleCard({ weekSchedules, yearWeek }: { weekSchedules: ConfirmData["weekSchedules"]; yearWeek: string }) {
+function WeeklyScheduleCard({ weekSchedules, yearWeek, rtMap }: { weekSchedules: ConfirmData["weekSchedules"]; yearWeek: string; rtMap: Map<string, { color: string; routeStatus?: string }> }) {
     if (!weekSchedules || weekSchedules.length === 0) return null;
 
     // Parse yearWeek for display
     const weekMatch = yearWeek?.match(/(\d{4})-W?(\d{1,2})/);
     const weekLabel = weekMatch ? `Week ${parseInt(weekMatch[2])}, ${weekMatch[1]}` : yearWeek;
 
-    const workDays = weekSchedules.filter(s => getShiftConfig(s.type).isOff === false);
+    const workDays = weekSchedules.filter(s => getShiftConfig(s.type, rtMap).isOff === false);
 
     return (
         <div className="bg-zinc-800/60 rounded-2xl border border-zinc-700/50 overflow-hidden mb-5">
@@ -149,7 +143,7 @@ function WeeklyScheduleCard({ weekSchedules, yearWeek }: { weekSchedules: Confir
             {/* Schedule Rows */}
             <div className="divide-y divide-zinc-700/20">
                 {weekSchedules.map((day, i) => {
-                    const config = getShiftConfig(day.type);
+                    const config = getShiftConfig(day.type, rtMap);
                     const isToday = (() => {
                         try {
                             const d = safeDate(day.date);
@@ -176,7 +170,13 @@ function WeeklyScheduleCard({ weekSchedules, yearWeek }: { weekSchedules: Confir
 
                             {/* Shift Type */}
                             <div className="flex-1">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${config.bg} ${config.color}`}>
+                                <span
+                                    className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                                    style={{
+                                        backgroundColor: config.isOff ? '#3f3f46' : config.hexColor,
+                                        color: config.isOff ? '#a1a1aa' : '#fff',
+                                    }}
+                                >
                                     {config.label}
                                 </span>
                             </div>
@@ -201,6 +201,22 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
     const [showRemarks, setShowRemarks] = useState(false);
     const [remarks, setRemarks] = useState("");
     const [successAction, setSuccessAction] = useState<"confirmed" | "change_requested" | null>(null);
+
+    // ── Fetch route types for dynamic colors ──
+    const [routeTypes, setRouteTypes] = useState<{ name: string; color: string; routeStatus?: string }[]>([]);
+    useEffect(() => {
+        fetch("/api/admin/settings/route-types")
+            .then(r => r.json())
+            .then((data: any[]) => {
+                if (Array.isArray(data)) setRouteTypes(data.filter(t => t.name));
+            })
+            .catch(() => {});
+    }, []);
+    const rtMap = useMemo(() => {
+        const map = new Map<string, { color: string; routeStatus?: string }>();
+        routeTypes.forEach(rt => map.set(rt.name.toLowerCase().trim(), { color: rt.color, routeStatus: rt.routeStatus }));
+        return map;
+    }, [routeTypes]);
 
     // Override root layout's overflow-hidden so this public page can scroll
     useEffect(() => {
@@ -267,10 +283,10 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
     // Helper: render the schedule card (weekly or single day)
     const renderScheduleCard = () => {
         if (data?.weekSchedules && data.weekSchedules.length > 0) {
-            return <WeeklyScheduleCard weekSchedules={data.weekSchedules} yearWeek={data.yearWeek} />;
+            return <WeeklyScheduleCard weekSchedules={data.weekSchedules} yearWeek={data.yearWeek} rtMap={rtMap} />;
         }
         if (data?.schedule) {
-            const config = getShiftConfig(data.schedule.type);
+            const config = getShiftConfig(data.schedule.type, rtMap);
             return (
                 <div className="bg-zinc-800/60 rounded-2xl p-5 border border-zinc-700/50 mb-6">
                     <div className="grid grid-cols-2 gap-5 text-sm">
@@ -285,7 +301,13 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                         <div className="text-center">
                             <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Shift Type</span>
                             <div className="mt-1.5 flex justify-center">
-                                <span className={`inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${config.bg} ${config.color}`}>
+                                <span
+                                    className="inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider"
+                                    style={{
+                                        backgroundColor: config.isOff ? '#3f3f46' : config.hexColor,
+                                        color: config.isOff ? '#a1a1aa' : '#fff',
+                                    }}
+                                >
                                     {config.label}
                                 </span>
                             </div>

@@ -45,6 +45,7 @@ import {
     Baby,
     type LucideIcon,
 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import {
     Tooltip,
     TooltipContent,
@@ -72,40 +73,31 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import RouteDetailModal from "../dispatching/_components/RouteDetailModal";
 
-// ── Type Options with Icons & Colors ──
+// ── Type Options — dynamically built from route type settings ──
 interface TypeOption {
     label: string;
     icon: LucideIcon;
+    color: string;     // hex color from DB
     bg: string;
     text: string;
     border: string;
     dotColor: string;
 }
 
-const TYPE_OPTIONS: TypeOption[] = [
-    { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700", dotColor: "bg-emerald-500" },
-    { label: "Open", icon: DoorOpen, bg: "bg-amber-400/80", text: "text-white", border: "border-amber-500/60", dotColor: "bg-amber-400" },
-    { label: "Close", icon: DoorClosed, bg: "bg-rose-400/80", text: "text-white", border: "border-rose-500/60", dotColor: "bg-rose-400" },
-    { label: "Off", icon: Coffee, bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600", dotColor: "bg-zinc-400" },
-    { label: "Call Out", icon: PhoneOff, bg: "bg-yellow-500", text: "text-white", border: "border-yellow-600", dotColor: "bg-yellow-500" },
-    { label: "AMZ Training", icon: GraduationCap, bg: "bg-indigo-600", text: "text-white", border: "border-indigo-700", dotColor: "bg-indigo-500" },
-    { label: "Fleet", icon: TruckIcon, bg: "bg-blue-600", text: "text-white", border: "border-blue-700", dotColor: "bg-blue-500" },
-    { label: "Request Off", icon: CalendarOff, bg: "bg-purple-600", text: "text-white", border: "border-purple-700", dotColor: "bg-purple-500" },
-    { label: "Trainer", icon: UserCheck, bg: "bg-teal-600", text: "text-white", border: "border-teal-700", dotColor: "bg-teal-500" },
-    { label: "Training OTR", icon: BookOpen, bg: "bg-violet-600", text: "text-white", border: "border-violet-700", dotColor: "bg-violet-500" },
-    { label: "Suspension", icon: Ban, bg: "bg-rose-700", text: "text-white", border: "border-rose-800", dotColor: "bg-rose-600" },
-    { label: "Modified Duty", icon: ShieldAlert, bg: "bg-amber-600", text: "text-white", border: "border-amber-700", dotColor: "bg-amber-500" },
-    { label: "Stand by", icon: Clock, bg: "bg-cyan-600", text: "text-white", border: "border-cyan-700", dotColor: "bg-cyan-500" },
-];
+/** Resolve a Lucide icon component by name string from the DB, fallback to Navigation */
+function resolveIcon(iconName?: string): LucideIcon {
+    if (!iconName) return Navigation;
+    const resolved = (LucideIcons as any)[iconName];
+    return resolved || Navigation;
+}
 
-const TYPE_MAP = new Map(TYPE_OPTIONS.map(opt => [opt.label.toLowerCase(), opt]));
-
-function getTypeStyle(value: string): { bg: string; text: string; border: string } {
-    if (!value || value.trim() === "")
-        return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" };
-    const opt = TYPE_MAP.get(value.trim().toLowerCase());
-    if (opt) return { bg: opt.bg, text: opt.text, border: opt.border };
-    return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
+/** Build CSS style classes from a hex color */
+function colorToStyle(hex: string, isOff = false): { bg: string; text: string; border: string; dotColor: string } {
+    if (isOff) {
+        return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600", dotColor: "bg-zinc-400" };
+    }
+    // Use inline style via the color field; classes are generic placeholders
+    return { bg: "", text: "text-white", border: "", dotColor: "" };
 }
 
 // ── Attendance Options ──
@@ -294,7 +286,45 @@ export default function RoutesPage() {
     const [routeCountsByDate, setRouteCountsByDate] = useState<Record<string, Record<string, number>>>({});
     const [initialRoutesComp, setInitialRoutesComp] = useState<Record<string, number>>({});
 
+    // ── Route Types fetched from DB for dynamic icons & colors ──
+    const [routeTypes, setRouteTypes] = useState<{ name: string; color: string; icon?: string; routeStatus?: string }[]>([]);
+    useEffect(() => {
+        fetch("/api/admin/settings/route-types")
+            .then(r => r.json())
+            .then((data: any[]) => {
+                if (Array.isArray(data)) setRouteTypes(data.filter(t => t.name));
+            })
+            .catch(() => {});
+    }, []);
 
+    const typeMap = useMemo(() => {
+        const map = new Map<string, { color: string; icon?: string; routeStatus?: string }>();
+        routeTypes.forEach(rt => map.set(rt.name.toLowerCase().trim(), { color: rt.color, icon: rt.icon, routeStatus: rt.routeStatus }));
+        return map;
+    }, [routeTypes]);
+
+    const typeOptions = useMemo<TypeOption[]>(() => {
+        return routeTypes.map(rt => {
+            const isOff = (rt.routeStatus || "").toLowerCase() === "off";
+            const style = colorToStyle(rt.color, isOff);
+            return {
+                label: rt.name,
+                icon: resolveIcon(rt.icon),
+                color: rt.color,
+                ...style,
+            };
+        });
+    }, [routeTypes]);
+
+    const TYPE_MAP = useMemo(() => new Map(typeOptions.map(opt => [opt.label.toLowerCase(), opt])), [typeOptions]);
+
+    function getTypeStyle(value: string): { bg: string; text: string; border: string; color?: string } {
+        if (!value || value.trim() === "")
+            return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" };
+        const opt = TYPE_MAP.get(value.trim().toLowerCase());
+        if (opt) return { bg: opt.bg, text: opt.text, border: opt.border, color: opt.color };
+        return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
+    }
     // Audit panel state
     const [showAuditPanel, setShowAuditPanel] = useState(false);
     const [auditEmployee, setAuditEmployee] = useState<{ transporterId: string; name: string } | null>(null);
@@ -981,10 +1011,14 @@ export default function RoutesPage() {
                                                             "h-3 w-3 text-muted-foreground transition-transform",
                                                             !isCollapsed && "rotate-90"
                                                         )} />
-                                                        <div className={cn(
-                                                            "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border",
-                                                            groupStyle.bg, groupStyle.text, groupStyle.border
-                                                        )}>
+                                                        <div
+                                                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border"
+                                                            style={{
+                                                                backgroundColor: typeOpt?.color || (groupStyle.color ? groupStyle.color : undefined),
+                                                                color: typeOpt?.color ? '#fff' : undefined,
+                                                                borderColor: typeOpt?.color ? `${typeOpt.color}80` : undefined,
+                                                            }}
+                                                        >
                                                             {GroupIcon && <GroupIcon className="h-3 w-3" />}
                                                             {group.type || "Unassigned"}
                                                         </div>
@@ -1021,8 +1055,7 @@ export default function RoutesPage() {
                                                                         </span>
                                                                     </div>
                                                                 )}
-                                                                {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
-                                                                {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: "#FE9EC7" }} />}
+                                                                {(() => { const rIcon = typeMap.get((row.type || "").toLowerCase()); const RI = rIcon ? resolveIcon(rIcon.icon) : null; return (row.type.toLowerCase() === "training otr" || row.type.toLowerCase() === "trainer") && RI ? <RI className="h-3 w-3 shrink-0" style={{ color: rIcon?.color || "#FE9EC7" }} /> : null; })()}
                                                                 <span
                                                                     className="text-[11px] font-bold truncate flex-1 min-w-0"
                                                                     title={row.employeeName}
@@ -1081,13 +1114,17 @@ export default function RoutesPage() {
                                                             <div className="inline-flex items-center justify-center w-full">
                                                                 {(() => {
                                                                     const typeOpt = TYPE_MAP.get((row.type || "").trim().toLowerCase());
-                                                                    const style = getTypeStyle(row.type);
                                                                     const Icon = typeOpt?.icon;
+                                                                    const isOff = (typeOpt as any)?.bg?.includes("zinc");
                                                                     return (
-                                                                        <span className={cn(
-                                                                            "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border",
-                                                                            style.bg, style.text, style.border
-                                                                        )}>
+                                                                        <span
+                                                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border"
+                                                                            style={{
+                                                                                backgroundColor: isOff ? undefined : (typeOpt?.color || "#71717a"),
+                                                                                color: isOff ? "#a1a1aa" : "#fff",
+                                                                                borderColor: typeOpt?.color ? `${typeOpt.color}80` : "#71717a",
+                                                                            }}
+                                                                        >
                                                                             {Icon && <Icon className="h-2.5 w-2.5" />}
                                                                             {row.type || "—"}
                                                                         </span>

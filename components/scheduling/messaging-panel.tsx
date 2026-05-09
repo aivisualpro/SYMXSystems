@@ -51,6 +51,7 @@ import {
   ShieldAlert,
   Minus,
 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -1400,19 +1401,11 @@ function MessagingSubTab({
                         const displayType = (nextShift as any).scheduleType || nextShift.type || "";
                         const typeKey = displayType.toLowerCase().trim();
                         const color = routeTypeMap[typeKey] || "#10b981";
-                        
-                        let CellIcon = Navigation;
-                        let isOff = false;
-                        if (typeKey === "open") CellIcon = DoorOpen;
-                        else if (typeKey === "close") CellIcon = DoorClosed;
-                        else if (["off", "request off"].includes(typeKey)) { CellIcon = Coffee; isOff = true; }
-                        else if (typeKey === "call out") CellIcon = PhoneOff;
-                        else if (typeKey.includes("train")) CellIcon = GraduationCap;
-                        else if (typeKey === "fleet") CellIcon = TruckIcon;
-                        else if (typeKey === "trainer") CellIcon = UserCheck;
-                        else if (typeKey === "suspension") CellIcon = Ban;
-                        else if (typeKey === "modified duty") CellIcon = ShieldAlert;
-                        else if (typeKey === "stand by") CellIcon = Clock;
+                        const isOff = ["off", "request off"].includes(typeKey);
+
+                        // Use the icon from route type settings (DB), fallback to Navigation
+                        const iconName = routeIconMap?.[typeKey] || "";
+                        const CellIcon = (iconName && (LucideIcons as any)[iconName]) ? (LucideIcons as any)[iconName] : Navigation;
 
                         return (
                           <span
