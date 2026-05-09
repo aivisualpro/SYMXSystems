@@ -19,7 +19,7 @@ That's it — Atlas now creates dated snapshots automatically. Restore any of th
 
 ## Layer 2 — Daily JSON export to Cloudinary (extra safety)
 
-A Vercel cron hits `/api/cron/backup` every day at **02:00 UTC**, exports every collection as gzipped JSON, and uploads it to Cloudinary as a new dated file.
+A Vercel cron hits `/api/cron/backup` every day at **06:00 UTC** (= **11:00 PM Pacific Daylight Time**, or 10:00 PM Pacific Standard Time during winter — Vercel Cron is UTC-only and does not adjust for DST), exports every collection as gzipped JSON, and uploads it to Cloudinary as a new dated file.
 
 Path in Cloudinary: `mongodb-backups/2026-05-09/full-backup-1746763200000.json.gz`
 
