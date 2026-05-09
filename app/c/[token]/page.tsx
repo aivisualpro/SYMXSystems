@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, use } from "react";
+import * as LucideIcons from "lucide-react";
 
 type Status = "loading" | "pending" | "confirmed" | "change_requested" | "error" | "expired" | "submitting";
 
@@ -76,17 +77,22 @@ function formatTime(t: string) {
     return t;
 }
 
+/** Resolve a Lucide icon component by name */
+function resolveIcon(iconName?: string) {
+    if (!iconName) return null;
+    return (LucideIcons as any)[iconName] || null;
+}
+
 /** Build shift config from a dynamic route types map */
-function getShiftConfig(type: string, rtMap?: Map<string, { color: string; routeStatus?: string }>) {
+function getShiftConfig(type: string, rtMap?: Map<string, { color: string; icon?: string; routeStatus?: string }>) {
     const t = (type || "").toLowerCase().trim();
-    if (!type || t === "off") return { label: "OFF", hexColor: "#71717a", isOff: true };
+    if (!type || t === "off") return { label: "OFF", hexColor: "#71717a", isOff: true, icon: null as any };
     const rt = rtMap?.get(t);
     if (rt) {
         const isOff = (rt.routeStatus || "").toLowerCase() === "off";
-        return { label: type, hexColor: rt.color, isOff };
+        return { label: type, hexColor: rt.color, isOff, icon: resolveIcon(rt.icon) };
     }
-    // Fallback for unknown types
-    return { label: type, hexColor: "#52525b", isOff: false };
+    return { label: type, hexColor: "#52525b", isOff: false, icon: null as any };
 }
 
 function getMessageTitle(messageType: string) {
@@ -100,7 +106,7 @@ function getMessageTitle(messageType: string) {
     return MAP[messageType] || "Schedule Notification";
 }
 
-function WeeklyScheduleCard({ weekSchedules, yearWeek, rtMap }: { weekSchedules: ConfirmData["weekSchedules"]; yearWeek: string; rtMap: Map<string, { color: string; routeStatus?: string }> }) {
+function WeeklyScheduleCard({ weekSchedules, yearWeek, rtMap }: { weekSchedules: ConfirmData["weekSchedules"]; yearWeek: string; rtMap: Map<string, { color: string; icon?: string; routeStatus?: string }> }) {
     if (!weekSchedules || weekSchedules.length === 0) return null;
 
     // Parse yearWeek for display
@@ -171,12 +177,13 @@ function WeeklyScheduleCard({ weekSchedules, yearWeek, rtMap }: { weekSchedules:
                             {/* Shift Type */}
                             <div className="flex-1">
                                 <span
-                                    className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
                                     style={{
                                         backgroundColor: config.isOff ? '#3f3f46' : config.hexColor,
                                         color: config.isOff ? '#a1a1aa' : '#fff',
                                     }}
                                 >
+                                    {config.icon && <config.icon className="w-3 h-3" />}
                                     {config.label}
                                 </span>
                             </div>
@@ -203,7 +210,7 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
     const [successAction, setSuccessAction] = useState<"confirmed" | "change_requested" | null>(null);
 
     // ── Fetch route types for dynamic colors ──
-    const [routeTypes, setRouteTypes] = useState<{ name: string; color: string; routeStatus?: string }[]>([]);
+    const [routeTypes, setRouteTypes] = useState<{ name: string; color: string; icon?: string; routeStatus?: string }[]>([]);
     useEffect(() => {
         fetch("/api/admin/settings/route-types")
             .then(r => r.json())
@@ -213,8 +220,8 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
             .catch(() => {});
     }, []);
     const rtMap = useMemo(() => {
-        const map = new Map<string, { color: string; routeStatus?: string }>();
-        routeTypes.forEach(rt => map.set(rt.name.toLowerCase().trim(), { color: rt.color, routeStatus: rt.routeStatus }));
+        const map = new Map<string, { color: string; icon?: string; routeStatus?: string }>();
+        routeTypes.forEach(rt => map.set(rt.name.toLowerCase().trim(), { color: rt.color, icon: rt.icon, routeStatus: rt.routeStatus }));
         return map;
     }, [routeTypes]);
 
@@ -302,12 +309,13 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                             <span className="text-zinc-500 uppercase tracking-wider text-[10px] font-semibold block">Shift Type</span>
                             <div className="mt-1.5 flex justify-center">
                                 <span
-                                    className="inline-flex items-center px-3 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider"
+                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider"
                                     style={{
                                         backgroundColor: config.isOff ? '#3f3f46' : config.hexColor,
                                         color: config.isOff ? '#a1a1aa' : '#fff',
                                     }}
                                 >
+                                    {config.icon && <config.icon className="w-3.5 h-3.5" />}
                                     {config.label}
                                 </span>
                             </div>
