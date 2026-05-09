@@ -68,8 +68,9 @@ const SymxEmployeeScheduleSchema: Schema = new Schema({
 
 // Compound index for upsert
 SymxEmployeeScheduleSchema.index({ transporterId: 1, date: 1 }, { unique: true });
-// Index for week queries
-SymxEmployeeScheduleSchema.index({ yearWeek: 1 });
+// Compound index for week-schedule queries (confirmation portal, messaging employees)
+SymxEmployeeScheduleSchema.index({ yearWeek: 1, transporterId: 1, date: 1 });
+// Index for daily filters
 SymxEmployeeScheduleSchema.index({ date: 1 });
 SymxEmployeeScheduleSchema.index({ typeId: 1 });
 

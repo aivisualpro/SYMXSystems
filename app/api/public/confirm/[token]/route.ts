@@ -44,13 +44,16 @@ async function findByToken(token: string) {
     }
     if (!legacyDoc) return null;
 
-    // Resolve the schedule from legacy doc's transporterId + scheduleDate
+    // Resolve the schedule from legacy doc's transporterId + scheduleDate/yearWeek
     const scheduleQuery: any = { transporterId: legacyDoc.transporterId };
     if (legacyDoc.scheduleDate) {
         // Use day-range to handle timezone/midnight edge cases
         const dayStart = new Date(legacyDoc.scheduleDate + "T00:00:00.000Z");
         const dayEnd = new Date(legacyDoc.scheduleDate + "T23:59:59.999Z");
         scheduleQuery.date = { $gte: dayStart, $lte: dayEnd };
+    } else if (legacyDoc.yearWeek) {
+        // week-schedule: narrow by yearWeek so we don't return a schedule from the wrong week
+        scheduleQuery.yearWeek = legacyDoc.yearWeek;
     }
     const legacySchedule = await SymxEmployeeSchedule.findOne(scheduleQuery).sort({ date: -1 }).lean() as any;
 
@@ -114,13 +117,17 @@ export async function GET(
 
         const isWeekSchedule = messageType === "week-schedule";
 
+        // For week-schedule, the ScheduleConfirmation's yearWeek is the source of truth
+        // (schedule.yearWeek may come from a different week's document)
+        const effectiveYearWeek = (result as any).legacyDoc?.yearWeek || schedule.yearWeek || "";
+
         if (isWeekSchedule && schedule.transporterId) {
             // Fetch all schedules for the week
             let schedules: any[] = [];
-            if (schedule.yearWeek) {
+            if (effectiveYearWeek) {
                 schedules = await SymxEmployeeSchedule.find({
                     transporterId: schedule.transporterId,
-                    yearWeek: schedule.yearWeek,
+                    yearWeek: effectiveYearWeek,
                 }).sort({ date: 1 }).lean();
             }
 
@@ -249,7 +256,7 @@ export async function GET(
             token,
             employeeName,
             status: currentStatus,
-            yearWeek: schedule.yearWeek || "",
+            yearWeek: isWeekSchedule ? effectiveYearWeek : (schedule.yearWeek || ""),
             messageType,
             scheduleDate,
             confirmedAt,

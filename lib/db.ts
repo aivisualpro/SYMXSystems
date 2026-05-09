@@ -30,10 +30,14 @@ async function connectToDatabase() {
 
   if (!cached.promise) {
     const opts = {
-      maxPoolSize: 10,              // More concurrent queries (default is 5)
+      maxPoolSize: 15,              // Support 16+ parallel queries (fleet dashboard, scorecard)
       minPoolSize: 2,               // Keep connections warm
+      maxIdleTimeMS: 60000,         // Close stale connections after 60s — prevents leak in serverless
       socketTimeoutMS: 30000,       // 30s socket timeout
       serverSelectionTimeoutMS: 5000, // Fail fast if DB is unreachable
+      compressors: ['zstd'] as any, // ~60-70% wire size reduction on every query
+      retryWrites: true,            // Auto-retry on transient network blips
+      retryReads: true,             // Auto-retry read operations on transient failures
       autoIndex: process.env.NODE_ENV === 'development', // Auto-create indexes in dev
       family: 4,                    // Force IPv4. Fixes Vercel/Node 20 IPv6 TLS handshake issues with MongoDB Atlas
     };

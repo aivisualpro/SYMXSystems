@@ -186,7 +186,7 @@ SYMXRouteSchema.index({ transporterId: 1, date: 1 }, { unique: true });
 SYMXRouteSchema.index({ yearWeek: 1, transporterId: 1 });
 SYMXRouteSchema.index({ typeId: 1 });                   // primary type filter
 SYMXRouteSchema.index({ van: 1 });                      // for vehicle name lookups
-SYMXRouteSchema.index({ date: 1 });                     // for daily filters
+SYMXRouteSchema.index({ date: 1, type: 1 });             // for daily filters + type exclusion (fleet dashboard)
 
 const SYMXRoute: Model<ISYMXRoute> =
     mongoose.models.SYMXRoute ||

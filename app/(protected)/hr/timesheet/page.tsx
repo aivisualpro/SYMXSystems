@@ -9,13 +9,9 @@ import {
   FileText,
   FileDown,
   Loader2,
-  Users,
-  ClipboardList,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -81,44 +77,44 @@ interface WeekPair {
   year: number;
 }
 
-/** Generate bi-weekly pairs for the given year + some surrounding */
+/** Generate bi-weekly pairs: 2025-W52/2026-W01 through 2026-W52/2027-W01 */
 function generateWeekPairs(): WeekPair[] {
-  const now = new Date();
-  const year = now.getFullYear();
   const pairs: WeekPair[] = [];
 
-  // Generate for current year: W01-W02, W03-W04, ..., W51-W52
-  for (let w = 1; w <= 52; w += 2) {
-    const w1 = w;
-    const w2 = w + 1;
-    const startDate = getSundayOfWeek(year, w1);
-    const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + 13);
+  // Start: 2025-W52 paired with 2026-W01
+  pairs.push(makePair(2025, 52, 2026, 1));
 
-    const w1Str = String(w1).padStart(2, "0");
-    const w2Str = String(w2).padStart(2, "0");
-
-    pairs.push({
-      id: `${year}-W${w1Str},${year}-W${w2Str}`,
-      label: `${year}-W${w1Str} , ${year}-W${w2Str}`,
-      startDate,
-      endDate,
-      w1, w2, year,
-    });
+  // 2026-W02/W03 through 2026-W50/W51
+  for (let w = 2; w <= 50; w += 2) {
+    pairs.push(makePair(2026, w, 2026, w + 1));
   }
+
+  // End: 2026-W52 paired with 2027-W01
+  pairs.push(makePair(2026, 52, 2027, 1));
 
   return pairs;
 }
 
-/** Find the current week pair */
+function makePair(y1: number, w1: number, y2: number, w2: number): WeekPair {
+  const startDate = getSundayOfWeek(y1, w1);
+  const endDate = new Date(startDate);
+  endDate.setDate(startDate.getDate() + 13);
+  const w1Str = String(w1).padStart(2, "0");
+  const w2Str = String(w2).padStart(2, "0");
+  return {
+    id: `${y1}-W${w1Str},${y2}-W${w2Str}`,
+    label: `${y1}-W${w1Str} , ${y2}-W${w2Str}`,
+    startDate, endDate, w1, w2, year: y1,
+  };
+}
+
+/** Find the current week pair by checking date ranges */
 function getCurrentPairId(): string {
   const now = new Date();
-  const year = now.getFullYear();
-  const week = getISOWeek(now);
-  // Find which pair the current week belongs to (odd-even pairing)
-  const w1 = week % 2 === 1 ? week : week - 1;
-  const w2 = w1 + 1;
-  return `${year}-W${String(w1).padStart(2, "0")},${year}-W${String(w2).padStart(2, "0")}`;
+  now.setHours(0, 0, 0, 0);
+  const pairs = generateWeekPairs();
+  const match = pairs.find(p => now >= p.startDate && now <= p.endDate);
+  return match?.id || pairs[0].id;
 }
 
 const LEGAL_TEXT =
@@ -401,227 +397,105 @@ export default function TimesheetPage() {
     }
   }, [employees, selectedPair]);
 
-  const days = getDays(selectedPair.startDate);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="animate-in fade-in duration-500">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-      {/* ═══ Date Selector + Actions ═══ */}
-      <div className="rounded-2xl border border-border/50 bg-card p-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6">
-          {/* Week pair selector */}
-          <div className="space-y-2 flex-1 min-w-0">
-            <label className="text-xs font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5" />
-              Pay Period (2 Weeks)
-            </label>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={goPrev}
-                disabled={selectedIdx <= 0}
-                className="h-10 w-10 rounded-lg border border-border/50 flex items-center justify-center hover:bg-muted/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-              >
+        {/* ═══ LEFT COLUMN: Pay Period Selector ═══ */}
+        <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-border/30 bg-gradient-to-r from-blue-500/5 to-cyan-500/5">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-blue-500/10">
+                <Calendar className="h-4 w-4 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-sm font-bold">Pay Period (2 Weeks)</p>
+                <p className="text-[10px] text-muted-foreground">Select bi-weekly pay period</p>
+              </div>
+            </div>
+          </div>
+          <div className="p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <button onClick={goPrev} disabled={selectedIdx <= 0} className="h-10 w-10 rounded-xl border border-border/50 flex items-center justify-center hover:bg-muted/50 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed shrink-0">
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <select
-                value={selectedPairId}
-                onChange={(e) => setSelectedPairId(e.target.value)}
-                className="h-10 px-3 rounded-lg border border-border/50 bg-background text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/30 min-w-[200px]"
-              >
+              <select value={selectedPairId} onChange={(e) => setSelectedPairId(e.target.value)} className="h-10 px-3 rounded-xl border border-border/50 bg-background text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/30 flex-1 min-w-0 cursor-pointer">
                 {weekPairs.map((p) => (
                   <option key={p.id} value={p.id}>{p.label}</option>
                 ))}
               </select>
-              <button
-                onClick={goNext}
-                disabled={selectedIdx >= weekPairs.length - 1}
-                className="h-10 w-10 rounded-lg border border-border/50 flex items-center justify-center hover:bg-muted/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-              >
+              <button onClick={goNext} disabled={selectedIdx >= weekPairs.length - 1} className="h-10 w-10 rounded-xl border border-border/50 flex items-center justify-center hover:bg-muted/50 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed shrink-0">
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              Period: <span className="font-bold text-foreground">{fmtDate(start)}</span>
-              {" → "}
-              <span className="font-bold text-foreground">{fmtDate(end)}</span>
-              <span className="ml-2 text-muted-foreground/60">(14 days)</span>
-            </p>
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 dark:bg-white/[0.03] border border-border/30">
+              <div className="flex items-center gap-2 flex-1">
+                <div className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-black">{fmtDate(start)}</div>
+                <span className="text-muted-foreground text-xs">→</span>
+                <div className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-black">{fmtDate(end)}</div>
+              </div>
+              <span className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wide">14 days</span>
+            </div>
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-3">
-            <Button
+        {/* ═══ RIGHT COLUMN: Actions ═══ */}
+        <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-border/30 bg-gradient-to-r from-emerald-500/5 to-teal-500/5">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-emerald-500/10">
+                <FileText className="h-4 w-4 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-sm font-bold">Generate Timesheets</p>
+                <p className="text-[10px] text-muted-foreground">Download PDF for selected period</p>
+              </div>
+            </div>
+          </div>
+          <div className="p-5 space-y-3">
+            <button
               onClick={() => handleGenerate("timesheet")}
               disabled={!!generating || employees.length === 0}
-              className="h-10 gap-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-lg shadow-blue-500/20 px-5"
+              className={cn(
+                "w-full flex items-center gap-4 p-4 rounded-xl border transition-all group",
+                "hover:shadow-md hover:shadow-blue-500/10 hover:border-blue-500/30 active:scale-[0.99]",
+                "disabled:opacity-50 disabled:cursor-not-allowed",
+                "border-border/50 bg-gradient-to-r from-blue-500/[0.03] to-cyan-500/[0.03]"
+              )}
             >
-              {generating === "timesheet" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <FileText className="h-4 w-4" />
-              )}
-              Generate Timesheet
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform">
+                {generating === "timesheet" ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileText className="h-5 w-5" />}
+              </div>
+              <div className="flex-1 text-left">
+                <p className="text-sm font-bold text-foreground">Generate Timesheet</p>
+                <p className="text-[10px] text-muted-foreground">1 page per active employee, sorted A–Z</p>
+              </div>
               {employees.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded bg-white/20 text-[10px] font-black">
-                  {employees.length}
-                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-black">{employees.length}</span>
               )}
-            </Button>
-            <Button
-              variant="outline"
+            </button>
+            <button
               onClick={() => handleGenerate("blank")}
               disabled={!!generating}
-              className="h-10 gap-2 border-border px-5"
-            >
-              {generating === "blank" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <FileDown className="h-4 w-4" />
+              className={cn(
+                "w-full flex items-center gap-4 p-4 rounded-xl border transition-all group",
+                "hover:shadow-md hover:shadow-zinc-500/10 hover:border-zinc-400/30 active:scale-[0.99]",
+                "disabled:opacity-50 disabled:cursor-not-allowed",
+                "border-border/50 bg-muted/20 dark:bg-white/[0.02]"
               )}
-              Download Blank
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* ═══ Preview Section ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-        {/* Timesheet Preview Card */}
-        <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
-          <div className="px-5 py-3 border-b border-border/30 bg-gradient-to-r from-blue-500/5 to-cyan-500/5 flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-blue-500/10">
-              <ClipboardList className="h-4 w-4 text-blue-500" />
-            </div>
-            <div>
-              <p className="text-sm font-bold">Employee Timesheet</p>
-              <p className="text-[10px] text-muted-foreground">1 page per active employee, sorted A—Z</p>
-            </div>
-          </div>
-          {/* Mini Preview */}
-          <div className="p-5">
-            <div className="border border-border/50 rounded-xl p-4 bg-background space-y-3">
-              {/* Header preview */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center">
-                    <span className="text-white text-[8px] font-bold">◉</span>
-                  </div>
-                  <span className="text-[10px] font-black text-foreground">SYMX Logistics</span>
-                </div>
-                <span className="text-[8px] font-bold text-muted-foreground">Punch In Correction Form</span>
+            >
+              <div className="p-2.5 rounded-xl bg-zinc-200 dark:bg-zinc-800 text-muted-foreground group-hover:scale-105 transition-transform">
+                {generating === "blank" ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileDown className="h-5 w-5" />}
               </div>
-
-              <p className="text-[9px] text-center text-muted-foreground">
-                Employee Name: <span className="font-bold text-blue-500">JOHN DOE</span>
-              </p>
-
-              {/* Mini table */}
-              <div className="border border-border/30 rounded-md overflow-hidden">
-                <div className="grid grid-cols-8 bg-muted/50 text-center">
-                  {["Date", "Day", "In", "Out L", "In L", "Out", "Notes", "Sign"].map((h) => (
-                    <div key={h} className="px-1 py-1 text-[6px] font-black text-muted-foreground border-r border-border/20 last:border-0">
-                      {h}
-                    </div>
-                  ))}
-                </div>
-                {days.slice(0, 4).map((d, i) => (
-                  <div key={i} className="grid grid-cols-8 border-t border-border/20 text-center">
-                    <div className="px-1 py-1 text-[6px] text-muted-foreground border-r border-border/10">{fmtDate(d)}</div>
-                    <div className="px-1 py-1 text-[6px] text-muted-foreground border-r border-border/10">{DAY_NAMES[d.getDay()].slice(0, 3)}</div>
-                    {Array.from({ length: 6 }).map((_, j) => (
-                      <div key={j} className="px-1 py-1 border-r border-border/10 last:border-0" />
-                    ))}
-                  </div>
-                ))}
-                <div className="text-center py-1 text-[6px] text-muted-foreground/40 border-t border-border/10">
-                  ... {10} more rows
-                </div>
+              <div className="flex-1 text-left">
+                <p className="text-sm font-bold text-foreground">Download Blank</p>
+                <p className="text-[10px] text-muted-foreground">Single page, empty name — print & fill</p>
               </div>
-
-              <div className="flex items-center justify-between pt-1 border-t border-border/20">
-                <span className="text-[7px] text-muted-foreground/40">Supervisor's Signature: ____________</span>
-                <span className="text-[7px] text-muted-foreground/40">Date: ____________</span>
-              </div>
-            </div>
-
-            {/* Employee count */}
-            <div className="mt-4 flex items-center gap-2">
-              <Users className="h-4 w-4 text-blue-500" />
-              <span className="text-xs font-bold text-foreground">
-                {employees.length} active employees
-              </span>
-              <span className="text-[10px] text-muted-foreground">
-                = {employees.length} pages
-              </span>
-            </div>
+            </button>
           </div>
         </div>
 
-        {/* Blank Preview Card */}
-        <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
-          <div className="px-5 py-3 border-b border-border/30 bg-gradient-to-r from-gray-500/5 to-gray-400/5 flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-muted">
-              <FileDown className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-bold">Blank Template</p>
-              <p className="text-[10px] text-muted-foreground">Single page, empty name field</p>
-            </div>
-          </div>
-          {/* Mini Preview */}
-          <div className="p-5">
-            <div className="border border-border/50 rounded-xl p-4 bg-background space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center">
-                    <span className="text-white text-[8px] font-bold">◉</span>
-                  </div>
-                  <span className="text-[10px] font-black text-foreground">SYMX Logistics</span>
-                </div>
-                <span className="text-[8px] font-bold text-muted-foreground">Punch In Correction Form</span>
-              </div>
-
-              <p className="text-[9px] text-center text-muted-foreground">
-                Employee Name: <span className="inline-block w-32 border-b border-muted-foreground/30" />
-              </p>
-
-              {/* Mini table */}
-              <div className="border border-border/30 rounded-md overflow-hidden">
-                <div className="grid grid-cols-8 bg-muted/50 text-center">
-                  {["Date", "Day", "In", "Out L", "In L", "Out", "Notes", "Sign"].map((h) => (
-                    <div key={h} className="px-1 py-1 text-[6px] font-black text-muted-foreground border-r border-border/20 last:border-0">
-                      {h}
-                    </div>
-                  ))}
-                </div>
-                {days.slice(0, 4).map((d, i) => (
-                  <div key={i} className="grid grid-cols-8 border-t border-border/20 text-center">
-                    <div className="px-1 py-1 text-[6px] text-muted-foreground border-r border-border/10">{fmtDate(d)}</div>
-                    <div className="px-1 py-1 text-[6px] text-muted-foreground border-r border-border/10">{DAY_NAMES[d.getDay()].slice(0, 3)}</div>
-                    {Array.from({ length: 6 }).map((_, j) => (
-                      <div key={j} className="px-1 py-1 border-r border-border/10 last:border-0" />
-                    ))}
-                  </div>
-                ))}
-                <div className="text-center py-1 text-[6px] text-muted-foreground/40 border-t border-border/10">
-                  ... {10} more rows
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-1 border-t border-border/20">
-                <span className="text-[7px] text-muted-foreground/40">Supervisor's Signature: ____________</span>
-                <span className="text-[7px] text-muted-foreground/40">Date: ____________</span>
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs font-bold text-foreground">1 page</span>
-              <span className="text-[10px] text-muted-foreground">— print and fill manually</span>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

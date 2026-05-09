@@ -113,6 +113,10 @@ function getDspTier(avg: number, type: "score" | "rate" | "percent" | "fico"): s
   }
 }
 
+// Cache for scorecard weeksList — weeks only change when data is imported
+let scorecardWeeksCache: { data: string[]; timestamp: number } | null = null;
+const SCORECARD_WEEKS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export async function GET(req: NextRequest) {
   try {
     await requirePermission("Scorecard", "view");
@@ -134,8 +138,12 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
 
-    // If no week specified, return weeks that actually have data
+    // If no week specified, return weeks that actually have data (cached)
     if (!week) {
+      const now = Date.now();
+      if (scorecardWeeksCache && (now - scorecardWeeksCache.timestamp) < SCORECARD_WEEKS_CACHE_TTL) {
+        return NextResponse.json({ weeks: scorecardWeeksCache.data });
+      }
       // Query distinct weeks from ALL data collections to find weeks with real data
       const [deWeeks, podWeeks, dvicWeeks, safetyWeeks, cdfWeeks, dsbWeeks, dcrWeeks, rtsWeeks] = await Promise.all([
         SymxDeliveryExcellence.distinct("week"),
@@ -151,6 +159,7 @@ export async function GET(req: NextRequest) {
       const weeks = allWeeks
         .filter((w: string) => /^\d{4}-W\d{2}$/.test(w))
         .sort((a: string, b: string) => b.localeCompare(a));
+      scorecardWeeksCache = { data: weeks, timestamp: Date.now() };
       return NextResponse.json({ weeks });
     }
 

@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
         VehicleRepair.find({ currentStatus: { $ne: "Completed" } }).sort({ creationDate: -1 }).limit(6).select("description unitNumber estimatedDate currentStatus vin").lean(),
         VehicleRepair.aggregate([{ $group: { _id: "$currentStatus", count: { $sum: 1 } } }]),
         DailyInspection.find({}).sort({ routeDate: -1 }).limit(6).select("vin unitNumber routeDate driver anyRepairs").lean(),
-        VehicleRentalAgreement.countDocuments({}),
+        VehicleRentalAgreement.estimatedDocumentCount(),
         VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now } }),
         VehicleRentalAgreement.countDocuments({ registrationEndDate: { $lte: now } }),
         VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow } }),

@@ -216,9 +216,16 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
+
+    // Default weekly availability to route type ObjectId if not set
+    const DEFAULT_ROUTE_TYPE = '69f8d51a4e04c9a132a586cf';
+    const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    for (const day of DAYS) {
+      if (!body[day]) body[day] = DEFAULT_ROUTE_TYPE;
+    }
     
     // Check for duplicate email
-    const existingEmployee = await SymxEmployee.findOne({ email: body.email });
+    const existingEmployee = await SymxEmployee.findOne({ email: body.email }).lean();
     if (existingEmployee) {
       return new NextResponse("Email already exists", { status: 409 });
     }

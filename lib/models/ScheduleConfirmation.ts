@@ -65,6 +65,8 @@ const ScheduleConfirmationSchema = new Schema<IScheduleConfirmation>(
 ScheduleConfirmationSchema.index({ yearWeek: 1, messageType: 1, messageLogId: 1 });
 ScheduleConfirmationSchema.index({ yearWeek: 1, messageType: 1, scheduleDate: 1 });
 ScheduleConfirmationSchema.index({ messageLogId: 1 });
+// Compound index for transporterId-based lookups (messaging pre-fetch, confirmation portal)
+ScheduleConfirmationSchema.index({ transporterId: 1, yearWeek: 1, messageType: 1 });
 
 const ScheduleConfirmation: Model<IScheduleConfirmation> =
     mongoose.models.ScheduleConfirmation ||

@@ -19,6 +19,9 @@ const SymxEmployeeNoteSchema: Schema = new Schema(
   { collection: "SYMXEmployeeNotes", timestamps: true }
 );
 
+// Index for per-employee note lookups and aggregate counts
+SymxEmployeeNoteSchema.index({ transporterId: 1, createdAt: -1 });
+
 const SymxEmployeeNote =
   mongoose.models.SYMXEmployeeNote ||
   mongoose.model<ISymxEmployeeNote>("SYMXEmployeeNote", SymxEmployeeNoteSchema, "SYMXEmployeeNotes");

@@ -558,12 +558,7 @@ export default function EmployeeDetailPage(props: PageProps) {
               >
                 Scorecard
               </TabsTrigger>
-              <TabsTrigger 
-                value="logistics" 
-                className="rounded-[0.9rem] px-5 py-2 font-bold text-xs data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/30 transition-all"
-              >
-                Logistics
-              </TabsTrigger>
+
               <TabsTrigger 
                 value="documents" 
                 className="rounded-[0.9rem] px-5 py-2 font-bold text-xs data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/30 transition-all"
@@ -585,39 +580,7 @@ export default function EmployeeDetailPage(props: PageProps) {
               <EmployeeScorecard transporterId={employee.transporterId || ''} employeeName={`${employee.firstName} ${employee.lastName}`} />
             </TabsContent>
 
-            {/* ──────── LOGISTICS TAB ──────── */}
-            <TabsContent value="logistics" className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
-              <section className="space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 rounded-lg bg-primary/10">
-                    <Truck className="w-4 h-4 text-primary" />
-                  </div>
-                  <h3 className="font-bold text-sm tracking-tight text-foreground">Vehicle Assignments</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <InfoRow label="Primary Van" value={employee.defaultVan1} icon={Truck} />
-                  <InfoRow label="Backup Van 1" value={employee.defaultVan2} icon={Truck} />
-                  <InfoRow label="Backup Van 2" value={employee.defaultVan3} icon={Truck} />
-                </div>
-              </section>
 
-              <section className="space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 rounded-lg bg-primary/10">
-                    <IdCard className="w-4 h-4 text-primary" />
-                  </div>
-                  <h3 className="font-bold text-sm tracking-tight text-foreground">Identification & Details</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <InfoRow label="Badge #" value={employee.badgeNumber} icon={IdCard} />
-                  <InfoRow label="Transporter ID" value={employee.transporterId} icon={Briefcase} />
-                  <InfoRow label="Gas Card PIN" value={employee.gasCardPin} icon={ShieldCheck} />
-                  <InfoRow label="Routes Comp" value={employee.routesComp} icon={Building2} />
-                  <InfoRow label="DL Expiration" value={employee.dlExpiration ? format(new Date(employee.dlExpiration), "MMM dd, yyyy") : null} icon={Calendar} />
-                  <InfoRow label="MVR Date" value={employee.motorVehicleReportDate ? format(new Date(employee.motorVehicleReportDate), "MMM dd, yyyy") : null} icon={Calendar} />
-                </div>
-              </section>
-            </TabsContent>
 
             {/* ──────── DOCUMENTS TAB ──────── */}
             <TabsContent value="documents" className="pt-2 animate-in fade-in slide-in-from-right-2 duration-300">

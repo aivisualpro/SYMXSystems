@@ -72,7 +72,7 @@ function EmployeesPageContent() {
   const searchParams = useSearchParams();
   const hasUrlFilters = searchParams.get('status') || searchParams.get('type') || searchParams.get('filter') || searchParams.get('hourlyStatus');
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const needsApiCall = !!debouncedSearch || !!searchParams.get('search') || !!hasUrlFilters;
+  const needsApiCall = !!searchParams.get('search') || !!hasUrlFilters;
 
   const { data: storeEmployees = { records: [], totalCount: 0, hasMore: false }, isLoading: isLoadingEmployees } = useEmployeesList();
 
@@ -222,7 +222,7 @@ function EmployeesPageContent() {
       setFetchedFromApi(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, searchParams]);
+  }, [searchParams]);
 
   const handleSubmit = async (formData: any) => {
     setIsSubmitting(true);
@@ -641,12 +641,30 @@ function EmployeesPageContent() {
   };
 
   const filteredData = React.useMemo(() => {
+    let result = data;
+
     // Filter out inactive (Terminated, Resigned) employees unless toggle is on
     if (!showInactives) {
-      return data.filter(emp => emp.status === 'Active');
+      result = result.filter(emp => emp.status === 'Active');
     }
-    return data;
-  }, [data, showInactives]);
+
+    // Client-side search — instant, no API round-trip
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(emp => {
+        const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.toLowerCase();
+        return (
+          fullName.includes(q) ||
+          (emp.email || '').toLowerCase().includes(q) ||
+          (emp.eeCode || '').toLowerCase().includes(q) ||
+          (emp.transporterId || '').toLowerCase().includes(q) ||
+          (emp.badgeNumber || '').toLowerCase().includes(q)
+        );
+      });
+    }
+
+    return result;
+  }, [data, showInactives, searchQuery]);
 
   // ── Shared chip renderer for mobile cards ──
   const renderDayChip = (emp: ISymxEmployee, day: string) => {
