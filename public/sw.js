@@ -58,6 +58,9 @@ self.addEventListener('fetch', (event) => {
   // Skip API calls — always go to network for fresh data
   if (url.pathname.startsWith('/api/')) return;
 
+  // Skip Flutter web app — it has its own service worker and asset pipeline
+  if (url.pathname.startsWith('/app/') || url.pathname === '/app') return;
+
   // Skip browser extension requests
   if (!url.protocol.startsWith('http')) return;
 
