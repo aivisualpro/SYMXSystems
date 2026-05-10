@@ -82,100 +82,48 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [
-                    const Color(0xFF0F172A),
-                    const Color(0xFF1E1B4B),
-                    const Color(0xFF0F172A),
-                  ]
-                : [
-                    const Color(0xFFF8FAFC),
-                    const Color(0xFFEEF2FF),
-                    const Color(0xFFF0FDF4),
-                  ],
-          ),
-        ),
+        decoration: const BoxDecoration(color: Color(0xFF0A0E1A)),
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ── Logo Icon ──
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppTheme.primaryIndigo,
-                      AppTheme.accentEmerald,
-                    ],
+              // ── SYMX Logistics wordmark (full color, the same asset
+              //    used by the marketing site's login page) ──
+              Image.asset(
+                'assets/symx-logo.png',
+                width: 280,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Text(
+                  'SYMX Logistics',
+                  style: GoogleFonts.inter(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : AppTheme.textPrimary,
                   ),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.primaryIndigo.withValues(alpha: 0.35),
-                      blurRadius: 32,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.local_shipping_rounded,
-                  size: 44,
-                  color: Colors.white,
                 ),
               )
                   .animate()
+                  .fadeIn(duration: 600.ms)
                   .scale(
-                    begin: const Offset(0.6, 0.6),
+                    begin: const Offset(0.94, 0.94),
                     end: const Offset(1.0, 1.0),
-                    duration: 600.ms,
-                    curve: Curves.easeOutBack,
-                  )
-                  .fadeIn(duration: 400.ms)
-                  .then()
-                  .shimmer(
-                    duration: 1800.ms,
-                    color: Colors.white.withValues(alpha: 0.15),
+                    duration: 700.ms,
+                    curve: Curves.easeOutCubic,
                   ),
 
-              const SizedBox(height: 28),
-
-              // ── Brand Text ──
-              Text(
-                'SYMX',
-                style: GoogleFonts.inter(
-                  fontSize: 36,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 6,
-                  color: isDark ? Colors.white : AppTheme.textPrimary,
-                ),
-              )
-                  .animate()
-                  .fadeIn(delay: 200.ms, duration: 500.ms)
-                  .slideY(begin: 0.15, end: 0, duration: 500.ms),
-
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
 
               Text(
-                'SYSTEMS',
+                'DRIVER OPERATIONS',
                 style: GoogleFonts.inter(
-                  fontSize: 14,
+                  fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  letterSpacing: 8,
-                  color: isDark
-                      ? AppTheme.textSecondaryDark
-                      : AppTheme.textSecondary,
+                  letterSpacing: 4,
+                  color: Colors.white.withValues(alpha: 0.45),
                 ),
               )
                   .animate()
-                  .fadeIn(delay: 400.ms, duration: 500.ms)
+                  .fadeIn(delay: 450.ms, duration: 500.ms)
                   .slideY(begin: 0.15, end: 0, duration: 500.ms),
 
               const SizedBox(height: 48),

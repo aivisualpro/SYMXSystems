@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -98,6 +99,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         children: [
           // ── Main scaffold ──
           Scaffold(
+            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                ? AppTheme.bgDark
+                : AppTheme.surfaceLight,
             appBar: _HomeAppBar(
               title: _kTabs[currentIdx].title,
             ),
@@ -128,126 +132,142 @@ class _HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final String title;
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(72);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final employee = ref.watch(currentEmployeeProvider);
+    final emp = employee.valueOrNull;
 
-    // Build initials from employee name.
-    final initials = employee.whenOrNull(
-          data: (e) {
-            if (e == null) return '?';
-            final f = e.firstName.isNotEmpty ? e.firstName[0] : '';
-            final l = e.lastName.isNotEmpty ? e.lastName[0] : '';
-            return '$f$l'.toUpperCase();
-          },
-        ) ??
-        '?';
+    final firstName = emp?.firstName.isNotEmpty == true
+        ? emp!.firstName
+        : 'Driver';
+    final initials = emp == null
+        ? '?'
+        : '${emp.firstName.isNotEmpty ? emp.firstName[0] : ''}${emp.lastName.isNotEmpty ? emp.lastName[0] : ''}'
+            .toUpperCase();
+    final profileUrl = emp?.profileImage ?? '';
 
     return AppBar(
-      backgroundColor: isDark ? AppTheme.surfaceDark : Colors.white,
+      backgroundColor: isDark ? AppTheme.bgDark : Colors.white,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      scrolledUnderElevation: 0.5,
+      scrolledUnderElevation: 0,
+      automaticallyImplyLeading: false,
+      toolbarHeight: 72,
 
-      // ── Left: Profile circle ──
-      leading: Padding(
-        padding: const EdgeInsets.only(left: 12),
-        child: Center(
-          child: GestureDetector(
-            onTap: () => _showProfileDrawer(context, ref),
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppTheme.primaryIndigo, AppTheme.accentEmerald],
-                ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primaryIndigo.withValues(alpha: 0.25),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  initials,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-
-      // ── Center: Tab title ──
-      centerTitle: true,
-      title: Text(
-        title,
-        style: GoogleFonts.inter(
-          fontSize: 17,
-          fontWeight: FontWeight.w600,
-          color: isDark ? AppTheme.textOnDark : AppTheme.textPrimary,
-        ),
-      ),
-
-      // ── Right: Notification bell ──
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 12),
-          child: IconButton(
-            onPressed: () {
-              // Placeholder — will open notifications in a later prompt.
-            },
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  Icons.notifications_outlined,
-                  size: 24,
-                  color: isDark
-                      ? AppTheme.textSecondaryDark
-                      : AppTheme.textSecondary,
-                ),
-                // Badge dot
-                Positioned(
-                  top: -2,
-                  right: -2,
-                  child: Container(
-                    width: 9,
-                    height: 9,
-                    decoration: BoxDecoration(
-                      color: AppTheme.accentEmerald,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isDark ? AppTheme.surfaceDark : Colors.white,
-                        width: 1.5,
-                      ),
+      // ── Left: Profile pill (avatar + greeting) ──
+      titleSpacing: 0,
+      title: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            // Tappable profile pill (flexible so long names don't overflow)
+            Flexible(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(40),
+                  onTap: () => _showProfileDrawer(context, ref),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 14, 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _ProfileAvatar(
+                          imageUrl: profileUrl,
+                          initials: initials,
+                          size: 44,
+                          fontSize: 15,
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Hi, $firstName',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? AppTheme.textOnDark
+                                      : AppTheme.textPrimary,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? AppTheme.textSecondaryDark
+                                      : AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
-      ],
+            const SizedBox(width: 8),
 
-      // Bottom border
+            // ── Right: Notification bell ──
+            IconButton(
+              onPressed: () {},
+              tooltip: 'Notifications',
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    Icons.notifications_outlined,
+                    size: 22,
+                    color: isDark
+                        ? AppTheme.textSecondaryDark
+                        : AppTheme.textSecondary,
+                  ),
+                  Positioned(
+                    top: -2,
+                    right: -2,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentEmerald,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? AppTheme.bgDark : Colors.white,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+
+      // Bottom hairline
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(
           height: 1,
-          color: isDark ? AppTheme.dividerDark : AppTheme.dividerLight,
+          color: isDark ? AppTheme.borderDark : AppTheme.dividerLight,
         ),
       ),
     );
@@ -284,28 +304,14 @@ class _HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 ),
 
                 // Avatar
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [AppTheme.primaryIndigo, AppTheme.accentEmerald],
-                    ),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      employee != null
-                          ? '${employee.firstName.isNotEmpty ? employee.firstName[0] : ''}${employee.lastName.isNotEmpty ? employee.lastName[0] : ''}'
-                              .toUpperCase()
-                          : '?',
-                      style: GoogleFonts.inter(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
+                _ProfileAvatar(
+                  imageUrl: employee?.profileImage ?? '',
+                  initials: employee != null
+                      ? '${employee.firstName.isNotEmpty ? employee.firstName[0] : ''}${employee.lastName.isNotEmpty ? employee.lastName[0] : ''}'
+                          .toUpperCase()
+                      : '?',
+                  size: 64,
+                  fontSize: 22,
                 ),
 
                 const SizedBox(height: 16),
@@ -358,6 +364,86 @@ class _HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// PROFILE AVATAR — shows network image with initials fallback
+// ═══════════════════════════════════════════════════════════════════
+
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({
+    required this.imageUrl,
+    required this.initials,
+    this.size = 36,
+    this.fontSize = 13,
+  });
+
+  final String imageUrl;
+  final String initials;
+  final double size;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imageUrl.isNotEmpty;
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppTheme.primaryIndigo, AppTheme.accentEmerald],
+        ),
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryIndigo.withValues(alpha: 0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: hasImage
+          ? ClipOval(
+              child: CachedNetworkImage(
+                imageUrl: imageUrl,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Center(
+                  child: Text(
+                    initials,
+                    style: GoogleFonts.inter(
+                      fontSize: fontSize,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                errorWidget: (_, __, ___) => Center(
+                  child: Text(
+                    initials,
+                    style: GoogleFonts.inter(
+                      fontSize: fontSize,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : Center(
+              child: Text(
+                initials,
+                style: GoogleFonts.inter(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // ANIMATED BOTTOM NAV
 // ═══════════════════════════════════════════════════════════════════
 
@@ -374,7 +460,7 @@ class _AnimatedBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final bgColor = isDark ? AppTheme.surfaceDark : Colors.white;
+    final bgColor = isDark ? AppTheme.bgDark : Colors.white;
 
     return Container(
       decoration: BoxDecoration(

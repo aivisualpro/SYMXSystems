@@ -3,9 +3,9 @@
   "short_name": "SYMX",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#0a0e1a",
-  "theme_color": "#0a0e1a",
-  "description": "SYMX Systems App",
+  "background_color": "#0A0E1A",
+  "theme_color": "#0A0E1A",
+  "description": "SYMX Systems — Driver operations app for inspections, routes, and notices.",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [

@@ -9,12 +9,15 @@ class AppTheme {
   AppTheme._(); // prevent instantiation
 
   // ─── Brand Colours ───────────────────────────────────────────────
+  // Matches the root SYMX Systems web app exactly.
   static const Color primaryIndigo = Color(0xFF4F46E5);
   static const Color accentEmerald = Color(0xFF10B981);
   static const Color surfaceLight = Color(0xFFF8FAFC);
-  static const Color surfaceDark = Color(0xFF0F172A);
-  static const Color cardDark = Color(0xFF1E293B);
+  static const Color surfaceDark = Color(0xFF0A0E1A); // root app dark
+  static const Color bgDark = Color(0xFF0A0E1A); // root app dark navy
+  static const Color cardDark = Color(0xFF111827);
   static const Color cardLight = Color(0xFFFFFFFF);
+  static const Color borderDark = Color(0xFF1F2937);
   static const Color textPrimary = Color(0xFF0F172A);
   static const Color textSecondary = Color(0xFF64748B);
   static const Color textOnDark = Color(0xFFF1F5F9);

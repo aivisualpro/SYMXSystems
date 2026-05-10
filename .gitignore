@@ -42,3 +42,10 @@ next-env.d.ts
 
 # Ignored files
 passwords
+
+# Flutter web build output (regenerated on Vercel deploy)
+/public/app/
+
+# Flutter local build artifacts
+SYMXSystemsApp/build/
+SYMXSystemsApp/.dart_tool/

@@ -1,10 +1,13 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:lottie/lottie.dart';
+import 'package:timezone/timezone.dart' as tz;
 
+import '../../../core/theme/app_theme.dart';
 import '../../auth/data/auth_repository.dart';
 
 // ─── First-visit flag ──────────────────────────────────────────────
@@ -60,12 +63,16 @@ class _WelcomeOverlayState extends ConsumerState<WelcomeOverlay>
   @override
   Widget build(BuildContext context) {
     final employee = ref.watch(currentEmployeeProvider);
-    final firstName = employee.whenOrNull(
-          data: (e) => e?.firstName ?? 'Driver',
-        ) ??
-        'Driver';
+    final emp = employee.valueOrNull;
+    final firstName = emp?.firstName ?? 'Driver';
+    final profileUrl = emp?.profileImage ?? '';
+    final initials = emp != null
+        ? '${emp.firstName.isNotEmpty ? emp.firstName[0] : ''}${emp.lastName.isNotEmpty ? emp.lastName[0] : ''}'
+            .toUpperCase()
+        : '?';
 
-    final today = DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now());
+    final la = tz.getLocation('America/Los_Angeles');
+    final today = DateFormat('EEEE, MMMM d, yyyy').format(tz.TZDateTime.now(la));
 
     return AnimatedBuilder(
       animation: _dismissCtrl,
@@ -87,15 +94,7 @@ class _WelcomeOverlayState extends ConsumerState<WelcomeOverlay>
             width: double.infinity,
             height: double.infinity,
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF1E1B4B),
-                  Color(0xFF0F172A),
-                  Color(0xFF064E3B),
-                ],
-              ),
+              color: Color(0xFF0A0E1A),
             ),
             child: Stack(
               children: [
@@ -117,6 +116,96 @@ class _WelcomeOverlayState extends ConsumerState<WelcomeOverlay>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Profile avatar
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.3),
+                              width: 2.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primaryIndigo.withValues(alpha: 0.4),
+                                blurRadius: 24,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ClipOval(
+                            child: profileUrl.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: profileUrl,
+                                    width: 80,
+                                    height: 80,
+                                    fit: BoxFit.cover,
+                                    placeholder: (_, __) => Container(
+                                      decoration: const BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [AppTheme.primaryIndigo, AppTheme.accentEmerald],
+                                        ),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          initials,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 28,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    errorWidget: (_, __, ___) => Container(
+                                      decoration: const BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [AppTheme.primaryIndigo, AppTheme.accentEmerald],
+                                        ),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          initials,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 28,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : Container(
+                                    decoration: const BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [AppTheme.primaryIndigo, AppTheme.accentEmerald],
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        initials,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                        )
+                            .animate()
+                            .scale(
+                              begin: const Offset(0.5, 0.5),
+                              end: const Offset(1.0, 1.0),
+                              duration: 500.ms,
+                              curve: Curves.easeOutBack,
+                            )
+                            .fadeIn(duration: 400.ms),
+
+                        const SizedBox(height: 20),
+
                         // Greeting
                         Text(
                           'Hello, $firstName 👋',

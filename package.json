@@ -8,7 +8,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "backup": "node scripts/run-backup.mjs"
+    "backup": "node scripts/run-backup.mjs",
+    "flutter:build": "cd SYMXSystemsApp && flutter build web --release --base-href /app/ --pwa-strategy=none && rm -rf ../public/app && mkdir -p ../public/app && cp -R build/web/* ../public/app/",
+    "flutter:dev": "cd SYMXSystemsApp && flutter run -d web-server --web-port=5050 --web-hostname=localhost",
+    "flutter:icons": "cd SYMXSystemsApp && dart run flutter_launcher_icons"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

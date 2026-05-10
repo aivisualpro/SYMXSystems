@@ -1,5 +1,6 @@
-
 {
+  "buildCommand": "bash scripts/vercel-flutter-build.sh",
+  "framework": "nextjs",
   "crons": [
     {
       "path": "/api/admin/live-shipments/refresh-all",

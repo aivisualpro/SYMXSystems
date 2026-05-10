@@ -180,37 +180,34 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
           ),
         ),
       ),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // ── Route Info Header ──
-            _buildRouteHeader(theme, isDark, typeColor),
-            const SizedBox(height: 20),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // ── Route Info Header ──
+          _buildRouteHeader(theme, isDark, typeColor),
+          const SizedBox(height: 20),
 
-            // ── Mileage ──
-            _buildMileageField(theme, isDark),
-            const SizedBox(height: 16),
+          // ── Mileage ──
+          _buildMileageField(theme, isDark),
+          const SizedBox(height: 16),
 
-            // ── Photos ──
-            _buildPhotosSection(theme, isDark),
-            const SizedBox(height: 16),
+          // ── Photos ──
+          _buildPhotosSection(theme, isDark),
+          const SizedBox(height: 16),
 
-            // ── Any Repairs ──
-            _buildRepairsSection(theme, isDark),
-            const SizedBox(height: 16),
+          // ── Any Repairs ──
+          _buildRepairsSection(theme, isDark),
+          const SizedBox(height: 16),
 
-            // ── Comments ──
-            _buildField('Comments (optional)', _commentsCtrl, theme, isDark,
-                maxLines: 3),
-            const SizedBox(height: 28),
+          // ── Comments ──
+          _buildField('Comments (optional)', _commentsCtrl, theme, isDark,
+              maxLines: 3),
+          const SizedBox(height: 28),
 
-            // ── Submit Button ──
-            _buildSubmitButton(isDark),
-            const SizedBox(height: 20),
-          ],
-        ),
+          // ── Submit Button ──
+          _buildSubmitButton(isDark),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }

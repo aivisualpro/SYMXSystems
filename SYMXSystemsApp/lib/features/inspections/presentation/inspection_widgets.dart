@@ -58,8 +58,7 @@ Color _hexToColor(String hex) {
 /// Returns today's date (YYYY-MM-DD) in America/Los_Angeles.
 ///
 /// Uses the `timezone` package so PST/PDT transitions are handled
-/// correctly. The server response's `date` field is still the
-/// authoritative value and replaces this on first load.
+/// correctly. The business date always follows the company timezone.
 String todayLA() {
   final la = tz.getLocation('America/Los_Angeles');
   final now = tz.TZDateTime.now(la);
@@ -295,29 +294,33 @@ class _RouteCardState extends State<RouteCard> {
           // ── Row 1: Type pill + Route # ──
           Row(
             children: [
-              // Type pill
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: typeColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: typeColor.withValues(alpha: 0.3),
+              // Type pill — flexible so long type names ellipsize
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
                   ),
-                ),
-                child: Text(
-                  widget.route.type.isNotEmpty ? widget.route.type : '—',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: typeColor,
+                  decoration: BoxDecoration(
+                    color: typeColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: typeColor.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    widget.route.type.isNotEmpty ? widget.route.type : '—',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: typeColor,
+                    ),
                   ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               if (widget.route.routeNumber.isNotEmpty)
                 Text(
                   '#${widget.route.routeNumber}',
@@ -372,28 +375,34 @@ class _RouteCardState extends State<RouteCard> {
 
           const SizedBox(height: 14),
 
-          // ── Row 3: Status timeline ──
+          // ── Row 3: Status timeline (each dot expands equally) ──
           Row(
             children: [
-              _StatusDot(
-                icon: Icons.search,
-                label: 'Inspected',
-                time: widget.route.inspectionTime,
-                theme: theme,
+              Expanded(
+                child: _StatusDot(
+                  icon: Icons.search,
+                  label: 'Inspected',
+                  time: widget.route.inspectionTime,
+                  theme: theme,
+                ),
               ),
-              const SizedBox(width: 16),
-              _StatusDot(
-                icon: Icons.departure_board,
-                label: 'Departed',
-                time: widget.route.actualDepartureTime,
-                theme: theme,
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatusDot(
+                  icon: Icons.departure_board,
+                  label: 'Departed',
+                  time: widget.route.actualDepartureTime,
+                  theme: theme,
+                ),
               ),
-              const SizedBox(width: 16),
-              _StatusDot(
-                icon: Icons.check_circle_outline,
-                label: 'Delivered',
-                time: widget.route.deliveryCompletionTime,
-                theme: theme,
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatusDot(
+                  icon: Icons.check_circle_outline,
+                  label: 'Delivered',
+                  time: widget.route.deliveryCompletionTime,
+                  theme: theme,
+                ),
               ),
             ],
           ),
@@ -483,41 +492,45 @@ class _StatusDot extends StatelessWidget {
         : (theme.textTheme.bodySmall?.color ?? Colors.grey)
             .withValues(alpha: 0.35);
 
-    return Expanded(
-      child: Row(
-        children: [
-          Icon(
-            hasValue ? Icons.check_circle : Icons.remove_circle_outline,
-            size: 14,
-            color: color,
-          ),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: GoogleFonts.inter(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: color,
-                    letterSpacing: 0.3,
-                  ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          hasValue ? Icons.check_circle : Icons.remove_circle_outline,
+          size: 14,
+          color: color,
+        ),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                  letterSpacing: 0.3,
                 ),
-                Text(
-                  hasValue ? time : '—',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: hasValue ? theme.textTheme.bodyLarge?.color : color,
-                  ),
+              ),
+              Text(
+                hasValue ? time : '—',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: hasValue ? theme.textTheme.bodyLarge?.color : color,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
