@@ -258,21 +258,20 @@ class _RouteCardState extends State<RouteCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final typeColor = getTypeColor(widget.route.type, widget.route.typeColor);
     final supportsHover =
         kIsWeb || Theme.of(context).platform == TargetPlatform.macOS;
 
     Widget card = AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(20),
       transform: _isHovered
           ? Matrix4.translationValues(0.0, -2.0, 0.0)
           : Matrix4.identity(),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.cardDark : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: _isHovered
               ? AppTheme.primaryIndigo.withValues(alpha: 0.3)
@@ -291,51 +290,7 @@ class _RouteCardState extends State<RouteCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Row 1: Type pill + Route # ──
-          Row(
-            children: [
-              // Type pill — flexible so long type names ellipsize
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: typeColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: typeColor.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Text(
-                    widget.route.type.isNotEmpty ? widget.route.type : '—',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: typeColor,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              if (widget.route.routeNumber.isNotEmpty)
-                Text(
-                  '#${widget.route.routeNumber}',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: theme.textTheme.bodyLarge?.color,
-                  ),
-                ),
-            ],
-          ),
-
-          const SizedBox(height: 14),
-
-          // ── Row 2: Van, Dashcam, ServiceType (all inline) ──
+          // ── Row 1: Van, Dashcam, ServiceType (all inline) ──
           Row(
             children: [
               if (widget.route.van.isNotEmpty)
@@ -372,19 +327,19 @@ class _RouteCardState extends State<RouteCard> {
             ],
           ),
 
-          // ── Row 3: VIN ──
+          // ── Row 2: VIN ──
           if (widget.route.vin.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             _InfoChip(
               icon: Icons.confirmation_number_outlined,
-              label: widget.route.vin,
+              label: 'VIN: ${widget.route.vin}',
               theme: theme,
             ),
           ],
 
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
 
-          // ── Row 4: Status timeline (each dot expands equally) ──
+          // ── Status timeline ──
           Row(
             children: [
               Expanded(

@@ -308,10 +308,19 @@ class _TopBar extends StatelessWidget {
         int.tryParse(weekParts.length == 2 ? weekParts[1] : '1') ?? 1;
     final year = weekParts.isNotEmpty ? weekParts[0] : '${DateTime.now().year}';
 
+    // Determine maximum week to show (current real week)
+    final todayStr = todayLA();
+    final todayDate = DateTime.tryParse(todayStr) ?? DateTime.now();
+    final todayYW = dateToYearWeek(todayDate);
+    final todayParts = todayYW.split('-W');
+    final maxWeek = (todayParts.length == 2)
+        ? (int.tryParse(todayParts[1]) ?? 52)
+        : 52;
+
     // Approximate tile height for scrolling to the current week
     const double tileHeight = 48.0;
     final initialOffset =
-        ((currentWeekNum - 1) * tileHeight).clamp(0.0, 52 * tileHeight);
+        ((currentWeekNum - 1) * tileHeight).clamp(0.0, maxWeek * tileHeight);
 
     showModalBottomSheet(
       context: context,
@@ -338,7 +347,7 @@ class _TopBar extends StatelessWidget {
               Expanded(
                 child: ListView.builder(
                   controller: scrollController,
-                  itemCount: 52,
+                  itemCount: maxWeek,
                   itemBuilder: (_, i) {
                     final w = i + 1;
                     final label = '$year-W${w.toString().padLeft(2, '0')}';
