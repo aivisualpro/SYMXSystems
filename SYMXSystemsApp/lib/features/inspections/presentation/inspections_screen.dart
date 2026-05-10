@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/models/route_row.dart';
 import '../../../shared/widgets/error_retry_card.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/routes_repository.dart';
+import 'inspection_form_screen.dart';
 import 'inspection_widgets.dart';
 
 // ─── Local State ───────────────────────────────────────────────────
@@ -363,11 +365,24 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// ROUTES LIST
-// ═══════════════════════════════════════════════════════════════════
+/// Handles tapping a route card: opens the inspection form for
+/// uninspected routes, or the detail sheet for already-inspected ones.
+void _onRouteTap(BuildContext context, RouteRow route, WidgetRef ref) {
+  if (route.isInspected) {
+    showRouteDetailSheet(context, route);
+  } else {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProviderScope(
+          parent: ProviderScope.containerOf(context),
+          child: InspectionFormScreen(route: route),
+        ),
+      ),
+    );
+  }
+}
 
-class _RoutesList extends StatelessWidget {
+class _RoutesList extends ConsumerWidget {
   const _RoutesList({
     required this.routesAsync,
     required this.isWide,
@@ -379,7 +394,7 @@ class _RoutesList extends StatelessWidget {
   final VoidCallback? onRetry;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return routesAsync.when(
       loading: () => ListView(
         padding: const EdgeInsets.all(16),
@@ -418,7 +433,7 @@ class _RoutesList extends StatelessWidget {
             itemBuilder: (_, i) {
               return RouteCard(
                 route: routes[i],
-                onTap: () => showRouteDetailSheet(context, routes[i]),
+                onTap: () => _onRouteTap(context, routes[i], ref),
               )
                   .animate()
                   .fadeIn(duration: 200.ms, delay: (i * 40).ms)
@@ -434,7 +449,7 @@ class _RoutesList extends StatelessWidget {
           itemBuilder: (_, i) {
             return RouteCard(
               route: routes[i],
-              onTap: () => showRouteDetailSheet(context, routes[i]),
+              onTap: () => _onRouteTap(context, routes[i], ref),
             )
                 .animate()
                 .fadeIn(duration: 200.ms, delay: (i * 40).ms)

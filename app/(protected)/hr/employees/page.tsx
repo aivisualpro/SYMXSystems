@@ -74,7 +74,7 @@ function EmployeesPageContent() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const needsApiCall = !!searchParams.get('search') || !!hasUrlFilters;
 
-  const { data: storeEmployees = { records: [], totalCount: 0, hasMore: false }, isLoading: isLoadingEmployees } = useEmployeesList();
+  const { data: storeEmployees = { records: [], totalCount: 0, hasMore: false }, isLoading: isLoadingEmployees } = useEmployeesList({ limit: '9999', terminated: 'true' });
 
   const [data, setData] = useState<ISymxEmployee[]>(() => {
     if (!needsApiCall && storeEmployees?.records?.length > 0) {
@@ -169,7 +169,8 @@ function EmployeesPageContent() {
     try {
       const params = new URLSearchParams({
         skip: skip.toString(),
-        limit: PAGE_SIZE.toString(),
+        limit: '9999',
+        terminated: 'true',
       });
       if (debouncedSearch) params.set("search", debouncedSearch);
 

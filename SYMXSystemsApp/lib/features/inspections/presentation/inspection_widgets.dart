@@ -629,30 +629,41 @@ void showRouteDetailSheet(BuildContext context, RouteRow route) {
 
                 const SizedBox(height: 28),
 
-                // CTA placeholder
+                // CTA — inspection status
                 SizedBox(
                   width: double.infinity,
                   height: 52,
-                  child: ElevatedButton(
-                    onPressed: null, // disabled
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          AppTheme.primaryIndigo.withValues(alpha: 0.4),
-                      disabledBackgroundColor:
-                          AppTheme.primaryIndigo.withValues(alpha: 0.15),
-                      disabledForegroundColor:
-                          AppTheme.primaryIndigo.withValues(alpha: 0.4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      elevation: 0,
+                  child: ElevatedButton.icon(
+                    onPressed: null,
+                    icon: Icon(
+                      route.isInspected
+                          ? Icons.check_circle_rounded
+                          : Icons.search_rounded,
+                      size: 18,
                     ),
-                    child: Text(
-                      'Start Inspection — Coming in next update',
+                    label: Text(
+                      route.isInspected
+                          ? 'Inspection Complete'
+                          : 'Inspection Pending',
                       style: GoogleFonts.inter(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: route.isInspected
+                          ? AppTheme.accentEmerald.withValues(alpha: 0.15)
+                          : AppTheme.primaryIndigo.withValues(alpha: 0.15),
+                      disabledBackgroundColor: route.isInspected
+                          ? AppTheme.accentEmerald.withValues(alpha: 0.15)
+                          : AppTheme.primaryIndigo.withValues(alpha: 0.15),
+                      disabledForegroundColor: route.isInspected
+                          ? AppTheme.accentEmerald
+                          : AppTheme.primaryIndigo.withValues(alpha: 0.4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      elevation: 0,
                     ),
                   ),
                 ),

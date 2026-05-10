@@ -54,6 +54,9 @@ dependencies:
   # Timezone-aware date handling
   timezone: ^0.9.4
 
+  # Camera / gallery image picker
+  image_picker: ^1.0.7
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
