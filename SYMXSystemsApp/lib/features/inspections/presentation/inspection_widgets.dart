@@ -333,49 +333,58 @@ class _RouteCardState extends State<RouteCard> {
             ],
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
-          // ── Row 2: Info chips ──
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
+          // ── Row 2: Van, Dashcam, ServiceType (all inline) ──
+          Row(
             children: [
               if (widget.route.van.isNotEmpty)
-                _InfoChip(
-                  icon: Icons.local_shipping_outlined,
-                  label: widget.route.van,
-                  theme: theme,
+                Expanded(
+                  child: _InfoChip(
+                    icon: Icons.local_shipping_outlined,
+                    label: widget.route.van,
+                    theme: theme,
+                  ),
                 ),
-              if (widget.route.routeDuration.isNotEmpty)
-                _InfoChip(
-                  icon: Icons.timer_outlined,
-                  label: widget.route.routeDuration,
-                  theme: theme,
+              if (widget.route.van.isNotEmpty &&
+                  (widget.route.dashcam.isNotEmpty ||
+                      widget.route.serviceType.isNotEmpty))
+                const SizedBox(width: 8),
+              if (widget.route.dashcam.isNotEmpty)
+                Expanded(
+                  child: _InfoChip(
+                    icon: Icons.videocam_outlined,
+                    label: widget.route.dashcam,
+                    theme: theme,
+                  ),
                 ),
-              if (widget.route.waveTime.isNotEmpty)
-                _InfoChip(
-                  icon: Icons.waves_outlined,
-                  label: widget.route.waveTime,
-                  theme: theme,
-                ),
-              if (widget.route.stopCount > 0)
-                _InfoChip(
-                  icon: Icons.pin_drop_outlined,
-                  label: '${widget.route.stopCount} stops',
-                  theme: theme,
-                ),
-              if (widget.route.packageCount > 0)
-                _InfoChip(
-                  icon: Icons.inventory_2_outlined,
-                  label: '${widget.route.packageCount} pkg',
-                  theme: theme,
+              if (widget.route.dashcam.isNotEmpty &&
+                  widget.route.serviceType.isNotEmpty)
+                const SizedBox(width: 8),
+              if (widget.route.serviceType.isNotEmpty)
+                Expanded(
+                  child: _InfoChip(
+                    icon: Icons.miscellaneous_services_outlined,
+                    label: widget.route.serviceType,
+                    theme: theme,
+                  ),
                 ),
             ],
           ),
 
+          // ── Row 3: VIN ──
+          if (widget.route.vin.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _InfoChip(
+              icon: Icons.confirmation_number_outlined,
+              label: widget.route.vin,
+              theme: theme,
+            ),
+          ],
+
           const SizedBox(height: 14),
 
-          // ── Row 3: Status timeline (each dot expands equally) ──
+          // ── Row 4: Status timeline (each dot expands equally) ──
           Row(
             children: [
               Expanded(

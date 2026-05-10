@@ -308,12 +308,19 @@ class _TopBar extends StatelessWidget {
         int.tryParse(weekParts.length == 2 ? weekParts[1] : '1') ?? 1;
     final year = weekParts.isNotEmpty ? weekParts[0] : '${DateTime.now().year}';
 
+    // Approximate tile height for scrolling to the current week
+    const double tileHeight = 48.0;
+    final initialOffset =
+        ((currentWeekNum - 1) * tileHeight).clamp(0.0, 52 * tileHeight);
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
+        final scrollController =
+            ScrollController(initialScrollOffset: initialOffset);
         return SizedBox(
           height: 320,
           child: Column(
@@ -330,6 +337,7 @@ class _TopBar extends StatelessWidget {
               ),
               Expanded(
                 child: ListView.builder(
+                  controller: scrollController,
                   itemCount: 52,
                   itemBuilder: (_, i) {
                     final w = i + 1;
@@ -427,7 +435,7 @@ class _RoutesList extends ConsumerWidget {
               crossAxisCount: 2,
               mainAxisSpacing: 4,
               crossAxisSpacing: 12,
-              mainAxisExtent: 180,
+              mainAxisExtent: 220,
             ),
             itemCount: routes.length,
             itemBuilder: (_, i) {

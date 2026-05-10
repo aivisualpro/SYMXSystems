@@ -25,6 +25,8 @@ class RouteRow {
   final int packageCount;
   final String attendance;
   final String serviceType;
+  final String dashcam;
+  final String vin;
 
   const RouteRow({
     required this.id,
@@ -48,6 +50,8 @@ class RouteRow {
     this.packageCount = 0,
     this.attendance = '',
     this.serviceType = '',
+    this.dashcam = '',
+    this.vin = '',
   });
 
   factory RouteRow.fromJson(Map<String, dynamic> json) {
@@ -79,6 +83,8 @@ class RouteRow {
       packageCount: json['packageCount'] ?? 0,
       attendance: json['attendance'] ?? '',
       serviceType: json['serviceType'] ?? '',
+      dashcam: json['dashcam'] ?? '',
+      vin: json['vin'] ?? '',
     );
   }
 

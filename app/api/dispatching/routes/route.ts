@@ -143,7 +143,7 @@ export async function GET(req: NextRequest) {
             }
         });
         const transporterIds = [...transporterIdsSet];
-        const allVins = [...new Set(routes.map((r: any) => r.van).filter(Boolean))];
+        const allVanNames = [...new Set(routes.map((r: any) => r.van).filter(Boolean))];
 
         // Build completion types filter using typeId
         const completionTypeIds: string[] = Array.isArray(completionSetting?.value) && (completionSetting as any).value.length > 0
@@ -172,8 +172,8 @@ export async function GET(req: NextRequest) {
                 { $match: { yearWeek } },
                 { $group: { _id: "$transporterId", count: { $sum: 1 } } },
             ]),
-            allVins.length > 0
-                ? Vehicle.find({ vin: { $in: allVins } }, { vin: 1, vehicleName: 1 }).lean()
+            allVanNames.length > 0
+                ? Vehicle.find({ vehicleName: { $in: allVanNames } }, { vin: 1, vehicleName: 1 }).lean()
                 : [],
             // Fetch schedules linked to these routes (for shiftNotification status)
             (() => {
@@ -231,8 +231,12 @@ export async function GET(req: NextRequest) {
         auditCountsRaw.forEach((c: any) => { auditCounts[c._id] = c.count; });
 
         const vehicleNames: Record<string, string> = {};
+        const vehicleNameToVin: Record<string, string> = {};
         (vehicleDocs as any[]).forEach((v: any) => {
-            if (v.vin && v.vehicleName) vehicleNames[v.vin] = v.vehicleName;
+            if (v.vin && v.vehicleName) {
+                vehicleNames[v.vin] = v.vehicleName;
+                vehicleNameToVin[v.vehicleName] = v.vin;
+            }
         });
 
         // ── Build Confirmation Status Map ──
@@ -278,18 +282,37 @@ export async function GET(req: NextRequest) {
             rtIdToName.set(String(rt._id), rt.name || "");
         }
 
+        // ── Enrich routes with vin resolved from vehicleName → vin map ──
+        const backfillVinOps: any[] = [];
         const enrichedRoutes = routes.map((r: any) => {
             const typeId = r.typeId ? String(r.typeId) : "";
             const resolvedType = typeId ? (rtIdToName.get(typeId) || r.type || "") : (r.type || "");
             const emp = employeeMap[(r.transporterId || "").trim().toUpperCase()] || {};
+            // Resolve vin from the van (vehicleName) field
+            const resolvedVin = r.van ? (vehicleNameToVin[r.van] || r.vin || "") : (r.vin || "");
+            // Queue lazy backfill if vin is missing or stale in the DB (only for W19+)
+            if (resolvedVin && r.vin !== resolvedVin && (r.yearWeek || "") >= "2026-W19") {
+                backfillVinOps.push({
+                    updateOne: {
+                        filter: { _id: r._id },
+                        update: { $set: { vin: resolvedVin } },
+                    },
+                });
+            }
             return {
                 ...r,
                 type: resolvedType,
+                vin: resolvedVin,
                 employeeName: emp.name || r.transporterId,
                 profileImage: emp.profileImage || "",
                 phone: emp.phoneNumber || "",
             };
         });
+
+        // Fire-and-forget lazy backfill of vin onto routes
+        if (backfillVinOps.length > 0) {
+            SYMXRoute.bulkWrite(backfillVinOps, { ordered: false }).catch(() => {});
+        }
 
         return NextResponse.json({
             routes: enrichedRoutes,
@@ -580,7 +603,7 @@ async function autoAssignVans(yearWeek: string) {
     // 4. Fetch all Active vehicles
     const activeVehicles = await Vehicle.find(
         { status: "Active", serviceType: { $in: SIZE_CATEGORIES } },
-        { vehicleName: 1, serviceType: 1, dashcam: 1 }
+        { vin: 1, vehicleName: 1, serviceType: 1, dashcam: 1 }
     ).sort({ vehicleName: -1 }).lean() as any[];
 
     let totalAssigned = 0;
@@ -628,7 +651,7 @@ async function autoAssignVans(yearWeek: string) {
         const orderedRoutes = [...untrained, ...trained];
         const vanQueue = [...availableVans]; // work with a copy
 
-        const vanUpdates: { routeId: string; vehicleName: string; serviceType: string; dashcam: string }[] = [];
+        const vanUpdates: { routeId: string; vin: string; vehicleName: string; serviceType: string; dashcam: string }[] = [];
 
         for (const route of orderedRoutes) {
             if (vanQueue.length === 0) break;
@@ -636,6 +659,7 @@ async function autoAssignVans(yearWeek: string) {
             const van = vanQueue.shift()!;
             vanUpdates.push({
                 routeId: route._id.toString(),
+                vin: van.vin || "",
                 vehicleName: van.vehicleName,
                 serviceType: van.serviceType || "",
                 dashcam: van.dashcam || "",
@@ -653,6 +677,7 @@ async function autoAssignVans(yearWeek: string) {
                     update: {
                         $set: {
                             van: u.vehicleName,
+                            vin: u.vin,
                             serviceType: u.serviceType,
                             dashcam: u.dashcam,
                         },
@@ -693,6 +718,7 @@ async function autoAssignVans(yearWeek: string) {
                         update: {
                             $set: {
                                 van: van.vehicleName,
+                                vin: van.vin || "",
                                 serviceType: van.serviceType || "",
                                 dashcam: van.dashcam || "",
                             },
@@ -749,20 +775,22 @@ export async function PUT(req: NextRequest) {
             return NextResponse.json({ error: "Route not found" }, { status: 404 });
         }
 
-        // If van is being updated, auto-resolve serviceType + dashcam from Vehicle
+        // If van is being updated, auto-resolve serviceType + dashcam + vin from Vehicle
         if (updates.van !== undefined && updates.van.trim() !== "") {
             try {
                 const vehicle = await Vehicle.findOne(
                     { vehicleName: updates.van.trim() },
-                    { serviceType: 1, dashcam: 1 }
+                    { vin: 1, serviceType: 1, dashcam: 1 }
                 ).lean() as any;
                 if (vehicle) {
+                    updates.vin = vehicle.vin || "";
                     updates.serviceType = vehicle.serviceType || "";
                     updates.dashcam = vehicle.dashcam || "";
                 }
             } catch { }
         } else if (updates.van !== undefined && updates.van.trim() === "") {
-            // Clearing van also clears serviceType + dashcam
+            // Clearing van also clears serviceType + dashcam + vin
+            updates.vin = "";
             updates.serviceType = "";
             updates.dashcam = "";
         }

@@ -14,6 +14,7 @@ export interface ISYMXRoute extends Document {
     // ── Route info ──
     routeSize: string;
     van: string;
+    vin: string;
     serviceType: string;
     dashcam: string;
     routeNumber: string;
@@ -104,6 +105,7 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
         // Route info
         routeSize: { type: String, default: "" },
         van: { type: String, default: "" },
+        vin: { type: String, default: "" },
         serviceType: { type: String, default: "" },
         dashcam: { type: String, default: "" },
         routeNumber: { type: String, default: "" },

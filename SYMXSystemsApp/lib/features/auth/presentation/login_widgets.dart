@@ -506,69 +506,78 @@ class _LoginPinInputState extends State<LoginPinInput> {
       children: [
         LayoutBuilder(
           builder: (context, constraints) {
-            // Fit 4 cells with 8px gaps inside whatever width we get.
-            const gap = 8.0;
-            final maxW = constraints.hasBoundedWidth
-                ? constraints.maxWidth
-                : 320.0;
-            final available = maxW - (gap * (_length - 1));
-            final cellW =
-                (available / _length).clamp(40.0, 64.0).toDouble();
-            final cellH = (cellW * 1.07).clamp(48.0, 68.0).toDouble();
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: List.generate(_length, (i) {
-                final filled = i < pin.length;
-                final active = i == pin.length;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
-                  margin: EdgeInsets.only(
-                    left: i == 0 ? 0 : gap / 2,
-                    right: i == _length - 1 ? 0 : gap / 2,
-                  ),
-                  width: cellW,
-                  height: cellH,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(
-                        alpha: filled ? 0.07 : 0.04),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: active
-                          ? LoginBrand.blue500.withValues(alpha: 0.7)
-                          : filled
-                              ? LoginBrand.blue500.withValues(alpha: 0.45)
-                              : Colors.white.withValues(alpha: 0.1),
-                      width: active ? 1.5 : 1,
-                    ),
-                    boxShadow: active
-                        ? [
-                            BoxShadow(
-                              color: LoginBrand.blue500
-                                  .withValues(alpha: 0.20),
-                              blurRadius: 20,
-                              spreadRadius: 0,
+            final screenW = MediaQuery.of(context).size.width;
+            final maxW = (constraints.hasBoundedWidth
+                    ? constraints.maxWidth
+                    : screenW - 96)
+                .clamp(160.0, 480.0);
+
+            final gap = maxW < 240 ? 4.0 : 8.0;
+
+            return ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxW),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(_length * 2 - 1, (index) {
+                  // Odd indices are spacers between cells.
+                  if (index.isOdd) return SizedBox(width: gap);
+
+                  final i = index ~/ 2;
+                  final filled = i < pin.length;
+                  final active = i == pin.length;
+                  return Flexible(
+                    child: AspectRatio(
+                      aspectRatio: 1 / 1.07,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        constraints: const BoxConstraints(
+                          maxWidth: 64,
+                          maxHeight: 68,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(
+                              alpha: filled ? 0.07 : 0.04),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: active
+                                ? LoginBrand.blue500.withValues(alpha: 0.7)
+                                : filled
+                                    ? LoginBrand.blue500
+                                        .withValues(alpha: 0.45)
+                                    : Colors.white.withValues(alpha: 0.1),
+                            width: active ? 1.5 : 1,
+                          ),
+                          boxShadow: active
+                              ? [
+                                  BoxShadow(
+                                    color: LoginBrand.blue500
+                                        .withValues(alpha: 0.20),
+                                    blurRadius: 20,
+                                    spreadRadius: 0,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        alignment: Alignment.center,
+                        child: AnimatedScale(
+                          scale: filled ? 1 : 0,
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOutBack,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
                             ),
-                          ]
-                        : null,
-                  ),
-                  alignment: Alignment.center,
-                  child: AnimatedScale(
-                    scale: filled ? 1 : 0,
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOutBack,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }),
+              ),
             );
           },
         ),

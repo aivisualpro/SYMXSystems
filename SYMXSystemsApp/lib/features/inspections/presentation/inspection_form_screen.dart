@@ -156,7 +156,6 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final typeColor = getTypeColor(widget.route.type, widget.route.typeColor);
 
     return Scaffold(
       appBar: AppBar(
@@ -183,10 +182,6 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ── Route Info Header ──
-          _buildRouteHeader(theme, isDark, typeColor),
-          const SizedBox(height: 20),
-
           // ── Mileage ──
           _buildMileageField(theme, isDark),
           const SizedBox(height: 16),
@@ -418,14 +413,27 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
           ],
         ),
         const SizedBox(height: 10),
-        SizedBox(
-          height: 110,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _photoLabels.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (_, i) => _photoSlot(i, isDark, theme),
-          ),
+        // Row 1: 3 photos
+        Row(
+          children: [
+            for (int i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(width: 10),
+              Expanded(child: _photoSlot(i, isDark, theme)),
+            ],
+          ],
+        ),
+        const SizedBox(height: 10),
+        // Row 2: 2 photos
+        Row(
+          children: [
+            for (int i = 3; i < 5; i++) ...[
+              if (i > 3) const SizedBox(width: 10),
+              Expanded(child: _photoSlot(i, isDark, theme)),
+            ],
+            const SizedBox(width: 10),
+            // Spacer to match row width with top row
+            const Expanded(child: SizedBox()),
+          ],
         ),
       ],
     );
@@ -439,7 +447,7 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
     return GestureDetector(
       onTap: isUploading ? null : () => _pickPhoto(i),
       child: Container(
-        width: 90,
+        height: 110,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(

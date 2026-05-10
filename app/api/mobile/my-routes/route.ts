@@ -197,6 +197,8 @@ export async function GET(req: NextRequest) {
         packageCount: r.packageCount || 0,
         attendance: r.attendance || "",
         serviceType: r.serviceType || "",
+        dashcam: r.dashcam || "",
+        vin: r.vin || "",
       };
     });
 
