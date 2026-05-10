@@ -9,6 +9,7 @@ import '../../../shared/widgets/error_retry_card.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/routes_repository.dart';
 import 'inspection_form_screen.dart';
+import 'inspection_detail_screen.dart';
 import 'inspection_widgets.dart';
 
 // ─── Local State ───────────────────────────────────────────────────
@@ -385,8 +386,15 @@ class _TopBar extends StatelessWidget {
 /// Handles tapping a route card: opens the inspection form for
 /// uninspected routes, or the detail sheet for already-inspected ones.
 void _onRouteTap(BuildContext context, RouteRow route, WidgetRef ref) {
-  if (route.isInspected) {
-    showRouteDetailSheet(context, route);
+  if (route.isInspected && route.inspectionId.isNotEmpty) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProviderScope(
+          parent: ProviderScope.containerOf(context),
+          child: InspectionDetailScreen(inspectionId: route.inspectionId),
+        ),
+      ),
+    );
   } else {
     Navigator.of(context).push(
       MaterialPageRoute(

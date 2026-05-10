@@ -49,6 +49,16 @@ class InspectionRepository {
     final res = await _dio.post('/api/mobile/inspections', data: data);
     return res.data as Map<String, dynamic>;
   }
+
+  /// Fetch inspection detail by ID.
+  Future<Map<String, dynamic>?> getInspectionDetail(String id) async {
+    try {
+      final res = await _dio.get('/api/mobile/inspections/$id');
+      return res.data['inspection'] as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 final inspectionRepositoryProvider = Provider<InspectionRepository>((ref) {

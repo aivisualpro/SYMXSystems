@@ -98,18 +98,19 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
         'driver': widget.route.transporterId,
         'employeeName': widget.route.employeeName,
         'van': widget.route.van,
+        'vin': widget.route.vin,
         'routeDate': widget.route.date?.toIso8601String() ?? '',
         'mileage': mileage,
         'comments': _commentsCtrl.text.trim(),
-        'anyRepairs': _anyRepairs ? 'TRUE' : '',
+        'anyRepairs': _anyRepairs ? 'TRUE' : 'FALSE',
         if (_anyRepairs) 'repairDescription': _repairDescCtrl.text.trim(),
         if (_anyRepairs) 'repairCurrentStatus': 'Not Started',
-        // Photos
-        if (_photoUrls[0] != null) 'vehiclePicture1': _photoUrls[0],
-        if (_photoUrls[1] != null) 'vehiclePicture2': _photoUrls[1],
-        if (_photoUrls[2] != null) 'vehiclePicture3': _photoUrls[2],
-        if (_photoUrls[3] != null) 'vehiclePicture4': _photoUrls[3],
-        if (_photoUrls[4] != null) 'dashboardImage': _photoUrls[4],
+        // Photos — always send all fields
+        'vehiclePicture1': _photoUrls[0],
+        'vehiclePicture2': _photoUrls[1],
+        'vehiclePicture3': _photoUrls[2],
+        'vehiclePicture4': _photoUrls[3],
+        'dashboardImage': _photoUrls[4],
       };
 
       await repo.submitInspection(data);

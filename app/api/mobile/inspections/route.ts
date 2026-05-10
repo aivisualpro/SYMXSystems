@@ -130,14 +130,20 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    // Resolve VIN from van name if not provided
+    // Resolve VIN + unitNumber + vehicleId from van name
     let vin = body.vin || "";
-    if (!vin && body.van) {
+    let unitNumber = "";
+    let vehicleId: any = null;
+    if (body.van) {
       const vehicle = await Vehicle.findOne(
         { vehicleName: body.van },
-        { vin: 1 }
+        { vin: 1, unitNumber: 1, _id: 1 }
       ).lean();
-      if (vehicle) vin = (vehicle as any).vin || "";
+      if (vehicle) {
+        if (!vin) vin = (vehicle as any).vin || "";
+        unitNumber = (vehicle as any).unitNumber || "";
+        vehicleId = (vehicle as any)._id || null;
+      }
     }
 
     // Build inspection data
@@ -147,14 +153,16 @@ export async function POST(req: NextRequest) {
       driver: body.driver || transporterId,
       employeeName: body.employeeName || "",
       vin,
+      unitNumber,
+      vehicleId,
       routeDate: body.routeDate ? new Date(body.routeDate) : new Date(),
       mileage: Number(body.mileage) || 0,
-      anyRepairs: body.anyRepairs || "",
+      anyRepairs: body.anyRepairs === "TRUE" ? "TRUE" : "FALSE",
       repairDescription: body.repairDescription || null,
       repairCurrentStatus: body.repairCurrentStatus || null,
       repairImage: body.repairImage || null,
       comments: body.comments || null,
-      inspectedBy: body.inspectedBy || `mobile:${transporterId}`,
+      inspectedBy: transporterId,
       routeId: body.routeId || "",
       timeStamp: new Date(),
       // Photo fields
