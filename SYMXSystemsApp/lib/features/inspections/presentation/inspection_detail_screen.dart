@@ -108,12 +108,12 @@ class _InspectionDetailScreenState
     final hasRepair =
         d['anyRepairs'] == 'TRUE' || d['anyRepairs'] == 'true';
 
-    final photos = [
-      {'url': d['vehiclePicture1'] ?? '', 'label': 'Passenger Side'},
-      {'url': d['vehiclePicture2'] ?? '', 'label': 'Back'},
-      {'url': d['vehiclePicture3'] ?? '', 'label': 'Driver Side'},
-      {'url': d['vehiclePicture4'] ?? '', 'label': 'Front'},
-      {'url': d['dashboardImage'] ?? '', 'label': 'Dashboard'},
+    final photos = <Map<String, String>>[
+      {'url': (d['vehiclePicture1'] ?? '').toString(), 'label': 'Passenger Side'},
+      {'url': (d['vehiclePicture2'] ?? '').toString(), 'label': 'Back'},
+      {'url': (d['vehiclePicture3'] ?? '').toString(), 'label': 'Driver Side'},
+      {'url': (d['vehiclePicture4'] ?? '').toString(), 'label': 'Front'},
+      {'url': (d['dashboardImage'] ?? '').toString(), 'label': 'Dashboard'},
     ];
 
     return ListView(
