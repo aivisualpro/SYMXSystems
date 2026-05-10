@@ -323,14 +323,14 @@ export default function EmployeeDetailPage(props: PageProps) {
         
         {/* ════════ LEFT COLUMN: Profile + Employee Info ════════ */}
         <div className="lg:col-span-4 space-y-5">
-          {/* ── Redesigned Profile Card + Address ── */}
+          {/* ── Redesigned Profile Card ── */}
           <Card className="border border-zinc-200 dark:border-zinc-800 shadow-none bg-card rounded-[32px] overflow-hidden">
-            <CardContent className="p-6">
-               {/* Header Link - Flex Row */}
-               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 mb-8">
-                  {/* Avatar - Left */}
+            <CardContent className="p-6 space-y-5">
+
+               {/* ── ROW 1: Avatar + Full Name + Status Chip ── */}
+               <div className="flex items-center gap-4">
                   <div className="relative shrink-0">
-                     <div className="w-24 h-24 rounded-full overflow-hidden border border-zinc-100 dark:border-zinc-800 shadow-sm bg-muted/20">
+                     <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-zinc-100 dark:border-zinc-800 shadow-sm bg-muted/20">
                         {employee.profileImage ? (
                            <>
                              <img
@@ -345,205 +345,163 @@ export default function EmployeeDetailPage(props: PageProps) {
                                }}
                              />
                              <span className="w-full h-full items-center justify-center hidden">
-                               <User className="w-10 h-10 opacity-50" />
+                               <User className="w-7 h-7 opacity-50" />
                              </span>
                            </>
                         ) : (
                            <div className="w-full h-full flex items-center justify-center bg-zinc-50 dark:bg-zinc-900 text-muted-foreground">
-                              <User className="w-10 h-10 opacity-50" />
+                              <User className="w-7 h-7 opacity-50" />
                            </div>
                         )}
                      </div>
                   </div>
-
-                  {/* Name & Status - Right */}
-                  <div className="text-center sm:text-left space-y-1.5 pt-1.5 flex-1">
-                     <h2 className="text-2xl font-black text-foreground tracking-tight uppercase leading-none break-words">
-                        {employee.firstName}<br/>{employee.lastName}
+                  <div className="flex-1 min-w-0">
+                     <h2 className="text-lg font-black text-foreground tracking-tight uppercase leading-tight truncate">
+                        {employee.firstName} {employee.lastName}
                      </h2>
-                     <div className="flex flex-wrap gap-2 justify-center sm:justify-start items-center">
+                     <div className="flex items-center gap-2 mt-1">
                         {getStatusBadge(employee.status)}
-                        <span className="px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-[10px] font-bold text-muted-foreground uppercase tracking-wide border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors cursor-default">
-                           {employee.type || "Employee"}
-                        </span>
-                        <span className="px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-[10px] font-bold text-muted-foreground uppercase tracking-wide border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors cursor-default">
-                           {employee.eeCode || "N/A"}
-                        </span>
                      </div>
                   </div>
                </div>
 
-               {/* Info Blocks */}
-               <div className="space-y-6">
-                  {/* Contact Info */}
-                  <div className="space-y-3">
-                     <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/50">
-                        <div className="flex items-center gap-2">
-                           <Mail className="w-3.5 h-3.5 text-muted-foreground" />
-                           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Email</span>
-                        </div>
-                        <span className="text-xs font-bold text-foreground truncate max-w-[180px]">{employee.email || "—"}</span>
-                     </div>
-                     <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/50">
-                        <div className="flex items-center gap-2">
-                           <Phone className="w-3.5 h-3.5 text-muted-foreground" />
-                           <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Phone</span>
-                        </div>
-                        <span className="text-xs font-bold text-foreground">{formatPhoneNumber(employee.phoneNumber || "")}</span>
-                     </div>
-                     <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50/30 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-800/30">
-                        <div className="flex items-center gap-2">
-                           <DollarSign className="w-3.5 h-3.5 text-blue-500" />
-                           <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">Rate</span>
-                        </div>
-                        <span className="text-sm font-black text-blue-700 dark:text-blue-300">${employee.rate || 0}</span>
-                     </div>
+               {/* ── ROW 2: eeCode / badgeNumber / transporterId ── */}
+               <div className="grid grid-cols-3 gap-2">
+                  <InfoRow label="EE Code" value={employee.eeCode} icon={IdCard} />
+                  <InfoRow label="Badge #" value={employee.badgeNumber} icon={ShieldCheck} />
+                  <InfoRow label="Transporter" value={<span className="text-xs">{employee.transporterId}</span>} icon={Truck} />
+               </div>
 
-                     {/* Chips Moved Here */}
-                     <div className="flex flex-wrap gap-2 pt-1">
-                        <div className="px-3 py-1.5 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1.5">
-                           <User className="w-3 h-3" />
-                           {employee.gender || "N/A"}
-                        </div>
-                        <div className="px-3 py-1.5 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1.5">
-                           <Calendar className="w-3 h-3" />
-                           {employee.dob ? format(new Date(employee.dob), "MMM d") : "N/A"}
-                        </div>
-                        <div className={cn(
-                           "px-3 py-1.5 rounded-full border text-[10px] font-bold uppercase flex items-center gap-1.5",
-                           employee.eligibility 
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20" 
-                              : "border-red-200 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20"
-                        )}>
-                           <div className={cn("w-1.5 h-1.5 rounded-full", employee.eligibility ? "bg-emerald-500" : "bg-red-500")} />
-                           {employee.eligibility ? "Eligible" : "Ineligible"}
-                        </div>
+               {/* ── ROW 3: gender / type / hourlyStatus ── */}
+               <div className="grid grid-cols-3 gap-2">
+                  <InfoRow label="Gender" value={employee.gender} icon={User} />
+                  <InfoRow label="Type" value={employee.type} icon={Briefcase} />
+                  <InfoRow label="Hourly Status" value={employee.hourlyStatus} icon={Clock} />
+               </div>
+
+               {/* ── ROW 4: email / phone / address (stacked) ── */}
+               <div className="space-y-2">
+                  <InfoRow label="Email" value={employee.email} icon={Mail} />
+                  <InfoRow label="Phone" value={formatPhoneNumber(employee.phoneNumber || "")} icon={Phone} />
+                  <InfoRow label="Address" value={[employee.streetAddress, employee.city, employee.state, employee.zipCode].filter(Boolean).join(", ") || undefined} icon={MapPin} />
+               </div>
+
+               {/* ── ROW 5: hiredDate / dob / rate ── */}
+               <div className="grid grid-cols-3 gap-2">
+                  <InfoRow label="Hired Date" value={employee.hiredDate ? format(new Date(employee.hiredDate), "MMM dd, yyyy") : undefined} icon={Calendar} />
+                  <InfoRow label="Date of Birth" value={employee.dob ? format(new Date(employee.dob), "MMM dd, yyyy") : undefined} icon={Calendar} />
+                  <InfoRow
+                     label="Rate"
+                     value={<span className="text-blue-600 dark:text-blue-400 font-black">${employee.rate || 0}</span>}
+                     icon={DollarSign}
+                     className="bg-blue-50/30 dark:bg-blue-900/10 border-blue-100/50 dark:border-blue-800/30"
+                  />
+               </div>
+
+               <Separator className="bg-border/40" />
+
+               {/* ── WEEKLY SCHEDULE (unchanged) ── */}
+               <div className="space-y-4">
+                  <div className="flex items-center gap-2 px-1">
+                     <CalendarCheck className="w-3.5 h-3.5 text-muted-foreground/70" />
+                     <span className="text-[10px] font-black text-muted-foreground/70 uppercase tracking-widest">Weekly Schedule</span>
+                  </div>
+                  <div className="space-y-2">
+                     {/* Top Row: 3 Days */}
+                     <div className="grid grid-cols-3 gap-2">
+                        {['Sun', 'Mon', 'Tue'].map((day, idx) => {
+                           const dayKey = ['sunday', 'monday', 'tuesday'][idx];
+                           const rawVal = (employee as any)[dayKey];
+                           const rtId = rawVal ? String(rawVal) : null;
+                           const matched = rtId ? routeTypeIdMap.get(rtId) : null;
+                           const isOff = !matched;
+                           return (
+                              <AvailabilityCard key={day} day={day} routeType={matched} isOff={isOff} dayKey={dayKey} handleStatusChange={handleStatusChange} defaultRouteTypes={defaultRouteTypes} routeTypeIdMap={routeTypeIdMap} />
+                           );
+                        })}
+                     </div>
+                     {/* Bottom Row: 4 Days */}
+                     <div className="grid grid-cols-4 gap-2">
+                        {['Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => {
+                           const dayKey = ['wednesday', 'thursday', 'friday', 'saturday'][idx];
+                           const rawVal = (employee as any)[dayKey];
+                           const rtId = rawVal ? String(rawVal) : null;
+                           const matched = rtId ? routeTypeIdMap.get(rtId) : null;
+                           const isOff = !matched;
+                           return (
+                              <AvailabilityCard key={day} day={day} routeType={matched} isOff={isOff} dayKey={dayKey} handleStatusChange={handleStatusChange} defaultRouteTypes={defaultRouteTypes} routeTypeIdMap={routeTypeIdMap} />
+                           );
+                        })}
                      </div>
                   </div>
-
-                  <Separator className="bg-border/40" />
-
-                  {/* Inline Address Section */}
-                  <div className="space-y-3">
-                     <div className="p-4 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 flex items-start gap-3">
-                        <MapPin className="w-4 h-4 text-muted-foreground/70 mt-0.5 shrink-0" />
-                        <p className="text-xs font-bold text-foreground leading-relaxed">
-                           {[
-                              employee.streetAddress,
-                              employee.city,
-                              employee.state,
-                              employee.zipCode
-                           ].filter(Boolean).join(", ") || "No address provided"}
+                  {employee.ScheduleNotes && (
+                     <div className="p-3 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800">
+                        <p className="text-[11px] text-foreground/70 italic leading-relaxed font-medium">
+                           {employee.ScheduleNotes}
                         </p>
                      </div>
-                  </div>
+                  )}
 
-                  <Separator className="bg-border/40" />
-
-                  {/* Merged Weekly Schedule */}
-                  <div className="space-y-4">
+                  {/* ── DEFAULT VANS (unchanged) ── */}
+                  <div className="space-y-2 pt-1">
                      <div className="flex items-center gap-2 px-1">
-                        <CalendarCheck className="w-3.5 h-3.5 text-muted-foreground/70" />
-                        <span className="text-[10px] font-black text-muted-foreground/70 uppercase tracking-widest">Weekly Schedule</span>
+                        <Truck className="w-3 h-3 text-muted-foreground/70" />
+                        <span className="text-[9px] font-black text-muted-foreground/70 uppercase tracking-widest">Default Vans</span>
                      </div>
-                     <div className="space-y-2">
-                        {/* Top Row: 3 Days */}
-                        <div className="grid grid-cols-3 gap-2">
-                           {['Sun', 'Mon', 'Tue'].map((day, idx) => {
-                              const dayKey = ['sunday', 'monday', 'tuesday'][idx];
-                              const rawVal = (employee as any)[dayKey];
-                              const rtId = rawVal ? String(rawVal) : null;
-                              const matched = rtId ? routeTypeIdMap.get(rtId) : null;
-                              const isOff = !matched;
-                              return (
-                                 <AvailabilityCard key={day} day={day} routeType={matched} isOff={isOff} dayKey={dayKey} handleStatusChange={handleStatusChange} defaultRouteTypes={defaultRouteTypes} routeTypeIdMap={routeTypeIdMap} />
-                              );
-                           })}
-                        </div>
-                        {/* Bottom Row: 4 Days */}
-                        <div className="grid grid-cols-4 gap-2">
-                           {['Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => {
-                              const dayKey = ['wednesday', 'thursday', 'friday', 'saturday'][idx];
-                              const rawVal = (employee as any)[dayKey];
-                              const rtId = rawVal ? String(rawVal) : null;
-                              const matched = rtId ? routeTypeIdMap.get(rtId) : null;
-                              const isOff = !matched;
-                              return (
-                                 <AvailabilityCard key={day} day={day} routeType={matched} isOff={isOff} dayKey={dayKey} handleStatusChange={handleStatusChange} defaultRouteTypes={defaultRouteTypes} routeTypeIdMap={routeTypeIdMap} />
-                              );
-                           })}
-                        </div>
-                     </div>
-                     {employee.ScheduleNotes && (
-                        <div className="p-3 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800">
-                           <p className="text-[11px] text-foreground/70 italic leading-relaxed font-medium">
-                              {employee.ScheduleNotes}
-                           </p>
-                        </div>
-                     )}
-
-                     {/* Default Van Assignments — clickable dropdowns */}
-                     <div className="space-y-2 pt-1">
-                        <div className="flex items-center gap-2 px-1">
-                           <Truck className="w-3 h-3 text-muted-foreground/70" />
-                           <span className="text-[9px] font-black text-muted-foreground/70 uppercase tracking-widest">Default Vans</span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                           {[
-                             { field: 'defaultVan1', label: 'Primary' },
-                             { field: 'defaultVan2', label: 'Backup 1' },
-                             { field: 'defaultVan3', label: 'Backup 2' },
-                           ].map(({ field, label }) => {
-                             const val = String((employee as any)[field] || '');
-                             return (
-                               <DropdownMenu key={field}>
-                                 <DropdownMenuTrigger asChild>
-                                   <button className={cn(
-                                     "flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all hover:scale-[1.02] active:scale-95 group relative overflow-hidden cursor-pointer min-h-[60px]",
-                                     val ? "bg-blue-500/10 border-blue-500/20" : "bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800"
-                                   )}>
-                                     <span className="text-[8px] font-bold text-muted-foreground/50 uppercase tracking-widest mb-1">{label}</span>
-                                     <Truck className={cn("w-4 h-4 mb-1", val ? "text-blue-500" : "text-muted-foreground/30")} />
-                                     <span className={cn("text-[10px] font-bold truncate max-w-full", val ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground/50")}>
-                                       {val || '—'}
-                                     </span>
-                                   </button>
-                                 </DropdownMenuTrigger>
-                                 <DropdownMenuContent align="center" className="min-w-[140px] rounded-xl p-1.5 shadow-2xl border border-border bg-popover/95 backdrop-blur-md">
-                                   <div className="max-h-[180px] overflow-y-auto">
-                                   <DropdownMenuItem
-                                     onClick={() => handleVanChange(field, '')}
-                                     className={cn(
-                                       "text-[10px] font-bold py-2 px-3 rounded-lg cursor-pointer",
-                                       !val ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground"
-                                     )}
-                                   >
-                                     — None —
-                                   </DropdownMenuItem>
-                                   {vehicleNames.map((name: string) => (
-                                     <DropdownMenuItem
-                                       key={name}
-                                       onClick={() => handleVanChange(field, name)}
-                                       className={cn(
-                                         "text-[10px] font-bold py-2 px-3 rounded-lg cursor-pointer flex items-center justify-between",
-                                         val === name ? "bg-primary/10 text-primary" : "hover:bg-accent"
-                                       )}
-                                     >
-                                       {name}
-                                       {val === name && <CheckCircle2 className="w-3 h-3 text-primary" />}
-                                     </DropdownMenuItem>
-                                   ))}
-                                   </div>
-                                 </DropdownMenuContent>
-                               </DropdownMenu>
-                             );
-                           })}
-                        </div>
+                     <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { field: 'defaultVan1', label: 'Primary' },
+                          { field: 'defaultVan2', label: 'Backup 1' },
+                          { field: 'defaultVan3', label: 'Backup 2' },
+                        ].map(({ field, label }) => {
+                          const val = String((employee as any)[field] || '');
+                          return (
+                            <DropdownMenu key={field}>
+                              <DropdownMenuTrigger asChild>
+                                <button className={cn(
+                                  "flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all hover:scale-[1.02] active:scale-95 group relative overflow-hidden cursor-pointer min-h-[60px]",
+                                  val ? "bg-blue-500/10 border-blue-500/20" : "bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800"
+                                )}>
+                                  <span className="text-[8px] font-bold text-muted-foreground/50 uppercase tracking-widest mb-1">{label}</span>
+                                  <Truck className={cn("w-4 h-4 mb-1", val ? "text-blue-500" : "text-muted-foreground/30")} />
+                                  <span className={cn("text-[10px] font-bold truncate max-w-full", val ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground/50")}>
+                                    {val || '—'}
+                                  </span>
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="center" className="min-w-[140px] rounded-xl p-1.5 shadow-2xl border border-border bg-popover/95 backdrop-blur-md">
+                                <div className="max-h-[180px] overflow-y-auto">
+                                <DropdownMenuItem
+                                  onClick={() => handleVanChange(field, '')}
+                                  className={cn(
+                                    "text-[10px] font-bold py-2 px-3 rounded-lg cursor-pointer",
+                                    !val ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground"
+                                  )}
+                                >
+                                  — None —
+                                </DropdownMenuItem>
+                                {vehicleNames.map((name: string) => (
+                                  <DropdownMenuItem
+                                    key={name}
+                                    onClick={() => handleVanChange(field, name)}
+                                    className={cn(
+                                      "text-[10px] font-bold py-2 px-3 rounded-lg cursor-pointer flex items-center justify-between",
+                                      val === name ? "bg-primary/10 text-primary" : "hover:bg-accent"
+                                    )}
+                                  >
+                                    {name}
+                                    {val === name && <CheckCircle2 className="w-3 h-3 text-primary" />}
+                                  </DropdownMenuItem>
+                                ))}
+                                </div>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          );
+                        })}
                      </div>
                   </div>
-
-
                </div>
+
             </CardContent>
           </Card>
         </div>
