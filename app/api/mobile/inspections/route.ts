@@ -30,7 +30,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-// ── GET: fetch last mileage for a VIN ──
+// ── GET: fetch last mileage for a van (by vehicle name or VIN) ──
 export async function GET(req: NextRequest) {
   try {
     const token = req.headers.get("x-badge-token");
@@ -53,13 +53,24 @@ export async function GET(req: NextRequest) {
     await connectToDatabase();
 
     const { searchParams } = new URL(req.url);
-    const vin = searchParams.get("vin") || "";
+    const vanParam = searchParams.get("vin") || searchParams.get("van") || "";
 
-    if (!vin) {
+    if (!vanParam) {
       return NextResponse.json(
         { lastMileage: null },
         { status: 200, headers: corsHeaders }
       );
+    }
+
+    // Resolve VIN: the param might be a vehicle name (e.g. "SYMX-123")
+    // or a raw VIN. Try vehicle name lookup first.
+    let vin = vanParam;
+    const vehicle = await Vehicle.findOne(
+      { vehicleName: vanParam },
+      { vin: 1 }
+    ).lean();
+    if (vehicle && (vehicle as any).vin) {
+      vin = (vehicle as any).vin;
     }
 
     const lastInspection = await DailyInspection.findOne(
