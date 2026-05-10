@@ -45,8 +45,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 6));
       if (!mounted) return false;
-      setState(() => _gradientFlip = !_gradientFlip);
-      return true;
+      if (mounted) setState(() => _gradientFlip = !_gradientFlip);
+      return mounted;
     });
   }
 
@@ -193,8 +193,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppTheme.primaryIndigo,
                                   foregroundColor: Colors.white,
-                                  disabledBackgroundColor:
-                                      AppTheme.primaryIndigo.withValues(alpha: 0.5),
+                                  disabledBackgroundColor: AppTheme
+                                      .primaryIndigo
+                                      .withValues(alpha: 0.5),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14),
                                   ),

@@ -30,9 +30,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   Future<void> _checkAuthAndNavigate() async {
     final repo = ref.read(authRepositoryProvider);
 
-    // Run token check and minimum hold in parallel.
+    // Run token+cache check and minimum hold in parallel.
     final results = await Future.wait([
-      _tryGetEmployee(repo),
+      _resolveEmployee(repo),
       Future.delayed(const Duration(milliseconds: 900)),
     ]);
 
@@ -43,17 +43,34 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       // Returning user — skip the welcome overlay.
       ref.read(showWelcomeOverlayProvider.notifier).state = false;
       context.go('/home');
+      // Background refresh — don't await.
+      _backgroundRefresh(repo);
     } else {
       context.go('/login');
     }
   }
 
-  Future<Employee?> _tryGetEmployee(AuthRepository repo) async {
+  /// Try cached employee first, fall back to network only if cache misses.
+  Future<Employee?> _resolveEmployee(AuthRepository repo) async {
+    if (!await repo.hasToken) return null;
+    final cached = await repo.cachedEmployee();
+    if (cached != null) return cached;
     try {
-      if (!await repo.hasToken) return null;
       return await repo.me();
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Silently refresh the employee profile in the background.
+  /// If the token is expired/invalid, clear auth state so the user
+  /// is bounced to /login on the next interaction.
+  Future<void> _backgroundRefresh(AuthRepository repo) async {
+    try {
+      await repo.me();
+      ref.invalidate(currentEmployeeProvider);
+    } catch (_) {
+      await repo.logout();
     }
   }
 

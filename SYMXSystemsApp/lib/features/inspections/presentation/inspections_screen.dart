@@ -83,7 +83,8 @@ class InspectionsScreen extends ConsumerWidget {
                           routesAsync: routesAsync,
                           isWide: isWide,
                           onRetry: () => ref.invalidate(myRoutesProvider(
-                            RoutesParam(yearWeek: selectedWeek, date: selectedDate),
+                            RoutesParam(
+                                yearWeek: selectedWeek, date: selectedDate),
                           )),
                         ),
                       ),
@@ -255,8 +256,8 @@ class _TopBar extends StatelessWidget {
                           borderRadius: BorderRadius.circular(14),
                           border: isToday && !isSelected
                               ? Border.all(
-                                  color:
-                                      AppTheme.accentEmerald.withValues(alpha: 0.5),
+                                  color: AppTheme.accentEmerald
+                                      .withValues(alpha: 0.5),
                                   width: 1.5,
                                 )
                               : null,
@@ -301,9 +302,8 @@ class _TopBar extends StatelessWidget {
 
   void _showWeekPicker(BuildContext context) {
     final weekParts = selectedWeek.split('-W');
-    final currentWeekNum = int.tryParse(
-            weekParts.length == 2 ? weekParts[1] : '1') ??
-        1;
+    final currentWeekNum =
+        int.tryParse(weekParts.length == 2 ? weekParts[1] : '1') ?? 1;
     final year = weekParts.isNotEmpty ? weekParts[0] : '${DateTime.now().year}';
 
     showModalBottomSheet(
@@ -331,8 +331,7 @@ class _TopBar extends StatelessWidget {
                   itemCount: 52,
                   itemBuilder: (_, i) {
                     final w = i + 1;
-                    final label =
-                        '$year-W${w.toString().padLeft(2, '0')}';
+                    final label = '$year-W${w.toString().padLeft(2, '0')}';
                     final isCurrent = w == currentWeekNum;
 
                     return ListTile(
@@ -392,7 +391,8 @@ class _RoutesList extends StatelessWidget {
         ),
       ),
       error: (err, _) => ErrorRetryCard(
-        message: 'Could not load your routes. Check your connection and try again.',
+        message:
+            'Could not load your routes. Check your connection and try again.',
         onRetry: onRetry,
       ),
       data: (response) {
@@ -514,7 +514,8 @@ class _WeekSidebar extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                       border: isSelected
                           ? Border.all(
-                              color: AppTheme.primaryIndigo.withValues(alpha: 0.3))
+                              color:
+                                  AppTheme.primaryIndigo.withValues(alpha: 0.3))
                           : null,
                     ),
                     child: Row(
@@ -523,9 +524,8 @@ class _WeekSidebar extends StatelessWidget {
                           dayLabel(d),
                           style: GoogleFonts.inter(
                             fontSize: 13,
-                            fontWeight: isSelected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w500,
                             color: isSelected
                                 ? AppTheme.primaryIndigo
                                 : theme.textTheme.bodySmall?.color,

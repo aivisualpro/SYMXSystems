@@ -51,6 +51,9 @@ dependencies:
   # Material design icons (bundled with Flutter)
   cupertino_icons: ^1.0.6
 
+  # Timezone-aware date handling
+  timezone: ^0.9.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -58,3 +61,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/lottie/welcome.json
+    - assets/lottie/empty_box.json
+    - assets/lottie/rocket.json

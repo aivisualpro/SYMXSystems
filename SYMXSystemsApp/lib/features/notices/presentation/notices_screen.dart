@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lottie/lottie.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/content_constraint.dart';
@@ -100,24 +101,21 @@ class _NoticesScreenState extends State<NoticesScreen> {
 
     return ContentConstraint(
       child: ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-      itemCount: notices.length,
-      itemBuilder: (_, i) {
-        return _NoticeCard(
-          notice: notices[i],
-          isExpanded: _expandedIndices.contains(i),
-          onTap: () => _toggle(i),
-        )
-            .animate()
-            .fadeIn(duration: 250.ms, delay: (i * 60).ms)
-            .slideY(
-              begin: 0.06,
-              end: 0,
-              duration: 300.ms,
-              delay: (i * 60).ms,
-              curve: Curves.easeOutCubic,
-            );
-      },
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        itemCount: notices.length,
+        itemBuilder: (_, i) {
+          return _NoticeCard(
+            notice: notices[i],
+            isExpanded: _expandedIndices.contains(i),
+            onTap: () => _toggle(i),
+          ).animate().fadeIn(duration: 250.ms, delay: (i * 60).ms).slideY(
+                begin: 0.06,
+                end: 0,
+                duration: 300.ms,
+                delay: (i * 60).ms,
+                curve: Curves.easeOutCubic,
+              );
+        },
       ),
     );
   }
@@ -293,23 +291,12 @@ class _EmptyNotices extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.primaryIndigo.withValues(alpha: 0.12),
-                    AppTheme.accentEmerald.withValues(alpha: 0.12),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Icon(
-                Icons.campaign_outlined,
-                size: 40,
-                color: theme.colorScheme.primary.withValues(alpha: 0.4),
-              ),
+            Lottie.asset(
+              'assets/lottie/empty_box.json',
+              width: 180,
+              height: 180,
+              repeat: true,
+              fit: BoxFit.contain,
             ),
             const SizedBox(height: 20),
             Text(

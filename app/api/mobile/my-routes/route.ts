@@ -22,13 +22,14 @@ import connectToDatabase from "@/lib/db";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import RouteType from "@/lib/models/RouteType";
+import SYMXSetting from "@/lib/models/SYMXSetting";
 
 // ── JWT secret (same as badge-login / me) ──
 const secretKey = process.env.JWT_SECRET || "symx_systems_secret_key";
 const key = new TextEncoder().encode(secretKey);
 
-/** Business timezone — all date computations use Pacific Time */
-const BUSINESS_TZ = "America/Los_Angeles";
+/** Fallback business timezone */
+const DEFAULT_TZ = "America/Los_Angeles";
 
 // ── CORS headers ──
 const corsHeaders = {
@@ -44,9 +45,9 @@ export async function OPTIONS() {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/** Returns today's date string (YYYY-MM-DD) in the business timezone. */
-function todayInLA(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: BUSINESS_TZ });
+/** Returns today's date string (YYYY-MM-DD) in the given timezone. */
+function todayInTZ(tz: string): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: tz });
 }
 
 /**
@@ -99,21 +100,27 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    await connectToDatabase();
+
+    // ── Fetch system timezone from settings ──
+    const tzSetting = await SYMXSetting.findOne({ key: "system_timezone" }).lean() as any;
+    const businessTZ = tzSetting?.value || DEFAULT_TZ;
+
     // ── Query params ──
     const { searchParams } = new URL(req.url);
-    const dateParam = searchParams.get("date") || todayInLA();
+    const dateParam = searchParams.get("date") || todayInTZ(businessTZ);
     const yearWeek = searchParams.get("yearWeek") || dateToYearWeek(dateParam);
-
-    await connectToDatabase();
 
     // ── Build query ──
     const query: any = {
       yearWeek,
       transporterId,
     };
-    // If a specific date was requested, filter to that day
+    // Use a date range to handle timezone offsets in stored dates
     if (dateParam) {
-      query.date = new Date(dateParam);
+      const dayStart = new Date(dateParam + "T00:00:00.000Z");
+      const dayEnd = new Date(dateParam + "T23:59:59.999Z");
+      query.date = { $gte: dayStart, $lte: dayEnd };
     }
 
     // ── Parallel fetches ──
@@ -199,6 +206,7 @@ export async function GET(req: NextRequest) {
         employee: employeeInfo,
         date: dateParam,
         yearWeek,
+        timezone: businessTZ,
       },
       { status: 200, headers: corsHeaders }
     );

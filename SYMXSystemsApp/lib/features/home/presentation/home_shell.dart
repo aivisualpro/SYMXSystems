@@ -70,13 +70,16 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
     // Tab switching: 1, 2, 3
     if (label == '1') {
-      widget.navigationShell.goBranch(0, initialLocation: widget.navigationShell.currentIndex == 0);
+      widget.navigationShell.goBranch(0,
+          initialLocation: widget.navigationShell.currentIndex == 0);
       return KeyEventResult.handled;
     } else if (label == '2') {
-      widget.navigationShell.goBranch(1, initialLocation: widget.navigationShell.currentIndex == 1);
+      widget.navigationShell.goBranch(1,
+          initialLocation: widget.navigationShell.currentIndex == 1);
       return KeyEventResult.handled;
     } else if (label == '3') {
-      widget.navigationShell.goBranch(2, initialLocation: widget.navigationShell.currentIndex == 2);
+      widget.navigationShell.goBranch(2,
+          initialLocation: widget.navigationShell.currentIndex == 2);
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -413,7 +416,6 @@ class _AnimatedBottomNav extends StatelessWidget {
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 200),
@@ -429,24 +431,22 @@ class _AnimatedBottomNav extends StatelessWidget {
                           ),
                         ),
                         // Label fades in only when selected.
-                        AnimatedSize(
-                          duration: const Duration(milliseconds: 250),
-                          curve: Curves.easeOutCubic,
-                          child: selected
-                              ? Padding(
-                                  padding: const EdgeInsets.only(left: 8),
-                                  child: Text(
-                                    tab.label,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.primaryIndigo,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                )
-                              : const SizedBox.shrink(),
-                        ),
+                        if (selected)
+                          Flexible(
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 6),
+                              child: Text(
+                                tab.label,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.primaryIndigo,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),

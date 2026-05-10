@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lottie/lottie.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/route_row.dart';
@@ -54,11 +56,13 @@ Color _hexToColor(String hex) {
 // ═══════════════════════════════════════════════════════════════════
 
 /// Returns today's date (YYYY-MM-DD) in America/Los_Angeles.
+///
+/// Uses the `timezone` package so PST/PDT transitions are handled
+/// correctly. The server response's `date` field is still the
+/// authoritative value and replaces this on first load.
 String todayLA() {
-  // Dart doesn't have tz database built-in; we approximate by
-  // using UTC-7 (PDT) which covers most of the year.
-  // For production accuracy, use the `timezone` package.
-  final now = DateTime.now().toUtc().subtract(const Duration(hours: 7));
+  final la = tz.getLocation('America/Los_Angeles');
+  final now = tz.TZDateTime.now(la);
   return '${now.year}-${_pad(now.month)}-${_pad(now.day)}';
 }
 
@@ -69,8 +73,7 @@ String dateToYearWeek(DateTime d) {
   final dayOfWeek = d.weekday; // Mon=1 … Sun=7
   final thursday = d.add(Duration(days: 4 - dayOfWeek));
   final yearStart = DateTime(thursday.year, 1, 1);
-  final weekNo =
-      ((thursday.difference(yearStart).inDays) / 7).ceil() + 1;
+  final weekNo = ((thursday.difference(yearStart).inDays) / 7).ceil() + 1;
   return '${thursday.year}-W${weekNo.toString().padLeft(2, '0')}';
 }
 
@@ -94,15 +97,24 @@ String dayLabel(DateTime d) => _kDayLabels[d.weekday - 1];
 /// Format date as "May 9".
 String shortDate(DateTime d) {
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   return '${months[d.month - 1]} ${d.day}';
 }
 
 /// Format date as YYYY-MM-DD.
-String isoDate(DateTime d) =>
-    '${d.year}-${_pad(d.month)}-${_pad(d.day)}';
+String isoDate(DateTime d) => '${d.year}-${_pad(d.month)}-${_pad(d.day)}';
 
 // ═══════════════════════════════════════════════════════════════════
 // SHIMMER PLACEHOLDER
@@ -189,23 +201,12 @@ class RoutesEmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.primaryIndigo.withValues(alpha: 0.15),
-                    AppTheme.accentEmerald.withValues(alpha: 0.15),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Icon(
-                Icons.route_outlined,
-                size: 40,
-                color: theme.colorScheme.primary.withValues(alpha: 0.4),
-              ),
+            Lottie.asset(
+              'assets/lottie/empty_box.json',
+              width: 180,
+              height: 180,
+              repeat: true,
+              fit: BoxFit.contain,
             ),
             const SizedBox(height: 20),
             Text(
@@ -259,7 +260,8 @@ class _RouteCardState extends State<RouteCard> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final typeColor = getTypeColor(widget.route.type, widget.route.typeColor);
-    final supportsHover = kIsWeb || Theme.of(context).platform == TargetPlatform.macOS;
+    final supportsHover =
+        kIsWeb || Theme.of(context).platform == TargetPlatform.macOS;
 
     Widget card = AnimatedContainer(
       duration: const Duration(milliseconds: 180),
@@ -335,31 +337,36 @@ class _RouteCardState extends State<RouteCard> {
             spacing: 8,
             runSpacing: 6,
             children: [
-              if (widget.route.van.isNotEmpty) _InfoChip(
-                icon: Icons.local_shipping_outlined,
-                label: widget.route.van,
-                theme: theme,
-              ),
-              if (widget.route.routeDuration.isNotEmpty) _InfoChip(
-                icon: Icons.timer_outlined,
-                label: widget.route.routeDuration,
-                theme: theme,
-              ),
-              if (widget.route.waveTime.isNotEmpty) _InfoChip(
-                icon: Icons.waves_outlined,
-                label: widget.route.waveTime,
-                theme: theme,
-              ),
-              if (widget.route.stopCount > 0) _InfoChip(
-                icon: Icons.pin_drop_outlined,
-                label: '${widget.route.stopCount} stops',
-                theme: theme,
-              ),
-              if (widget.route.packageCount > 0) _InfoChip(
-                icon: Icons.inventory_2_outlined,
-                label: '${widget.route.packageCount} pkg',
-                theme: theme,
-              ),
+              if (widget.route.van.isNotEmpty)
+                _InfoChip(
+                  icon: Icons.local_shipping_outlined,
+                  label: widget.route.van,
+                  theme: theme,
+                ),
+              if (widget.route.routeDuration.isNotEmpty)
+                _InfoChip(
+                  icon: Icons.timer_outlined,
+                  label: widget.route.routeDuration,
+                  theme: theme,
+                ),
+              if (widget.route.waveTime.isNotEmpty)
+                _InfoChip(
+                  icon: Icons.waves_outlined,
+                  label: widget.route.waveTime,
+                  theme: theme,
+                ),
+              if (widget.route.stopCount > 0)
+                _InfoChip(
+                  icon: Icons.pin_drop_outlined,
+                  label: '${widget.route.stopCount} stops',
+                  theme: theme,
+                ),
+              if (widget.route.packageCount > 0)
+                _InfoChip(
+                  icon: Icons.inventory_2_outlined,
+                  label: '${widget.route.packageCount} pkg',
+                  theme: theme,
+                ),
             ],
           ),
 
@@ -473,7 +480,8 @@ class _StatusDot extends StatelessWidget {
     final hasValue = time.trim().isNotEmpty;
     final color = hasValue
         ? AppTheme.accentEmerald
-        : (theme.textTheme.bodySmall?.color ?? Colors.grey).withValues(alpha: 0.35);
+        : (theme.textTheme.bodySmall?.color ?? Colors.grey)
+            .withValues(alpha: 0.35);
 
     return Expanded(
       child: Row(
@@ -502,9 +510,7 @@ class _StatusDot extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: hasValue
-                        ? theme.textTheme.bodyLarge?.color
-                        : color,
+                    color: hasValue ? theme.textTheme.bodyLarge?.color : color,
                   ),
                 ),
               ],
@@ -598,8 +604,10 @@ void showRouteDetailSheet(BuildContext context, RouteRow route) {
                 _DetailRow('Van', route.van),
                 _DetailRow('Duration', route.routeDuration),
                 _DetailRow('Wave Time', route.waveTime),
-                _DetailRow('Stops', route.stopCount > 0 ? '${route.stopCount}' : '—'),
-                _DetailRow('Packages', route.packageCount > 0 ? '${route.packageCount}' : '—'),
+                _DetailRow(
+                    'Stops', route.stopCount > 0 ? '${route.stopCount}' : '—'),
+                _DetailRow('Packages',
+                    route.packageCount > 0 ? '${route.packageCount}' : '—'),
                 _DetailRow('Service Type', route.serviceType),
                 _DetailRow('Attendance', route.attendance),
 
@@ -628,7 +636,8 @@ void showRouteDetailSheet(BuildContext context, RouteRow route) {
                   child: ElevatedButton(
                     onPressed: null, // disabled
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryIndigo.withValues(alpha: 0.4),
+                      backgroundColor:
+                          AppTheme.primaryIndigo.withValues(alpha: 0.4),
                       disabledBackgroundColor:
                           AppTheme.primaryIndigo.withValues(alpha: 0.15),
                       disabledForegroundColor:

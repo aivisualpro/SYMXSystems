@@ -69,9 +69,7 @@ class RoutesParam {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is RoutesParam &&
-          yearWeek == other.yearWeek &&
-          date == other.date;
+      other is RoutesParam && yearWeek == other.yearWeek && date == other.date;
 
   @override
   int get hashCode => Object.hash(yearWeek, date);

@@ -279,7 +279,8 @@ class AppTheme {
           borderRadius: BorderRadius.circular(borderRadiusXs),
         ),
         side: const BorderSide(color: dividerLight),
-        labelStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500),
+        labelStyle:
+            GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500),
       ),
 
       // Dialog
@@ -299,8 +300,7 @@ class AppTheme {
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         showDragHandle: true,
       ),
@@ -481,8 +481,7 @@ class AppTheme {
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: cardDark,
         shape: RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         showDragHandle: true,
       ),

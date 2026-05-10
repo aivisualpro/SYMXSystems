@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lottie/lottie.dart';
 
 import '../../../core/theme/app_theme.dart';
 
@@ -83,66 +84,38 @@ class _ComingSoonScreenState extends State<ComingSoonScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 // ── Animated Hero Icon ──
-                AnimatedBuilder(
-                  animation: _floatCtrl,
-                  builder: (_, child) {
-                    final float = sin(_floatCtrl.value * pi) * 8;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      transform: Matrix4.translationValues(
-                        _dx,
-                        _dy + float,
-                        0,
-                      ),
-                      child: child,
-                    );
-                  },
-                  child: Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppTheme.primaryIndigo,
-                          AppTheme.accentEmerald,
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(36),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.primaryIndigo.withValues(alpha: 0.3),
-                          blurRadius: 40,
-                          offset: const Offset(0, 12),
+                Builder(builder: (context) {
+                  final rocketWidget = Lottie.asset(
+                    'assets/lottie/rocket.json',
+                    width: 240,
+                    height: 240,
+                    repeat: true,
+                    fit: BoxFit.contain,
+                  );
+                  return AnimatedBuilder(
+                    animation: _floatCtrl,
+                    builder: (_, __) {
+                      final float = sin(_floatCtrl.value * pi) * 8;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        transform: Matrix4.translationValues(
+                          _dx,
+                          _dy + float,
+                          0,
                         ),
-                        BoxShadow(
-                          color: AppTheme.accentEmerald.withValues(alpha: 0.15),
-                          blurRadius: 60,
-                          offset: const Offset(0, 24),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.rocket_launch_rounded,
-                      size: 56,
-                      color: Colors.white,
-                    ),
-                  )
-                      .animate()
-                      .scale(
-                        begin: const Offset(0.7, 0.7),
-                        end: const Offset(1.0, 1.0),
-                        duration: 700.ms,
-                        curve: Curves.easeOutBack,
-                      )
-                      .fadeIn(duration: 500.ms)
-                      .then()
-                      .shimmer(
-                        duration: 2000.ms,
-                        color: Colors.white.withValues(alpha: 0.12),
-                      ),
-                ),
+                        child: rocketWidget,
+                      );
+                    },
+                  );
+                })
+                    .animate()
+                    .scale(
+                      begin: const Offset(0.7, 0.7),
+                      end: const Offset(1.0, 1.0),
+                      duration: 700.ms,
+                      curve: Curves.easeOutBack,
+                    )
+                    .fadeIn(duration: 500.ms),
 
                 const SizedBox(height: 36),
 
@@ -157,10 +130,7 @@ class _ComingSoonScreenState extends State<ComingSoonScreen>
                     height: 1.3,
                     color: isDark ? Colors.white : AppTheme.textPrimary,
                   ),
-                )
-                    .animate()
-                    .fadeIn(delay: 200.ms, duration: 500.ms)
-                    .slideY(
+                ).animate().fadeIn(delay: 200.ms, duration: 500.ms).slideY(
                       begin: 0.15,
                       end: 0,
                       delay: 200.ms,
@@ -181,10 +151,7 @@ class _ComingSoonScreenState extends State<ComingSoonScreen>
                         : AppTheme.textSecondary,
                     height: 1.5,
                   ),
-                )
-                    .animate()
-                    .fadeIn(delay: 400.ms, duration: 500.ms)
-                    .slideY(
+                ).animate().fadeIn(delay: 400.ms, duration: 500.ms).slideY(
                       begin: 0.1,
                       end: 0,
                       delay: 400.ms,
@@ -225,9 +192,7 @@ class _ComingSoonScreenState extends State<ComingSoonScreen>
                       label: 'Push Alerts',
                     ),
                   ],
-                )
-                    .animate()
-                    .fadeIn(delay: 800.ms, duration: 500.ms),
+                ).animate().fadeIn(delay: 800.ms, duration: 500.ms),
               ],
             ),
           ),

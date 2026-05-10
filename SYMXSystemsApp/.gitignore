@@ -46,7 +46,6 @@ migrate_working_dir/
 *.jks
 
 # Web related
-lib/generated_plugin_registrant.dart
 
 # macOS related
 **/macos/Flutter/GeneratedPluginRegistrant.swift

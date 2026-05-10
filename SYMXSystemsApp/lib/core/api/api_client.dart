@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../constants/app_constants.dart';
+import '../router/app_router.dart';
 
 // ─── Secure Storage Provider ───────────────────────────────────────
 /// Shared instance of [FlutterSecureStorage] used across the app.
@@ -37,6 +38,13 @@ final dioProvider = Provider<Dio>((ref) {
   final storage = ref.read(secureStorageProvider);
   dio.interceptors.add(_AuthInterceptor(storage));
 
+  // Global 401 handler — clear auth state and redirect to login.
+  dio.interceptors.add(_UnauthorizedInterceptor(() async {
+    await storage.delete(key: kBadgeTokenKey);
+    await storage.delete(key: kEmployeeKey);
+    ref.read(routerProvider).go('/login');
+  }));
+
   // Debug-only logging.
   if (kDebugMode) {
     dio.interceptors.add(
@@ -69,5 +77,23 @@ class _AuthInterceptor extends Interceptor {
       options.headers['x-badge-token'] = token;
     }
     handler.next(options);
+  }
+}
+
+// ─── 401 Interceptor ───────────────────────────────────────────────
+/// Intercepts 401 responses from `/api/mobile/*` endpoints and
+/// triggers a forced logout + redirect to the login screen.
+class _UnauthorizedInterceptor extends Interceptor {
+  _UnauthorizedInterceptor(this._onUnauthorized);
+
+  final Future<void> Function() _onUnauthorized;
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    if (err.response?.statusCode == 401 &&
+        err.requestOptions.path.startsWith('/api/mobile/')) {
+      _onUnauthorized();
+    }
+    handler.next(err);
   }
 }
