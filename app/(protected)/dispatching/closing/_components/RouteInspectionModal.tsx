@@ -169,7 +169,8 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
                 inspectedBy: sessionEmail || ""
             };
 
-            // 1. Submit to Fleet Inspections
+            // Submit to Fleet Inspections — the shared helper handles
+            // SYMXRoute write-back (inspectionTime + inspectionId) automatically.
             const inspectionRes = await fetch("/api/fleet/inspections", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -182,21 +183,6 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
 
             const dataResponse = await inspectionRes.json();
             const inspectionId = dataResponse.inspection?._id || dataResponse._id;
-
-            // 2. Update Route with inspectionTime and inspectionId
-            const nowTime = new Date().toLocaleTimeString("en-US", { hour12: false, hour: '2-digit', minute: '2-digit' });
-            const routeRes = await fetch("/api/dispatching/routes", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    routeId: route._id,
-                    updates: {
-                        inspectionTime: nowTime,
-                        ...(inspectionId ? { inspectionId } : {})
-                    }
-                }),
-            });
-            if (!routeRes.ok) throw new Error("Failed to update route inspection time");
 
             onSaved(route._id, inspectionId);
             onClose();

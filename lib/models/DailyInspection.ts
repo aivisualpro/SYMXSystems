@@ -99,6 +99,9 @@ DailyInspectionSchema.index({ driver: 1 });
 DailyInspectionSchema.index({ inspectedBy: 1 });
 DailyInspectionSchema.index({ unitNumber: 1, routeDate: -1 });
 DailyInspectionSchema.index({ vin: 1, isStandardPhoto: 1 });
+// Compound index for "latest inspection per routeId" queries (Passes 2-4)
+// Non-unique: historic data may have legitimate multiple inspections per routeId
+DailyInspectionSchema.index({ routeId: 1, timeStamp: -1 });
 // Text index for full-text search (much faster than $regex)
 DailyInspectionSchema.index({ vin: 'text', driver: 'text', routeId: 'text', inspectedBy: 'text', comments: 'text' }, { name: 'inspection_text_search' });
 

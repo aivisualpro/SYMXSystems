@@ -11,6 +11,7 @@ import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
 import SYMXSetting from "@/lib/models/SYMXSetting";
 import SymxUser from "@/lib/models/SymxUser";
 import Vehicle from "@/lib/models/Vehicle";
+import DailyInspection from "@/lib/models/DailyInspection";
 
 
 import RouteType from "@/lib/models/RouteType";
@@ -312,6 +313,50 @@ export async function GET(req: NextRequest) {
         // Fire-and-forget lazy backfill of vin onto routes
         if (backfillVinOps.length > 0) {
             SYMXRoute.bulkWrite(backfillVinOps, { ordered: false }).catch(() => {});
+        }
+
+        // ── DailyInspection enrichment (authoritative source of truth) ──
+        const routeIds = enrichedRoutes.map((r: any) => String(r._id));
+        const dailyInspections = routeIds.length > 0
+          ? await DailyInspection.find(
+              { routeId: { $in: routeIds } },
+              { _id: 1, routeId: 1, timeStamp: 1, mileage: 1 }
+            )
+              .sort({ timeStamp: -1 })
+              .lean()
+          : [];
+
+        // First encounter per routeId wins (most recent, sorted desc)
+        const inspByRouteId = new Map<string, { _id: any; timeStamp: any; mileage: any }>();
+        for (const insp of dailyInspections as any[]) {
+          const rid = String(insp.routeId);
+          if (!inspByRouteId.has(rid)) inspByRouteId.set(rid, insp);
+        }
+
+        // Override inspectionId/inspectionTime from DailyInspection when present
+        const inspectionBackfillOps: any[] = [];
+        for (const r of enrichedRoutes as any[]) {
+          const insp = inspByRouteId.get(String(r._id));
+          if (insp) {
+            const newInspId = String(insp._id);
+            const newInspTime = new Date(insp.timeStamp).toLocaleTimeString("en-US", {
+              hour12: false, hour: "2-digit", minute: "2-digit", timeZone: BUSINESS_TZ,
+            });
+            // Back-fill stale SYMXRoute if needed (fire-and-forget)
+            if (r.inspectionId !== newInspId) {
+              inspectionBackfillOps.push({
+                updateOne: {
+                  filter: { _id: r._id },
+                  update: { $set: { inspectionId: newInspId, inspectionTime: newInspTime } },
+                },
+              });
+            }
+            r.inspectionId = newInspId;
+            r.inspectionTime = newInspTime;
+          }
+        }
+        if (inspectionBackfillOps.length > 0) {
+          SYMXRoute.bulkWrite(inspectionBackfillOps, { ordered: false }).catch(() => {});
         }
 
         return NextResponse.json({

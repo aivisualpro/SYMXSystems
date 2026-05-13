@@ -8,9 +8,17 @@ import '../data/inspection_repository.dart';
 
 /// Full-screen detail view for a completed daily inspection.
 /// Shows all data + photos in a mobile-optimised bento layout.
+///
+/// Accepts either [inspectionId] (direct lookup) or [routeId]
+/// (latest inspection for that route). At least one must be provided.
 class InspectionDetailScreen extends ConsumerStatefulWidget {
-  const InspectionDetailScreen({super.key, required this.inspectionId});
+  const InspectionDetailScreen({
+    super.key,
+    this.inspectionId = '',
+    this.routeId = '',
+  });
   final String inspectionId;
+  final String routeId;
 
   @override
   ConsumerState<InspectionDetailScreen> createState() =>
@@ -31,7 +39,14 @@ class _InspectionDetailScreenState
 
   Future<void> _fetch() async {
     final repo = ref.read(inspectionRepositoryProvider);
-    final d = await repo.getInspectionDetail(widget.inspectionId);
+    Map<String, dynamic>? d;
+
+    if (widget.inspectionId.isNotEmpty) {
+      d = await repo.getInspectionDetail(widget.inspectionId);
+    } else if (widget.routeId.isNotEmpty) {
+      d = await repo.getInspectionByRouteId(widget.routeId);
+    }
+
     if (mounted) setState(() { _data = d; _loading = false; });
   }
 
