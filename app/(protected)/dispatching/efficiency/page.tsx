@@ -37,7 +37,7 @@ import {
     TooltipProvider,
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import {
     Sheet,
@@ -295,10 +295,10 @@ export default function EfficiencyPage() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update");
-            toast.success(`Updated ${field}`);
+            notify.success(`Updated ${field}`);
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch (err: any) {
-            toast.error(err.message || "Failed to update");
+            notify.error(err.message || "Failed to update");
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
     }, [queryClient, patchRouteCache]);
@@ -327,10 +327,10 @@ export default function EfficiencyPage() {
                 body: JSON.stringify({ routeId, updates }),
             });
             if (!res.ok) throw new Error();
-            toast.success(`Updated efficiency entry for ${quickEditRow.employeeName}`);
+            notify.success(`Updated efficiency entry for ${quickEditRow.employeeName}`);
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch {
-            toast.error("Failed to update efficiency entry");
+            notify.error("Failed to update efficiency entry");
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
     };

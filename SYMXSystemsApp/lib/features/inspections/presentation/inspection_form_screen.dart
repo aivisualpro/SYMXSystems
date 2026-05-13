@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/route_row.dart';
 import '../data/inspection_repository.dart';
 import '../data/routes_repository.dart';
+import 'inspection_detail_screen.dart';
 import 'inspection_widgets.dart';
 
 /// Full-screen inspection form for a single route.
@@ -44,7 +45,32 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
   @override
   void initState() {
     super.initState();
+    _checkExistingInspection();
     _fetchLastMileage();
+  }
+
+  /// Idempotency guard: if an inspection already exists for this route,
+  /// pop immediately and redirect to the detail screen.
+  Future<void> _checkExistingInspection() async {
+    final repo = ref.read(inspectionRepositoryProvider);
+    final existing = await repo.getInspectionByRouteId(widget.route.id);
+    if (existing != null && mounted) {
+      final inspId = (existing['_id'] ?? '').toString();
+      if (inspId.isNotEmpty) {
+        // Pop form screen (with true so parent invalidates)
+        Navigator.of(context).pop(true);
+        // Push detail screen in its place
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ProviderScope(
+              parent: ProviderScope.containerOf(context),
+              child: InspectionDetailScreen(inspectionId: inspId),
+            ),
+          ),
+        );
+        return;
+      }
+    }
   }
 
   Future<void> _fetchLastMileage() async {

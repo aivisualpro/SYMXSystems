@@ -59,7 +59,7 @@ import {
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 // ── Type Options (colored pills) ──
 import { getTypeStyle, TYPE_OPTIONS, TYPE_MAP, getContrastText } from "@/lib/route-types";
@@ -521,11 +521,11 @@ export default function TimePage() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update");
-            toast.success(`Updated ${field}`);
+            notify.success(`Updated ${field}`);
             // 3. Background refetch for eventual consistency
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch (err: any) {
-            toast.error(err.message || "Failed to update");
+            notify.error(err.message || "Failed to update");
             // Revert: refetch from server
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
@@ -550,10 +550,10 @@ export default function TimePage() {
                 body: JSON.stringify({ routeId, updates }),
             });
             if (!res.ok) throw new Error();
-            toast.success(`Updated time entry for ${quickEditRow.employeeName}`);
+            notify.success(`Updated time entry for ${quickEditRow.employeeName}`);
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch {
-            toast.error("Failed to update time entry");
+            notify.error("Failed to update time entry");
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
     };

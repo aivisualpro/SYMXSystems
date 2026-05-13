@@ -24,7 +24,7 @@ import {
   EyeOff,
   Loader2,
 } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 interface User {
   _id?: string;
@@ -89,7 +89,7 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
     }
     setFormData(prev => ({ ...prev, password }));
     setShowPassword(true);
-    toast.success("Secure password generated");
+    notify.success("Secure password generated");
   };
 
   const [availableRoles, setAvailableRoles] = useState<{ name: string }[]>([]);
@@ -137,7 +137,7 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      toast.error("File excessively large. Please choose a smaller image.");
+      notify.error("File excessively large. Please choose a smaller image.");
       return;
     }
     setUploadingPicture(true);
@@ -148,9 +148,9 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
       setFormData((prev) => ({ ...prev, profilePicture: data.secure_url }));
-      toast.success("Photo uploaded");
+      notify.success("Photo uploaded");
     } catch {
-      toast.error("Failed to upload photo");
+      notify.error("Failed to upload photo");
     } finally {
       setUploadingPicture(false);
     }
@@ -225,7 +225,7 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
         const data = await res.json();
         setFormData((prev) => ({ ...prev, signature: data.secure_url }));
       } catch {
-        toast.error("Failed to upload signature");
+        notify.error("Failed to upload signature");
       } finally {
         setUploadingSignature(false);
       }

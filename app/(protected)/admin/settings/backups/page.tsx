@@ -25,7 +25,7 @@ import {
   Filter,
   SlidersHorizontal,
 } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 interface BackupListItem {
   publicId: string;
@@ -182,7 +182,7 @@ export default function BackupsPage() {
         setSelectedDate(json.backups[0].date);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load backups");
+      notify.error(err instanceof Error ? err.message : "Failed to load backups");
     } finally {
       setLoadingBackups(false);
     }
@@ -215,7 +215,7 @@ export default function BackupsPage() {
         if (!res.ok || !json.ok) throw new Error(json.error || "Failed to inspect backup");
         if (!cancelled) setInspect(json);
       } catch (err) {
-        if (!cancelled) toast.error(err instanceof Error ? err.message : "Failed to inspect backup");
+        if (!cancelled) notify.error(err instanceof Error ? err.message : "Failed to inspect backup");
       } finally {
         if (!cancelled) setLoadingInspect(false);
       }
@@ -245,7 +245,7 @@ export default function BackupsPage() {
         if (!res.ok || !json.ok) throw new Error(json.error || "Failed to fetch collection");
         if (!cancelled) setCollectionData(json);
       } catch (err) {
-        if (!cancelled) toast.error(err instanceof Error ? err.message : "Failed to fetch collection");
+        if (!cancelled) notify.error(err instanceof Error ? err.message : "Failed to fetch collection");
       } finally {
         if (!cancelled) setLoadingDocs(false);
       }
@@ -304,12 +304,12 @@ export default function BackupsPage() {
   const copyJson = async () => {
     if (!filteredDocuments.length) return;
     await navigator.clipboard.writeText(JSON.stringify(filteredDocuments, null, 2));
-    toast.success(`Copied ${filteredDocuments.length} doc(s) to clipboard`);
+    notify.success(`Copied ${filteredDocuments.length} doc(s) to clipboard`);
   };
 
   const downloadFullCollection = async () => {
     if (!selectedBackup || !selectedCollection) return;
-    toast.info("Preparing full collection download…");
+    notify.info("Preparing full collection download…");
     try {
       const res = await fetch(
         `/api/admin/backups/collection?url=${encodeURIComponent(
@@ -329,7 +329,7 @@ export default function BackupsPage() {
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Download failed");
+      notify.error(err instanceof Error ? err.message : "Download failed");
     }
   };
 

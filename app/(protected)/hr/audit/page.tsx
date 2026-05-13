@@ -30,7 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 interface AuditEmployee {
   _id: string;
@@ -224,9 +224,9 @@ export default function EmployeeAuditPage() {
       );
 
       const label = DOC_FIELDS.find((d) => d.key === field)?.label || field;
-      toast.success(`${label} uploaded successfully`);
+      notify.success(`${label} uploaded successfully`);
     } catch (err: any) {
-      toast.error(err.message || "Upload failed");
+      notify.error(err.message || "Upload failed");
     } finally {
       setUploading(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -263,10 +263,10 @@ export default function EmployeeAuditPage() {
       );
 
       const label = DOC_FIELDS.find((d) => d.key === previewField)?.label || previewField;
-      toast.success(`${label} removed`);
+      notify.success(`${label} removed`);
       closePreview();
     } catch (err: any) {
-      toast.error(err.message || "Failed to delete file");
+      notify.error(err.message || "Failed to delete file");
     } finally {
       setDeleting(false);
     }

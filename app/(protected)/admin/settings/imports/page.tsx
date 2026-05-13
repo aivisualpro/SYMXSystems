@@ -15,7 +15,7 @@ import {
   Shield,
   Ticket,
 } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import Papa from "papaparse";
 
 interface ImportResult {
@@ -266,7 +266,7 @@ export default function ImportsSettingsPage() {
       });
 
       if (parsed.length === 0) {
-        toast.error("CSV file is empty or has no valid rows");
+        notify.error("CSV file is empty or has no valid rows");
         setIsImporting(null);
         setImportProgress("");
         return;
@@ -316,11 +316,11 @@ export default function ImportsSettingsPage() {
       };
 
       setLastResult((prev) => ({ ...prev, [activeImportType]: finalResult }));
-      toast.success(
+      notify.success(
         `Imported ${totalCount} records (${totalInserted} new, ${totalUpdated} updated)${chunks.length > 1 ? ` in ${chunks.length} batches` : ""}`
       );
     } catch (err: any) {
-      toast.error(err.message || "Import failed");
+      notify.error(err.message || "Import failed");
       setLastResult((prev) => ({
         ...prev,
         [activeImportType]: { success: false, count: 0, inserted: 0, updated: 0 },

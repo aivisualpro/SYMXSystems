@@ -32,7 +32,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import RoutesInfoPanel from "../dispatching/_components/RoutesInfoPanel";
 import { useDispatchingRoutes } from "@/lib/query/hooks/useDispatching";
 import { useQueryClient } from "@tanstack/react-query";

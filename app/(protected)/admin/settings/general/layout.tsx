@@ -3,14 +3,9 @@
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Route, ListFilter, Settings, Plus, Wrench } from "lucide-react";
-import { useRef, createContext, useContext, useState } from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
-
-interface AddRefCtx {
-    addRef: React.MutableRefObject<(() => void) | null>;
-}
-const AddRefContext = createContext<AddRefCtx>({ addRef: { current: null } });
-export const useAddRef = () => useContext(AddRefContext);
+import { AddRefContext } from "./_components/add-ref-context";
 
 const SUB_TABS = [
     { id: "general", label: "General", icon: Wrench },

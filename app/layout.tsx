@@ -12,13 +12,6 @@ import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-regis
 import { Providers } from "@/app/providers";
 import VersionChecker from "@/components/version-checker";
 
-import { Poppins } from "next/font/google";
-
-const poppins = Poppins({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"], // Reduced weights to prevent unused preload console warnings
-  variable: "--font-poppins",
-});
 
 export const metadata: Metadata = {
   title: "SYMX Systems",
@@ -58,6 +51,7 @@ export default async function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" />
         {/* Apple PWA icons */}
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
@@ -81,7 +75,6 @@ export default async function RootLayout({
         suppressHydrationWarning
         className={cn(
           "bg-background overscroll-none antialiased h-screen overflow-hidden",
-          poppins.variable,
           "font-poppins",
           activeThemeValue ? `theme-${activeThemeValue}` : "",
           isScaled ? "theme-scaled" : ""
@@ -98,7 +91,7 @@ export default async function RootLayout({
             <Providers>
               {children}
             </Providers>
-            <Toaster position="top-center" richColors />
+            <Toaster position="bottom-right" closeButton expand={false} duration={2500} />
             <ServiceWorkerRegistration />
             <VersionChecker />
           </ActiveThemeProvider>

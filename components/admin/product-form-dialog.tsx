@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Hash, Package, Plus, X, Layers, Image as ImageIcon, FileText, Share2 } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 interface Product {
   _id?: string;
@@ -121,11 +121,11 @@ export function ProductFormDialog({
 
       if (!response.ok) throw new Error("Failed to save");
 
-      toast.success(initialData?._id ? "Product updated" : "Product created");
+      notify.success(initialData?._id ? "Product updated" : "Product created");
       onOpenChange(false);
       onSuccess();
     } catch (error) {
-      toast.error("An error occurred saving the product");
+      notify.error("An error occurred saving the product");
       console.error(error);
     }
   };

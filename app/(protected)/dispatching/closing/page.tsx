@@ -29,7 +29,7 @@ import {
     Search,
 } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import RouteInspectionModal from "./_components/RouteInspectionModal";
 
 /** Convert a date (ISO string or Date) to YYYY-MM-DD in Pacific Time */
@@ -423,7 +423,7 @@ function ClosingPageContent() {
                                             const returnUrl = encodeURIComponent(`/dispatching/closing?highlight=${row._id}`);
                                             router.push(`/fleet/inspections/${row.inspectionId}?returnTo=${returnUrl}`);
                                         } else {
-                                            toast.error("No Inspection Record found");
+                                            notify.error("No Inspection Record found");
                                         }
                                     }}
                                     className={cn(
@@ -509,7 +509,7 @@ function ClosingPageContent() {
                 onClose={() => setInspectingRoute(null)}
                 route={inspectingRoute}
                 onSaved={(routeId) => {
-                    toast.success("Inspection saved successfully!");
+                    notify.success("Inspection saved successfully!");
                     refreshRoutes(); // refresh to show under "Inspected"
                 }}
             />

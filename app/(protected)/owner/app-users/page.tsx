@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
+import { useUpsertUser, useDeleteUser, useToggleUserActive } from "@/lib/query/hooks/useAdmin";
 import {
   IconEdit, IconTrash, IconMail, IconPhone,
   IconUser, IconUsers, IconMapPin, IconShieldCheck,
@@ -57,58 +58,38 @@ export default function AppUsersPage() {
   const [viewUser, setViewUser] = useState<User | null>(null);
 
   /* ── CRUD ──────────────────────────────────────────────── */
+  const upsertUser = useUpsertUser();
+  const removeUser = useDeleteUser();
+  const toggleActive = useToggleUserActive();
+
   const handleSubmit = async (formData: Partial<User>) => {
-    try {
-      const url = editingItem ? `/api/admin/users/${editingItem._id}` : "/api/admin/users";
-      const method = editingItem ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-      if (!res.ok) throw new Error("Failed");
-      toast.success(editingItem ? "User updated" : "User created");
-      setAddUserOpen(false);
-      setEditingItem(null);
-      fetchUsers();
-      if (viewUser && editingItem && viewUser._id === editingItem._id) {
-        fetchUserDetail(editingItem._id);
-      }
-    } catch {
-      toast.error("Failed to save user");
-    }
+    upsertUser.mutate(
+      { id: editingItem?._id, data: formData },
+      {
+        onSuccess: () => {
+          setAddUserOpen(false);
+          setEditingItem(null);
+          fetchUsers();
+          if (viewUser && editingItem && viewUser._id === editingItem._id) {
+            fetchUserDetail(editingItem._id);
+          }
+        },
+      },
+    );
   };
 
-  const handleDelete = async (id: string, e?: React.MouseEvent) => {
+  const handleDelete = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (!confirm("Are you sure you want to delete this user?")) return;
-    try {
-      const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed");
-      toast.success("User deleted");
-      if (viewUser?._id === id) setViewUser(null);
-      fetchUsers();
-    } catch {
-      toast.error("Failed to delete user");
-    }
+    if (viewUser?._id === id) setViewUser(null);
+    removeUser.mutate({ id }, { onSettled: () => fetchUsers() });
   };
 
-  const handleToggleActive = useCallback(async (userId: string, checked: boolean) => {
-    try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: checked }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      toast.success(`User ${checked ? "activated" : "deactivated"}`);
-      fetchUsers();
-      if (viewUser?._id === userId) setViewUser(prev => prev ? { ...prev, isActive: checked } : null);
-    } catch {
-      toast.error("Failed to update status");
-      fetchUsers();
-    }
-  }, [fetchUsers, viewUser]);
+  const handleToggleActive = useCallback((userId: string, checked: boolean) => {
+    toggleActive.mutate({ id: userId, isActive: checked });
+    if (viewUser?._id === userId) setViewUser(prev => prev ? { ...prev, isActive: checked } : null);
+    fetchUsers();
+  }, [fetchUsers, viewUser, toggleActive]);
 
   const openEditSheet = async (item: User, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -131,7 +112,7 @@ export default function AppUsersPage() {
         setViewUser(data);
       }
     } catch {
-      toast.error("Failed to load user details");
+      notify.error("Failed to load user details");
     }
   };
 
@@ -352,7 +333,7 @@ export default function AppUsersPage() {
                       onClick={async () => {
                         const input = document.getElementById("detail-password-input") as HTMLInputElement;
                         const newPassword = input.value;
-                        if (!newPassword) { toast.error("Please enter a new password"); return; }
+                        if (!newPassword) { notify.error("Please enter a new password"); return; }
                         try {
                           const res = await fetch("/api/auth/change-password", {
                             method: "POST",
@@ -360,9 +341,9 @@ export default function AppUsersPage() {
                             body: JSON.stringify({ userId: viewUser._id, newPassword }),
                           });
                           if (!res.ok) throw new Error("Failed");
-                          toast.success("Password updated");
+                          notify.success("Password updated");
                           input.value = "";
-                        } catch { toast.error("Failed to update password"); }
+                        } catch { notify.error("Failed to update password"); }
                       }}
                     >
                       Update

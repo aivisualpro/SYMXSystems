@@ -34,7 +34,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import RoutesInfoPanel from "./_components/RoutesInfoPanel";
 import { useQueryClient } from "@tanstack/react-query";
 import { generateRoutesPDF } from "@/lib/generate-routes-pdf";
@@ -298,15 +298,15 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
             if (!res.ok) throw new Error(data.error || "Failed to generate routes");
 
             if (data.created > 0) {
-                toast.success(`${routesGenerated ? "Regenerated" : "Generated"} ${data.created} route records for ${formatWeekLabel(selectedWeek)}`);
+                notify.success(`${routesGenerated ? "Regenerated" : "Generated"} ${data.created} route records for ${formatWeekLabel(selectedWeek)}`);
             } else {
-                toast.info(data.message || "Routes already exist for this week");
+                notify.info(data.message || "Routes already exist for this week");
             }
             setRoutesGenerated(true);
             setRefreshKey((k) => k + 1);
             queryClient.invalidateQueries({ queryKey: ["dispatching"] });
         } catch (err: any) {
-            toast.error(err.message || "Failed to generate routes");
+            notify.error(err.message || "Failed to generate routes");
         } finally {
             setGeneratingRoutes(false);
         }
@@ -522,15 +522,15 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                 <button
                                     onClick={async () => {
                                         if (!selectedWeek || !selectedDate) {
-                                            toast.error("No date selected");
+                                            notify.error("No date selected");
                                             return;
                                         }
                                         setPdfLoading(true);
                                         try {
                                             await generateRoutesPDF(selectedWeek, selectedDate);
-                                            toast.success("PDF downloaded");
+                                            notify.success("PDF downloaded");
                                         } catch (err: any) {
-                                            toast.error(err.message || "Failed to generate PDF");
+                                            notify.error(err.message || "Failed to generate PDF");
                                         } finally {
                                             setPdfLoading(false);
                                         }

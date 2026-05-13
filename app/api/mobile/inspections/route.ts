@@ -4,16 +4,16 @@
  * Allows a driver to submit a vehicle inspection from the mobile app.
  * Auth: JWT via `x-badge-token` header (same as my-routes).
  *
- * After creating the DailyInspection record, it also updates the
- * corresponding SYMXRoute with the inspectionTime and inspectionId.
+ * Delegates to the shared `createInspectionForRoute` helper which
+ * handles vehicle resolution, idempotency, and SYMXRoute write-back.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import connectToDatabase from "@/lib/db";
 import DailyInspection from "@/lib/models/DailyInspection";
-import SYMXRoute from "@/lib/models/SYMXRoute";
 import Vehicle from "@/lib/models/Vehicle";
+import { createInspectionForRoute } from "@/lib/inspections/createInspectionForRoute";
 
 // ── JWT secret ──
 const secretKey = process.env.JWT_SECRET || "symx_systems_secret_key";
@@ -30,7 +30,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-// ── GET: fetch last mileage for a van (by vehicle name or VIN) ──
+// ── GET: fetch inspection by routeId, or last mileage for a van ──
 export async function GET(req: NextRequest) {
   try {
     const token = req.headers.get("x-badge-token");
@@ -53,6 +53,20 @@ export async function GET(req: NextRequest) {
     await connectToDatabase();
 
     const { searchParams } = new URL(req.url);
+
+    // ── Route-based lookup: GET /api/mobile/inspections?routeId=... ──
+    const routeId = searchParams.get("routeId");
+    if (routeId) {
+      const inspection = await DailyInspection.findOne({ routeId })
+        .sort({ timeStamp: -1 })
+        .lean();
+      return NextResponse.json(
+        { inspection: inspection || null },
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
+    // ── Fallback: last mileage by VIN / van name ──
     const vanParam = searchParams.get("vin") || searchParams.get("van") || "";
 
     if (!vanParam) {
@@ -126,87 +140,41 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await connectToDatabase();
-
     const body = await req.json();
 
-    // Resolve VIN + unitNumber + vehicleId from van name
-    let vin = body.vin || "";
-    let unitNumber = "";
-    let vehicleId: any = null;
-    if (body.van) {
-      const vehicle = await Vehicle.findOne(
-        { vehicleName: body.van },
-        { vin: 1, unitNumber: 1, _id: 1 }
-      ).lean();
-      if (vehicle) {
-        if (!vin) vin = (vehicle as any).vin || "";
-        unitNumber = (vehicle as any).unitNumber || "";
-        vehicleId = (vehicle as any)._id || null;
-      }
-    }
-
-    // Build inspection data
-    const inspectionData: any = {
-      type: body.type || "Route Inspection",
-      inspectionType: body.inspectionType || "Route Inspection",
-      driver: body.driver || transporterId,
-      employeeName: body.employeeName || "",
-      vin,
-      unitNumber,
-      vehicleId,
-      routeDate: body.routeDate ? new Date(body.routeDate) : new Date(),
-      mileage: Number(body.mileage) || 0,
-      anyRepairs: body.anyRepairs === "TRUE" ? "TRUE" : "FALSE",
-      repairDescription: body.repairDescription || null,
-      repairCurrentStatus: body.repairCurrentStatus || null,
-      repairImage: body.repairImage || null,
-      comments: body.comments || null,
-      inspectedBy: transporterId,
+    const result = await createInspectionForRoute({
       routeId: body.routeId || "",
-      timeStamp: new Date(),
-      // Photo fields
-      vehiclePicture1: body.vehiclePicture1 || null,
-      vehiclePicture2: body.vehiclePicture2 || null,
-      vehiclePicture3: body.vehiclePicture3 || null,
-      vehiclePicture4: body.vehiclePicture4 || null,
-      dashboardImage: body.dashboardImage || null,
-      additionalPicture: body.additionalPicture || null,
-    };
-
-    // Clean empty strings to null
-    for (const k of Object.keys(inspectionData)) {
-      if (inspectionData[k] === "") inspectionData[k] = null;
-    }
-
-    // 1. Create the DailyInspection record
-    const inspection = await DailyInspection.create(inspectionData);
-    const inspectionId = String(inspection._id);
-
-    // 2. Update the corresponding route with inspectionTime + inspectionId
-    if (body.routeId) {
-      const nowTime = new Date().toLocaleTimeString("en-US", {
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "America/Los_Angeles",
-      });
-
-      await SYMXRoute.findByIdAndUpdate(body.routeId, {
-        $set: {
-          inspectionTime: nowTime,
-          inspectionId,
-        },
-      });
-    }
+      transporterId: body.driver || transporterId,
+      employeeName: body.employeeName,
+      inspectedBy: transporterId,
+      van: body.van,
+      vin: body.vin,
+      mileage: Number(body.mileage) || 0,
+      anyRepairs: body.anyRepairs,
+      repairDescription: body.repairDescription,
+      repairCurrentStatus: body.repairCurrentStatus,
+      repairImage: body.repairImage,
+      comments: body.comments,
+      vehiclePicture1: body.vehiclePicture1,
+      vehiclePicture2: body.vehiclePicture2,
+      vehiclePicture3: body.vehiclePicture3,
+      vehiclePicture4: body.vehiclePicture4,
+      dashboardImage: body.dashboardImage,
+      additionalPicture: body.additionalPicture,
+      routeDate: body.routeDate,
+      inspectionType: body.inspectionType || body.type,
+    });
 
     return NextResponse.json(
       {
         success: true,
-        inspectionId,
-        message: "Inspection submitted successfully",
+        inspectionId: result.inspection._id,
+        created: result.created,
+        message: result.created
+          ? "Inspection submitted successfully"
+          : "Inspection already exists for this route",
       },
-      { status: 201, headers: corsHeaders }
+      { status: result.created ? 201 : 200, headers: corsHeaders }
     );
   } catch (err: any) {
     console.error("[mobile/inspections POST]", err);

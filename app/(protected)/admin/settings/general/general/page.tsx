@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Loader2, Save, ChevronDown, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 const SETTING_KEY = "routes_completion_types";
 const RTS_SETTING_KEY = "everyday_logic_rts";
@@ -121,9 +121,9 @@ export default function GeneralSettingsPage() {
             });
             if (!res.ok) throw new Error("Failed to save");
             setDirty(false);
-            toast.success("Setting saved");
+            notify.success("Setting saved");
         } catch (err: any) {
-            toast.error(err.message || "Failed to save");
+            notify.error(err.message || "Failed to save");
         } finally {
             setSaving(false);
         }
@@ -142,9 +142,9 @@ export default function GeneralSettingsPage() {
                 }),
             });
             if (!res.ok) throw new Error("Failed to save RTS setting");
-            toast.success("Everyday Logic saved");
+            notify.success("Everyday Logic saved");
         } catch (err: any) {
-            toast.error(err.message || "Failed to save RTS setting");
+            notify.error(err.message || "Failed to save RTS setting");
             setRtsEnabled(!checked);
         }
     };
@@ -162,9 +162,9 @@ export default function GeneralSettingsPage() {
                 }),
             });
             if (!res.ok) throw new Error("Failed to save Attendance setting");
-            toast.success("Everyday Logic saved");
+            notify.success("Everyday Logic saved");
         } catch (err: any) {
-            toast.error(err.message || "Failed to save Attendance setting");
+            notify.error(err.message || "Failed to save Attendance setting");
             setAttendanceEnabled(!checked);
         }
     };
@@ -182,9 +182,9 @@ export default function GeneralSettingsPage() {
                 }),
             });
             if (!res.ok) throw new Error("Failed to save Dispatching Logic");
-            toast.success("Dispatching Logic saved");
+            notify.success("Dispatching Logic saved");
         } catch (err: any) {
-            toast.error(err.message || "Failed to save Dispatching Logic");
+            notify.error(err.message || "Failed to save Dispatching Logic");
             setDispatchingDetailsEnabled(!checked);
         }
     };
@@ -390,9 +390,9 @@ export default function GeneralSettingsPage() {
                                                     }),
                                                 });
                                                 if (!res.ok) throw new Error("Failed to save timezone");
-                                                toast.success(`Timezone set to ${tz.label}`);
+                                                notify.success(`Timezone set to ${tz.label}`);
                                             } catch (err: any) {
-                                                toast.error(err.message || "Failed to save timezone");
+                                                notify.error(err.message || "Failed to save timezone");
                                                 setSelectedTimezone(selectedTimezone);
                                             }
                                         }}

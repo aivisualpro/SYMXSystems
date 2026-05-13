@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { Loader2, Plus, DollarSign, TrendingUp, Clock, CheckCircle2, Trash2, Search, Paperclip, X, Upload, FileSpreadsheet, ArrowRight, CheckCircle, AlertCircle, RotateCw, FileUp, Table2 } from "lucide-react";
 import { ISymxReimbursement } from "@/lib/models/SymxReimbursement";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
@@ -181,7 +181,7 @@ export default function ReimbursementPage() {
       setKpis(json.kpi);
     } catch (err) {
       console.error("Failed to load reimbursements", err);
-      toast.error("Failed to load data");
+      notify.error("Failed to load data");
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -237,7 +237,7 @@ export default function ReimbursementPage() {
 
   const handleImportFileParse = (file: File) => {
     if (!file.name.endsWith(".csv")) {
-      toast.error("Please select a CSV file");
+      notify.error("Please select a CSV file");
       return;
     }
     setCsvFileName(file.name);
@@ -246,7 +246,7 @@ export default function ReimbursementPage() {
       skipEmptyLines: true,
       complete: (results) => {
         if (!results.data || results.data.length === 0) {
-          toast.error("CSV file is empty or has no valid rows");
+          notify.error("CSV file is empty or has no valid rows");
           return;
         }
         const headers = results.meta.fields || [];
@@ -255,7 +255,7 @@ export default function ReimbursementPage() {
         setImportStep("preview");
       },
       error: (err) => {
-        toast.error(`Failed to parse CSV: ${err.message}`);
+        notify.error(`Failed to parse CSV: ${err.message}`);
       },
     });
   };
@@ -314,10 +314,10 @@ export default function ReimbursementPage() {
 
       setImportResult({ inserted: totalInserted, updated: totalUpdated, total: totalCount, errors: totalErrors });
       setImportStep("done");
-      toast.success(`Imported ${totalCount} records (${totalInserted} new, ${totalUpdated} updated)`);
+      notify.success(`Imported ${totalCount} records (${totalInserted} new, ${totalUpdated} updated)`);
       fetchData(true);
     } catch (err: any) {
-      toast.error(err.message || "Import failed");
+      notify.error(err.message || "Import failed");
       setImportResult({ inserted: totalInserted, updated: totalUpdated, total: totalCount, errors: totalErrors + 1 });
       setImportStep("done");
     }
@@ -420,7 +420,7 @@ export default function ReimbursementPage() {
 
   const handleSave = async () => {
     if (!formData.transporterId) {
-      toast.error("Please select an employee");
+      notify.error("Please select an employee");
       return;
     }
     setSaving(true);
@@ -456,12 +456,12 @@ export default function ReimbursementPage() {
         if (!res.ok) throw new Error("Save failed");
       }
 
-      toast.success(editingItem ? "Reimbursement updated" : "Reimbursement created");
+      notify.success(editingItem ? "Reimbursement updated" : "Reimbursement created");
       setIsDialogOpen(false);
       setSelectedFile(null);
       fetchData(true);
     } catch (err: any) {
-      toast.error(err.message);
+      notify.error(err.message);
     } finally {
       setSaving(false);
     }
@@ -472,10 +472,10 @@ export default function ReimbursementPage() {
     try {
       const res = await fetch(`/api/admin/reimbursements/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
-      toast.success("Deleted");
+      notify.success("Deleted");
       fetchData(true);
     } catch (err: any) {
-      toast.error(err.message);
+      notify.error(err.message);
     }
   };
 
@@ -489,9 +489,9 @@ export default function ReimbursementPage() {
       if (!res.ok) throw new Error("Update failed");
       // Optimistic update
       setData(prev => prev.map(row => row._id === id ? { ...row, status: newStatus } : row));
-      toast.success(`Status updated to ${newStatus}`);
+      notify.success(`Status updated to ${newStatus}`);
     } catch (err: any) {
-      toast.error(err.message);
+      notify.error(err.message);
     }
   };
 

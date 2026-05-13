@@ -5,7 +5,7 @@ import { DetailPageSkeleton } from "@/components/skeletons";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { UserForm } from "@/components/admin/user-form";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { 
   User as UserIcon, 
   Mail, 
@@ -78,7 +78,7 @@ export default function UserDetailsPage() {
       const data = await response.json();
       setUser(data);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "An error occurred");
+      notify.error(error instanceof Error ? error.message : "An error occurred");
       router.push("/owner/app-users");
     } finally {
       setLoading(false);
@@ -102,14 +102,14 @@ export default function UserDetailsPage() {
 
       if (!response.ok) throw new Error("Failed to update user");
 
-      toast.success("User updated successfully");
+      notify.success("User updated successfully");
       setIsEditDialogOpen(false);
       
       // Refresh user data
       const updatedUser = await response.json();
       setUser(updatedUser);
     } catch (error) {
-      toast.error("Failed to update user");
+      notify.error("Failed to update user");
     } finally {
       setIsSubmitting(false);
     }
@@ -271,7 +271,7 @@ export default function UserDetailsPage() {
                         const input = document.getElementById("new-password-input") as HTMLInputElement;
                         const newPassword = input.value;
                         if (!newPassword) {
-                           toast.error("Please enter a new password");
+                           notify.error("Please enter a new password");
                            return;
                         }
                         try {
@@ -281,10 +281,10 @@ export default function UserDetailsPage() {
                               body: JSON.stringify({ userId: user._id, newPassword })
                            });
                            if (!res.ok) throw new Error("Failed to change password");
-                           toast.success("Password updated successfully");
+                           notify.success("Password updated successfully");
                            input.value = "";
                         } catch (err) {
-                           toast.error("Failed to update password");
+                           notify.error("Failed to update password");
                         }
                      }}
                   >

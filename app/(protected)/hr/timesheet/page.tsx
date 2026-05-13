@@ -12,7 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -363,7 +363,7 @@ export default function TimesheetPage() {
 
   const handleGenerate = useCallback(async (type: "timesheet" | "blank") => {
     if (type === "timesheet" && employees.length === 0) {
-      toast.error("No active employees found");
+      notify.error("No active employees found");
       return;
     }
 
@@ -385,13 +385,13 @@ export default function TimesheetPage() {
         : `TimeSheet_${selectedPair.id.replace(",", "_")}.pdf`;
 
       doc.save(fileName);
-      toast.success(
+      notify.success(
         type === "blank"
           ? "Blank timesheet downloaded"
           : `Timesheet with ${employees.length} employees downloaded`
       );
     } catch (err: any) {
-      toast.error(err.message || "Failed to generate PDF");
+      notify.error(err.message || "Failed to generate PDF");
     } finally {
       setGenerating(null);
     }

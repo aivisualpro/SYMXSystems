@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 export function ServiceWorkerRegistration() {
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
@@ -36,7 +36,7 @@ export function ServiceWorkerRegistration() {
               // New SW installed but waiting → show toast and dispatch event
               setWaitingWorker(newWorker);
               window.dispatchEvent(new CustomEvent("pwa-update-available", { detail: newWorker }));
-              toast("App update available!", {
+             notify.custom("App update available!", {
                 description: "Tap to refresh and get the latest version.",
                 action: {
                   label: "Update",

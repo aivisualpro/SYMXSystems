@@ -3,7 +3,7 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import Papa from "papaparse";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import {
     Upload,
     FileSpreadsheet,
@@ -172,7 +172,7 @@ export default function ImportRoutesModal({ open, onClose, onImportComplete }: I
 
     const processFile = useCallback((selectedFile: File) => {
         if (!selectedFile.name.endsWith(".csv")) {
-            toast.error("Please select a CSV file");
+            notify.error("Please select a CSV file");
             return;
         }
 
@@ -284,7 +284,7 @@ export default function ImportRoutesModal({ open, onClose, onImportComplete }: I
             });
             setStep("done");
 
-            toast.success(
+            notify.success(
                 `Imported ${totalCount} route records (${totalInserted} new, ${totalUpdated} updated)${
                     totalInfoSynced > 0 ? ` + ${totalInfoSynced} Routes Info synced` : ""
                 }`
@@ -294,7 +294,7 @@ export default function ImportRoutesModal({ open, onClose, onImportComplete }: I
         } catch (err: any) {
             setError(err.message || "Import failed");
             setStep("preview");
-            toast.error(err.message || "Import failed");
+            notify.error(err.message || "Import failed");
         } finally {
             setImporting(false);
         }

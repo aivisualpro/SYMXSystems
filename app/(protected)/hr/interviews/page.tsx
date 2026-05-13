@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { useHrInterviews } from "@/lib/query/hooks/useHr";
+import { useHrInterviews, useUpsertInterview, useDeleteInterview } from "@/lib/query/hooks/useHr";
 import { useDropdowns } from "@/lib/query/hooks/useShared";
 import {
   Search,
@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import Papa from "papaparse";
 import QRCode from "qrcode";
 
@@ -177,7 +177,7 @@ function ShareDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(shareUrl);
     setCopied(true);
-    toast.success("Link copied!");
+    notify.success("Link copied!");
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -267,7 +267,8 @@ function InterviewDialog({
   statusOptions: DropdownStatus[];
 }) {
   const [form, setForm] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
+  const upsert = useUpsertInterview();
+  const saving = upsert.isPending;
   const [activeTab, setActiveTab] = useState<"basic" | "interview" | "onboarding">("basic");
 
   useEffect(() => {
@@ -301,21 +302,10 @@ function InterviewDialog({
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const url = interview ? `/api/admin/interviews/${interview._id}` : "/api/admin/interviews";
-      const method = interview ? "PUT" : "POST";
-      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-      if (!res.ok) throw new Error("Save failed");
-      toast.success(interview ? "Interview updated" : "Interview created");
-      onSaved();
-      onClose();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save");
-    } finally {
-      setSaving(false);
-    }
+  const handleSave = () => {
+    upsert.mutate({ id: interview?._id, data: form });
+    onSaved();
+    onClose();
   };
 
   if (!open) return null;
@@ -792,7 +782,7 @@ export default function HRInterviewsPage() {
       const parsed = await new Promise<any[]>((resolve, reject) => {
         Papa.parse(file, { header: true, skipEmptyLines: true, complete: (r) => resolve(r.data), error: reject });
       });
-      if (parsed.length === 0) { toast.error("CSV file is empty"); setImporting(false); return; }
+      if (parsed.length === 0) { notify.error("CSV file is empty"); setImporting(false); return; }
 
       const chunks: any[][] = [];
       for (let i = 0; i < parsed.length; i += CHUNK_SIZE) chunks.push(parsed.slice(i, i + CHUNK_SIZE));
@@ -808,61 +798,39 @@ export default function HRInterviewsPage() {
         if (!res.ok) throw new Error(result.error || "Import failed");
         total += result.inserted || 0;
       }
-      toast.success(`Imported ${total} applicants`);
+      notify.success(`Imported ${total} applicants`);
       await fetchInterviews();
     } catch (err: any) {
-      toast.error(err.message || "Import failed");
+      notify.error(err.message || "Import failed");
     } finally {
       setImporting(false);
     }
   }, [fetchInterviews]);
 
   // ── Delete ──
-  const handleDelete = useCallback(async (id: string) => {
+  const deleteInterview = useDeleteInterview();
+  const handleDelete = useCallback((id: string) => {
     if (!confirm("Delete this applicant?")) return;
     setDeletingId(id);
-    try {
-      const res = await fetch(`/api/admin/interviews/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      setInterviews((p) => p.filter((x) => x._id !== id));
-      toast.success("Applicant deleted");
-    } catch {
-      toast.error("Failed to delete");
-    } finally {
-      setDeletingId(null);
-    }
-  }, []);
+    setInterviews((p) => p.filter((x) => x._id !== id));
+    deleteInterview.mutate(
+      { id },
+      { onSettled: () => setDeletingId(null) },
+    );
+  }, [deleteInterview]);
 
   // ── Status update ──
-  const handleStatusChange = useCallback(async (id: string, status: string) => {
-    try {
-      const res = await fetch(`/api/admin/interviews/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error();
-      setInterviews((p) => p.map((x) => x._id === id ? { ...x, status } : x));
-      toast.success(`Status → ${status}`);
-    } catch {
-      toast.error("Failed to update");
-    }
-  }, []);
+  const upsertInterview = useUpsertInterview();
+  const handleStatusChange = useCallback((id: string, status: string) => {
+    setInterviews((p) => p.map((x) => x._id === id ? { ...x, status } : x));
+    upsertInterview.mutate({ id, data: { status } });
+  }, [upsertInterview]);
 
   // ── Generic inline field update ──
-  const handleFieldUpdate = useCallback(async (id: string, field: string, value: string) => {
-    try {
-      const res = await fetch(`/api/admin/interviews/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
-      });
-      if (!res.ok) throw new Error();
-      setInterviews((p) => p.map((x) => x._id === id ? { ...x, [field]: value } : x));
-    } catch {
-      toast.error("Failed to save");
-    }
-  }, []);
+  const handleFieldUpdate = useCallback((id: string, field: string, value: string) => {
+    setInterviews((p) => p.map((x) => x._id === id ? { ...x, [field]: value } : x));
+    upsertInterview.mutate({ id, data: { [field]: value } });
+  }, [upsertInterview]);
 
   // ── DL Photo upload ──
   const handleDlPhotoUpload = useCallback(async (id: string, file: File) => {
@@ -876,9 +844,9 @@ export default function HRInterviewsPage() {
       if (!upRes.ok) throw new Error();
       const { url } = await upRes.json();
       await handleFieldUpdate(id, "dlPhoto", url);
-      toast.success("DL Photo uploaded");
+      notify.success("DL Photo uploaded");
     } catch {
-      toast.error("Upload failed");
+      notify.error("Upload failed");
     }
   }, [handleFieldUpdate]);
 

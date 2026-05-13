@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
+import { useUpsertClaim, useDeleteClaim } from "@/lib/query/hooks/useHr";
 import { Loader2, Plus, Shield, AlertTriangle, CheckCircle2, DollarSign, Trash2, Search, FileSpreadsheet, ArrowRight, CheckCircle, AlertCircle, RotateCw, FileUp, Table2, Upload, X, ExternalLink } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
@@ -90,6 +91,8 @@ interface EmployeeOption {
 
 export default function IncidentsPage() {
   const { data: queryClaims } = useHrClaims();
+  const upsertClaim = useUpsertClaim();
+  const deleteClaim = useDeleteClaim();
   const [data, setData] = useState<ClaimRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -169,7 +172,7 @@ export default function IncidentsPage() {
       setTotalCount(json.totalCount);
       setHasMore(json.hasMore);
       setKpis(json.kpi);
-    } catch { toast.error("Failed to load data"); }
+    } catch { notify.error("Failed to load data"); }
     finally { setLoading(false); setLoadingMore(false); }
   }, [debouncedSearch, data.length]);
 
@@ -205,17 +208,17 @@ export default function IncidentsPage() {
   };
 
   const handleImportFileParse = (file: File) => {
-    if (!file.name.endsWith(".csv")) { toast.error("Please select a CSV file"); return; }
+    if (!file.name.endsWith(".csv")) { notify.error("Please select a CSV file"); return; }
     setCsvFileName(file.name);
     Papa.parse(file, {
       header: true, skipEmptyLines: true,
       complete: (results) => {
-        if (!results.data || results.data.length === 0) { toast.error("CSV is empty"); return; }
+        if (!results.data || results.data.length === 0) { notify.error("CSV is empty"); return; }
         setCsvHeaders(results.meta.fields || []);
         setParsedRows(results.data as any[]);
         setImportStep("preview");
       },
-      error: (err) => toast.error(`Parse failed: ${err.message}`),
+      error: (err) => notify.error(`Parse failed: ${err.message}`),
     });
   };
 
@@ -243,10 +246,10 @@ export default function IncidentsPage() {
       }
       setImportResult({ inserted: ti, updated: tu, total: tc, errors: te });
       setImportStep("done");
-      toast.success(`Imported ${tc} records`);
+      notify.success(`Imported ${tc} records`);
       fetchData(true);
     } catch (err: any) {
-      toast.error(err.message || "Import failed");
+      notify.error(err.message || "Import failed");
       setImportResult({ inserted: ti, updated: tu, total: tc, errors: te + 1 });
       setImportStep("done");
     }
@@ -291,42 +294,32 @@ export default function IncidentsPage() {
     setIsDialogOpen(true);
   };
 
-  const handleSave = async () => {
-    if (!formData.transporterId) { toast.error("Employee is required"); return; }
-    setSaving(true);
-    try {
-      const payload: any = { ...formData };
-      if (payload.paid) payload.paid = parseFloat(payload.paid);
-      if (payload.reserved) payload.reserved = parseFloat(payload.reserved);
-      if (payload.incidentDate) payload.incidentDate = new Date(payload.incidentDate + "T00:00:00.000Z");
-      if (payload.reportedDate) payload.reportedDate = new Date(payload.reportedDate + "T00:00:00.000Z");
-
-      const url = editingItem ? `/api/admin/claims/${editingItem._id}` : "/api/admin/claims";
-      const method = editingItem ? "PUT" : "POST";
-      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (!res.ok) throw new Error("Save failed");
-      toast.success(editingItem ? "Incident updated" : "Incident created");
-      setIsDialogOpen(false); fetchData(true);
-    } catch (err: any) { toast.error(err.message); }
-    finally { setSaving(false); }
+  const handleSave = () => {
+    if (!formData.transporterId) { notify.error("Employee is required"); return; }
+    const payload: any = { ...formData };
+    if (payload.paid) payload.paid = parseFloat(payload.paid);
+    if (payload.reserved) payload.reserved = parseFloat(payload.reserved);
+    if (payload.incidentDate) payload.incidentDate = new Date(payload.incidentDate + "T00:00:00.000Z");
+    if (payload.reportedDate) payload.reportedDate = new Date(payload.reportedDate + "T00:00:00.000Z");
+    upsertClaim.mutate(
+      { id: editingItem?._id, data: payload },
+      { onSettled: () => fetchData(true) },
+    );
+    setIsDialogOpen(false);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!confirm("Delete this incident?")) return;
-    try {
-      const res = await fetch(`/api/admin/claims/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Delete failed");
-      toast.success("Deleted"); fetchData(true);
-    } catch (err: any) { toast.error(err.message); }
+    setData(prev => prev.filter(r => r._id !== id));
+    deleteClaim.mutate(
+      { id },
+      { onSettled: () => fetchData(true) },
+    );
   };
 
-  const handleInlineStatusChange = async (id: string, newStatus: string) => {
-    try {
-      const res = await fetch(`/api/admin/claims/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ claimStatus: newStatus }) });
-      if (!res.ok) throw new Error("Update failed");
-      setData(prev => prev.map(row => row._id === id ? { ...row, claimStatus: newStatus } : row));
-      toast.success(`Status → ${newStatus}`);
-    } catch (err: any) { toast.error(err.message); }
+  const handleInlineStatusChange = (id: string, newStatus: string) => {
+    setData(prev => prev.map(row => row._id === id ? { ...row, claimStatus: newStatus } : row));
+    upsertClaim.mutate({ id, data: { claimStatus: newStatus } });
   };
 
   const fmt = (d: string | undefined) => { if (!d) return "—"; const dt = new Date(d); return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }); };

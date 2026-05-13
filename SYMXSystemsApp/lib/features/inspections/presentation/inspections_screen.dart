@@ -384,8 +384,10 @@ class _TopBar extends StatelessWidget {
 }
 
 /// Handles tapping a route card: opens the inspection form for
-/// uninspected routes, or the detail sheet for already-inspected ones.
-void _onRouteTap(BuildContext context, RouteRow route, WidgetRef ref) {
+/// uninspected routes, or the detail screen for already-inspected ones.
+/// When the form pops with `true` (successful submit), invalidates the
+/// routes provider so the card flips to "Inspected" immediately.
+Future<void> _onRouteTap(BuildContext context, RouteRow route, WidgetRef ref) async {
   if (route.isInspected && route.inspectionId.isNotEmpty) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -396,7 +398,7 @@ void _onRouteTap(BuildContext context, RouteRow route, WidgetRef ref) {
       ),
     );
   } else {
-    Navigator.of(context).push(
+    final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => ProviderScope(
           parent: ProviderScope.containerOf(context),
@@ -404,6 +406,40 @@ void _onRouteTap(BuildContext context, RouteRow route, WidgetRef ref) {
         ),
       ),
     );
+
+    if (result == true && context.mounted) {
+      // Optimistic: invalidate so the list refetches with the new inspection
+      final selectedDate = ref.read(_selectedDateProvider);
+      final selectedWeek = ref.read(_selectedWeekProvider);
+      ref.invalidate(myRoutesProvider(
+        RoutesParam(yearWeek: selectedWeek, date: selectedDate),
+      ));
+
+      // Floating success snack in the bottom-right (Sonner-style)
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Inspection submitted ✓',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppTheme.accentEmerald,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.only(bottom: 16, right: 16, left: 200),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 }
 

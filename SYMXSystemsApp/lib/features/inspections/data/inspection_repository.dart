@@ -59,6 +59,21 @@ class InspectionRepository {
       return null;
     }
   }
+
+  /// Fetch the latest inspection for a given routeId.
+  /// Uses `GET /api/mobile/inspections?routeId=...`.
+  Future<Map<String, dynamic>?> getInspectionByRouteId(String routeId) async {
+    if (routeId.isEmpty) return null;
+    try {
+      final res = await _dio.get(
+        '/api/mobile/inspections',
+        queryParameters: {'routeId': routeId},
+      );
+      return res.data['inspection'] as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 final inspectionRepositoryProvider = Provider<InspectionRepository>((ref) {

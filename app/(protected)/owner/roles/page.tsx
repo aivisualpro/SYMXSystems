@@ -30,7 +30,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { Shield, Plus, Pencil, Trash, User, Loader2, Search } from "lucide-react";
 import { SettingsPageSkeleton } from "@/components/skeletons";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
@@ -74,7 +74,7 @@ export default function RolesSettingsPage() {
       setRoles(data);
     } catch (error) {
       console.error(error);
-      toast.error("Failed to load roles");
+      notify.error("Failed to load roles");
     } finally {
       setLoading(false);
     }
@@ -115,14 +115,14 @@ export default function RolesSettingsPage() {
         throw new Error(errorData.error || "Failed to create role");
       }
 
-      toast.success("Role created successfully");
+      notify.success("Role created successfully");
       setNewRoleName("");
       setNewRoleDesc("");
       setIsCreateOpen(false);
       fetchRoles();
     } catch (error: any) {
       console.error(error);
-      toast.error(error.message);
+      notify.error(error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -139,7 +139,7 @@ export default function RolesSettingsPage() {
     e.stopPropagation(); // Prevent card click
     
     if (role.userCount > 0) {
-      toast.error(`Cannot delete role. It has ${role.userCount} active users.`);
+      notify.error(`Cannot delete role. It has ${role.userCount} active users.`);
       return;
     }
 
@@ -157,11 +157,11 @@ export default function RolesSettingsPage() {
 
       if (!res.ok) throw new Error("Failed to delete role");
 
-      toast.success("Role deleted successfully");
+      notify.success("Role deleted successfully");
       fetchRoles();
     } catch (error) {
        console.error(error);
-       toast.error("Failed to delete role");
+       notify.error("Failed to delete role");
     } finally {
         setIsDeleteAlertOpen(false);
         setRoleToDelete(null);

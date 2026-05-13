@@ -34,7 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
 import { cn, formatPhoneNumber } from "@/lib/utils";
 import { format } from "date-fns";
@@ -224,9 +224,9 @@ export default function EmployeeDetailPage(props: PageProps) {
     if (!employee) return;
     try {
       await updateEmployee({ id: String(employee._id), data: { [field]: value } });
-      toast.success("Van updated");
+      notify.success("Van updated");
     } catch (error) {
-      toast.error("Failed to update van");
+      notify.error("Failed to update van");
     }
   };
 
@@ -234,9 +234,9 @@ export default function EmployeeDetailPage(props: PageProps) {
     if (!employee) return;
     try {
       await updateEmployee({ id: String(employee._id), data: { [dayKey]: value } });
-      toast.success(`${dayKey.charAt(0).toUpperCase() + dayKey.slice(1)} updated`);
+      notify.success(`${dayKey.charAt(0).toUpperCase() + dayKey.slice(1)} updated`);
     } catch (error) {
-      toast.error("Failed to update availability");
+      notify.error("Failed to update availability");
     }
   };
 
@@ -634,9 +634,9 @@ export default function EmployeeDetailPage(props: PageProps) {
               try {
                 await updateEmployee({ id: String(employee._id), data });
                 setIsEditDialogOpen(false);
-                toast.success("Profile updated successfully");
+                notify.success("Profile updated successfully");
               } catch (e) {
-                toast.error("Failed to update profile");
+                notify.error("Failed to update profile");
               }
             }} 
             isLoading={false} 

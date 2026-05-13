@@ -17,7 +17,7 @@ import {
     RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { useDispatching } from "../layout";
 import { Trash2, ArrowUpDown } from "lucide-react";
 
@@ -252,7 +252,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                 setActiveCell(null);
                 setEditingCell(null);
             })
-            .catch(() => toast.error("Failed to load routes info"))
+            .catch(() => notify.error("Failed to load routes info"))
             .finally(() => { if (!cancelled) setLoading(false); });
 
         // Also fetch the SYMXRouteSheet URL + saved pages data from SYMXEveryday
@@ -349,7 +349,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             // Send all rows that actually have some identifying data
             const activeRows = rows.filter(r => r.routeNumber || r.transporterId || dirtyRows.has(r.rowIndex));
             if (activeRows.length === 0) {
-                toast.info("No active rows to save");
+                notify.info("No active rows to save");
                 return;
             }
             const res = await fetch("/api/dispatching/routes-info", {
@@ -359,13 +359,13 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
-            toast.success(`Saved ${data.saved} rows${data.synced > 0 ? `, synced ${data.synced} to Routes` : ""}`);
+            notify.success(`Saved ${data.saved} rows${data.synced > 0 ? `, synced ${data.synced} to Routes` : ""}`);
             setDirtyRows(new Set());
             // Small delay to ensure DB writes are fully committed before refetch
             await new Promise(r => setTimeout(r, 500));
             refreshRoutes();
         } catch (err: any) {
-            toast.error(err.message || "Failed to save");
+            notify.error(err.message || "Failed to save");
         } finally {
             setSaving(false);
         }
@@ -379,12 +379,12 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
         e.target.value = "";
 
         if (file.type !== "application/pdf") {
-            toast.error("Please upload a PDF file");
+            notify.error("Please upload a PDF file");
             return;
         }
 
         setPdfImporting(true);
-        const importToastId = toast.loading("Parsing PDF...");
+        const importToastId = notify.loading("Parsing PDF...");
 
         try {
             // Load PDF.js from CDN (cached after first load)
@@ -409,7 +409,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             const totalPages = pdf.numPages;
 
-            toast.loading(`Extracting data from ${totalPages} pages...`, { id: importToastId });
+            notify.loading(`Extracting data from ${totalPages} pages...`, { id: importToastId });
 
             const pages: { routeNumber: string; stagingLocation: string; bags: string; ov: string; commercialPackages: string }[] = [];
 
@@ -558,11 +558,11 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             }
 
             if (pages.length === 0) {
-                toast.error("No route data found in PDF", { id: importToastId });
+                notify.error("No route data found in PDF", { id: importToastId });
                 return;
             }
 
-            toast.loading(`Updating ${pages.length} routes...`, { id: importToastId });
+            notify.loading(`Updating ${pages.length} routes...`, { id: importToastId });
 
             // Send to server as FormData (includes PDF file for Cloudinary upload)
             const formData = new FormData();
@@ -593,7 +593,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
 
             // Show results
             if (result.matched > 0) {
-                toast.success(
+                notify.success(
                     `Imported ${result.matched} of ${result.totalPages} routes` +
                     (result.skipped > 0 ? ` (${result.skipped} unmatched)` : ""),
                     { id: importToastId, duration: 5000 }
@@ -618,10 +618,10 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                 }
                 refreshRoutes();
             } else {
-                toast.warning("No matching routes found for imported data", { id: importToastId });
+                notify.warning("No matching routes found for imported data", { id: importToastId });
             }
         } catch (err: any) {
-            toast.error(err.message || "Failed to import PDF", { id: importToastId });
+            notify.error(err.message || "Failed to import PDF", { id: importToastId });
         } finally {
             setPdfImporting(false);
         }
@@ -630,12 +630,12 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
     // ── Refetch handler: re-download PDF from Cloudinary and re-parse with latest code ──
     const handleRefetch = useCallback(async () => {
         if (!routeSheetUrl) {
-            toast.info("No PDF to re-process. Please upload a PDF first.");
+            notify.info("No PDF to re-process. Please upload a PDF first.");
             return;
         }
 
         setRefetching(true);
-        const refetchToastId = toast.loading("Downloading PDF from Cloudinary...");
+        const refetchToastId = notify.loading("Downloading PDF from Cloudinary...");
 
         try {
             // ── 1. Load PDF.js if not already loaded ──
@@ -663,7 +663,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             // ── 3. Re-parse with latest extraction logic ──
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             const totalPages = pdf.numPages;
-            toast.loading(`Re-parsing ${totalPages} pages...`, { id: refetchToastId });
+            notify.loading(`Re-parsing ${totalPages} pages...`, { id: refetchToastId });
 
             const pages: { routeNumber: string; stagingLocation: string; bags: string; ov: string; commercialPackages: string }[] = [];
 
@@ -766,12 +766,12 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             }
 
             if (pages.length === 0) {
-                toast.error("No route data found in PDF", { id: refetchToastId });
+                notify.error("No route data found in PDF", { id: refetchToastId });
                 return;
             }
 
             // ── 4. Send freshly parsed data to server ──
-            toast.loading(`Updating ${pages.length} routes...`, { id: refetchToastId });
+            notify.loading(`Updating ${pages.length} routes...`, { id: refetchToastId });
 
             const formData = new FormData();
             formData.append("date", date);
@@ -792,7 +792,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             });
             lastParsedPagesRef.current = pages;
 
-            toast.success(
+            notify.success(
                 `Re-parsed & applied: ${result.matched} matched, ${result.skipped} missing`,
                 { id: refetchToastId, duration: 4000 }
             );
@@ -816,7 +816,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
             }
             refreshRoutes();
         } catch (err: any) {
-            toast.error(err.message || "Failed to re-parse PDF", { id: refetchToastId });
+            notify.error(err.message || "Failed to re-parse PDF", { id: refetchToastId });
         } finally {
             setRefetching(false);
         }
@@ -873,10 +873,10 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                 n.delete(row.rowIndex);
                 return n;
             });
-            toast.success("Row cleared");
+            notify.success("Row cleared");
             refreshRoutes();
         } catch (err: any) {
-            toast.error(err.message || "Failed to delete");
+            notify.error(err.message || "Failed to delete");
         }
     }, [rows, date, refreshRoutes, sortConfig]);
 
@@ -1153,7 +1153,7 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
 
         setDirtyRows(newDirty);
         const pastedCells = pasteRows.reduce((sum, line) => sum + line.split("\t").length, 0);
-        toast.success(`Pasted ${pastedCells} value${pastedCells !== 1 ? "s" : ""}`);
+        notify.success(`Pasted ${pastedCells} value${pastedCells !== 1 ? "s" : ""}`);
     }, [activeCell, editingCell, dirtyRows, saveCell]);
 
     // ── Scroll active cell into view ──

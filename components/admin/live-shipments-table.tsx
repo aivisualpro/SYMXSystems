@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { IconMapPin, IconRefresh, IconShip, IconCircleCheck, IconCircleX, IconCalendar } from "@tabler/icons-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { useState, useEffect } from "react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import Link from "next/link";
@@ -92,9 +92,9 @@ export function LiveShipmentsTable({ containers }: { containers: ContainerInfo[]
       }
 
       setTrackingData(prev => ({ ...prev, [containerNo]: data }));
-      toast.success(`Updated tracking for ${containerNo}`);
+      notify.success(`Updated tracking for ${containerNo}`);
     } catch (error) {
-      toast.error(`Failed to track ${containerNo}`);
+      notify.error(`Failed to track ${containerNo}`);
       console.error(error);
     } finally {
       setLoading(prev => ({ ...prev, [containerNo]: false }));

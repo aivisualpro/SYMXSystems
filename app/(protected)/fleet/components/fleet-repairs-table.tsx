@@ -7,7 +7,7 @@ import {
 } from "@tabler/icons-react";
 import * as LucideIcons from "lucide-react";
 import { useFleet } from "../layout";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 
 import FleetFormModal from "../components/fleet-form-modal";

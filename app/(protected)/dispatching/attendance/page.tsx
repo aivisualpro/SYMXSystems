@@ -47,7 +47,7 @@ import {
     DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 /** Convert a date (ISO string or Date) to YYYY-MM-DD in Pacific Time */
 const BUSINESS_TZ = "America/Los_Angeles";
@@ -207,10 +207,10 @@ export default function AttendancePage() {
                 }),
             });
             if (!res.ok) throw new Error("Failed to update");
-            toast.success(`Updated ${field}`);
+            notify.success(`Updated ${field}`);
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch (err: any) {
-            toast.error(err.message || "Failed to update");
+            notify.error(err.message || "Failed to update");
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
     }, [queryClient, patchRouteCache]);
@@ -236,10 +236,10 @@ export default function AttendancePage() {
                 }),
             });
             if (!res.ok) throw new Error();
-            toast.success(`Marked ${row.employeeName} present`);
+            notify.success(`Marked ${row.employeeName} present`);
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch {
-            toast.error(`Failed to mark present`);
+            notify.error(`Failed to mark present`);
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
     };
@@ -265,10 +265,10 @@ export default function AttendancePage() {
                 }),
             });
             if (!res.ok) throw new Error();
-            toast.success(`Marked ${row.employeeName} absent`);
+            notify.success(`Marked ${row.employeeName} absent`);
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         } catch {
-            toast.error(`Failed to mark absent`);
+            notify.error(`Failed to mark absent`);
             queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
         }
     };

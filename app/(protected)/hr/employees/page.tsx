@@ -10,7 +10,7 @@ import { formatPhoneNumber, cn } from "@/lib/utils";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { ColumnDef } from "@tanstack/react-table";
 import { Search, User, CheckCircle2, Minus, Coffee } from "lucide-react";
 import * as LucideIcons from "lucide-react";
@@ -146,7 +146,7 @@ function EmployeesPageContent() {
       ));
       await updateEmployee({ id, data: { [field]: value } });
     } catch {
-      toast.error("Failed to update");
+      notify.error("Failed to update");
       fetchEmployees(true);
     }
   };
@@ -205,10 +205,10 @@ function EmployeesPageContent() {
         setHasMore(result.hasMore || false);
         setFetchedFromApi(true);
       } else {
-        toast.error("Failed to fetch employees");
+        notify.error("Failed to fetch employees");
       }
     } catch (error) {
-      toast.error("Failed to fetch employees");
+      notify.error("Failed to fetch employees");
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -239,11 +239,11 @@ function EmployeesPageContent() {
         await createEmployee(formData);
       }
 
-      toast.success(editingItem?._id ? "Employee updated successfully" : "Employee created successfully");
+      notify.success(editingItem?._id ? "Employee updated successfully" : "Employee created successfully");
       setIsDialogOpen(false);
       fetchEmployees();
     } catch (error: any) {
-      toast.error(error?.message || "Failed to save employee");
+      notify.error(error?.message || "Failed to save employee");
     } finally {
       setIsSubmitting(false);
     }
@@ -258,10 +258,10 @@ function EmployeesPageContent() {
       });
       if (!response.ok) throw new Error("Failed to delete employee");
       queryClient.invalidateQueries({ queryKey: ['employees'] });
-      toast.success("Employee deleted successfully");
+      notify.success("Employee deleted successfully");
       fetchEmployees(true);
     } catch (error) {
-      toast.error("Failed to delete employee");
+      notify.error("Failed to delete employee");
     }
   };
 

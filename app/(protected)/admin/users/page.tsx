@@ -18,7 +18,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { ColumnDef } from "@tanstack/react-table";
 import { MoreHorizontal, Pencil, Trash, User as UserIcon, Mail, Phone, FileText, Eye } from "lucide-react";
 import {
@@ -94,7 +94,7 @@ export default function UsersPage() {
         setData(sortUsers(users));
       }
     } catch (error) {
-      toast.error("Failed to fetch users");
+      notify.error("Failed to fetch users");
     } finally {
       setLoading(false);
     }
@@ -121,16 +121,16 @@ export default function UsersPage() {
 
       if (!response.ok) throw new Error("Failed to save user");
 
-      toast.success(editingItem ? "User updated successfully" : "User created successfully");
+      notify.success(editingItem ? "User updated successfully" : "User created successfully");
       setIsSheetOpen(false);
       fetchUsers();
     } catch (error) {
-       toast.error("Failed to save user");
+       notify.error("Failed to save user");
     }
   };
 
   const handleDelete = async (id: string) => {
-    toast("Are you sure you want to delete this user?", {
+   notify.custom("Are you sure you want to delete this user?", {
         action: {
             label: "Delete",
             onClick: async () => {
@@ -139,10 +139,10 @@ export default function UsersPage() {
                         method: "DELETE",
                     });
                     if (!response.ok) throw new Error("Failed to delete user");
-                    toast.success("User deleted successfully");
+                    notify.success("User deleted successfully");
                     fetchUsers();
                 } catch (error) {
-                    toast.error("Failed to delete user");
+                    notify.error("Failed to delete user");
                 }
             },
         },
@@ -237,9 +237,9 @@ export default function UsersPage() {
                     if (!response.ok) {
                        throw new Error("Failed");
                     }
-                    toast.success(`User ${checked ? 'activated' : 'deactivated'}`);
+                    notify.success(`User ${checked ? 'activated' : 'deactivated'}`);
                  } catch (err) {
-                    toast.error("Failed to update status");
+                    notify.error("Failed to update status");
                     fetchUsers(); // Revert on failure
                  }
               }}

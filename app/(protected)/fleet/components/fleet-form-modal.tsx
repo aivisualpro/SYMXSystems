@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import * as LucideIcons from "lucide-react";
 import { IconX, IconLoader2, IconUpload, IconPhoto, IconCheck, IconSearch, IconChevronDown, IconTrash, IconDownload } from "@tabler/icons-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { useFleet } from "../layout";
 
 const inputClass = "w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors";
@@ -254,10 +254,10 @@ function MultiPhotoUploadField({
         if (data.secure_url) newUrls.push(data.secure_url);
       }
       onChange([...values, ...newUrls]);
-      toast.success(`${newUrls.length} file(s) uploaded successfully!`);
+      notify.success(`${newUrls.length} file(s) uploaded successfully!`);
     } catch (err) { 
       console.error("Upload failed:", err); 
-      toast.error("Failed to upload image(s).");
+      notify.error("Failed to upload image(s).");
     } finally { 
       setUploading(false); 
       if (fileRef.current) fileRef.current.value = "";
@@ -269,7 +269,7 @@ function MultiPhotoUploadField({
       const newVals = [...values];
       newVals.splice(index, 1);
       onChange(newVals);
-      toast.success("Image deleted");
+      notify.success("Image deleted");
     }
   };
 

@@ -65,7 +65,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 // ── Types ──
 interface EmployeeRecipient {
@@ -778,7 +778,7 @@ function MessagingSubTab({
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
     if (attachments.length + fileArray.length > 5) {
-      toast.error("Maximum 5 attachments allowed");
+      notify.error("Maximum 5 attachments allowed");
       return;
     }
     setUploading(true);
@@ -802,9 +802,9 @@ function MessagingSubTab({
       }
       const data = await res.json();
       setAttachments((prev) => [...prev, ...data.files]);
-      toast.success(`${data.files.length} file(s) uploaded`);
+      notify.success(`${data.files.length} file(s) uploaded`);
     } catch (err: any) {
-      toast.error(err.message || "Upload failed");
+      notify.error(err.message || "Upload failed");
     } finally {
       setUploading(false);
       setUploadProgress(0);
@@ -893,10 +893,10 @@ function MessagingSubTab({
             // Show toast for confirmed/change_requested transitions
             if (info.status === "confirmed") {
               const empName = activeEmployees.find(e => e.transporterId === tid)?.name;
-              toast.success(`✅ ${empName || tid} confirmed their schedule!`, { duration: 5000 });
+              notify.success(`✅ ${empName || tid} confirmed their schedule!`, { duration: 5000 });
             } else if (info.status === "change_requested") {
               const empName = activeEmployees.find(e => e.transporterId === tid)?.name;
-              toast.info(`🔄 ${empName || tid} requested a change`, { duration: 5000 });
+              notify.info(`🔄 ${empName || tid} requested a change`, { duration: 5000 });
             }
           }
           prevStatusRef.current[tid] = info.status;
@@ -1093,17 +1093,17 @@ function MessagingSubTab({
     const selectedEmployees = filteredEmployees.filter((e) => selectedIds.has(e._id));
 
     if (selectedEmployees.length === 0) {
-      toast.error("Please select at least one employee");
+      notify.error("Please select at least one employee");
       return;
     }
 
     if (!message.trim()) {
-      toast.error("Please enter a message");
+      notify.error("Please enter a message");
       return;
     }
 
     if (!fromNumber) {
-      toast.error("No phone number configured. Please check your OpenPhone account.");
+      notify.error("No phone number configured. Please check your OpenPhone account.");
       return;
     }
 
@@ -1196,13 +1196,13 @@ function MessagingSubTab({
       const failCount = results.filter((r) => !r.success).length;
 
       if (failCount === 0 && successCount > 0) {
-        toast.success(`${successCount} message(s) sent successfully!`);
+        notify.success(`${successCount} message(s) sent successfully!`);
       } else if (successCount === 0 && failCount > 0) {
         // All failed — show the first error message for user context
         const firstError = results.find((r) => !r.success)?.error || "Unknown error";
-        toast.error(`All ${failCount} message(s) failed: ${firstError}`);
+        notify.error(`All ${failCount} message(s) failed: ${firstError}`);
       } else if (failCount > 0) {
-        toast.warning(`${successCount} sent, ${failCount} failed`);
+        notify.warning(`${successCount} sent, ${failCount} failed`);
       }
 
       // Start live polling for successfully sent employees (by transporterId)
@@ -1216,7 +1216,7 @@ function MessagingSubTab({
         startPolling(sentTids);
       }
     } catch (err: any) {
-      toast.error(err.message || "Failed to send messages");
+      notify.error(err.message || "Failed to send messages");
     } finally {
       setSending(false);
     }

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { SimpleDataTable } from "@/components/admin/simple-data-table";
 import { formatPhoneNumber, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { ColumnDef } from "@tanstack/react-table";
 import { Search, User, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -80,10 +80,10 @@ export default function TerminationsPage() {
         setTotalCount(result.totalCount || fetchedData.length);
         setHasMore(result.hasMore || false);
       } else {
-        toast.error("Failed to fetch terminated employees");
+        notify.error("Failed to fetch terminated employees");
       }
     } catch {
-      toast.error("Failed to fetch terminated employees");
+      notify.error("Failed to fetch terminated employees");
     } finally {
       setLoading(false);
       setLoadingMore(false);

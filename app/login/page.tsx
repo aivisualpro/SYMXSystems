@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { Eye, EyeOff, Lock, Mail, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,26 +47,26 @@ export default function LoginPage() {
 
       if (!response.ok) {
         if (response.status === 403) {
-          toast.error(result.error || "Your account is inactive. Please contact your administrator.");
+          notify.error(result.error || "Your account is inactive. Please contact your administrator.");
         } else if (response.status === 401) {
-          toast.error("Invalid email or password. Please check your credentials.");
+          notify.error("Invalid email or password. Please check your credentials.");
         } else if (response.status === 404) {
-           toast.error("User not found.");
+           notify.error("User not found.");
         } else {
-          toast.error(result.error || "An error occurred during login.");
+          notify.error(result.error || "An error occurred during login.");
         }
         setIsLoading(false);
         return;
       }
       
-      toast.success(`Welcome back, ${result.user.name}`);
+      notify.success(`Welcome back, ${result.user.name}`);
       router.push("/profile");
     } catch (err: any) {
       console.error("[Login Error]", err);
       if (err.name === 'AbortError' || err.message === 'Failed to fetch') {
-        toast.error("Network error or connection lost. Please refresh the page and try again.");
+        notify.error("Network error or connection lost. Please refresh the page and try again.");
       } else {
-        toast.error(err.message || "An unexpected error occurred.");
+        notify.error(err.message || "An unexpected error occurred.");
       }
     } finally {
       setIsLoading(false);
@@ -76,7 +76,7 @@ export default function LoginPage() {
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
-      toast.error("Please enter your email address");
+      notify.error("Please enter your email address");
       return;
     }
     
@@ -90,13 +90,13 @@ export default function LoginPage() {
       const result = await response.json();
       
       if (response.ok) {
-        toast.success(result.message);
+        notify.success(result.message);
         setIsForgotMode(false);
       } else {
-        toast.error(result.error || "Something went wrong");
+        notify.error(result.error || "Something went wrong");
       }
     } catch (err) {
-      toast.error("Failed to send recovery email");
+      notify.error("Failed to send recovery email");
     } finally {
       setIsSubmitting(false);
     }

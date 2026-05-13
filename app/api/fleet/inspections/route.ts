@@ -9,6 +9,7 @@ import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxUser from "@/lib/models/SymxUser";
 import DropdownOption from "@/lib/models/DropdownOption";
 import { authorizeAction } from "@/lib/rbac";
+import { createInspectionForRoute } from "@/lib/inspections/createInspectionForRoute";
 
 export async function GET(req: NextRequest) {
   try { await requirePermission("Fleet", "view"); } catch (e: any) {
@@ -207,18 +208,39 @@ export async function POST(req: NextRequest) {
     const auth = await authorizeAction("Fleet", "create");
     if (!auth.authorized) return auth.response;
 
-    await connectToDatabase();
     const body = await req.json();
     const data = body.data || body;
 
-    if (data) {
-      for (const key of Object.keys(data)) {
-        if (data[key] === "") data[key] = null;
-      }
-    }
+    const result = await createInspectionForRoute({
+      routeId: data.routeId || "",
+      transporterId: data.driver || "",
+      employeeName: data.employeeName,
+      inspectedBy: data.inspectedBy || "",
+      van: data.van,
+      vin: data.vin,
+      mileage: Number(data.mileage) || 0,
+      anyRepairs: data.anyRepairs,
+      repairDescription: data.repairDescription,
+      repairCurrentStatus: data.repairCurrentStatus,
+      repairImage: data.repairImage,
+      comments: data.comments,
+      vehiclePicture1: data.vehiclePicture1,
+      vehiclePicture2: data.vehiclePicture2,
+      vehiclePicture3: data.vehiclePicture3,
+      vehiclePicture4: data.vehiclePicture4,
+      dashboardImage: data.dashboardImage,
+      additionalPicture: data.additionalPicture,
+      routeDate: data.routeDate,
+      inspectionType: data.inspectionType || data.type,
+    });
 
-    const inspection = await DailyInspection.create({ ...data, timeStamp: data.timeStamp || new Date() });
-    return NextResponse.json({ inspection, message: "Inspection created successfully" });
+    return NextResponse.json({
+      inspection: result.inspection,
+      created: result.created,
+      message: result.created
+        ? "Inspection created successfully"
+        : "Inspection already exists for this route",
+    });
   } catch (error: any) {
     console.error("Fleet Inspections POST Error:", error);
     return NextResponse.json({ error: error.message || "Failed to create record" }, { status: 500 });

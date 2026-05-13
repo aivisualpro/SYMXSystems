@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSchedulingWeeks } from "@/lib/query/hooks/useSchedules";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, Edit2, Phone, Timer, Package, Hash, ThumbsUp, type LucideIcon , Paperclip, ImagePlus, Plus } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -33,64 +33,12 @@ import {
 import { getTypeStyle as getRouteTypeStyleLib, TYPE_OPTIONS as ROUTE_TYPE_OPTIONS_LIB, TYPE_MAP as ROUTE_TYPE_MAP_LIB, getContrastText } from "@/lib/route-types";
 import { generateRoutesPDF } from "@/lib/generate-routes-pdf";
 import { RoutesTable, type RoutesTableRow } from "@/app/(protected)/dispatching/_components/RoutesTable";
+import {
+  BUSINESS_TZ, getTodayPacific, getCurrentYearWeek,
+  TYPE_OPTIONS, TYPE_MAP, getTypeStyle, formatWeekLabel,
+  type TypeOption,
+} from "./_components/everyday-utils";
 
-/** Business timezone — all date computations use Pacific Time */
-const BUSINESS_TZ = "America/Los_Angeles";
-
-function getTodayPacific(): string {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
-}
-
-function getCurrentYearWeek(dateStr: string): string {
-    const date = new Date(dateStr + "T00:00:00.000Z");
-    const dayOfWeek = date.getUTCDay();
-    const sundayOfThisWeek = new Date(date);
-    sundayOfThisWeek.setUTCDate(date.getUTCDate() - dayOfWeek);
-    const year = sundayOfThisWeek.getUTCFullYear();
-    const jan1 = new Date(Date.UTC(year, 0, 1));
-    const jan1Day = jan1.getUTCDay();
-    const firstSunday = new Date(jan1);
-    firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
-    const diffMs = sundayOfThisWeek.getTime() - firstSunday.getTime();
-    const diffDays = Math.round(diffMs / 86400000);
-    const weekNum = Math.floor(diffDays / 7) + 1;
-    return `${year}-W${weekNum.toString().padStart(2, "0")}`;
-}
-
-// ── Type Options — exact copy from dispatching/routes ──
-interface TypeOption {
-    label: string;
-    icon: LucideIcon;
-    bg: string;
-    text: string;
-    border: string;
-}
-
-const TYPE_OPTIONS: TypeOption[] = [
-    { label: "Route", icon: Navigation, bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700" },
-    { label: "Open", icon: DoorOpen, bg: "bg-amber-400/80", text: "text-white", border: "border-amber-500/60" },
-    { label: "Close", icon: DoorClosed, bg: "bg-rose-400/80", text: "text-white", border: "border-rose-500/60" },
-    { label: "Off", icon: Coffee, bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" },
-    { label: "Call Out", icon: PhoneOff, bg: "bg-yellow-500", text: "text-white", border: "border-yellow-600" },
-    { label: "AMZ Training", icon: GraduationCap, bg: "bg-indigo-600", text: "text-white", border: "border-indigo-700" },
-    { label: "Fleet", icon: TruckIcon, bg: "bg-blue-600", text: "text-white", border: "border-blue-700" },
-    { label: "Request Off", icon: CalendarOff, bg: "bg-purple-600", text: "text-white", border: "border-purple-700" },
-    { label: "Trainer", icon: UserCheck, bg: "bg-teal-600", text: "text-white", border: "border-teal-700" },
-    { label: "Training OTR", icon: BookOpen, bg: "bg-violet-600", text: "text-white", border: "border-violet-700" },
-    { label: "Suspension", icon: Ban, bg: "bg-rose-700", text: "text-white", border: "border-rose-800" },
-    { label: "Modified Duty", icon: ShieldAlert, bg: "bg-amber-600", text: "text-white", border: "border-amber-700" },
-    { label: "Stand by", icon: Clock, bg: "bg-cyan-600", text: "text-white", border: "border-cyan-700" },
-];
-
-const TYPE_MAP = new Map(TYPE_OPTIONS.map(opt => [opt.label.toLowerCase(), opt]));
-
-function getTypeStyle(value: string): { bg: string; text: string; border: string } {
-    if (!value || value.trim() === "")
-        return { bg: "bg-zinc-100 dark:bg-zinc-700", text: "text-zinc-400 dark:text-zinc-400", border: "border-zinc-200 dark:border-zinc-600" };
-    const opt = TYPE_MAP.get(value.trim().toLowerCase());
-    if (opt) return { bg: opt.bg, text: opt.text, border: opt.border };
-    return { bg: "bg-zinc-500", text: "text-white", border: "border-zinc-600" };
-}
 
 const HeaderIcon = ({ icon: Icon, title, className, strokeWidth }: any) => (
     <TooltipProvider delayDuration={0}>
@@ -202,7 +150,7 @@ export default function EverydayAfterDispatchingPage() {
 
     const handleSaveRTS = async () => {
         if (!rtsModalRoute || !rtsTBA.trim() || !rtsReason.trim()) {
-            toast.error("TBA and Reason are required");
+            notify.error("TBA and Reason are required");
             return;
         }
         setIsSavingRTS(true);
@@ -221,7 +169,7 @@ export default function EverydayAfterDispatchingPage() {
             });
             if (!res.ok) throw new Error("Failed to save RTS");
 
-            toast.success("RTS recorded successfully");
+            notify.success("RTS recorded successfully");
             setRtsModalOpen(false);
 
             // Update Map optimistically so the icon refreshes immediately
@@ -244,7 +192,7 @@ export default function EverydayAfterDispatchingPage() {
                 setRtsReasonsList(prev => [...prev, rtsReason.trim()]);
             }
         } catch (e) {
-            toast.error("Failed to save RTS record");
+            notify.error("Failed to save RTS record");
         } finally {
             setIsSavingRTS(false);
         }
@@ -255,7 +203,7 @@ export default function EverydayAfterDispatchingPage() {
         try {
             const res = await fetch(`/api/everyday/rts?id=${rtsModalEditId}`, { method: "DELETE" });
             if (!res.ok) throw new Error("Failed to delete RTS");
-            toast.success("RTS record deleted");
+            notify.success("RTS record deleted");
             setRtsModalOpen(false);
             setRtsMap(prev => {
                 const newMap = { ...prev };
@@ -265,7 +213,7 @@ export default function EverydayAfterDispatchingPage() {
                 return newMap;
             });
         } catch (e) {
-            toast.error("Failed to delete RTS record");
+            notify.error("Failed to delete RTS record");
         }
     };
 
@@ -283,11 +231,11 @@ export default function EverydayAfterDispatchingPage() {
 
     const handleSaveRescue = async () => {
         if (!rescueModalRoute || !rescueBy || !rescueStops || !rescueReason) {
-            toast.error("Please fill in all rescue fields");
+            notify.error("Please fill in all rescue fields");
             return;
         }
         if (Number(rescueStops) < 0) {
-            toast.error("Stops rescued cannot be negative");
+            notify.error("Stops rescued cannot be negative");
             return;
         }
         setIsSavingRescue(true);
@@ -308,7 +256,7 @@ export default function EverydayAfterDispatchingPage() {
             });
             if (!res.ok) throw new Error("Failed to save Rescue");
 
-            toast.success("Rescue recorded successfully");
+            notify.success("Rescue recorded successfully");
             setRescueModalOpen(false);
 
             if (res.ok) {
@@ -330,7 +278,7 @@ export default function EverydayAfterDispatchingPage() {
                 setRescueReasonsList(prev => [...prev, rescueReason.trim()]);
             }
         } catch (e) {
-            toast.error("Failed to save Rescue record");
+            notify.error("Failed to save Rescue record");
         } finally {
             setIsSavingRescue(false);
         }
@@ -341,7 +289,7 @@ export default function EverydayAfterDispatchingPage() {
         try {
             const res = await fetch(`/api/everyday/rescue?id=${rescueModalEditId}`, { method: "DELETE" });
             if (!res.ok) throw new Error("Failed to delete Rescue");
-            toast.success("Rescue record deleted");
+            notify.success("Rescue record deleted");
             setRescueModalOpen(false);
             setRescueMap(prev => {
                 const newMap = { ...prev };
@@ -351,7 +299,7 @@ export default function EverydayAfterDispatchingPage() {
                 return newMap;
             });
         } catch (e) {
-            toast.error("Failed to delete Rescue record");
+            notify.error("Failed to delete Rescue record");
         }
     };
 
@@ -395,10 +343,10 @@ export default function EverydayAfterDispatchingPage() {
             });
             if (!res.ok) throw new Error("Failed to end day");
 
-            toast.success("Day ended successfully");
+            notify.success("Day ended successfully");
             setEndDay(true);
         } catch (error) {
-            toast.error("Failed to mark day as ended");
+            notify.error("Failed to mark day as ended");
         } finally {
             setEndDayLoading(false);
         }
@@ -562,11 +510,7 @@ export default function EverydayAfterDispatchingPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [weekDates]);
 
-    function formatWeekLabel(week: string) {
-        const match = week.match(/(\d{4})-W(\d{2})/);
-        if (!match) return week;
-        return `${match[1]} – Week ${parseInt(match[2])}`;
-    }
+    // formatWeekLabel imported from everyday-utils
 
     // Removed week selection widget
 
@@ -708,7 +652,7 @@ export default function EverydayAfterDispatchingPage() {
             }
         } catch (error) {
             console.error(error);
-            toast.error("Failed to load dashboard data");
+            notify.error("Failed to load dashboard data");
         } finally {
             setLoading(false);
             isFetchingRef.current = false;
@@ -734,7 +678,7 @@ export default function EverydayAfterDispatchingPage() {
             });
             if (!res.ok) throw new Error("Failed to save notes");
         } catch (error) {
-            toast.error("Error auto-saving notes");
+            notify.error("Error auto-saving notes");
         } finally {
             setSavingNotes(false);
         }
@@ -756,7 +700,7 @@ export default function EverydayAfterDispatchingPage() {
         setDebounceNotes(notes);
         lastFetchedNotesRef.current = notes; // mark as persisted to prevent redundant auto-save
         saveNotesToDB(notes);
-        toast.success("Notes saved successfully");
+        notify.success("Notes saved successfully");
     };
 
     const toggleConfirmIcon = async (transporterId: string, currentVal: string, isTomorrow = false) => {
@@ -790,7 +734,7 @@ export default function EverydayAfterDispatchingPage() {
             });
             if (!res.ok) throw new Error("Update failed");
         } catch (err) {
-            toast.error("Failed to update status");
+            notify.error("Failed to update status");
             // revert locally
             if (isTomorrow) {
                 setTomorrowSchedulesMap(prev => ({ ...prev, [transporterId]: { ...prev[transporterId], dayBeforeConfirmation: currentVal } }));
@@ -816,9 +760,9 @@ export default function EverydayAfterDispatchingPage() {
                 body: JSON.stringify({ routeId, updates: { deliveryCompletionTime: timeStr } })
             });
             if (!res.ok) throw new Error("Update failed");
-            if (timeStr) toast.success(`Marked delivery at ${timeStr}`);
+            if (timeStr) notify.success(`Marked delivery at ${timeStr}`);
         } catch (err) {
-            toast.error("Failed to update delivery time");
+            notify.error("Failed to update delivery time");
             // revert locally
             setRoutes(prev => prev.map(r => r._id === routeId ? { ...r, deliveryCompletionTime: currentVal } : r));
         }
@@ -841,9 +785,9 @@ export default function EverydayAfterDispatchingPage() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update");
-            toast.success(`Type updated to ${newType}`);
+            notify.success(`Type updated to ${newType}`);
         } catch (err: any) {
-            toast.error(err.message || "Failed to update type");
+            notify.error(err.message || "Failed to update type");
             // Revert on error
             setTomorrowRoutes(prev => prev.map(r =>
                 r._id === routeId ? { ...r, type: r.type } : r
@@ -1029,15 +973,15 @@ export default function EverydayAfterDispatchingPage() {
                     <button
                         onClick={async () => {
                             if (!selectedWeek || !date) {
-                                toast.error("No date selected");
+                                notify.error("No date selected");
                                 return;
                             }
                             setPdfLoading(true);
                             try {
                                 await generateRoutesPDF(selectedWeek, date);
-                                toast.success("PDF downloaded");
+                                notify.success("PDF downloaded");
                             } catch (err: any) {
-                                toast.error(err.message || "Failed to generate PDF");
+                                notify.error(err.message || "Failed to generate PDF");
                             } finally {
                                 setPdfLoading(false);
                             }
@@ -1936,9 +1880,9 @@ export default function EverydayAfterDispatchingPage() {
                                         const updatedAtts = [...attachments, ...newUrls];
                                         setAttachments(updatedAtts);
                                         await saveNotesToDB(notes, updatedAtts);
-                                        toast.success("Attachments uploaded successfully");
+                                        notify.success("Attachments uploaded successfully");
                                     } catch (err: any) {
-                                        toast.error(err.message || "Failed to upload");
+                                        notify.error(err.message || "Failed to upload");
                                     } finally {
                                         setUploadingImage(false);
                                         if (fileInputRef.current) fileInputRef.current.value = '';

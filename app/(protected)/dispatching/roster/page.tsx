@@ -57,7 +57,7 @@ import {
     DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 /** Convert a date (ISO string or Date) to YYYY-MM-DD in Pacific Time */
 const BUSINESS_TZ = "America/Los_Angeles";
@@ -197,12 +197,12 @@ export default function RosterPage() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update");
-            toast.success(`Type updated to ${newType}`);
+            notify.success(`Type updated to ${newType}`);
             queryClient.invalidateQueries({ queryKey: ["dispatching"] });
             // Increment audit count for this employee
             setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
         } catch (err: any) {
-            toast.error(err.message || "Failed to update type");
+            notify.error(err.message || "Failed to update type");
             refreshRoutes();
         }
     }, [refreshRoutes]);

@@ -1,6 +1,7 @@
 "use client";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import dynamic from "next/dynamic";
 
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment, useDeferredValue } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -53,7 +54,6 @@ import * as LucideIcons from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { EmployeeNotesPanel } from "@/components/scheduling/employee-notes-panel";
 import {
   Select,
   SelectContent,
@@ -72,7 +72,7 @@ import { useDropdowns, useRouteTypes } from "@/lib/query/hooks/useShared";
 import { formatRouteTypes, getDynamicTypeStyle, getContrastText } from "@/lib/route-types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import {
   AlertDialog,
@@ -84,205 +84,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import MessagingPanel, { type ActiveTabInfo, SUB_TABS } from "@/components/scheduling/messaging-panel";
+import { type ActiveTabInfo, SUB_TABS } from "@/components/scheduling/messaging-panel";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  DAY_NAMES, FULL_DAY_NAMES, BUSINESS_TZ,
+  type DayData, type EmployeeSchedule, type WeekData, type PlanningRow,
+  isWorkingDay, computePlanningData, groupByType, countWorkingDays,
+  getConsecutiveWarnings, getTodayPacific, getCurrentYearWeek,
+  getNextYearWeek, getPrevYearWeek,
+} from "./_components/schedule-utils";
+
+// ── Lazy-loaded heavy panels ─────────────────────────────────────────────────
+const MessagingPanel = dynamic(() => import("@/components/scheduling/messaging-panel"), {
+  loading: () => <Skeleton className="h-[600px] w-full rounded-xl" />,
+  ssr: false,
+});
+
+const EmployeeNotesPanel = dynamic(() => import("@/components/scheduling/employee-notes-panel").then(m => ({ default: m.EmployeeNotesPanel })), {
+  loading: () => <Skeleton className="h-[400px] w-full rounded-xl" />,
+  ssr: false,
+});
 
 
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-// Working types — anything NOT in this list is considered "not working"
-// Resolve whether a day is a working day via typeId→routeTypeIdMap, falling back to type string
-function isWorkingDay(day: DayData | undefined | null, routeTypeIdMap?: Map<string, any>): boolean {
-  if (!day) return false;
-  if (day.typeId && routeTypeIdMap) {
-    const rt = routeTypeIdMap.get(String(day.typeId));
-    if (rt) return (rt.routeStatus || "").trim().toLowerCase() !== "off";
-  }
-  // Legacy fallback
-  const NON_WORKING = new Set(["off", "", "call out", "request off", "suspension", "stand by"]);
-  return !NON_WORKING.has((day.type || "").trim().toLowerCase());
-}
-
-interface DayData {
-  _id: string;
-  date: string;
-  weekDay: string;
-  typeId?: string;
-  // Legacy fields — kept for read-back compatibility with old records
-  type?: string;
-  status?: string;
-  routeStatus?: string;
-  subType?: string;
-  trainingDay?: string;
-  note?: string;
-  startTime: string;
-  dayBeforeConfirmation: string;
-  dayOfConfirmation: string;
-  weekConfirmation: string;
-  van: string;
-}
-
-interface EmployeeSchedule {
-  transporterId: string;
-  employee: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    name: string;
-    type: string;
-    status: string;
-    ScheduleNotes?: string;
-    hiredDate?: string | Date;
-    profileImage?: string;
-  } | null;
-  weekNote: string;
-  days: Record<number, DayData>;
-}
-
-interface WeekData {
-  yearWeek: string;
-  dates: string[];
-  employees: EmployeeSchedule[];
-  totalEmployees: number;
-  prevWeekTrailing?: Record<string, number>;
-  auditCounts?: Record<string, number>;
-  everydayRecords?: Record<string, any>;
-  dailyLaborActualCost?: Record<string, number>;
-  dailyLaborTheoryCost?: Record<string, number>;
-  dailyLaborTheoryCostBreakdown?: Record<string, { employeeName: string; type: string; rate: number; theoryHrs: number; cost: number; }[]>;
-  dailyLaborActualCostBreakdown?: Record<string, { employeeName: string; type: string; regHrs: number; otHrs: number; rate: number; cost: number; }[]>;
-  dailyRevenue?: Record<string, number>;
-  dailyRevenueBreakdown?: Record<string, { employeeName: string; type: string; wst: string; hrs: number; cost: number; }[]>;
-  dailyDriverActualCost?: Record<string, number>;
-  dailyOpsActualCost?: Record<string, number>;
-  dailyDriverCostPct?: Record<string, number>;
-  dailyOpsCostPct?: Record<string, number>;
-  dailyLaborTheoryPct?: Record<string, number>;
-  dailyLaborActualPct?: Record<string, number>;
-  dailyLaborVarDol?: Record<string, number>;
-  dailyLaborVarPct?: Record<string, number>;
-}
-
-// ── Planning Row Data ──
-interface PlanningRow {
-  label: string;
-  values: number[];
-  total: number;
-  color: string;
-}
-
-function computePlanningData(employees: EmployeeSchedule[], everydayRecords: Record<string, any> = {}, dates: string[] = [], routeTypeIdMap: Map<string, any> = new Map()): PlanningRow[] {
-  const daStats = Array(7).fill(0);
-  const standBy = Array(7).fill(0);
-  const routesAssigned = Array(7).fill(0);
-  const ops = Array(7).fill(0);
-  const extraDAs = Array(7).fill(0);
-
-  // Initialize Routes Assigned from manual entries only
-  for (let d = 0; d < 7; d++) {
-    const date = dates[d];
-    if (date && everydayRecords[date]?.routesAssigned !== undefined) {
-      routesAssigned[d] = everydayRecords[date].routesAssigned;
-    }
-  }
-
-  employees.forEach(emp => {
-    for (let d = 0; d < 7; d++) {
-      const day = emp.days[d];
-      if (!day) continue;
-
-      // Prefer resolving via typeId for accuracy; fall back to type string
-      const rt = day.typeId ? routeTypeIdMap.get(String(day.typeId)) : null;
-      const typeVal = (day.type || "").trim().toLowerCase();
-
-      const isDA = rt ? rt.isDA : (typeVal === "route" || typeVal === "pending ecp");
-      const isStandby = rt ? rt.isStandby : (typeVal === "stand by");
-      const isOps = rt ? rt.isOps : (["open", "close", "fleet"].includes(typeVal));
-
-      if (isDA) daStats[d]++;
-      if (isStandby) standBy[d]++;
-      if (isOps) ops[d]++;
-    }
-  });
-
-  // Extra DA's = DA's - Routes Assigned
-  for (let d = 0; d < 7; d++) {
-    extraDAs[d] = daStats[d] - routesAssigned[d];
-  }
-
-  const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
-
-  return [
-    { label: "DA's", values: daStats, total: sum(daStats), color: "text-emerald-400" },
-    { label: "Stand By", values: standBy, total: sum(standBy), color: "text-cyan-400" },
-    { label: "Routes Assigned", values: routesAssigned, total: sum(routesAssigned), color: "text-blue-400" },
-    { label: "Ops", values: ops, total: sum(ops), color: "text-orange-400" },
-    { label: "Extra DA's", values: extraDAs, total: sum(extraDAs), color: "text-purple-400" },
-  ];
-}
-
-// Group employees by type, and sort alphabetically with new hires at the bottom
-function groupByType(employees: EmployeeSchedule[]): Record<string, EmployeeSchedule[]> {
-  const groups: Record<string, EmployeeSchedule[]> = {};
-  employees.forEach(emp => {
-    const type = emp.employee?.type || "Unassigned";
-    if (!groups[type]) groups[type] = [];
-    groups[type].push(emp);
-  });
-
-  // Sort within each group
-  Object.values(groups).forEach(groupList => {
-    groupList.sort((a, b) => {
-      const aIsNewHire = a.employee?.hiredDate ? (Date.now() - new Date(a.employee.hiredDate).getTime()) / 86400000 <= 30 : false;
-      const bIsNewHire = b.employee?.hiredDate ? (Date.now() - new Date(b.employee.hiredDate).getTime()) / 86400000 <= 30 : false;
-
-      // 1. New hires go to the bottom
-      if (aIsNewHire && !bIsNewHire) return 1;
-      if (!aIsNewHire && bIsNewHire) return -1;
-      
-      // 2. Alphabetical by name
-      const nameA = (a.employee?.name || a.transporterId || "").toLowerCase();
-      const nameB = (b.employee?.name || b.transporterId || "").toLowerCase();
-      return nameA.localeCompare(nameB);
-    });
-  });
-
-  return groups;
-}
-
-// Count working days for an employee using typeId resolution
-function countWorkingDays(emp: EmployeeSchedule, routeTypeIdMap?: Map<string, any>): number {
-  let count = 0;
-  for (let d = 0; d < 7; d++) {
-    const day = emp.days[d];
-    if (isWorkingDay(day, routeTypeIdMap)) count++;
-  }
-  return count;
-}
-
-// Detect consecutive working days and return warnings per day index
-// carryOver = how many consecutive working days the employee had at the END of the previous week
-function getConsecutiveWarnings(emp: EmployeeSchedule, carryOver: number = 0, routeTypeIdMap?: Map<string, any>): Map<number, { consecutive: number; type: 'caution' | 'danger' }> {
-  const warnings = new Map<number, { consecutive: number; type: 'caution' | 'danger' }>();
-
-  let consecutive = carryOver;
-  for (let d = 0; d < 7; d++) {
-    const day = emp.days[d];
-    if (isWorkingDay(day, routeTypeIdMap)) {
-      consecutive++;
-      if (consecutive === 6) {
-        warnings.set(d, { consecutive: 6, type: 'caution' });
-      } else if (consecutive >= 7) {
-        warnings.set(d, { consecutive, type: 'danger' });
-      }
-    } else {
-      consecutive = 0;
-    }
-  }
-
-  return warnings;
-}
 
 // ── Inline Editable Note Component ──
 function EditableNote({
@@ -318,7 +141,7 @@ function EditableNote({
 
   const handleSave = async () => {
     if (!employeeId) {
-      toast.error("No employee ID available");
+      notify.error("No employee ID available");
       return;
     }
     if (draft === value) {
@@ -334,11 +157,11 @@ function EditableNote({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save");
-      toast.success("Note saved");
+      notify.success("Note saved");
       onSaved(draft, employeeName, value);
       setEditing(false);
     } catch (err: any) {
-      toast.error(err.message || "Failed to save note");
+      notify.error(err.message || "Failed to save note");
     } finally {
       setSaving(false);
     }
@@ -410,31 +233,6 @@ function EditableNote({
   );
 }
 
-/** Business timezone — all "today" checks use Pacific Time. */
-const BUSINESS_TZ = "America/Los_Angeles";
-
-/** Get today's date string (YYYY-MM-DD) in Pacific Time. */
-function getTodayPacific(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
-}
-
-/** Compute current yearWeek (Sun-based) from today's date in Pacific Time. */
-function getCurrentYearWeek(): string {
-  const todayStr = getTodayPacific();
-  const date = new Date(todayStr + "T00:00:00.000Z");
-  const dayOfWeek = date.getUTCDay(); // 0=Sun … 6=Sat
-  const sundayOfThisWeek = new Date(date);
-  sundayOfThisWeek.setUTCDate(date.getUTCDate() - dayOfWeek);
-  const year = sundayOfThisWeek.getUTCFullYear();
-  const jan1 = new Date(Date.UTC(year, 0, 1));
-  const jan1Day = jan1.getUTCDay();
-  const firstSunday = new Date(jan1);
-  firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
-  const diffMs = sundayOfThisWeek.getTime() - firstSunday.getTime();
-  const diffDays = Math.round(diffMs / 86400000);
-  const weekNum = Math.floor(diffDays / 7) + 1;
-  return `${year}-W${weekNum.toString().padStart(2, "0")}`;
-}
 
 function RouteAssignedPopover({ date, value, onSave }: { date: string, value: number, onSave: (d: string, v: number) => void }) {
   const [open, setOpen] = useState(false);
@@ -626,7 +424,7 @@ function SchedulingPageContent() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to delete schedule data");
 
-      toast.success(`Schedule deleted successfully. Removed ${data.deleted?.schedules || 0} schedules.`);
+      notify.success(`Schedule deleted successfully. Removed ${data.deleted?.schedules || 0} schedules.`);
 
       const deletedWeek = selectedWeek;
 
@@ -651,7 +449,7 @@ function SchedulingPageContent() {
       // Refresh weeks list from server
       queryClient.invalidateQueries({ queryKey: ['schedules', 'weeksList'] });
     } catch (err: any) {
-      toast.error(err.message || "Failed to delete week");
+      notify.error(err.message || "Failed to delete week");
     } finally {
       setDeletingWeek(false);
     }
@@ -686,12 +484,12 @@ function SchedulingPageContent() {
           ...prev,
           [date]: { ...(prev[date] || {}), routesAssigned: value }
         }));
-        toast.success("Routes Assigned updated");
+        notify.success("Routes Assigned updated");
       } else {
-        toast.error("Failed to update");
+        notify.error("Failed to update");
       }
     } catch (err) {
-      toast.error("Failed to update");
+      notify.error("Failed to update");
     }
   };
 
@@ -703,22 +501,6 @@ function SchedulingPageContent() {
     updateURL(activeMainTab, activeSubTab, week, deferredSearchQuery, messagingDate);
   }, [activeMainTab, activeSubTab, deferredSearchQuery, messagingDate, updateURL]);
 
-  // Helpers to compute next/prev yearWeek strings
-  const getNextYearWeek = (yw: string): string => {
-    const m = yw.match(/(\d{4})-W(\d{2})/);
-    if (!m) return yw;
-    let yr = parseInt(m[1]), wk = parseInt(m[2]) + 1;
-    if (wk > 52) { yr++; wk = 1; }
-    return `${yr}-W${String(wk).padStart(2, "0")}`;
-  };
-
-  const getPrevYearWeek = (yw: string): string => {
-    const m = yw.match(/(\d{4})-W(\d{2})/);
-    if (!m) return yw;
-    let yr = parseInt(m[1]), wk = parseInt(m[2]) - 1;
-    if (wk < 1) { yr--; wk = 52; }
-    return `${yr}-W${String(wk).padStart(2, "0")}`;
-  };
 
   // Generate week schedules (works for both next and prev)
   const generateWeek = useCallback(async (targetWeek: string, direction: 'next' | 'prev') => {
@@ -733,11 +515,11 @@ function SchedulingPageContent() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate");
       if (data.created === 0) {
-        toast.info(`Week ${targetWeek} — all ${data.employees} employees already have schedules`);
+        notify.info(`Week ${targetWeek} — all ${data.employees} employees already have schedules`);
       } else if (data.isNewWeek) {
-        toast.success(`Created week ${targetWeek} — ${data.created} records for ${data.employees} employees`);
+        notify.success(`Created week ${targetWeek} — ${data.created} records for ${data.employees} employees`);
       } else {
-        toast.success(`Synced week ${targetWeek} — added ${data.created} records for ${data.missingEmployees} new employee(s)`);
+        notify.success(`Synced week ${targetWeek} — added ${data.created} records for ${data.missingEmployees} new employee(s)`);
       }
       // Add to weeks list in the right position and navigate
       setWeeks(prev => {
@@ -747,7 +529,7 @@ function SchedulingPageContent() {
       });
       setSelectedWeek(targetWeek);
     } catch (err: any) {
-      toast.error(err.message || "Failed to generate week");
+      notify.error(err.message || "Failed to generate week");
     } finally {
       setGeneratingWeek(false);
     }
@@ -874,7 +656,7 @@ function SchedulingPageContent() {
         .then(syncData => {
           if (cancelled) return;
           if (syncData.created > 0) {
-            toast.success(`Synced ${syncData.missingEmployees} new employee(s) — ${syncData.created} records added`);
+            notify.success(`Synced ${syncData.missingEmployees} new employee(s) — ${syncData.created} records added`);
             refetchWeekData();
           }
         })
@@ -1082,6 +864,10 @@ function SchedulingPageContent() {
               variant="outline"
               size="icon"
               className="h-8 w-8"
+              onMouseEnter={() => {
+                const adjacentWeek = idx >= weeks.length - 1 ? getPrevYearWeek(weeks[weeks.length - 1]) : weeks[idx + 1];
+                queryClient.prefetchQuery({ queryKey: ['schedules', 'week', adjacentWeek], queryFn: () => fetch(`/api/schedules?yearWeek=${adjacentWeek}`).then(r => r.json()) });
+              }}
               onClick={() => {
                 if (idx >= weeks.length - 1) {
                   const prevWeek = getPrevYearWeek(weeks[weeks.length - 1]);
@@ -1125,6 +911,10 @@ function SchedulingPageContent() {
               variant="outline"
               size="icon"
               className="h-8 w-8"
+              onMouseEnter={() => {
+                const adjacentWeek = idx <= 0 ? getNextYearWeek(weeks[0]) : weeks[idx - 1];
+                queryClient.prefetchQuery({ queryKey: ['schedules', 'week', adjacentWeek], queryFn: () => fetch(`/api/schedules?yearWeek=${adjacentWeek}`).then(r => r.json()) });
+              }}
               onClick={() => {
                 if (idx <= 0) {
                   const nextWeek = getNextYearWeek(weeks[0]);
@@ -1184,7 +974,7 @@ function SchedulingPageContent() {
     } else {
       const dateStr = weekData?.dates?.[dayIdx];
       if (!dateStr || !selectedWeek) {
-        toast.error("Cannot determine date for this day");
+        notify.error("Cannot determine date for this day");
         return;
       }
       payload.date = dateStr;
@@ -1193,12 +983,12 @@ function SchedulingPageContent() {
 
     updateSchedule({ payload }, {
       onSuccess: () => {
-        toast.success(`Type updated to ${newType}`);
+        notify.success(`Type updated to ${newType}`);
         setMessagingRefreshKey(prev => prev + 1);
         setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
       },
       onError: (err) => {
-        toast.error(err.message || "Failed to update type");
+        notify.error(err.message || "Failed to update type");
       }
     });
 

@@ -4,7 +4,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { FileText, X, Loader2, Upload } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 interface FileUploadProps {
@@ -45,7 +45,7 @@ export function FileUpload({
         const file = files[i];
         
         if (file.size > MAX_SIZE) {
-            toast.error(`File ${file.name} is too large (max 10MB).`);
+            notify.error(`File ${file.name} is too large (max 10MB).`);
             continue;
         }
 
@@ -82,12 +82,12 @@ export function FileUpload({
         } else {
             onChange(uploadedUrls[0]);
         }
-        toast.success("File uploaded successfully");
+        notify.success("File uploaded successfully");
       }
       
     } catch (error: any) {
       console.error(error);
-      toast.error(error.message || "Failed to upload file");
+      notify.error(error.message || "Failed to upload file");
     } finally {
       setLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

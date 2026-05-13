@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { ImagePlus, X, Loader2 } from "lucide-react";
 import Image from "next/image";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 interface ImageUploadProps {
@@ -42,7 +42,7 @@ export function ImageUpload({
         
         // Client-side validation
         if (file.size > MAX_SIZE) {
-            toast.error(`File ${file.name} allows max 10MB. Got ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+            notify.error(`File ${file.name} allows max 10MB. Got ${(file.size / 1024 / 1024).toFixed(2)}MB`);
             continue;
         }
 
@@ -70,12 +70,12 @@ export function ImageUpload({
         } else {
             onChange(uploadedUrls[0]);
         }
-        toast.success("Image uploaded successfully");
+        notify.success("Image uploaded successfully");
       }
       
     } catch (error: any) {
       console.error(error);
-      toast.error(error.message || "Failed to upload image");
+      notify.error(error.message || "Failed to upload image");
     } finally {
       setLoading(false);
       // Reset input

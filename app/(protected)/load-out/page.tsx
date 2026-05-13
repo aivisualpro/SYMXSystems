@@ -70,7 +70,7 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import RouteDetailModal from "../dispatching/_components/RouteDetailModal";
 
 // ── Type Options — dynamically built from route type settings ──
@@ -392,10 +392,10 @@ export default function RoutesPage() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update van");
-            toast.success(newVan ? `Van updated to ${newVan}` : "Van cleared");
+            notify.success(newVan ? `Van updated to ${newVan}` : "Van cleared");
             setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
         } catch (err: any) {
-            toast.error(err.message || "Failed to update van");
+            notify.error(err.message || "Failed to update van");
             refreshRoutes();
         }
     }, [vehicles, refreshRoutes]);
@@ -518,10 +518,10 @@ export default function RoutesPage() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update");
-            toast.success(`Type updated to ${newType}`);
+            notify.success(`Type updated to ${newType}`);
             setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
         } catch (err: any) {
-            toast.error(err.message || "Failed to update type");
+            notify.error(err.message || "Failed to update type");
             refreshRoutes();
         }
     }, [refreshRoutes]);
@@ -546,12 +546,12 @@ export default function RoutesPage() {
             if (!res.ok) throw new Error(data.error);
             
             const label = status === "confirmed" ? "Confirmed" : status === "change_requested" ? "Change Requested" : "Pending";
-            toast.success(`${row.employeeName}: ${label}`);
+            notify.success(`${row.employeeName}: ${label}`);
             
             setAllRoutes(prev => prev.map(r => r._id === row._id ? { ...r, confirmationStatus: data.confirmation } : r));
             refreshRoutes();
         } catch (err: any) {
-            toast.error(err.message || "Failed to update status");
+            notify.error(err.message || "Failed to update status");
         }
     };
 

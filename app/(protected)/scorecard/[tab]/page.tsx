@@ -16,7 +16,7 @@ import {
   Download, Loader2, Upload, Search, Check, Hash,
   X, Play, ChevronRight, Trash2,
 } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import Papa from "papaparse";
 
@@ -142,7 +142,7 @@ function EmployeePerformanceDashboardInner() {
         setDriverSigTimestamp(data.remarks.driverSignatureTimestamp || null);
         setManagerSigTimestamp(data.remarks.managerSignatureTimestamp || null);
       }
-      toast.success('Remarks saved successfully');
+      notify.success('Remarks saved successfully');
       // Refresh signature map for the table
       if (selectedWeek) {
         try {
@@ -152,7 +152,7 @@ function EmployeePerformanceDashboardInner() {
         } catch { /* silently fail */ }
       }
     } catch {
-      toast.error('Failed to save remarks');
+      notify.error('Failed to save remarks');
     } finally {
       setSavingRemarks(false);
     }
@@ -253,7 +253,7 @@ function EmployeePerformanceDashboardInner() {
     const file = e.target.files?.[0];
     if (!file) return;
     const isValidExt = file.name.endsWith(".csv") || file.name.endsWith(".xlsx");
-    if (!isValidExt) { toast.error("Please select a valid CSV or XLSX file"); return; }
+    if (!isValidExt) { notify.error("Please select a valid CSV or XLSX file"); return; }
 
     // Try to detect week from filename first, then from CSV content
     let detectedWeek = extractWeekFromFilename(file.name);
@@ -324,12 +324,12 @@ function EmployeePerformanceDashboardInner() {
 
   const handleBatchImport = async () => {
     const filesToProcess = Object.entries(importFiles).filter(([, entry]) => entry !== null) as [string, { file: File; detectedWeek: string | null }][];
-    if (filesToProcess.length === 0) { toast.error("No files attached. Please select at least one CSV."); return; }
+    if (filesToProcess.length === 0) { notify.error("No files attached. Please select at least one CSV."); return; }
 
     // Validate: any file without a detected week needs the global fallback week
     const filesWithoutWeek = filesToProcess.filter(([, { detectedWeek }]) => !detectedWeek);
     if (filesWithoutWeek.length > 0 && !importWeek) {
-      toast.error(`Please select a fallback week — ${filesWithoutWeek.length} file(s) couldn't auto-detect their week.`);
+      notify.error(`Please select a fallback week — ${filesWithoutWeek.length} file(s) couldn't auto-detect their week.`);
       return;
     }
 
@@ -368,7 +368,7 @@ function EmployeePerformanceDashboardInner() {
 
       setImportProgress(100);
       setImportStatusMessage("All imports complete!");
-      toast.success(`Processed ${totalRecords} total records. Added: ${totalInserted}, Updated: ${totalUpdated}`);
+      notify.success(`Processed ${totalRecords} total records. Added: ${totalInserted}, Updated: ${totalUpdated}`);
 
       setTimeout(() => {
         setIsImporting(false);
@@ -381,7 +381,7 @@ function EmployeePerformanceDashboardInner() {
         if (selectedWeek) fetchData(selectedWeek);
       }, 1500);
     } catch (error: any) {
-      toast.error(error.message || "Failed to import data");
+      notify.error(error.message || "Failed to import data");
       setIsImporting(false);
     }
   };
@@ -447,7 +447,7 @@ function EmployeePerformanceDashboardInner() {
 
   const handleAddCustomWeek = () => {
     if (!normalizedWeekInput) {
-      toast.error("Invalid week format. Use YYYY-Wxx (e.g. 2026-W05)");
+      notify.error("Invalid week format. Use YYYY-Wxx (e.g. 2026-W05)");
       return;
     }
     if (!weeks.includes(normalizedWeekInput)) {
@@ -494,7 +494,7 @@ function EmployeePerformanceDashboardInner() {
           window.history.replaceState({}, '', url.toString());
         }
       })
-      .catch(() => toast.error("Failed to load weeks"))
+      .catch(() => notify.error("Failed to load weeks"))
       .finally(() => setLoadingWeeks(false));
   }, []);
 
@@ -515,7 +515,7 @@ function EmployeePerformanceDashboardInner() {
         const sigData = await sigRes.json();
         setSignatureMap(sigData.signatureMap || {});
       } catch { /* silently fail */ }
-    } catch { toast.error("Failed to fetch performance data"); }
+    } catch { notify.error("Failed to fetch performance data"); }
     finally { setLoading(false); }
   }, []);
 
@@ -835,12 +835,12 @@ function EmployeePerformanceDashboardInner() {
                     );
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.error || 'Failed to delete');
-                    toast.success(`Deleted ${data.deleted} record${data.deleted !== 1 ? 's' : ''} for ${activeTab} — ${selectedWeek}`);
+                    notify.success(`Deleted ${data.deleted} record${data.deleted !== 1 ? 's' : ''} for ${activeTab} — ${selectedWeek}`);
                     setDeleteConfirmOpen(false);
                     // Refresh data
                     if (selectedWeek) fetchData(selectedWeek);
                   } catch (err: any) {
-                    toast.error(err.message || 'Failed to delete data');
+                    notify.error(err.message || 'Failed to delete data');
                   } finally {
                     setDeleting(false);
                   }

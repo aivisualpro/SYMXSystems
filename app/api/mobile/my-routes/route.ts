@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import connectToDatabase from "@/lib/db";
 import SYMXRoute from "@/lib/models/SYMXRoute";
+import DailyInspection from "@/lib/models/DailyInspection";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import RouteType from "@/lib/models/RouteType";
 import SYMXSetting from "@/lib/models/SYMXSetting";
@@ -155,6 +156,26 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // ── Batch-lookup DailyInspections for all routes ──
+    const routeIds = (routes as any[]).map((r) => String(r._id));
+    const inspections = routeIds.length > 0
+      ? await DailyInspection.find(
+          { routeId: { $in: routeIds } },
+          { _id: 1, routeId: 1, timeStamp: 1, mileage: 1 }
+        )
+          .sort({ timeStamp: -1 })
+          .lean()
+      : [];
+
+    // First encounter per routeId wins (most recent, since sorted desc)
+    const inspByRouteId = new Map<string, { _id: any; timeStamp: any; mileage: any }>();
+    for (const insp of inspections as any[]) {
+      const rid = String(insp.routeId);
+      if (!inspByRouteId.has(rid)) {
+        inspByRouteId.set(rid, insp);
+      }
+    }
+
     // ── Employee info ──
     const emp = employee as any;
     const firstName = (emp?.firstName || "").trim();
@@ -174,6 +195,26 @@ export async function GET(req: NextRequest) {
       const typeId = r.typeId ? String(r.typeId) : "";
       const rtMeta = typeId ? rtIdToMeta.get(typeId) : null;
 
+      // Override inspection data from DailyInspection (authoritative)
+      const insp = inspByRouteId.get(String(r._id));
+      const inspectionId = insp ? String(insp._id) : (r.inspectionId || "");
+      const inspectionTime = insp
+        ? new Date(insp.timeStamp).toLocaleTimeString("en-US", {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: businessTZ,
+          })
+        : (r.inspectionTime || "");
+
+      // Fire-and-forget: back-fill stale SYMXRoute if needed
+      if (insp && r.inspectionId !== inspectionId) {
+        SYMXRoute.updateOne(
+          { _id: r._id },
+          { $set: { inspectionId, inspectionTime } }
+        ).exec().catch(() => {});
+      }
+
       return {
         id: String(r._id),
         transporterId: r.transporterId || "",
@@ -187,8 +228,8 @@ export async function GET(req: NextRequest) {
         van: r.van || "",
         routeDuration: r.routeDuration || "",
         waveTime: r.waveTime || "",
-        inspectionTime: r.inspectionTime || "",
-        inspectionId: r.inspectionId || "",
+        inspectionTime,
+        inspectionId,
         actualDepartureTime: r.actualDepartureTime || "",
         deliveryCompletionTime: r.deliveryCompletionTime || "",
         profileImage: employeeInfo.profileImage,

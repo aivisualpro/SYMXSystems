@@ -3,9 +3,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { useHrTickets } from "@/lib/query/hooks/useHr";
-import { useQueryClient } from "@tanstack/react-query";
-import { qk } from "@/lib/query/keys";
+import { useHrTickets, useUpsertTicket, useDeleteTicket } from "@/lib/query/hooks/useHr";
 import {
   Search,
   Ticket,
@@ -39,7 +37,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import Papa from "papaparse";
 import QRCode from "qrcode";
 
@@ -120,7 +118,7 @@ function ShareDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(shareUrl);
     setCopied(true);
-    toast.success("Link copied to clipboard!");
+    notify.success("Link copied to clipboard!");
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -243,8 +241,8 @@ function TicketDialog({
   const [resolution, setResolution] = useState(ticket?.resolution || "");
   const [holdReason, setHoldReason] = useState(ticket?.holdReason || "");
   const [managersEmail, setManagersEmail] = useState(ticket?.managersEmail || "");
-  const [saving, setSaving] = useState(false);
-  const queryClient = useQueryClient();
+  const upsert = useUpsertTicket();
+  const saving = upsert.isPending;
 
   useEffect(() => {
     if (open) {
@@ -257,36 +255,12 @@ function TicketDialog({
     }
   }, [open, ticket]);
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!category && !issue) return;
-    setSaving(true);
-
-    try {
-      const url = ticket
-        ? `/api/admin/hr-tickets/${ticket._id}`
-        : "/api/admin/hr-tickets";
-      const method = ticket ? "PUT" : "POST";
-
-      const body: any = { category, issue, notes, resolution, holdReason, managersEmail };
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error("Save failed");
-
-      queryClient.invalidateQueries({ queryKey: qk.hr.tickets });
-      queryClient.invalidateQueries({ queryKey: qk.hr.dashboard });
-
-      toast.success(ticket ? "Ticket updated" : "Ticket created");
-      onSaved();
-      onClose();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save");
-    } finally {
-      setSaving(false);
-    }
+    const body = { category, issue, notes, resolution, holdReason, managersEmail };
+    upsert.mutate({ id: ticket?._id, data: body });
+    onSaved();
+    onClose();
   };
 
   if (!open) return null;
@@ -428,6 +402,8 @@ function TicketDialog({
 
 export default function HRTicketsPage() {
   const { data: queryTickets } = useHrTickets();
+  const upsertTicket = useUpsertTicket();
+  const deleteTicket = useDeleteTicket();
   const [tickets, setTickets] = useState<HrTicket[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -438,7 +414,6 @@ export default function HRTicketsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { setRightContent } = useHeaderActions();
-  const queryClient = useQueryClient();
 
   // Dialog states
   const [showShare, setShowShare] = useState(false);
@@ -528,7 +503,7 @@ export default function HRTicketsPage() {
         });
       });
 
-      if (parsed.length === 0) { toast.error("CSV file is empty"); setImporting(false); return; }
+      if (parsed.length === 0) { notify.error("CSV file is empty"); setImporting(false); return; }
 
       const chunks: any[][] = [];
       for (let i = 0; i < parsed.length; i += CHUNK_SIZE) chunks.push(parsed.slice(i, i + CHUNK_SIZE));
@@ -545,59 +520,37 @@ export default function HRTicketsPage() {
         totalInserted += result.inserted || 0;
       }
 
-      toast.success(`Imported ${totalInserted} tickets`);
+      notify.success(`Imported ${totalInserted} tickets`);
       await fetchTickets();
     } catch (err: any) {
-      toast.error(err.message || "Import failed");
+      notify.error(err.message || "Import failed");
     } finally {
       setImporting(false);
     }
   }, [fetchTickets]);
 
   // ── Approve / Deny ──
-  const handleStatusUpdate = useCallback(async (ticketId: string, newStatus: "Approve" | "Deny") => {
+  const handleStatusUpdate = useCallback((ticketId: string, newStatus: "Approve" | "Deny") => {
     setUpdatingId(ticketId);
-    try {
-      const res = await fetch(`/api/admin/hr-tickets/${ticketId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approveDeny: newStatus }),
-      });
-      if (!res.ok) throw new Error("Update failed");
-
-      queryClient.invalidateQueries({ queryKey: qk.hr.tickets });
-      queryClient.invalidateQueries({ queryKey: qk.hr.dashboard });
-
-      setTickets((prev) =>
-        prev.map((t) => (t._id === ticketId ? { ...t, approveDeny: newStatus } : t))
-      );
-      toast.success(`Ticket ${newStatus === "Approve" ? "approved" : "denied"}`);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update");
-    } finally {
-      setUpdatingId(null);
-    }
-  }, []);
+    setTickets((prev) =>
+      prev.map((t) => (t._id === ticketId ? { ...t, approveDeny: newStatus } : t))
+    );
+    upsertTicket.mutate(
+      { id: ticketId, data: { approveDeny: newStatus } },
+      { onSettled: () => setUpdatingId(null) },
+    );
+  }, [upsertTicket]);
 
   // ── Delete ──
-  const handleDelete = useCallback(async (ticketId: string) => {
+  const handleDelete = useCallback((ticketId: string) => {
     if (!confirm("Delete this ticket? This cannot be undone.")) return;
     setDeletingId(ticketId);
-    try {
-      const res = await fetch(`/api/admin/hr-tickets/${ticketId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Delete failed");
-
-      queryClient.invalidateQueries({ queryKey: qk.hr.tickets });
-      queryClient.invalidateQueries({ queryKey: qk.hr.dashboard });
-
-      setTickets((prev) => prev.filter((t) => t._id !== ticketId));
-      toast.success("Ticket deleted");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to delete");
-    } finally {
-      setDeletingId(null);
-    }
-  }, []);
+    setTickets((prev) => prev.filter((t) => t._id !== ticketId));
+    deleteTicket.mutate(
+      { id: ticketId },
+      { onSettled: () => setDeletingId(null) },
+    );
+  }, [deleteTicket]);
 
   // ── KPIs ──
   const kpi = useMemo(() => {

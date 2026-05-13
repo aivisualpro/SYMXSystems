@@ -44,7 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -161,7 +161,7 @@ export default function RoleDetailsPage() {
         setRole(data);
       } catch (error) {
         console.error(error);
-        toast.error("Failed to load role details");
+        notify.error("Failed to load role details");
         router.push("/owner/roles");
       } finally {
         setLoading(false);
@@ -297,10 +297,10 @@ export default function RoleDetailsPage() {
       queryClient.invalidateQueries({ queryKey: qk.admin.users });
       queryClient.invalidateQueries({ queryKey: qk.permissions.current });
 
-      toast.success("Role permissions updated successfully");
+      notify.success("Role permissions updated successfully");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to save changes");
+      notify.error("Failed to save changes");
     } finally {
       setSaving(false);
     }

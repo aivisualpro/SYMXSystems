@@ -40,7 +40,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { cn } from "@/lib/utils";
 
@@ -88,7 +88,7 @@ export default function ProfilePage() {
       setEditForm(data);
     } catch (error) {
       console.error(error);
-      toast.error("Failed to load profile");
+      notify.error("Failed to load profile");
     } finally {
       setLoading(false);
     }
@@ -150,10 +150,10 @@ export default function ProfilePage() {
       setProfile(updated);
       setEditForm(updated);
       setIsEditing(false);
-      toast.success("Profile updated successfully!");
+      notify.success("Profile updated successfully!");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to save changes");
+      notify.error("Failed to save changes");
     } finally {
       setSaving(false);
     }
@@ -161,13 +161,13 @@ export default function ProfilePage() {
 
   const handlePasswordChange = async () => {
     if (!passwordForm.newPassword || !passwordForm.confirmPassword) {
-      toast.error("Please fill in all fields"); return;
+      notify.error("Please fill in all fields"); return;
     }
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      toast.error("Passwords do not match"); return;
+      notify.error("Passwords do not match"); return;
     }
     if (passwordForm.newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters"); return;
+      notify.error("Password must be at least 6 characters"); return;
     }
     setChangingPassword(true);
     try {
@@ -177,11 +177,11 @@ export default function ProfilePage() {
         body: JSON.stringify({ userId: profile?._id, newPassword: passwordForm.newPassword }),
       });
       if (!res.ok) throw new Error("Failed to change password");
-      toast.success("Password changed successfully!");
+      notify.success("Password changed successfully!");
       setShowPasswordDialog(false);
       setPasswordForm({ newPassword: "", confirmPassword: "" });
     } catch {
-      toast.error("Failed to change password");
+      notify.error("Failed to change password");
     } finally {
       setChangingPassword(false);
     }
@@ -203,10 +203,10 @@ export default function ProfilePage() {
         if (res.ok) {
           const updated = await res.json();
           setProfile(updated);
-          toast.success("Profile picture updated!");
+          notify.success("Profile picture updated!");
         }
       } catch {
-        toast.error("Failed to upload picture");
+        notify.error("Failed to upload picture");
       }
     };
     reader.readAsDataURL(file);

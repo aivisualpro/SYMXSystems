@@ -1,7 +1,7 @@
 "use client";
-
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useIsFetching, useIsMutating } from "@tanstack/react-query";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,11 @@ export function SiteHeader() {
 
   const title = getTitle(pathname);
 
+  // Background sync indicator — shows when any query/mutation is in-flight
+  const isFetching = useIsFetching();
+  const isMutating = useIsMutating();
+  const isBackgroundActive = isFetching > 0 || isMutating > 0;
+
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
       <div className="flex w-full items-center gap-1 px-3 sm:px-4 lg:gap-2 lg:px-6">
@@ -96,6 +101,13 @@ export function SiteHeader() {
         )}
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          {/* Background sync indicator */}
+          {isBackgroundActive && (
+            <div className="relative flex h-2 w-2 mr-1" title="Syncing data…">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-sky-500" />
+            </div>
+          )}
           {updateWorker ? (
             <Button
               variant="default"

@@ -5,13 +5,13 @@ import { Loader2, Save, Pencil, X, Trash2, GripVertical, ChevronDown, Check, Min
 import * as LucideIcons from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { restrictToVerticalAxis, restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useAddRef } from "../layout";
-import { IconPicker } from "../dropdowns/page";
+import { useAddRef } from "../_components/add-ref-context";
+import { IconPicker } from "../_components/icon-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface RouteTypeRow {
@@ -70,7 +70,7 @@ export default function DefaultRoutesPage() {
                         body: JSON.stringify(newRoutes.map(r => ({ _id: r._id, sortOrder: r.sortOrder })))
                     });
                 } catch {
-                    toast.error("Failed to save reordering");
+                    notify.error("Failed to save reordering");
                 }
             }
         }
@@ -82,7 +82,7 @@ export default function DefaultRoutesPage() {
             const data = await res.json();
             setRoutes(data.map((r: any) => ({ ...r, isEditing: false, isNew: false })));
         } catch {
-            toast.error("Failed to load route types");
+            notify.error("Failed to load route types");
         } finally {
             setLoading(false);
         }
@@ -119,7 +119,7 @@ export default function DefaultRoutesPage() {
 
     const saveRow = async (idx: number) => {
         const row = routes[idx];
-        if (!row.name.trim()) { toast.error("Route type name is required"); return; }
+        if (!row.name.trim()) { notify.error("Route type name is required"); return; }
 
         setSaving(row._id || `new-${idx}`);
         try {
@@ -133,11 +133,11 @@ export default function DefaultRoutesPage() {
             const schedulesUpdated = saved.schedulesUpdated || 0;
             delete saved.schedulesUpdated;
             setRoutes(prev => prev.map((r, i) => i === idx ? { ...saved, isEditing: false, isNew: false } : r));
-            toast.success("Saved");
+            notify.success("Saved");
             if (schedulesUpdated > 0) {
-                toast.info(`Updated start time for ${schedulesUpdated} schedule${schedulesUpdated === 1 ? '' : 's'} this week`);
+                notify.info(`Updated start time for ${schedulesUpdated} schedule${schedulesUpdated === 1 ? '' : 's'} this week`);
             }
-        } catch (err: any) { toast.error(err.message || "Failed to save"); }
+        } catch (err: any) { notify.error(err.message || "Failed to save"); }
         finally { setSaving(null); }
     };
 
@@ -149,8 +149,8 @@ export default function DefaultRoutesPage() {
         try {
             await fetch(`/api/admin/settings/route-types?id=${row._id}`, { method: "DELETE" });
             setRoutes(prev => prev.filter((_, i) => i !== idx));
-            toast.success("Deleted");
-        } catch { toast.error("Failed to delete"); }
+            notify.success("Deleted");
+        } catch { notify.error("Failed to delete"); }
         finally { setSaving(null); }
     };
 
@@ -181,7 +181,7 @@ export default function DefaultRoutesPage() {
                 body: JSON.stringify(newRoutes.map(r => ({ _id: r._id, sortOrder: r.sortOrder })))
             });
         } catch {
-            toast.error("Failed to reorder");
+            notify.error("Failed to reorder");
         }
     };
 

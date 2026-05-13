@@ -23,7 +23,7 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 /** Convert a date (ISO string or Date) to YYYY-MM-DD in Pacific Time */
 const BUSINESS_TZ = "America/Los_Angeles";
@@ -154,10 +154,10 @@ export default function OpeningPage() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update");
-            toast.success(`Updated ${field}`);
+            notify.success(`Updated ${field}`);
             queryClient.invalidateQueries({ queryKey: ["dispatching"] });
         } catch (err: any) {
-            toast.error(err.message || "Failed to update");
+            notify.error(err.message || "Failed to update");
         }
     }, []);
 

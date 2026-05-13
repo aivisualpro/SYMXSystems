@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { qk } from '../keys'
+import { makeOptimisticMutation } from '../optimistic'
 
 // ── HR Dashboard Stats ───────────────────────────────────────────────────────
 export function useHrDashboard() {
@@ -152,4 +153,218 @@ export function useEmployeesList() {
     },
     staleTime: 5 * 60_000,
   })
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  MUTATION HOOKS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Upsert HR Ticket ────────────────────────────────────────────────────────
+export function useUpsertTicket() {
+  const qc = useQueryClient()
+  return useMutation(
+    makeOptimisticMutation<any, { id?: string; data: any }>(
+      {
+        mutationFn: async ({ id, data }) => {
+          const url = id ? `/api/admin/hr-tickets/${id}` : '/api/admin/hr-tickets'
+          const method = id ? 'PUT' : 'POST'
+          const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          })
+          if (!res.ok) throw new Error('Failed to save ticket')
+          return res.json()
+        },
+        queryKey: qk.hr.tickets,
+        updater: (old: any, { id, data }) => {
+          if (!Array.isArray(old)) return old
+          if (id) return old.map((t: any) => (t._id === id ? { ...t, ...data } : t))
+          return [{ _id: `temp-${Date.now()}`, ...data }, ...old]
+        },
+        successMsg: 'Ticket saved',
+        errorMsg: 'Failed to save ticket',
+        extraInvalidateKeys: [qk.hr.dashboard],
+      },
+      qc,
+    ),
+  )
+}
+
+// ── Delete HR Ticket ────────────────────────────────────────────────────────
+export function useDeleteTicket() {
+  const qc = useQueryClient()
+  return useMutation(
+    makeOptimisticMutation<any, { id: string }>(
+      {
+        mutationFn: async ({ id }) => {
+          const res = await fetch(`/api/admin/hr-tickets/${id}`, { method: 'DELETE' })
+          if (!res.ok) throw new Error('Failed to delete ticket')
+          return res.json()
+        },
+        queryKey: qk.hr.tickets,
+        updater: (old: any, { id }) => {
+          if (!Array.isArray(old)) return old
+          return old.filter((t: any) => t._id !== id)
+        },
+        successMsg: 'Ticket deleted',
+        errorMsg: 'Failed to delete ticket',
+        extraInvalidateKeys: [qk.hr.dashboard],
+      },
+      qc,
+    ),
+  )
+}
+
+// ── Upsert Claim / Incident ─────────────────────────────────────────────────
+export function useUpsertClaim() {
+  const qc = useQueryClient()
+  return useMutation(
+    makeOptimisticMutation<any, { id?: string; data: any }>(
+      {
+        mutationFn: async ({ id, data }) => {
+          const url = id ? `/api/admin/claims/${id}` : '/api/admin/claims'
+          const method = id ? 'PUT' : 'POST'
+          const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          })
+          if (!res.ok) throw new Error('Failed to save incident')
+          return res.json()
+        },
+        queryKey: qk.hr.claims,
+        successMsg: 'Incident saved',
+        errorMsg: 'Failed to save incident',
+        extraInvalidateKeys: [qk.hr.claimsKpi, qk.hr.dashboard],
+      },
+      qc,
+    ),
+  )
+}
+
+// ── Delete Claim / Incident ─────────────────────────────────────────────────
+export function useDeleteClaim() {
+  const qc = useQueryClient()
+  return useMutation(
+    makeOptimisticMutation<any, { id: string }>(
+      {
+        mutationFn: async ({ id }) => {
+          const res = await fetch(`/api/admin/claims/${id}`, { method: 'DELETE' })
+          if (!res.ok) throw new Error('Failed to delete incident')
+          return res.json()
+        },
+        queryKey: qk.hr.claims,
+        successMsg: 'Incident deleted',
+        errorMsg: 'Failed to delete incident',
+        extraInvalidateKeys: [qk.hr.claimsKpi, qk.hr.dashboard],
+      },
+      qc,
+    ),
+  )
+}
+
+// ── Upsert Interview ────────────────────────────────────────────────────────
+export function useUpsertInterview() {
+  const qc = useQueryClient()
+  return useMutation(
+    makeOptimisticMutation<any, { id?: string; data: any }>(
+      {
+        mutationFn: async ({ id, data }) => {
+          const url = id ? `/api/admin/interviews/${id}` : '/api/admin/interviews'
+          const method = id ? 'PUT' : 'POST'
+          const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          })
+          if (!res.ok) throw new Error('Failed to save interview')
+          return res.json()
+        },
+        queryKey: qk.hr.interviews,
+        updater: (old: any, { id, data }) => {
+          if (!Array.isArray(old)) return old
+          if (id) return old.map((t: any) => (t._id === id ? { ...t, ...data } : t))
+          return [{ _id: `temp-${Date.now()}`, ...data }, ...old]
+        },
+        successMsg: 'Interview saved',
+        errorMsg: 'Failed to save interview',
+        extraInvalidateKeys: [qk.hr.dashboard],
+      },
+      qc,
+    ),
+  )
+}
+
+// ── Delete Interview ────────────────────────────────────────────────────────
+export function useDeleteInterview() {
+  const qc = useQueryClient()
+  return useMutation(
+    makeOptimisticMutation<any, { id: string }>(
+      {
+        mutationFn: async ({ id }) => {
+          const res = await fetch(`/api/admin/interviews/${id}`, { method: 'DELETE' })
+          if (!res.ok) throw new Error('Failed to delete interview')
+          return res.json()
+        },
+        queryKey: qk.hr.interviews,
+        updater: (old: any, { id }) => {
+          if (!Array.isArray(old)) return old
+          return old.filter((t: any) => t._id !== id)
+        },
+        successMsg: 'Interview deleted',
+        errorMsg: 'Failed to delete interview',
+        extraInvalidateKeys: [qk.hr.dashboard],
+      },
+      qc,
+    ),
+  )
+}
+
+// ── Upsert Reimbursement ────────────────────────────────────────────────────
+export function useUpsertReimbursement() {
+  const qc = useQueryClient()
+  return useMutation(
+    makeOptimisticMutation<any, { id?: string; data: any }>(
+      {
+        mutationFn: async ({ id, data }) => {
+          const url = id ? `/api/admin/reimbursements/${id}` : '/api/admin/reimbursements'
+          const method = id ? 'PUT' : 'POST'
+          const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          })
+          if (!res.ok) throw new Error('Failed to save reimbursement')
+          return res.json()
+        },
+        queryKey: qk.hr.reimbursements,
+        successMsg: 'Reimbursement saved',
+        errorMsg: 'Failed to save reimbursement',
+        extraInvalidateKeys: [qk.hr.reimbursementsKpi, qk.hr.dashboard],
+      },
+      qc,
+    ),
+  )
+}
+
+// ── Delete Reimbursement ────────────────────────────────────────────────────
+export function useDeleteReimbursement() {
+  const qc = useQueryClient()
+  return useMutation(
+    makeOptimisticMutation<any, { id: string }>(
+      {
+        mutationFn: async ({ id }) => {
+          const res = await fetch(`/api/admin/reimbursements/${id}`, { method: 'DELETE' })
+          if (!res.ok) throw new Error('Failed to delete reimbursement')
+          return res.json()
+        },
+        queryKey: qk.hr.reimbursements,
+        successMsg: 'Reimbursement deleted',
+        errorMsg: 'Failed to delete reimbursement',
+        extraInvalidateKeys: [qk.hr.reimbursementsKpi, qk.hr.dashboard],
+      },
+      qc,
+    ),
+  )
 }

@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Loader2, Save, Pencil, X, Trash2, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
-import { useAddRef } from "../layout";
+import { notify } from "@/lib/notify";
+import { useAddRef } from "../_components/add-ref-context";
 import { cn } from "@/lib/utils";
 
 interface WSTRow {
@@ -31,7 +31,7 @@ export default function WSTPage() {
             const data = await res.json();
             setRows(data.map((r: any) => ({ ...r, isEditing: false, isNew: false })));
         } catch {
-            toast.error("Failed to load WST options");
+            notify.error("Failed to load WST options");
         } finally {
             setLoading(false);
         }
@@ -59,7 +59,7 @@ export default function WSTPage() {
 
     const saveRow = async (idx: number) => {
         const row = rows[idx];
-        if (!row.wst.trim()) { toast.error("WST is required"); return; }
+        if (!row.wst.trim()) { notify.error("WST is required"); return; }
 
         setSaving(row._id || `new-${idx}`);
         try {
@@ -71,8 +71,8 @@ export default function WSTPage() {
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
             const saved = await res.json();
             setRows(prev => prev.map((r, i) => i === idx ? { ...saved, isEditing: false, isNew: false } : r));
-            toast.success("Saved");
-        } catch (err: any) { toast.error(err.message || "Failed to save"); }
+            notify.success("Saved");
+        } catch (err: any) { notify.error(err.message || "Failed to save"); }
         finally { setSaving(null); }
     };
 
@@ -84,8 +84,8 @@ export default function WSTPage() {
         try {
             await fetch(`/api/admin/settings/wst?id=${row._id}`, { method: "DELETE" });
             setRows(prev => prev.filter((_, i) => i !== idx));
-            toast.success("Deleted");
-        } catch { toast.error("Failed to delete"); }
+            notify.success("Deleted");
+        } catch { notify.error("Failed to delete"); }
         finally { setSaving(null); }
     };
 

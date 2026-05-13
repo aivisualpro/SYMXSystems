@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { useFleetDashboard, useFleetVehicles, useFleetRepairs, useFleetInspections, useFleetRentals } from "@/lib/query/hooks/useFleet";
 import { sidebarCache } from "@/components/app-sidebar";
@@ -250,7 +250,7 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
   };
 
   const handleDelete = async (type: string, id: string) => {
-    toast(`Delete this ${type}?`, {
+   notify.custom(`Delete this ${type}?`, {
       description: "This action cannot be undone.",
       action: {
         label: "Delete",
@@ -259,10 +259,10 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
             await fetch(`/api/fleet?type=${type}&id=${id}`, { method: "DELETE" });
             fetchData();
             setModalOpen(false);
-            toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully.`);
+            notify.success(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully.`);
           } catch (err) {
             console.error("Delete error:", err);
-            toast.error(`Failed to delete ${type}.`);
+            notify.error(`Failed to delete ${type}.`);
           }
         }
       },
