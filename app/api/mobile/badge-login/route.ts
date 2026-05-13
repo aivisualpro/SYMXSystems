@@ -89,10 +89,17 @@ export async function POST(req: NextRequest) {
       .setExpirationTime("30d")
       .sign(key);
 
-    return NextResponse.json(
+    const res = NextResponse.json(
       { success: true, employee: employeePayload, token },
       { status: 200, headers: corsHeaders }
     );
+    // Bias the root-route chooser for returning drivers
+    res.cookies.set("symx_role", "driver", {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 365, // 1 year
+    });
+    return res;
   } catch (err: any) {
     console.error("[mobile/badge-login] Error:", err);
     return NextResponse.json(

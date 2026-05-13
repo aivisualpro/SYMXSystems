@@ -18,6 +18,11 @@ const publicPaths = [
   "/confirm/",
   "/submit-ticket",
   "/apply",
+  // Flutter PWA — drivers authenticate themselves inside the app
+  // via badge token JWT against /api/mobile/* endpoints. The office
+  // session cookie is NOT required (and intentionally not used) here.
+  "/app",
+  "/app/",
 ];
 
 function isPublicPath(path: string) {

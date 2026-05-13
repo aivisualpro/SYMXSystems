@@ -43,7 +43,13 @@ export async function POST(request: Request) {
         avatar: "/logo.png",
       };
       await login(superAdminData);
-      return NextResponse.json({ success: true, user: superAdminData });
+      const res = NextResponse.json({ success: true, user: superAdminData });
+      res.cookies.set("symx_role", "office", {
+        path: "/",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 365,
+      });
+      return res;
     }
     // ────────────────────────────────────────────────────────────────
 
@@ -106,7 +112,14 @@ export async function POST(request: Request) {
     await login(userData);
     console.log(`[Auth API] Session creation took: ${Date.now() - loginStart}ms`);
 
-    return NextResponse.json({ success: true, user: userData });
+    const res = NextResponse.json({ success: true, user: userData });
+    // Bias the root-route chooser for returning office users
+    res.cookies.set("symx_role", "office", {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 365, // 1 year
+    });
+    return res;
   } catch (error: any) {
     console.error("[Auth API] Login Error:", error);
     return NextResponse.json({

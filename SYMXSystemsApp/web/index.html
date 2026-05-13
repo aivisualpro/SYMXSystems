@@ -45,6 +45,26 @@
       50%      { transform: scale(0.92); opacity: 0.55;}
     }
   </style>
+
+  <script>
+    // Kill any service worker installed by the parent site — the
+    // driver PWA is intentionally SW-free to avoid cache poisoning.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        for (var i = 0; i < regs.length; i++) {
+          regs[i].unregister();
+        }
+      }).catch(function () {});
+      // Also drop any caches the parent SW seeded (e.g. cached /login)
+      if ('caches' in window) {
+        caches.keys().then(function (keys) {
+          keys.forEach(function (k) {
+            if (!k.startsWith('flutter-')) caches.delete(k);
+          });
+        }).catch(function () {});
+      }
+    }
+  </script>
 </head>
 <body>
   <div id="app-loader"><img src="favicon.png" alt="SYMX"></div>

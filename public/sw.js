@@ -1,10 +1,9 @@
-const CACHE_NAME = 'symx-v3';
+const CACHE_NAME = 'symx-v4';
 
 // Assets to pre-cache on install
 const PRECACHE_URLS = [
   '/',
   '/dashboard',
-  '/login',
   '/manifest.json',
   '/symx-logo.png',
   '/logo.png',
@@ -55,11 +54,12 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests (POST/PUT/DELETE go straight to network)
   if (request.method !== 'GET') return;
 
+  // Skip Flutter web app — it has its own service worker and asset pipeline
+  // This MUST be first after the GET filter to prevent the navigate fallback from hijacking /app/
+  if (url.pathname.startsWith('/app/') || url.pathname === '/app') return;
+
   // Skip API calls — always go to network for fresh data
   if (url.pathname.startsWith('/api/')) return;
-
-  // Skip Flutter web app — it has its own service worker and asset pipeline
-  if (url.pathname.startsWith('/app/') || url.pathname === '/app') return;
 
   // Skip browser extension requests
   if (!url.protocol.startsWith('http')) return;
@@ -205,4 +205,16 @@ self.addEventListener('notificationclick', (event) => {
       return self.clients.openWindow(url);
     })
   );
+});
+
+// ── Message handler (force update / unregister) ─────────────────
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data?.type === 'UNREGISTER') {
+    self.registration.unregister().then(() => {
+      return self.clients.matchAll();
+    }).then((clients) => {
+      clients.forEach(c => c.navigate(c.url));
+    });
+  }
 });

@@ -1,7 +1,9 @@
 {
   "name": "SYMX Systems",
   "short_name": "SYMX",
-  "start_url": ".",
+  "id": "/app/",
+  "start_url": "/app/",
+  "scope": "/app/",
   "display": "standalone",
   "background_color": "#0A0E1A",
   "theme_color": "#0A0E1A",
