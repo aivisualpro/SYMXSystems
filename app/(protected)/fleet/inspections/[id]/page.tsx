@@ -16,14 +16,17 @@ import { useFleet } from "../../layout";
 import FleetFormModal from "../../components/fleet-form-modal";
 
 /* ── helpers ─────────────────────────────────────────────────────── */
-const fmtDate = (d: any) => !d ? "—" : new Date(d).toLocaleDateString("en-US", {
+const fmtDate = (d: any, tz?: string) => !d ? "—" : new Date(d).toLocaleDateString("en-US", {
     weekday: "short", month: "long", day: "numeric", year: "numeric",
+    ...(tz ? { timeZone: tz } : {}),
 });
-const fmtDateShort = (d: any) => !d ? "—" : new Date(d).toLocaleDateString("en-US", {
+const fmtDateShort = (d: any, tz?: string) => !d ? "—" : new Date(d).toLocaleDateString("en-US", {
     month: "short", day: "numeric", year: "numeric",
+    ...(tz ? { timeZone: tz } : {}),
 });
-const fmtTime = (d: any) => !d ? "—" : new Date(d).toLocaleTimeString("en-US", {
+const fmtTime = (d: any, tz?: string) => !d ? "—" : new Date(d).toLocaleTimeString("en-US", {
     hour: "numeric", minute: "2-digit",
+    ...(tz ? { timeZone: tz } : {}),
 });
 
 /* ── Image Compare Slider (ref-based, zero re-renders) ───────────── */
@@ -184,7 +187,8 @@ function InspectionDetailPageContent() {
     const params = useParams();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const id = params?.id as string;
+    // Works at both /fleet/inspections/[id] and /fleet/vehicles/[vid]/inspections/[inspectionId]
+    const id = (params?.inspectionId || params?.id) as string;
     const returnTo = searchParams?.get("returnTo");
 
     const { openEditModal } = useFleet();
@@ -206,6 +210,15 @@ function InspectionDetailPageContent() {
     const [master, setMaster] = useState<any>(null);
     const [compareError, setCompareError] = useState<string | null>(null);
     const [showCompareMenu, setShowCompareMenu] = useState(false);
+
+    // System Timezone
+    const [systemTimezone, setSystemTimezone] = useState<string>("America/Los_Angeles");
+    useEffect(() => {
+        fetch("/api/admin/settings/general")
+            .then(r => r.json())
+            .then(d => { if (d?.system_timezone) setSystemTimezone(d.system_timezone); })
+            .catch(() => {});
+    }, []);
 
     const { setRightContent, setLeftContent } = useHeaderActions();
 
@@ -668,7 +681,7 @@ function InspectionDetailPageContent() {
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5">Timestamp</p>
-                                        <p className="text-sm font-bold text-foreground">{fmtDate(inspection.timeStamp)} · {fmtTime(inspection.timeStamp)}</p>
+                                        <p className="text-sm font-bold text-foreground">{fmtDate(inspection.timeStamp, systemTimezone)} · {fmtTime(inspection.timeStamp, systemTimezone)}</p>
                                     </div>
                                 </div>
                             </div>
