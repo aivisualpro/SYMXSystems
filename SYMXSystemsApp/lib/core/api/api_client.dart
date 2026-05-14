@@ -90,8 +90,14 @@ class _UnauthorizedInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    if (err.response?.statusCode == 401 &&
-        err.requestOptions.path.startsWith('/api/mobile/')) {
+    final path = err.requestOptions.path;
+    // Only force-logout on 401s from *authenticated* endpoints.
+    // The badge-login endpoint itself is public — a 401 there just
+    // means "wrong credentials" and should surface as an error, not
+    // trigger a logout redirect.
+    final isAuthEndpoint = path.startsWith('/api/mobile/') &&
+        !path.contains('badge-login');
+    if (err.response?.statusCode == 401 && isAuthEndpoint) {
       _onUnauthorized();
     }
     handler.next(err);

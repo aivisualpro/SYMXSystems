@@ -12,12 +12,15 @@ import 'login_widgets.dart';
 
 // ─── State ─────────────────────────────────────────────────────────
 final _loginLoadingProvider = StateProvider<bool>((_) => false);
-final _loginErrorProvider = StateProvider<String?>((_) => null);
+final _loginErrorProvider   = StateProvider<String?>((_) => null);
 
-/// Login screen that matches the look and feel of the existing
-/// SYMX Logistics web login (see app/login/page.tsx) — scenic
-/// background, rising blue particles, full-color wordmark, dark blue
-/// gradient card with the original blue Sign In button.
+/// Login screen — single card with two input options on the same view:
+///   • Badge PIN  (4-digit badgeNumber)       — top
+///   • ── or ──                               — divider
+///   • Email      (SYMXEmployees.email)       — bottom
+///
+/// Whichever field is non-empty when Sign In is tapped is used.
+/// If both are filled, PIN takes priority.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -26,34 +29,51 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _pinController = TextEditingController();
-  final _pinFocusNode = FocusNode();
+  final _pinController   = TextEditingController();
+  final _pinFocusNode    = FocusNode();
+  final _emailController = TextEditingController();
+  final _emailFocusNode  = FocusNode();
 
   @override
   void dispose() {
     _pinController.dispose();
     _pinFocusNode.dispose();
+    _emailController.dispose();
+    _emailFocusNode.dispose();
     super.dispose();
   }
 
+  // ── Decide which method to use based on what the user filled ─────
   Future<void> _handleLogin([String? _]) async {
-    final pin = _pinController.text.trim();
-    if (pin.length < 4) return;
+    final pin   = _pinController.text.trim();
+    final email = _emailController.text.trim();
+
+    // Need at least one filled
+    if (pin.isEmpty && email.isEmpty) return;
+
+    // PIN takes priority if filled
+    if (pin.isNotEmpty && pin.length < 4) return;
 
     ref.read(_loginErrorProvider.notifier).state = null;
     ref.read(_loginLoadingProvider.notifier).state = true;
 
     try {
-      await ref.read(authRepositoryProvider).login(pin);
-      HapticFeedback.mediumImpact();
+      if (pin.isNotEmpty) {
+        await ref.read(authRepositoryProvider).login(pin);
+      } else {
+        await ref.read(authRepositoryProvider).loginWithEmail(email);
+      }
 
+      HapticFeedback.mediumImpact();
       if (mounted) {
         ref.invalidate(currentEmployeeProvider);
         ref.read(showWelcomeOverlayProvider.notifier).state = true;
         context.go('/home');
       }
     } catch (e) {
-      String msg = 'Invalid badge number. Please try again.';
+      String msg = pin.isNotEmpty
+          ? 'Invalid badge number. Please try again.'
+          : 'No active employee found with that email.';
       if (e is DioException && e.response?.data != null) {
         final serverMsg = e.response?.data['error'];
         if (serverMsg != null) msg = serverMsg.toString();
@@ -61,19 +81,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         msg = 'Network error — check your connection.';
       }
       ref.read(_loginErrorProvider.notifier).state = msg;
-      _pinController.clear();
-      _pinFocusNode.requestFocus();
-    } finally {
-      if (mounted) {
-        ref.read(_loginLoadingProvider.notifier).state = false;
+      if (pin.isNotEmpty) {
+        _pinController.clear();
+        _pinFocusNode.requestFocus();
       }
+    } finally {
+      if (mounted) ref.read(_loginLoadingProvider.notifier).state = false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isLoading = ref.watch(_loginLoadingProvider);
-    final error = ref.watch(_loginErrorProvider);
+    final error     = ref.watch(_loginErrorProvider);
 
     return Scaffold(
       backgroundColor: LoginBrand.base,
@@ -81,13 +101,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── Scenic background image with slow zoom + dark blue overlay ──
+          // ── Scenic background + overlay ──
           const LoginScenicBg(),
-
-          // ── Rising blue particles ──
           const LoginParticles(),
 
-          // ── Foreground content ──
+          // ── Foreground ──
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
@@ -97,86 +115,122 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // ── Logo + heading section ──
+                      // ── Logo ──
                       const LoginWordmark()
                           .animate()
                           .fadeIn(duration: 1200.ms)
-                          .slideX(
-                            begin: -0.05,
-                            end: 0,
-                            duration: 1200.ms,
-                            curve: Curves.easeOutCubic,
-                          ),
+                          .slideX(begin: -0.05, end: 0, duration: 1200.ms, curve: Curves.easeOutCubic),
 
                       const SizedBox(height: 24),
 
                       const LoginHeading(
                         title: 'Welcome Back',
                         subtitle: 'Sign in to your account to continue',
-                      )
-                          .animate()
-                          .fadeIn(delay: 500.ms, duration: 800.ms),
+                      ).animate().fadeIn(delay: 500.ms, duration: 800.ms),
 
                       const SizedBox(height: 40),
 
                       // ── Card ──
                       LoginCard(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const LoginFieldLabel(text: 'Badge PIN'),
-                            const SizedBox(height: 4),
-                            // PIN input + button both react to controller
-                            // changes via ListenableBuilder so the CTA
-                            // enables the moment the 4th digit is entered.
-                            ListenableBuilder(
-                              listenable: _pinController,
-                              builder: (context, _) {
-                                final filled =
-                                    _pinController.text.length >= 4;
-                                return Column(
-                                  mainAxisSize: MainAxisSize.min,
+                        child: ListenableBuilder(
+                          listenable: Listenable.merge([_pinController, _emailController]),
+                          builder: (context, _) {
+                            final pinFilled   = _pinController.text.length >= 4;
+                            final emailFilled = _emailController.text.trim().isNotEmpty;
+                            final canSubmit   = pinFilled || emailFilled;
+
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+
+                                // ── Badge PIN field ──────────────────
+                                const LoginFieldLabel(text: 'Badge PIN'),
+                                const SizedBox(height: 4),
+                                LoginPinInput(
+                                  controller: _pinController,
+                                  focusNode: _pinFocusNode,
+                                  enabled: !isLoading,
+                                  onCompleted: _handleLogin,
+                                ),
+
+                                const SizedBox(height: 24),
+
+                                // ── "or" divider ─────────────────────
+                                Row(
                                   children: [
-                                    LoginPinInput(
-                                      controller: _pinController,
-                                      focusNode: _pinFocusNode,
-                                      enabled: true,
-                                      onCompleted: _handleLogin,
+                                    Expanded(
+                                      child: Container(
+                                        height: 1,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(colors: [
+                                            Colors.transparent,
+                                            Colors.white.withValues(alpha: 0.15),
+                                          ]),
+                                        ),
+                                      ),
                                     ),
-                                    const SizedBox(height: 16),
-                                    if (error != null)
-                                      LoginErrorChip(message: error)
-                                          .animate()
-                                          .shakeX(
-                                            hz: 4,
-                                            amount: 4,
-                                            duration: 400.ms,
-                                          )
-                                          .fadeIn(duration: 200.ms),
-                                    const SizedBox(height: 20),
-                                    LoginPrimaryButton(
-                                      onPressed: (isLoading || !filled)
-                                          ? null
-                                          : _handleLogin,
-                                      loading: isLoading,
-                                      label: 'Sign In',
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                                      child: Text(
+                                        'or',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w400,
+                                          letterSpacing: 0.5,
+                                          color: Colors.white.withValues(alpha: 0.35),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Container(
+                                        height: 1,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(colors: [
+                                            Colors.white.withValues(alpha: 0.15),
+                                            Colors.transparent,
+                                          ]),
+                                        ),
+                                      ),
                                     ),
                                   ],
-                                );
-                              },
-                            ),
-                          ],
+                                ),
+
+                                const SizedBox(height: 24),
+
+                                // ── Email field ───────────────────────
+                                const LoginFieldLabel(text: 'Email'),
+                                const SizedBox(height: 4),
+                                LoginEmailInput(
+                                  controller: _emailController,
+                                  focusNode: _emailFocusNode,
+                                  enabled: !isLoading,
+                                  onSubmitted: _handleLogin,
+                                ),
+
+                                const SizedBox(height: 20),
+
+                                // ── Error chip ───────────────────────
+                                if (error != null)
+                                  LoginErrorChip(message: error)
+                                      .animate()
+                                      .shakeX(hz: 4, amount: 4, duration: 400.ms)
+                                      .fadeIn(duration: 200.ms),
+                                if (error != null) const SizedBox(height: 16),
+
+                                // ── Sign In button ────────────────────
+                                LoginPrimaryButton(
+                                  onPressed: (isLoading || !canSubmit) ? null : _handleLogin,
+                                  loading: isLoading,
+                                  label: 'Sign In',
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       )
                           .animate()
                           .fadeIn(delay: 400.ms, duration: 700.ms)
-                          .slideY(
-                            begin: 0.06,
-                            end: 0,
-                            delay: 400.ms,
-                            duration: 700.ms,
-                            curve: Curves.easeOutCubic,
-                          ),
+                          .slideY(begin: 0.06, end: 0, delay: 400.ms, duration: 700.ms, curve: Curves.easeOutCubic),
                     ],
                   ),
                 ),

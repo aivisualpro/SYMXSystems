@@ -5,7 +5,9 @@
 library;
 
 /// Base URL for all API calls to the SYMX Systems backend.
-const String kApiBaseUrl = 'https://symx-systems.vercel.app';
+/// Empty string = relative URLs, so the app calls whatever host serves it
+/// (works for both local dev at localhost:9568 and production on Vercel).
+const String kApiBaseUrl = '';
 
 /// Human-readable application name used in titles and branding.
 const String kAppName = 'SYMX Systems';

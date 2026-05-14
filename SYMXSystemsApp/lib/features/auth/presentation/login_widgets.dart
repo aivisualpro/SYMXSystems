@@ -14,6 +14,7 @@ class LoginBrand {
   static const Color blue600 = Color(0xFF2563EB);
   static const Color blue700 = Color(0xFF1D4ED8);
   static const Color blue500 = Color(0xFF3B82F6);
+  static const Color blue400 = Color(0xFF60A5FA);
   static const Color zinc400 = Color(0xFFA1A1AA);
   static const Color zinc300 = Color(0xFFD4D4D8);
 
@@ -758,6 +759,113 @@ class _LoginPrimaryButtonState extends State<LoginPrimaryButton> {
                   ],
                 ),
         ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EMAIL INPUT — styled to match the original .login-input aesthetics
+// ═══════════════════════════════════════════════════════════════════
+
+
+class LoginEmailInput extends StatefulWidget {
+  const LoginEmailInput({
+    super.key,
+    required this.controller,
+    required this.focusNode,
+    required this.enabled,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool enabled;
+  final ValueChanged<String> onSubmitted;
+
+  @override
+  State<LoginEmailInput> createState() => _LoginEmailInputState();
+}
+
+class _LoginEmailInputState extends State<LoginEmailInput> {
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() => setState(() => _focused = widget.focusNode.hasFocus);
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      height: 48,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: _focused ? 0.07 : 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _focused
+              ? LoginBrand.blue500.withValues(alpha: 0.5)
+              : Colors.white.withValues(alpha: 0.10),
+          width: 1,
+        ),
+        boxShadow: _focused
+            ? [
+                BoxShadow(
+                  color: LoginBrand.blue500.withValues(alpha: 0.10),
+                  blurRadius: 20,
+                  spreadRadius: 0,
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 14),
+          Icon(
+            Icons.mail_outline_rounded,
+            size: 16,
+            color: _focused
+                ? LoginBrand.blue400
+                : Colors.white.withValues(alpha: 0.45),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: widget.controller,
+              focusNode: widget.focusNode,
+              enabled: widget.enabled,
+              autofocus: false,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.go,
+              onSubmitted: widget.onSubmitted,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: const Color(0xFFE4E4E7),
+              ),
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                hintText: 'driver@symxlogistics.com',
+                hintStyle: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.white.withValues(alpha: 0.35),
+                ),
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+        ],
       ),
     );
   }

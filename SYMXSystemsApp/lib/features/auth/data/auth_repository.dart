@@ -12,6 +12,7 @@ import '../../../core/constants/app_constants.dart';
 class Employee {
   final String transporterId;
   final String badgeNumber;
+  final String email;
   final String firstName;
   final String lastName;
   final String fullName;
@@ -21,6 +22,7 @@ class Employee {
   const Employee({
     required this.transporterId,
     required this.badgeNumber,
+    required this.email,
     required this.firstName,
     required this.lastName,
     required this.fullName,
@@ -30,27 +32,29 @@ class Employee {
 
   factory Employee.fromJson(Map<String, dynamic> json) => Employee(
         transporterId: json['transporterId'] ?? '',
-        badgeNumber: json['badgeNumber'] ?? '',
-        firstName: json['firstName'] ?? '',
-        lastName: json['lastName'] ?? '',
-        fullName: json['fullName'] ?? '',
-        profileImage: json['profileImage'] ?? '',
-        type: json['type'] ?? '',
+        badgeNumber:   json['badgeNumber']   ?? '',
+        email:         json['email']         ?? '',
+        firstName:     json['firstName']     ?? '',
+        lastName:      json['lastName']      ?? '',
+        fullName:      json['fullName']      ?? '',
+        profileImage:  json['profileImage']  ?? '',
+        type:          json['type']          ?? '',
       );
 
   Map<String, dynamic> toJson() => {
         'transporterId': transporterId,
-        'badgeNumber': badgeNumber,
-        'firstName': firstName,
-        'lastName': lastName,
-        'fullName': fullName,
-        'profileImage': profileImage,
-        'type': type,
+        'badgeNumber':   badgeNumber,
+        'email':         email,
+        'firstName':     firstName,
+        'lastName':      lastName,
+        'fullName':      fullName,
+        'profileImage':  profileImage,
+        'type':          type,
       };
 }
 
 // ─── Auth Repository ───────────────────────────────────────────────
-/// Handles badge-number authentication, token persistence, and
+/// Handles badge-number / email authentication, token persistence, and
 /// employee profile retrieval.
 class AuthRepository {
   AuthRepository(this._dio, this._storage);
@@ -58,10 +62,22 @@ class AuthRepository {
   final Dio _dio;
   final FlutterSecureStorage _storage;
 
-  /// POST /api/mobile/badge-login
+  // ── Shared persistence helper ──────────────────────────────────────
+  Future<Employee> _persistSession(Map<String, dynamic> data) async {
+    if (data['success'] != true) {
+      throw Exception(data['error'] ?? 'Login failed');
+    }
+    final token    = data['token']    as String;
+    final employee = Employee.fromJson(data['employee'] as Map<String, dynamic>);
+    await _storage.write(key: kBadgeTokenKey, value: token);
+    await _storage.write(key: kEmployeeKey,   value: jsonEncode(employee.toJson()));
+    return employee;
+  }
+
+  /// POST /api/mobile/badge-login  { badgeNumber }
   ///
-  /// On success: persists the JWT and serialised employee JSON.
-  /// Returns the [Employee] object.
+  /// PIN-style badge login. On success: persists the JWT and serialised
+  /// employee JSON. Returns the [Employee] object.
   /// Throws on network or auth failure.
   Future<Employee> login(String badgeNumber) async {
     final response = await _dio.post(
@@ -69,23 +85,21 @@ class AuthRepository {
       data: {'badgeNumber': badgeNumber.trim()},
       options: Options(validateStatus: (_) => true),
     );
+    return _persistSession(response.data as Map<String, dynamic>);
+  }
 
-    final data = response.data;
-    if (data['success'] != true) {
-      throw Exception(data['error'] ?? 'Login failed');
-    }
-
-    final token = data['token'] as String;
-    final employee = Employee.fromJson(data['employee']);
-
-    // Persist to secure storage.
-    await _storage.write(key: kBadgeTokenKey, value: token);
-    await _storage.write(
-      key: kEmployeeKey,
-      value: jsonEncode(employee.toJson()),
+  /// POST /api/mobile/badge-login  { email }
+  ///
+  /// Email-based login. On success: persists the JWT and serialised
+  /// employee JSON. Returns the [Employee] object.
+  /// Throws on network or auth failure.
+  Future<Employee> loginWithEmail(String email) async {
+    final response = await _dio.post(
+      '/api/mobile/badge-login',
+      data: {'email': email.trim().toLowerCase()},
+      options: Options(validateStatus: (_) => true),
     );
-
-    return employee;
+    return _persistSession(response.data as Map<String, dynamic>);
   }
 
   /// GET /api/mobile/me
