@@ -14,6 +14,7 @@ import connectToDatabase from "@/lib/db";
 import DailyInspection from "@/lib/models/DailyInspection";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import Vehicle from "@/lib/models/Vehicle";
+import VehicleRepair from "@/lib/models/VehicleRepair";
 
 // ────────────────────────────────────────────────────────────────────
 // Types
@@ -172,6 +173,19 @@ export async function createInspectionForRoute(
   // ── Write-back to SYMXRoute (fire-and-forget) ──────────────────
   writeBackToRoute(input.routeId, inspectionTime, inspectionId);
 
+  // ── Auto-create VehicleRepair if anyRepairs = TRUE ─────────────
+  if (input.anyRepairs === "TRUE") {
+    writeRepairRecord({
+      vehicleId,
+      vin,
+      unitNumber,
+      description: input.repairDescription || "",
+      currentStatus: input.repairCurrentStatus || "Not Started",
+      repairImage: input.repairImage || null,
+      inspectionId,
+    });
+  }
+
   return {
     inspection: {
       _id: inspectionId,
@@ -199,6 +213,44 @@ function writeBackToRoute(
     .catch((err) => {
       console.error(
         `[createInspectionForRoute] SYMXRoute write-back failed for ${routeId}:`,
+        err
+      );
+    });
+}
+
+// ────────────────────────────────────────────────────────────────────
+// VehicleRepair auto-create (never throws)
+// ────────────────────────────────────────────────────────────────────
+
+function writeRepairRecord(opts: {
+  vehicleId: any;
+  vin: string;
+  unitNumber: string;
+  description: string;
+  currentStatus: string;
+  repairImage: string | null;
+  inspectionId: string;
+}): void {
+  VehicleRepair.create({
+    vehicleId: opts.vehicleId || undefined,
+    vin: opts.vin || "",
+    unitNumber: opts.unitNumber || "",
+    description: opts.description || "",
+    currentStatus: opts.currentStatus || "Not Started",
+    images: opts.repairImage ? [opts.repairImage] : [],
+    creationDate: new Date(),
+    lastEditOn: new Date(),
+    // Link back to the inspection that triggered this repair
+    sourceInspectionId: opts.inspectionId,
+  })
+    .then(() => {
+      console.log(
+        `[createInspectionForRoute] VehicleRepair created for inspection ${opts.inspectionId}`
+      );
+    })
+    .catch((err) => {
+      console.error(
+        `[createInspectionForRoute] VehicleRepair write failed for inspection ${opts.inspectionId}:`,
         err
       );
     });

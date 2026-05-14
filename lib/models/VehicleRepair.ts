@@ -16,6 +16,7 @@ export interface IVehicleRepair extends Document {
   completionDate: Date;
   lastEditOn: Date;
   repairDuration: number; // in days
+  sourceInspectionId?: mongoose.Types.ObjectId; // set when auto-created from a DailyInspection
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +41,8 @@ const VehicleRepairSchema: Schema = new Schema({
   completionDate: { type: Date },
   lastEditOn: { type: Date, default: Date.now },
   repairDuration: { type: Number, default: 0 },
+  // Set when this repair was auto-created from a DailyInspection
+  sourceInspectionId: { type: Schema.Types.ObjectId, ref: 'DailyInspection', default: null },
 }, {
   timestamps: true,
   collection: 'vehiclesRepairs'
