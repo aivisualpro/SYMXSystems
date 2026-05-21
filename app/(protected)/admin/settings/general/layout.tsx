@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Route, ListFilter, Settings, Plus, Wrench } from "lucide-react";
+import { Route, ListFilter, Settings, Plus, Wrench, Pencil } from "lucide-react";
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { AddRefContext } from "./_components/add-ref-context";
@@ -18,14 +18,15 @@ export default function GeneralSettingsLayout({ children }: { children: React.Re
     const pathname = usePathname();
     const router = useRouter();
     const addRef = useRef<(() => void) | null>(null);
+    const quickEditRef = useRef<(() => void) | null>(null);
 
     const activeTab = SUB_TABS.find(t => pathname.endsWith(`/${t.id}`))?.id || SUB_TABS[0].id;
 
     return (
-        <AddRefContext.Provider value={{ addRef }}>
-            <div className="space-y-4">
+        <AddRefContext.Provider value={{ addRef, quickEditRef }}>
+            <div className="flex flex-col h-full overflow-hidden">
                 {/* Sub-tabs + action button */}
-                <div className="flex items-center justify-between border-b border-border/50 pb-0">
+                <div className="flex items-center justify-between border-b border-border/50 pb-0 shrink-0">
                     <div className="flex items-center gap-1">
                         {SUB_TABS.map((tab) => {
                             const isActive = activeTab === tab.id;
@@ -56,10 +57,16 @@ export default function GeneralSettingsLayout({ children }: { children: React.Re
                         </Button>
                     )}
                     {activeTab === "dropdowns" && (
-                        <Button size="sm" onClick={() => addRef.current?.()} className="gap-1.5 mb-1">
-                            <Plus className="h-3.5 w-3.5" />
-                            Add Option
-                        </Button>
+                        <div className="flex items-center gap-1.5 mb-1">
+                            <Button size="sm" variant="outline" onClick={() => quickEditRef.current?.()} className="gap-1.5">
+                                <Pencil className="h-3.5 w-3.5" />
+                                Quick Edit
+                            </Button>
+                            <Button size="sm" onClick={() => addRef.current?.()} className="gap-1.5">
+                                <Plus className="h-3.5 w-3.5" />
+                                Add Option
+                            </Button>
+                        </div>
                     )}
                     {activeTab === "wst" && (
                         <Button size="sm" onClick={() => addRef.current?.()} className="gap-1.5 mb-1">
@@ -70,7 +77,9 @@ export default function GeneralSettingsLayout({ children }: { children: React.Re
                 </div>
 
                 {/* Tab Content */}
-                {children}
+                <div className="flex-1 min-h-0 overflow-hidden pt-4">
+                    {children}
+                </div>
             </div>
         </AddRefContext.Provider>
     );

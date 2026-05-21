@@ -9,6 +9,9 @@ export interface IDropdownOption extends Document {
     color?: string;
     icon?: string;
     defaultPad?: string;
+    metricTypeDisplay?: string;
+    metricTypeGoal?: string;
+    metricpercentage?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -22,6 +25,9 @@ const DropdownOptionSchema: Schema = new Schema({
     color: { type: String, default: '' },
     icon: { type: String, default: '' },
     defaultPad: { type: String, default: '' },
+    metricTypeDisplay: { type: String, default: '' },
+    metricTypeGoal: { type: String, default: '' },
+    metricpercentage: { type: String, default: '' },
 }, { timestamps: true, collection: 'SYMXDropdownOptions' });
 
 // Compound unique: same description + type can't exist twice

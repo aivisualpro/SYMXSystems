@@ -15,7 +15,9 @@ import {
   Target,
   Loader2,
   X,
+  Plus,
 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +27,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CoachingWriteUp {
   _id: string;
@@ -36,6 +45,9 @@ interface CoachingWriteUp {
   incidentWeek?: string;
   type?: string;
   metric?: string;
+  metricName?: string;
+  metricIcon?: string;
+  metricColor?: string;
   correctiveActionNumber?: string;
   metricNoticeNumber?: string;
   correctiveAction?: string;
@@ -79,7 +91,7 @@ function formatDate(dateStr?: string) {
 }
 
 export default function CoachingWriteupsPage() {
-  const { searchQuery } = useDispatching();
+  const { searchQuery, setOnCoachingAdd, availableWeeks } = useDispatching();
   const [data, setData] = useState<CoachingWriteUp[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
@@ -87,6 +99,9 @@ export default function CoachingWriteupsPage() {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [detailModal, setDetailModal] = useState<CoachingWriteUp | null>(null);
   const [localSearch, setLocalSearch] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
 
   const fetchData = useCallback(async (pageNum = 1, search = "") => {
     setLoading(true);
@@ -113,6 +128,38 @@ export default function CoachingWriteupsPage() {
     fetchData(page, query);
   }, [page, searchQuery, localSearch, fetchData]);
 
+  // Register add handler with layout
+  useEffect(() => {
+    setOnCoachingAdd(() => () => {
+      setAddForm({});
+      setShowAddModal(true);
+    });
+    return () => setOnCoachingAdd(null);
+  }, [setOnCoachingAdd]);
+
+  const handleAddSave = async () => {
+    setSaving(true);
+    try {
+      const body: any = { ...addForm };
+      if (body.incidentDate) body.incidentDate = new Date(body.incidentDate).toISOString();
+      if (body.correctiveActionDate) body.correctiveActionDate = new Date(body.correctiveActionDate).toISOString();
+      if (body.improvedByDate) body.improvedByDate = new Date(body.improvedByDate).toISOString();
+      const res = await fetch("/api/admin/coaching-writeups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Failed to create");
+      setShowAddModal(false);
+      setAddForm({});
+      fetchData(page, searchQuery || localSearch);
+    } catch (err) {
+      console.error("Failed to add:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Filter locally by the dispatching layout's search
   const filteredData = useMemo(() => {
     if (!searchQuery && !localSearch) return data;
@@ -121,7 +168,7 @@ export default function CoachingWriteupsPage() {
       (r) =>
         (r.employeeName || "").toLowerCase().includes(q) ||
         (r.type || "").toLowerCase().includes(q) ||
-        (r.metric || "").toLowerCase().includes(q) ||
+        (r.metricName || "").toLowerCase().includes(q) ||
         (r.supervisorName || "").toLowerCase().includes(q)
     );
   }, [data, searchQuery, localSearch]);
@@ -135,6 +182,26 @@ export default function CoachingWriteupsPage() {
     if (t.includes("termination")) return "bg-rose-600/15 text-rose-400 border-rose-600/30";
     return "bg-primary/10 text-primary border-primary/30";
   };
+  // Group by type
+  const groupedData = useMemo(() => {
+    const groups: { type: string; rows: CoachingWriteUp[] }[] = [];
+    const groupMap = new Map<string, CoachingWriteUp[]>();
+
+    for (const row of filteredData) {
+      const t = row.type || "Uncategorized";
+      if (!groupMap.has(t)) {
+        groupMap.set(t, []);
+      }
+      groupMap.get(t)!.push(row);
+    }
+
+    // Sort groups alphabetically
+    const sortedKeys = Array.from(groupMap.keys()).sort();
+    for (const key of sortedKeys) {
+      groups.push({ type: key, rows: groupMap.get(key)! });
+    }
+    return groups;
+  }, [filteredData]);
 
   return (
     <div className="flex flex-col h-full gap-3 px-1">
@@ -147,7 +214,6 @@ export default function CoachingWriteupsPage() {
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground w-[30px]"></th>
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Employee</th>
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Date</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Type</th>
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Metric</th>
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Corrective Action</th>
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Supervisor</th>
@@ -159,77 +225,99 @@ export default function CoachingWriteupsPage() {
           <tbody className="divide-y divide-border/50">
             {loading ? (
               <tr>
-                <td colSpan={10} className="text-center py-16">
+                <td colSpan={9} className="text-center py-16">
                   <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
                 </td>
               </tr>
-            ) : filteredData.length === 0 ? (
+            ) : groupedData.length === 0 ? (
               <tr>
-                <td colSpan={10} className="text-center py-16 text-muted-foreground">
+                <td colSpan={9} className="text-center py-16 text-muted-foreground">
                   No coaching writeups found
                 </td>
               </tr>
             ) : (
-              filteredData.map((row) => {
-                const isExpanded = expandedRow === row._id;
-                return (
-                  <React.Fragment key={row._id}>
-                    <tr
-                      className={cn(
-                        "hover:bg-muted/30 transition-colors cursor-pointer",
-                        isExpanded && "bg-muted/20"
-                      )}
-                      onClick={() => setExpandedRow(isExpanded ? null : row._id)}
-                    >
-                      <td className="px-3 py-2.5">
-                        {isExpanded ? (
-                          <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className="font-semibold text-foreground">{row.employeeName || "—"}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-muted-foreground">{formatDate(row.incidentDate)}</td>
-                      <td className="px-3 py-2.5">
-                        <span className={cn("inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border", getTypeBadgeColor(row.type))}>
-                          {row.type || "—"}
+              groupedData.map((group) => (
+                <React.Fragment key={group.type}>
+                  {/* ── Group header ── */}
+                  <tr className="bg-muted/40 border-t border-border">
+                    <td colSpan={9} className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-bold border", getTypeBadgeColor(group.type))}>
+                          {group.type}
                         </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-muted-foreground max-w-[150px] truncate">{row.metric || "—"}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground max-w-[200px] truncate">{row.correctiveAction || "—"}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground">{row.supervisorName || "—"}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground font-mono text-[10px]">{row.incidentWeek || "—"}</td>
-                      <td className="px-3 py-2.5">
-                        {(row.files && row.files.length > 0) ? (
-                          <Badge variant="secondary" className="text-[10px] gap-1">
-                            <FileText className="h-3 w-3" />
-                            {row.files.length}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDetailModal(row);
-                          }}
+                        <Badge variant="secondary" className="text-[10px] font-mono">
+                          {group.rows.length}
+                        </Badge>
+                      </div>
+                    </td>
+                  </tr>
+
+                  {/* ── Group rows ── */}
+                  {group.rows.map((row) => {
+                    const isExpanded = expandedRow === row._id;
+                    return (
+                      <React.Fragment key={row._id}>
+                        <tr
+                          className={cn(
+                            "hover:bg-muted/30 transition-colors cursor-pointer",
+                            isExpanded && "bg-muted/20"
+                          )}
+                          onClick={() => setExpandedRow(isExpanded ? null : row._id)}
                         >
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                      </td>
-                    </tr>
+                          <td className="px-3 py-2.5">
+                            {isExpanded ? (
+                              <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="font-semibold text-foreground">{row.employeeName || "—"}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-muted-foreground">{formatDate(row.incidentDate)}</td>
+                          <td className="px-3 py-2.5 text-muted-foreground max-w-[180px]">
+                            {row.metricName ? (
+                              <span className="inline-flex items-center gap-1.5 truncate">
+                                {row.metricIcon && (() => {
+                                  const IconComp = (LucideIcons as any)[row.metricIcon];
+                                  return IconComp ? <IconComp className="h-3.5 w-3.5 shrink-0" style={row.metricColor ? { color: row.metricColor } : undefined} /> : null;
+                                })()}
+                                <span className="truncate">{row.metricName}</span>
+                              </span>
+                            ) : "—"}
+                          </td>
+                          <td className="px-3 py-2.5 text-muted-foreground max-w-[200px] truncate">{row.correctiveAction || "—"}</td>
+                          <td className="px-3 py-2.5 text-muted-foreground">{row.supervisorName || "—"}</td>
+                          <td className="px-3 py-2.5 text-muted-foreground font-mono text-[10px]">{row.incidentWeek || "—"}</td>
+                          <td className="px-3 py-2.5">
+                            {(row.files && row.files.length > 0) ? (
+                              <Badge variant="secondary" className="text-[10px] gap-1">
+                                <FileText className="h-3 w-3" />
+                                {row.files.length}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDetailModal(row);
+                              }}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
 
                     {/* ── Expanded row detail ── */}
                     {isExpanded && (
                       <tr className="bg-muted/10">
-                        <td colSpan={10} className="px-6 py-4">
+                        <td colSpan={9} className="px-6 py-4">
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 text-xs">
                             <div>
                               <span className="text-muted-foreground block text-[10px] uppercase tracking-wider mb-0.5">Duration</span>
@@ -314,9 +402,11 @@ export default function CoachingWriteupsPage() {
                         </td>
                       </tr>
                     )}
-                  </React.Fragment>
-                );
-              })
+                      </React.Fragment>
+                    );
+                  })}
+                </React.Fragment>
+              ))
             )}
           </tbody>
         </table>
@@ -383,8 +473,16 @@ export default function CoachingWriteupsPage() {
 
               {/* All fields */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                {[
-                  ["Metric", detailModal.metric],
+                {(() => {
+                  const MetricIconComp = detailModal.metricIcon ? (LucideIcons as any)[detailModal.metricIcon] : null;
+                  const metricDisplay = detailModal.metricName ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      {MetricIconComp && <MetricIconComp className="h-3.5 w-3.5 shrink-0" style={detailModal.metricColor ? { color: detailModal.metricColor } : undefined} />}
+                      {detailModal.metricName}
+                    </span>
+                  ) : undefined;
+                  return [
+                    ["Metric", metricDisplay],
                   ["Metric Value", detailModal.metricValue],
                   ["Duration", detailModal.durationOfIncident],
                   ["Corrective Action #", detailModal.correctiveActionNumber],
@@ -395,7 +493,8 @@ export default function CoachingWriteupsPage() {
                   ["Total Neg. Feedbacks", detailModal.totalNegativeFeedbacks],
                   ["Goal", detailModal.goal],
                   ["Week", detailModal.incidentWeek],
-                ].map(([label, value]) => (
+                  ];
+                })().map(([label, value]) => (
                   <div key={label as string}>
                     <span className="text-muted-foreground text-[10px] uppercase tracking-wider block mb-0.5">{label}</span>
                     <span>{value || "—"}</span>
@@ -464,6 +563,143 @@ export default function CoachingWriteupsPage() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Modal ── */}
+      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-amber-500" />
+              Add Coaching & Writeup
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            {/* Row 1: Type + Duration */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Type</label>
+                <Select
+                  value={addForm.type || ""}
+                  onValueChange={(v) => setAddForm((prev) => ({ ...prev, type: v, durationOfIncident: "", incidentDate: "", incidentWeek: "" }))}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Coaching">Coaching</SelectItem>
+                    <SelectItem value="Write Up">Write Up</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {addForm.type && (
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Duration of Incident</label>
+                  <Select
+                    value={addForm.durationOfIncident || ""}
+                    onValueChange={(v) => setAddForm((prev) => ({ ...prev, durationOfIncident: v, incidentDate: "", incidentWeek: "" }))}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Select duration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Day">Day</SelectItem>
+                      <SelectItem value="Week">Week</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {/* Row 2: Conditional date/week */}
+            {addForm.durationOfIncident === "Day" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Incident Date</label>
+                  <Input
+                    type="date"
+                    value={addForm.incidentDate || ""}
+                    onChange={(e) => setAddForm((prev) => ({ ...prev, incidentDate: e.target.value }))}
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+            )}
+            {addForm.durationOfIncident === "Week" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Incident Week</label>
+                  <Select
+                    value={addForm.incidentWeek || ""}
+                    onValueChange={(v) => setAddForm((prev) => ({ ...prev, incidentWeek: v }))}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Select week" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[240px]">
+                      {(availableWeeks || []).map((w) => (
+                        <SelectItem key={w} value={w}>{w}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {/* Remaining fields */}
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { key: "metric", label: "Metric", type: "text" },
+                { key: "metricValue", label: "Metric Value", type: "text" },
+                { key: "correctiveActionNumber", label: "Corrective Action #", type: "text" },
+                { key: "metricNoticeNumber", label: "Metric Notice #", type: "text" },
+                { key: "correctiveAction", label: "Corrective Action", type: "text" },
+                { key: "correctiveActionDate", label: "Corrective Action Date", type: "date" },
+                { key: "improvedByDate", label: "Improved By Date", type: "date" },
+                { key: "totalNegativeFeedbacks", label: "Total Neg. Feedbacks", type: "text" },
+                { key: "goal", label: "Goal", type: "text" },
+              ].map((field) => (
+                <div key={field.key}>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{field.label}</label>
+                  <Input
+                    type={field.type}
+                    value={addForm[field.key] || ""}
+                    onChange={(e) => setAddForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                    className="h-8 text-xs"
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Text areas */}
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Suggestion</label>
+                <textarea
+                  value={addForm.suggestion || ""}
+                  onChange={(e) => setAddForm((prev) => ({ ...prev, suggestion: e.target.value }))}
+                  className="w-full h-16 text-xs rounded-md border border-border bg-background px-3 py-2 resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Prior Discussions / Warnings</label>
+                <textarea
+                  value={addForm.priorDiscussionOrWarningsOnThisSubject || ""}
+                  onChange={(e) => setAddForm((prev) => ({ ...prev, priorDiscussionOrWarningsOnThisSubject: e.target.value }))}
+                  className="w-full h-16 text-xs rounded-md border border-border bg-background px-3 py-2 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" size="sm" onClick={() => setShowAddModal(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleAddSave} disabled={saving} className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                Save
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

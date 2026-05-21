@@ -11,7 +11,7 @@ export interface ISYMXCoachingWriteUp extends Document {
   incidentDate?: Date;
   incidentWeek?: string;
   type?: string;
-  metric?: string;
+  metric?: mongoose.Types.ObjectId;
   correctiveActionNumber?: string;
   metricNoticeNumber?: string;
   correctiveAction?: string;
@@ -57,7 +57,7 @@ const SYMXCoachingWriteUpSchema = new Schema<ISYMXCoachingWriteUp>(
     incidentDate: { type: Date },
     incidentWeek: { type: String, index: true },
     type: { type: String },
-    metric: { type: String },
+    metric: { type: Schema.Types.ObjectId, ref: "DropdownOption" },
     correctiveActionNumber: { type: String },
     metricNoticeNumber: { type: String },
     correctiveAction: { type: String },

@@ -60,7 +60,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 pt-4 overflow-auto">
+      <div className="flex-1 pt-4 overflow-hidden">
         {children}
       </div>
     </div>

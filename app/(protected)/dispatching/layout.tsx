@@ -66,6 +66,7 @@ interface DispatchingContextType {
     selectedDate: string;
     setSelectedDate: (date: string) => void;
     weekDates: string[];
+    availableWeeks: string[];
     searchQuery: string;
     routesGenerated: boolean;
     routesLoading: boolean;
@@ -81,6 +82,9 @@ interface DispatchingContextType {
     /** Shared raw route data for the selected week — fetched once by layout, consumed by all tabs */
     rawRouteData: any;
     rawRouteDataLoading: boolean;
+    /** Callback for coaching page to register its add handler */
+    onCoachingAdd: (() => void) | null;
+    setOnCoachingAdd: (fn: (() => void) | null) => void;
 }
 
 const DispatchingContext = createContext<DispatchingContextType>({
@@ -88,6 +92,7 @@ const DispatchingContext = createContext<DispatchingContextType>({
     selectedDate: "",
     setSelectedDate: () => { },
     weekDates: [],
+    availableWeeks: [],
     searchQuery: "",
     routesGenerated: false,
     routesLoading: false,
@@ -102,6 +107,8 @@ const DispatchingContext = createContext<DispatchingContextType>({
     setConfirmationFilter: () => { },
     rawRouteData: null,
     rawRouteDataLoading: false,
+    onCoachingAdd: null,
+    setOnCoachingAdd: () => { },
 });
 
 export function useDispatching() {
@@ -188,6 +195,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [globalEditMode, setGlobalEditMode] = useState(false);
     const [pdfLoading, setPdfLoading] = useState(false);
     const [confirmationFilter, setConfirmationFilter] = useState("all");
+    const [onCoachingAdd, setOnCoachingAdd] = useState<(() => void) | null>(null);
     const currentWeek = useMemo(() => getCurrentYearWeek(), []);
 
     /** Pick best default week: URL > current > closest ≤ current > latest */
@@ -437,12 +445,13 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     return (
         <DispatchingContext.Provider
             value={{
-                selectedWeek, selectedDate, setSelectedDate, weekDates, searchQuery,
+                selectedWeek, selectedDate, setSelectedDate, weekDates, availableWeeks: weeks, searchQuery,
                 routesGenerated, routesLoading, refreshRoutes, refreshKey, setStats,
                 showRoutesInfo, setShowRoutesInfo,
                 globalEditMode, setGlobalEditMode,
                 confirmationFilter, setConfirmationFilter,
                 rawRouteData, rawRouteDataLoading,
+                onCoachingAdd, setOnCoachingAdd,
             }}
         >
             <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-3">
@@ -581,6 +590,20 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                 >
                                     <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                     {globalEditMode ? "Finish Editing" : "Quick Edit Table"}
+                                </button>
+                            </>
+                        )}
+
+                        {/* Add button — only on /dispatching/coaching-writeups */}
+                        {pathname.includes("/dispatching/coaching-writeups") && onCoachingAdd && (
+                            <>
+                                <div className="w-px h-6 bg-border/60 mx-1" />
+                                <button
+                                    onClick={onCoachingAdd}
+                                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap select-none bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-lg shadow-amber-500/25 hover:brightness-110 hover:shadow-xl hover:shadow-amber-500/30"
+                                >
+                                    <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                    Add
                                 </button>
                             </>
                         )}

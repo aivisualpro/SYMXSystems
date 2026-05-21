@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     await connectToDatabase();
     const body = await req.json();
-        const { _id, description, type, isActive, sortOrder, image, color, icon, defaultPad } = body;
+        const { _id, description, type, isActive, sortOrder, image, color, icon, defaultPad, metricTypeDisplay, metricTypeGoal, metricpercentage } = body;
 
     if (!description?.trim()) {
       return NextResponse.json({ error: "Description is required" }, { status: 400 });
@@ -61,8 +61,11 @@ export async function POST(req: NextRequest) {
           image: image ?? '',
           color: color ?? '',
           icon: icon ?? '',
-                    defaultPad: defaultPad ?? '',
-                },
+          defaultPad: defaultPad ?? '',
+          metricTypeDisplay: metricTypeDisplay ?? '',
+          metricTypeGoal: metricTypeGoal ?? '',
+          metricpercentage: metricpercentage ?? '',
+        },
         { new: true }
       ).lean();
       if (!updated) return NextResponse.json({ error: "Option not found" }, { status: 404 });
@@ -77,6 +80,9 @@ export async function POST(req: NextRequest) {
         color: color ?? '',
         icon: icon ?? '',
         defaultPad: defaultPad ?? '',
+        metricTypeDisplay: metricTypeDisplay ?? '',
+        metricTypeGoal: metricTypeGoal ?? '',
+        metricpercentage: metricpercentage ?? '',
 
       });
       return NextResponse.json(option.toJSON());

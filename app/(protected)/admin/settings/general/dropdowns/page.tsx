@@ -21,6 +21,9 @@ interface DropdownRow {
     color?: string;
     icon?: string;
     defaultPad?: string;
+    metricTypeDisplay?: string;
+    metricTypeGoal?: string;
+    metricpercentage?: string;
     isNew?: boolean;
     isEditing?: boolean;
 }
@@ -336,13 +339,15 @@ function AddOptionModal({
 }
 
 export default function DropdownsPage() {
-    const { addRef } = useAddRef();
+    const { addRef, quickEditRef } = useAddRef();
     const [rows, setRows] = useState<DropdownRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState<string | null>(null);
-    const [selectedType, setSelectedType] = useState<string>("all");
+    const [selectedType, setSelectedType] = useState<string>("");
     const [searchQuery, setSearchQuery] = useState("");
     const [addModalOpen, setAddModalOpen] = useState(false);
+    const [quickEditMode, setQuickEditMode] = useState(false);
+    const [dirtyRowIds, setDirtyRowIds] = useState<Set<string>>(new Set());
 
     const fetchRows = useCallback(async () => {
         try {
@@ -363,7 +368,68 @@ export default function DropdownsPage() {
         setAddModalOpen(true);
     }, []);
 
+    // Quick Edit: toggle all filtered rows into edit mode
+    const toggleQuickEdit = useCallback(() => {
+        setQuickEditMode(prev => {
+            const next = !prev;
+            if (next) {
+                // Enable editing on all rows, but don't mark any as dirty yet
+                setRows(prev => prev.map(r => ({ ...r, isEditing: true })));
+                setDirtyRowIds(new Set());
+            } else {
+                // Cancel: reset editing state
+                setRows(prev => prev.map(r => ({ ...r, isEditing: false })));
+                setDirtyRowIds(new Set());
+            }
+            return next;
+        });
+    }, []);
+
+    // Save only dirty (actually modified) rows
+    const saveAllRows = useCallback(async () => {
+        const dirtyRows = rows.filter(r => r._id && dirtyRowIds.has(r._id));
+        if (dirtyRows.length === 0) {
+            notify.info("No changes to save");
+            setQuickEditMode(false);
+            setRows(prev => prev.map(r => ({ ...r, isEditing: false })));
+            setDirtyRowIds(new Set());
+            return;
+        }
+
+        setSaving("batch");
+        let saved = 0;
+        for (const row of dirtyRows) {
+            try {
+                const res = await fetch("/api/admin/settings/dropdowns", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        _id: row._id,
+                        description: row.description,
+                        type: row.type,
+                        isActive: row.isActive,
+                        sortOrder: row.sortOrder,
+                        image: row.image,
+                        color: row.color,
+                        icon: row.icon,
+                        defaultPad: row.defaultPad,
+                        metricTypeDisplay: row.metricTypeDisplay,
+                        metricTypeGoal: row.metricTypeGoal,
+                        metricpercentage: row.metricpercentage,
+                    }),
+                });
+                if (res.ok) saved++;
+            } catch { /* continue */ }
+        }
+        await fetchRows();
+        setQuickEditMode(false);
+        setDirtyRowIds(new Set());
+        setSaving(null);
+        notify.success(`Saved ${saved} of ${dirtyRows.length} changed rows`);
+    }, [rows, dirtyRowIds, fetchRows]);
+
     useEffect(() => { addRef.current = openAddModal; return () => { addRef.current = null; }; }, [openAddModal, addRef]);
+    useEffect(() => { quickEditRef.current = toggleQuickEdit; return () => { quickEditRef.current = null; }; }, [toggleQuickEdit, quickEditRef]);
 
     const handleAddSave = async (data: Omit<DropdownRow, '_id' | 'isNew' | 'isEditing'>) => {
         setSaving("new-modal");
@@ -396,6 +462,13 @@ export default function DropdownsPage() {
 
     const updateField = (idx: number, field: string, value: any) => {
         setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value, isEditing: true } : r));
+        // Track dirty rows during quick edit
+        if (quickEditMode) {
+            const row = rows[idx];
+            if (row?._id) {
+                setDirtyRowIds(prev => new Set(prev).add(row._id!));
+            }
+        }
     };
 
     const saveRow = async (idx: number) => {
@@ -418,6 +491,9 @@ export default function DropdownsPage() {
                     color: row.color,
                     icon: row.icon,
                     defaultPad: row.defaultPad,
+                    metricTypeDisplay: row.metricTypeDisplay,
+                    metricTypeGoal: row.metricTypeGoal,
+                    metricpercentage: row.metricpercentage,
                 }),
             });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
@@ -454,10 +530,24 @@ export default function DropdownsPage() {
         return [...typeSet].sort();
     }, [rows]);
 
+    // Auto-select first type when data loads
+    useEffect(() => {
+        if (!selectedType && types.length > 0) {
+            setSelectedType(types[0]);
+        }
+    }, [types, selectedType]);
+
+    // Filter types list by search query
+    const filteredTypes = useMemo(() => {
+        if (!searchQuery) return types;
+        const q = searchQuery.toLowerCase();
+        return types.filter(t => t.toLowerCase().includes(q));
+    }, [types, searchQuery]);
+
     // Filtered rows based on selected type and search query
     const filteredRows = useMemo(() => {
         let result = rows;
-        if (selectedType !== "all") {
+        if (selectedType) {
             result = result.filter(r => r.type === selectedType);
         }
         if (searchQuery) {
@@ -485,49 +575,40 @@ export default function DropdownsPage() {
     }
 
     return (
-        <div className="flex gap-4 min-h-[400px]">
+        <div className="flex gap-4 h-full overflow-hidden">
             {/* Add Option Modal */}
             <AddOptionModal
                 open={addModalOpen}
                 onClose={() => setAddModalOpen(false)}
                 onSave={handleAddSave}
-                defaultType={selectedType !== "all" ? selectedType : ""}
+                defaultType={selectedType || ""}
                 saving={saving === "new-modal"}
                 padOptions={padOptions}
             />
 
             {/* ── Sub-sidebar: Type filter ── */}
-            <div className="w-[180px] shrink-0 border border-border/50 rounded-lg bg-card/50 overflow-hidden flex flex-col">
+            <div className="w-[240px] shrink-0 border border-border/50 rounded-lg bg-card/50 overflow-hidden flex flex-col">
                 <div className="px-3 py-2.5 border-b border-border/50 bg-muted/30">
                     <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                         <ListFilter className="h-3 w-3" />
                         Types
                     </div>
                 </div>
+                <div className="px-2 py-2 border-b border-border/50">
+                    <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                            type="search"
+                            placeholder="Search..."
+                            className="pl-8 h-8 w-full text-[11px] bg-background/50 border-input focus-visible:ring-1 focus-visible:ring-primary"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                </div>
                 <div className="flex-1 overflow-auto">
-                    {/* All option */}
-                    <button
-                        onClick={() => setSelectedType("all")}
-                        className={cn(
-                            "flex items-center justify-between w-full px-3 py-2 text-[12px] font-medium transition-colors border-b border-border/20",
-                            selectedType === "all"
-                                ? "bg-primary/10 text-primary border-l-2 border-l-primary"
-                                : "text-muted-foreground hover:bg-muted/30 hover:text-foreground border-l-2 border-l-transparent"
-                        )}
-                    >
-                        <span>All</span>
-                        <span className={cn(
-                            "text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center",
-                            selectedType === "all"
-                                ? "bg-primary/20 text-primary"
-                                : "bg-muted/50 text-muted-foreground"
-                        )}>
-                            {rows.length}
-                        </span>
-                    </button>
-
                     {/* Type items */}
-                    {types.map(t => {
+                    {filteredTypes.map(t => {
                         const count = rows.filter(r => r.type === t).length;
                         const isActive = selectedType === t;
                         return (
@@ -557,57 +638,71 @@ export default function DropdownsPage() {
                         );
                     })}
 
-                    {types.length === 0 && (
+                    {filteredTypes.length === 0 && (
                         <div className="px-3 py-4 text-center text-[11px] text-muted-foreground">
-                            No types yet
+                            {searchQuery ? "No matching types" : "No types yet"}
                         </div>
                     )}
                 </div>
             </div>
 
             {/* ── Table ── */}
-            <div className="flex-1 min-w-0">
-                {/* Active filter badge & Search */}
-                <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="relative w-full max-w-sm">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            type="search"
-                            placeholder="Search description or type..."
-                            className="pl-9 h-9 w-full rounded-md border-input bg-background/50 text-sm focus-visible:ring-1 focus-visible:ring-primary shadow-sm"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
+            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+                {selectedType && (
+                    <div className="mb-4 flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground">Showing:</span>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                            <Tag className="h-3 w-3" />
+                            {selectedType}
+                            <button
+                                onClick={() => setSelectedType(types[0] || "")}
+                                className="ml-1 hover:text-primary/70 transition-colors"
+                            >
+                                <X className="h-3 w-3" />
+                            </button>
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                            {filteredRows.length} record{filteredRows.length !== 1 ? "s" : ""}
+                        </span>
                     </div>
+                )}
 
-                    {selectedType !== "all" && (
-                        <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-[10px] text-muted-foreground hidden sm:block">Showing:</span>
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
-                                <Tag className="h-3 w-3" />
-                                {selectedType}
-                                <button
-                                    onClick={() => setSelectedType("all")}
-                                    className="ml-1 hover:text-primary/70 transition-colors"
-                                >
-                                    <X className="h-3 w-3" />
-                                </button>
-                            </span>
-                            <span className="text-[10px] text-muted-foreground hidden sm:block">
-                                {filteredRows.length} record{filteredRows.length !== 1 ? "s" : ""}
-                            </span>
+                {quickEditMode && (
+                    <div className="mb-3 flex items-center justify-between px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 shrink-0">
+                        <span className="text-[11px] font-medium text-amber-400 flex items-center gap-1.5">
+                            <Pencil className="h-3 w-3" />
+                            Quick Edit Mode — {dirtyRowIds.size > 0 ? `${dirtyRowIds.size} row${dirtyRowIds.size !== 1 ? 's' : ''} modified` : 'edit fields then click Save All'}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                            <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1" onClick={() => { setQuickEditMode(false); setDirtyRowIds(new Set()); fetchRows(); }}>
+                                <X className="h-3 w-3" />
+                                Cancel
+                            </Button>
+                            <Button size="sm" className="h-7 text-[11px] gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={saveAllRows} disabled={saving === "batch"}>
+                                {saving === "batch" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                Save All
+                            </Button>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
 
-                <div className="rounded-lg border border-border overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-border">
                     <table className="w-full">
-                        <thead>
-                            <tr className="bg-muted/50 border-b border-border">
+                        <thead className="sticky top-0 z-10">
+                            <tr className="bg-muted/80 backdrop-blur-sm border-b border-border">
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[50px]">#</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[220px]">Description</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[140px]">Type</th>
-                                <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[100px]">Default PAD</th>
+                                {selectedType === "wave time" && (
+                                    <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[100px]">Default PAD</th>
+                                )}
+                                {selectedType === "metric" && (
+                                    <>
+                                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[130px]">Display</th>
+                                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[100px]">Goal</th>
+                                        <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[100px]">Percentage</th>
+                                    </>
+                                )}
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Image</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Color</th>
                                 <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Icon</th>
@@ -617,10 +712,10 @@ export default function DropdownsPage() {
                         </thead>
                         <tbody>
                             {filteredRows.length === 0 && (
-                                <tr><td colSpan={9} className="text-center text-sm text-muted-foreground py-8">
-                                    {selectedType === "all"
-                                        ? 'No dropdown options configured. Click "Add Option" to get started.'
-                                        : `No options for type "${selectedType}".`
+                                <tr><td colSpan={selectedType === "metric" ? 11 : selectedType === "wave time" ? 9 : 8} className="text-center text-sm text-muted-foreground py-8">
+                                    {selectedType
+                                        ? `No options for type "${selectedType}".`
+                                        : 'No dropdown options configured. Click "Add Option" to get started.'
                                     }
                                 </td></tr>
                             )}
@@ -648,8 +743,8 @@ export default function DropdownsPage() {
                                                 disabled={!row.isEditing && !row.isNew}
                                             />
                                         </td>
-                                        <td className="px-4 py-2">
-                                            {row.type === "wave time" ? (
+                                        {selectedType === "wave time" && (
+                                            <td className="px-4 py-2">
                                                 <select
                                                     value={row.defaultPad || ""}
                                                     onChange={(e) => updateField(globalIdx, "defaultPad", e.target.value)}
@@ -659,10 +754,42 @@ export default function DropdownsPage() {
                                                     <option value="">None</option>
                                                     {padOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                                 </select>
-                                            ) : (
-                                                <span className="text-xs text-muted-foreground/50 italic px-2">N/A</span>
-                                            )}
-                                        </td>
+                                            </td>
+                                        )}
+                                        {selectedType === "metric" && (
+                                            <>
+                                                <td className="px-4 py-2">
+                                                    <Input
+                                                        value={row.metricTypeDisplay || ""}
+                                                        onChange={(e) => updateField(globalIdx, "metricTypeDisplay", e.target.value)}
+                                                        placeholder="Display"
+                                                        className="h-8 text-[11px]"
+                                                        disabled={!row.isEditing && !row.isNew}
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-2">
+                                                    <Input
+                                                        value={row.metricTypeGoal || ""}
+                                                        onChange={(e) => updateField(globalIdx, "metricTypeGoal", e.target.value)}
+                                                        placeholder="Goal"
+                                                        className="h-8 text-[11px]"
+                                                        disabled={!row.isEditing && !row.isNew}
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-2">
+                                                    <div className="relative">
+                                                        <Input
+                                                            value={row.metricpercentage || ""}
+                                                            onChange={(e) => updateField(globalIdx, "metricpercentage", e.target.value)}
+                                                            placeholder="0"
+                                                            className="h-8 text-[11px] pr-6"
+                                                            disabled={!row.isEditing && !row.isNew}
+                                                        />
+                                                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none">%</span>
+                                                    </div>
+                                                </td>
+                                            </>
+                                        )}
                                         <td className="px-4 py-2">
                                             <Input
                                                 value={row.image || ""}

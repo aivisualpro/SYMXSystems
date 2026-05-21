@@ -125,13 +125,263 @@ export const LUCIDE_ICONS = [...new Set([
     "Armchair", "BedDouble", "BedSingle", "Bath", "ShowerHead",
     "Utensils", "UtensilsCrossed", "CookingPot", "Beef", "Coffee", "CupSoda",
     "Wine", "Beer", "Apple", "Banana", "Cherry", "Grape", "Pizza", "Salad", "Sandwich", "Soup",
+
+    // Delivery & Logistics (matching SYMXDropdownOptions)
+    "PackageDelivery", "Mailbox", "MapPinCheck", "MapPinPlus", "MapPinX",
+    "Truck", "TruckIcon", "CircleCheckBig", "CircleX", "CircleMinus",
+    "ScanBarcode", "Barcode", "Weight", "Scale", "Shapes",
+    "SquareCheck", "SquareX", "SquareMinus", "SquarePlus",
+    "ClipboardPenLine", "ClipboardMinus", "ClipboardX", "ClipboardPlus",
+    "IterationCw", "IterationCcw", "RefreshCw", "RefreshCcw", "RotateCw", "RotateCcw",
+    "Replace", "Repeat", "Repeat1", "Recycle",
+
+    // Safety & Compliance (dashcam, seatbelt, speeding, etc.)
+    "ShieldEllipsis", "ShieldHalf", "ShieldBan",
+    "Seatbelt", "CircleSlash2", "OctagonX", "AlertOctagon",
+    "Radar", "Crosshair", "ScanSearch",
+    "Eye", "EyeOff", "MonitorCheck", "MonitorX", "MonitorPlay",
+    "Cctv", "Webcam", "ScreenShare", "ScreenShareOff",
+    "SpeedBoat", "Speedometer",
+    "CarOff", "ParkingCircle", "ParkingSquare",
+    "SquareParking", "SquareParkingOff",
+    "OctagonPause", "CirclePause", "CircleStop",
+
+    // HR & Employment (attendance, onboarding, termination, interviews)
+    "UserSearch", "UserSquare", "UserSquare2",
+    "IdCard", "BadgePercent", "Badge",
+    "CalendarPlus", "CalendarMinus", "CalendarOff",
+    "ClockArrowDown", "ClockArrowUp",
+    "LogIn", "LogOut", "DoorOpen", "DoorClosed",
+    "FileSignature", "FilePen", "FileHeart", "FileBadge", "FileBadge2",
+    "Scale", "Gavel", "ScrollText", "Stamp",
+    "Presentation", "Projector",
+    "BookUser", "BookCheck", "BookX", "BookPlus", "BookMinus", "BookMarked",
+    "NotebookPen", "NotebookText", "Notebook",
+
+    // Metrics & Analytics (matching metric dropdown descriptions)
+    "ChartBar", "ChartLine", "ChartPie", "ChartArea", "ChartColumn",
+    "ChartColumnBig", "ChartColumnDecreasing", "ChartColumnIncreasing",
+    "ChartColumnStacked", "ChartBarBig", "ChartBarDecreasing", "ChartBarIncreasing",
+    "ChartBarStacked", "ChartSpline", "ChartScatter", "ChartNoAxesColumn",
+    "ChartNoAxesCombined", "ChartNoAxesGantt",
+    "TrendingUp", "TrendingDown", "ArrowUpRight", "ArrowDownRight",
+    "Goal", "Crosshair", "Bullseye",
+    "Gauge", "GaugeCircle", "Speedometer",
+    "Medal", "Trophy", "Award", "Crown",
+    "CirclePercent", "PercentCircle", "PercentSquare",
+
+    // Insurance & Claims (auto, injury, property damage)
+    "FileWarning", "FileLock2", "FileShield",
+    "ShieldCheck", "ShieldAlert", "ShieldBan",
+    "CarCrash", "Ambulance", "Siren",
+    "Gavel", "Scale", "Landmark",
+    "ReceiptText", "Receipt", "FileText",
+    "Sticker", "StickyNote", "NotebookTabs",
+
+    // Uniform & Clothing
+    "Shirt", "ShirtIcon",
+    "HardHat", "Crown", "GraduationCap",
+    "Footprints", "Boot",
+    "Glasses", "Sunglasses",
+    "Watch", "Gem",
+    "Tag", "Tags", "Ticket", "TicketCheck",
+    "Ruler", "RulerIcon",
+    "Scissors", "ScissorsSquare",
+
+    // Fleet & Vehicle Management (repair status, fleet status, ownership)
+    "Wrench", "WrenchIcon",
+    "Settings", "Settings2", "Cog",
+    "CircleDashed", "CircleDotDashed", "Loader", "Loader2",
+    "RotateCw", "RefreshCw", "RefreshCcw",
+    "CheckCircle2", "XCircle", "MinusCircle",
+    "PauseCircle", "PlayCircle", "StopCircle",
+    "Power", "PowerOff", "ToggleLeft", "ToggleRight",
+    "Unplug", "Plug", "PlugZap",
+    "Fuel", "Gauge",
+    "KeySquare", "KeyRound", "Key",
+    "Warehouse", "ParkingSquare",
+    "Truck", "Car", "CarFront",
+
+    // Coaching & Training
+    "MessageCircleWarning", "MessageSquareWarning", "MessageSquareText",
+    "MessageSquareQuote", "MessageSquarePlus", "MessageSquareCheck",
+    "BookOpenText", "BookType", "BookA", "BookHeadphones",
+    "GraduationCap", "School", "Presentation",
+    "PencilLine", "PencilRuler", "Pen", "PenLine", "PenTool",
+    "NotebookPen", "NotebookText", "Notebook",
+    "BrainCircuit", "BrainCog", "Lightbulb",
+    "Speech", "AudioLines", "AudioWaveform",
+
+    // Wave Time & Scheduling
+    "Clock", "Clock1", "Clock2", "Clock3", "Clock4", "Clock5", "Clock6",
+    "Clock7", "Clock8", "Clock9", "Clock10", "Clock11", "Clock12",
+    "Timer", "TimerReset", "Hourglass", "AlarmClock",
+    "CalendarClock", "CalendarDays", "CalendarRange",
+    "Sunrise", "Sunset", "Sun", "Moon",
+
+    // Rescue & Emergency
+    "Ambulance", "Siren", "ShieldAlert", "AlertTriangle",
+    "LifeBuoy", "Anchor", "Flashlight", "FlashlightOff",
+    "HeartPulse", "Cross", "CircleAlert",
+    "Megaphone", "Bell", "BellRing",
+    "Radio", "Wifi", "Signal",
+    "Navigation", "Compass", "MapPin",
+
+    // Punch & Time Tracking
+    "Fingerprint", "ScanLine", "Scan",
+    "Clock", "Timer", "Watch",
+    "CalendarCheck", "CalendarX", "CalendarPlus",
+    "FileCheck", "FileX", "FilePen",
+    "ClipboardCheck", "ClipboardX", "ClipboardList",
+    "SquareCheck", "SquareX", "CheckSquare",
 ])];
+
+
+// Keyword → icon name mappings so users can search by domain terms (e.g. "Attendance" → CalendarCheck)
+const ICON_KEYWORDS: Record<string, string[]> = {
+    // Attendance & Timekeeping
+    "attendance": ["CalendarCheck", "CalendarX", "CalendarDays", "Clock", "Timer", "UserCheck", "UserX", "LogIn", "LogOut", "ClipboardCheck", "ClipboardX", "CheckCircle2", "XCircle", "AlarmClock", "Watch", "Fingerprint"],
+    "absent": ["UserX", "CalendarX", "XCircle", "Ban", "CircleSlash", "UserMinus", "CalendarOff"],
+    "late": ["Clock", "AlarmClock", "Timer", "AlertTriangle", "AlertCircle", "Watch", "Hourglass", "ClockArrowDown"],
+    "present": ["UserCheck", "CheckCircle2", "CalendarCheck", "CircleDot", "BadgeCheck", "UserRoundCheck"],
+    "timecard": ["Clock", "Timer", "Watch", "CalendarDays", "Fingerprint", "ClipboardList", "FileSpreadsheet", "Receipt"],
+    "punch": ["Fingerprint", "ScanLine", "Clock", "Timer", "LogIn", "LogOut", "Scan"],
+
+    // Metrics & Performance
+    "metric": ["BarChart", "BarChart2", "BarChart3", "LineChart", "PieChart", "TrendingUp", "TrendingDown", "Gauge", "Target", "Activity", "Sigma", "Percent", "ChartBar", "ChartLine", "ChartColumn", "Goal", "Medal", "Trophy"],
+    "behavior": ["UserCog", "Brain", "AlertTriangle", "ShieldAlert", "Eye", "MessageSquareWarning", "UserRoundX", "ThumbsDown", "ThumbsUp", "Frown", "Smile"],
+    "contact compliance": ["Phone", "PhoneCall", "MessageCircle", "CheckCircle2", "ClipboardCheck", "Contact", "Contact2", "MailCheck", "ShieldCheck"],
+    "photo on delivery": ["Camera", "Image", "ImagePlus", "Eye", "ScanEye", "CheckCircle2", "Package", "PackageCheck", "Focus"],
+    "customer delivery feedback": ["MessageSquare", "MessageCircle", "Star", "ThumbsDown", "ThumbsUp", "UserRound", "Package", "Megaphone", "MessagesSquare"],
+    "delivery completion rate": ["CheckCircle2", "Percent", "TrendingUp", "BarChart", "Target", "Package", "PackageCheck", "CircleCheckBig", "Goal"],
+    "delivery success": ["Package", "PackageCheck", "CheckCircle2", "Trophy", "Award", "Star", "TrendingUp", "ThumbsUp", "Medal"],
+    "safety infraction": ["ShieldAlert", "AlertTriangle", "ShieldX", "Ban", "OctagonAlert", "Siren", "TriangleAlert", "ShieldOff"],
+    "dvic quality": ["ClipboardCheck", "FileCheck", "CheckSquare", "ListChecks", "FileSearch", "ShieldCheck", "Verified"],
+    "engine off compliance": ["Power", "PowerOff", "ToggleLeft", "ToggleRight", "Key", "Fuel", "Gauge", "Car"],
+    "proper park sequence": ["CircleParking", "ParkingMeter", "Car", "MapPin", "CheckCircle2", "ListChecks", "SquareCheck", "SquareParking"],
+    "dpmo": ["BarChart", "TrendingDown", "Target", "Sigma", "Percent", "AlertTriangle", "Activity"],
+
+    // Safety Categories
+    "safety": ["ShieldAlert", "ShieldCheck", "Shield", "AlertTriangle", "Siren", "Eye", "HardHat", "Construction", "TrafficCone", "OctagonAlert"],
+    "seatbelt": ["ShieldAlert", "Lock", "Shield", "UserCheck", "AlertTriangle", "Ban", "CircleSlash"],
+    "speeding": ["Gauge", "AlertTriangle", "TrendingUp", "Zap", "ArrowBigUp", "Activity", "Radar"],
+    "distraction": ["Eye", "EyeOff", "Smartphone", "Ban", "AlertCircle", "Focus", "ScanEye", "MonitorX"],
+    "following distance": ["ArrowLeftRight", "Ruler", "Eye", "Car", "AlertTriangle", "Radar", "Crosshair"],
+    "sign signal": ["Signpost", "AlertTriangle", "OctagonAlert", "TrafficCone", "Flag", "Ban", "StopCircle"],
+    "dashcam": ["Camera", "Video", "Monitor", "Eye", "Film", "Webcam", "MonitorPlay", "Focus"],
+    "netradyne": ["Camera", "Video", "Monitor", "Eye", "Webcam", "MonitorPlay", "ShieldCheck"],
+    "motive": ["Camera", "Video", "Monitor", "Truck", "Gauge", "Activity"],
+    "samsara": ["Camera", "Video", "Monitor", "Truck", "Gauge", "Activity", "Wifi"],
+
+    // Delivery Feedback Types
+    "mishandled package": ["Package", "PackageX", "AlertTriangle", "ThumbsDown", "Box", "Boxes"],
+    "unprofessional": ["UserX", "Frown", "ThumbsDown", "MessageSquareWarning", "AlertCircle", "Ban"],
+    "delivery instructions": ["ClipboardList", "FileText", "ListChecks", "MessageSquare", "BookOpen", "ScrollText"],
+    "wrong address": ["MapPinX", "MapPin", "Navigation", "AlertTriangle", "XCircle", "Home", "MapPinOff"],
+    "never received": ["PackageX", "XCircle", "Package", "Ban", "CircleSlash", "AlertTriangle", "Mailbox"],
+    "wrong item": ["PackageX", "Replace", "AlertTriangle", "ArrowLeftRight", "RefreshCw", "Repeat"],
+
+    // Coaching & Write-ups
+    "coaching": ["MessageSquare", "BookOpen", "GraduationCap", "PencilLine", "NotebookPen", "Presentation", "Brain", "Lightbulb", "BrainCircuit"],
+    "write up": ["FileText", "FilePen", "PencilLine", "ClipboardList", "NotepadText", "NotebookPen", "ScrollText", "FileEdit"],
+    "corrective action": ["AlertTriangle", "FileWarning", "ShieldAlert", "ClipboardList", "Gavel", "Scale", "FilePen"],
+    "warning": ["AlertTriangle", "AlertCircle", "ShieldAlert", "TriangleAlert", "FileWarning", "OctagonAlert", "Siren"],
+
+    // Claims & Insurance
+    "claim": ["FileText", "FileWarning", "ShieldAlert", "Receipt", "ReceiptText", "Gavel", "Scale", "Landmark"],
+    "auto": ["Car", "CarFront", "Truck", "Key", "Gauge", "Fuel", "CarTaxiFront"],
+    "injury": ["HeartPulse", "Heart", "Ambulance", "Hospital", "BriefcaseMedical", "Stethoscope", "Bone", "Cross", "Syringe", "Pill"],
+    "property damage": ["Building", "Building2", "Hammer", "BrickWall", "AlertTriangle", "Construction", "Factory", "Home"],
+
+    // Fleet
+    "fleet": ["Truck", "Car", "CarFront", "Warehouse", "Key", "Fuel", "Gauge", "Settings", "Wrench", "Package"],
+    "vehicle": ["Car", "CarFront", "Truck", "Bus", "Key", "Fuel", "Gauge", "CarTaxiFront"],
+    "repair": ["Wrench", "Settings", "Cog", "Hammer", "Construction", "Screwdriver", "RotateCw", "RefreshCw"],
+    "maintenance": ["Wrench", "Settings", "Cog", "Hammer", "ClipboardList", "Screwdriver", "Construction"],
+    "grounded": ["Ban", "CircleSlash", "XCircle", "Power", "PowerOff", "PauseCircle", "StopCircle"],
+    "returned": ["RotateCcw", "undo", "ArrowLeft", "RefreshCcw", "Package", "Recycle"],
+    "inspection": ["ClipboardCheck", "ClipboardList", "FileSearch", "Search", "Eye", "ScanSearch", "ListChecks", "CheckSquare"],
+    "rental": ["Key", "KeyRound", "CreditCard", "Building", "Car", "Receipt", "Wallet"],
+    "lease": ["Key", "KeyRound", "FileText", "Receipt", "CreditCard", "Wallet", "Banknote"],
+
+    // Employee & HR
+    "employee": ["User", "UserRound", "Users", "IdCard", "Badge", "Contact", "UserCheck", "PersonStanding"],
+    "active": ["CheckCircle2", "CircleDot", "Verified", "BadgeCheck", "UserCheck", "Power", "ToggleRight", "Zap"],
+    "inactive": ["XCircle", "CircleSlash", "Ban", "UserX", "PowerOff", "ToggleLeft", "PauseCircle"],
+    "terminated": ["UserX", "UserMinus", "Ban", "XCircle", "LogOut", "DoorOpen", "Trash2"],
+    "onboarding": ["UserPlus", "GraduationCap", "BookOpen", "Rocket", "LogIn", "DoorOpen", "Plus", "UserRoundPlus"],
+    "hired": ["UserCheck", "BadgeCheck", "CheckCircle2", "Award", "ThumbsUp", "Verified", "PartyPopper"],
+    "interview": ["Users", "MessageSquare", "ClipboardList", "UserSearch", "Mic", "Video", "Presentation"],
+    "background check": ["Search", "FileSearch", "Shield", "ShieldCheck", "ScanSearch", "Eye", "Fingerprint"],
+
+    // Uniform
+    "uniform": ["Shirt", "HardHat", "GraduationCap", "Footprints", "Tag", "Ruler", "Scissors"],
+    "hat": ["Crown", "GraduationCap", "HardHat", "CircleDot"],
+    "pant": ["Ruler", "Scissors", "Tag"],
+    "shirt": ["Shirt", "Tag", "Ruler", "Scissors"],
+    "shoes": ["Footprints", "Boot", "PersonStanding"],
+    "vest": ["Shield", "ShieldCheck", "Shirt", "HardHat"],
+    "size": ["Ruler", "Maximize", "Minimize", "ArrowUpDown", "Scale", "Shapes"],
+
+    // Wave Time
+    "wave": ["Clock", "Timer", "Sunrise", "Sunset", "CalendarClock", "AlarmClock", "Watch", "Hourglass"],
+    "wave time": ["Clock", "Timer", "Sunrise", "Sunset", "CalendarClock", "AlarmClock", "Watch"],
+    "schedule": ["Calendar", "CalendarDays", "CalendarClock", "Clock", "Timer", "AlarmClock", "CalendarRange"],
+
+    // Rescue
+    "rescue": ["LifeBuoy", "Ambulance", "Siren", "HeartPulse", "ShieldAlert", "AlertTriangle", "Truck", "Navigation", "Flashlight"],
+    "stuck": ["AlertTriangle", "Construction", "Mountain", "Wrench", "LifeBuoy"],
+    "underperforming": ["TrendingDown", "ArrowDown", "AlertCircle", "Gauge", "Activity", "ThumbsDown"],
+    "mechanical": ["Wrench", "Cog", "Settings", "Construction", "Screwdriver", "AlertTriangle"],
+    "traffic": ["TrafficCone", "Car", "AlertTriangle", "Clock", "Timer", "Construction", "Signpost"],
+
+    // Pad
+    "pad": ["LayoutGrid", "Layers", "MapPin", "Flag", "Hash", "Tag"],
+
+    // Document types
+    "document": ["File", "FileText", "FileImage", "FilePlus", "Folder", "NotepadText", "BookOpen", "ScrollText"],
+    "photo": ["Camera", "Image", "ImagePlus", "Images", "Eye", "Film", "Focus", "Aperture"],
+    "receipt": ["Receipt", "ReceiptText", "FileText", "CreditCard", "DollarSign", "Banknote"],
+
+    // Status
+    "completed": ["CheckCircle2", "CircleCheckBig", "BadgeCheck", "Check", "Verified", "SquareCheck"],
+    "new": ["Plus", "PlusCircle", "Sparkles", "Star", "CirclePlus", "SquarePlus", "FilePlus"],
+    "pending": ["Clock", "Hourglass", "Loader", "Loader2", "CircleDashed", "Timer", "PauseCircle"],
+    "in progress": ["Loader", "Loader2", "RotateCw", "RefreshCw", "Activity", "Play", "PlayCircle"],
+    "waiting": ["Clock", "Hourglass", "Timer", "PauseCircle", "Loader", "Loader2"],
+
+    // Service types
+    "service": ["Package", "Truck", "Box", "Boxes", "ShoppingBag", "Store", "Settings"],
+    "small": ["Minimize", "Package", "Box", "ArrowDown"],
+    "large": ["Maximize", "Package", "Boxes", "ArrowUp"],
+};
+
+// Build a reverse lookup: icon name → set of keywords for fast filtering
+const ICON_KEYWORD_SET = new Map<string, Set<string>>();
+for (const [keyword, icons] of Object.entries(ICON_KEYWORDS)) {
+    for (const icon of icons) {
+        if (!ICON_KEYWORD_SET.has(icon)) ICON_KEYWORD_SET.set(icon, new Set());
+        ICON_KEYWORD_SET.get(icon)!.add(keyword);
+    }
+}
 
 export function IconPicker({ value, onChange, disabled }: { value: string, onChange: (v: string) => void, disabled: boolean }) {
     const [search, setSearch] = useState("");
     const filtered = useMemo(() => {
         if (!search) return LUCIDE_ICONS;
-        return LUCIDE_ICONS.filter(i => i.toLowerCase().includes(search.toLowerCase()));
+        const q = search.toLowerCase();
+        return LUCIDE_ICONS.filter(i => {
+            // Match icon name
+            if (i.toLowerCase().includes(q)) return true;
+            // Match keyword tags
+            const keywords = ICON_KEYWORD_SET.get(i);
+            if (keywords) {
+                for (const kw of keywords) {
+                    if (kw.includes(q)) return true;
+                }
+            }
+            return false;
+        });
     }, [search]);
 
     const ValueIcon = value ? (LucideIcons as any)[value] : null;

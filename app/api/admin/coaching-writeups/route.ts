@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SYMXCoachingWriteUp from "@/lib/models/SYMXCoachingWriteUp";
 import SymxEmployee from "@/lib/models/SymxEmployee";
+import DropdownOption from "@/lib/models/DropdownOption";
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,9 +27,18 @@ export async function GET(req: NextRequest) {
     if (search) {
       filter.$or = [
         { type: { $regex: search, $options: "i" } },
-        { metric: { $regex: search, $options: "i" } },
         { correctiveAction: { $regex: search, $options: "i" } },
       ];
+
+      // Search by metric name — find matching dropdown IDs first
+      const matchingMetrics = await DropdownOption.find(
+        { type: "metric", description: { $regex: search, $options: "i" } },
+        { _id: 1 }
+      ).lean();
+      if (matchingMetrics.length > 0) {
+        filter.$or.push({ metric: { $in: matchingMetrics.map((m: any) => m._id) } });
+      }
+
       // Also search by employee name — find matching employee IDs first
       const matchingEmps = await SymxEmployee.find(
         {
@@ -47,7 +57,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const [data, totalCount, employees] = await Promise.all([
+    const [data, totalCount, employees, metricOptions] = await Promise.all([
       SYMXCoachingWriteUp.find(filter)
         .sort({ incidentDate: -1, createdAt: -1 })
         .skip(skip)
@@ -55,6 +65,7 @@ export async function GET(req: NextRequest) {
         .lean(),
       SYMXCoachingWriteUp.countDocuments(filter),
       SymxEmployee.find({}, { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }).lean(),
+      DropdownOption.find({ type: "metric" }, { _id: 1, description: 1, icon: 1, color: 1 }).lean(),
     ]);
 
     // Build _id → name map AND transporterId → name map
@@ -66,14 +77,30 @@ export async function GET(req: NextRequest) {
       if (emp.transporterId) tidNameMap.set(emp.transporterId, name);
     }
 
-    // Enrich with employee name and supervisor name
-    const enriched = data.map((r: any) => ({
-      ...r,
-      employeeName: r.employeeId
-        ? idNameMap.get(r.employeeId.toString()) || ""
-        : tidNameMap.get(r.transporterId) || "",
-      supervisorName: r.supervisor ? idNameMap.get(r.supervisor.toString()) || "" : "",
-    }));
+    // Build metric _id → { description, icon, color } map
+    const metricMap = new Map<string, { description: string; icon: string; color: string }>();
+    for (const opt of metricOptions) {
+      metricMap.set(opt._id.toString(), {
+        description: (opt as any).description || "",
+        icon: (opt as any).icon || "",
+        color: (opt as any).color || "",
+      });
+    }
+
+    // Enrich with employee name, supervisor name, and metric details
+    const enriched = data.map((r: any) => {
+      const metricInfo = r.metric ? metricMap.get(r.metric.toString()) : null;
+      return {
+        ...r,
+        employeeName: r.employeeId
+          ? idNameMap.get(r.employeeId.toString()) || ""
+          : tidNameMap.get(r.transporterId) || "",
+        supervisorName: r.supervisor ? idNameMap.get(r.supervisor.toString()) || "" : "",
+        metricName: metricInfo?.description || "",
+        metricIcon: metricInfo?.icon || "",
+        metricColor: metricInfo?.color || "",
+      };
+    });
 
     return NextResponse.json({
       records: enriched,
