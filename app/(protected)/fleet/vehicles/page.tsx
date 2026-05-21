@@ -174,7 +174,14 @@ export default function FleetVehiclesPage() {
     },
     {
       key: "mileage", label: "Mileage", accessor: (v) => v.mileage || 0,
-      render: (v) => <>{v.mileage ? v.mileage.toLocaleString() : "—"}</>,
+      render: (v) => v.mileage ? (
+        <div className="flex flex-col">
+          <span>{v.mileage.toLocaleString()}</span>
+          {v.lastMileageDate && (
+            <span className="text-[9px] text-muted-foreground/60">{fmtDate(v.lastMileageDate)}</span>
+          )}
+        </div>
+      ) : <>—</>,
     },
     { key: "serviceType", label: "Service Type", accessor: (v) => v.serviceType || "" },
     { key: "dashcam", label: "Dashcam", accessor: (v) => v.dashcam || "" },

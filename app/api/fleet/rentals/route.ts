@@ -22,15 +22,42 @@ export async function GET(req: NextRequest) {
 
     let enrichedRentals: any[] = rentals as any[];
     try {
+      // Collect both VINs and vehicleIds for lookup
       const uniqueVins: string[] = Array.from(
         new Set((rentals as any[]).map((r: any) => r.vin).filter((v: any) => typeof v === "string" && v.length > 0))
       );
-      if (uniqueVins.length > 0) {
-        const vinNameMap: Record<string, string> = {};
-        const vehicles = await Vehicle.find({ vin: { $in: uniqueVins } }, { vin: 1, vehicleName: 1 }).lean();
-        (vehicles as any[]).forEach((v: any) => { if (v.vin && v.vehicleName) vinNameMap[v.vin] = v.vehicleName; });
-        enrichedRentals = (rentals as any[]).map((r: any) => ({ ...r, vehicleName: vinNameMap[r.vin] || "" }));
+      const uniqueVehicleIds = Array.from(
+        new Set((rentals as any[]).map((r: any) => r.vehicleId?.toString()).filter(Boolean))
+      );
+
+      // Build lookup maps from vehicles
+      const vinToVehicle: Record<string, { vehicleName: string; vin: string }> = {};
+      const idToVehicle: Record<string, { vehicleName: string; vin: string }> = {};
+
+      if (uniqueVins.length > 0 || uniqueVehicleIds.length > 0) {
+        const query: any = { $or: [] };
+        if (uniqueVins.length > 0) query.$or.push({ vin: { $in: uniqueVins } });
+        if (uniqueVehicleIds.length > 0) query.$or.push({ _id: { $in: uniqueVehicleIds } });
+
+        const vehicles = await Vehicle.find(query, { vin: 1, vehicleName: 1 }).lean();
+        (vehicles as any[]).forEach((v: any) => {
+          const entry = { vehicleName: v.vehicleName || "", vin: v.vin || "" };
+          if (v.vin) vinToVehicle[v.vin] = entry;
+          if (v._id) idToVehicle[v._id.toString()] = entry;
+        });
       }
+
+      // Enrich: prefer vehicleId lookup, fallback to vin lookup
+      enrichedRentals = (rentals as any[]).map((r: any) => {
+        const byId = r.vehicleId ? idToVehicle[r.vehicleId.toString()] : null;
+        const byVin = r.vin ? vinToVehicle[r.vin] : null;
+        const match = byId || byVin;
+        return {
+          ...r,
+          vehicleName: match?.vehicleName || "",
+          vin: r.vin || match?.vin || "",
+        };
+      });
     } catch (enrichErr) {
       console.warn("[Fleet] Rentals vehicleName enrichment failed, returning without:", enrichErr);
     }

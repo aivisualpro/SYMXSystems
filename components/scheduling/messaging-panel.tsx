@@ -751,6 +751,7 @@ function MessagingSubTab({
   const activeLoading = (tab.id === "future-shift" && showOffToday) ? offTodayLoading : loading;
 
   const [sending, setSending] = useState(false);
+  const [sendProgress, setSendProgress] = useState<{ current: number; total: number } | null>(null);
   const [selectedAll, setSelectedAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState(tab.defaultMessage);
@@ -1088,7 +1089,7 @@ function MessagingSubTab({
     }
   };
 
-  // Send messages — personalized per employee
+  // Send messages — personalized per employee (one-by-one to avoid timeouts)
   const handleSend = async () => {
     const selectedEmployees = filteredEmployees.filter((e) => selectedIds.has(e._id));
 
@@ -1153,53 +1154,66 @@ function MessagingSubTab({
 
     setSending(true);
     setSendResults(null);
+    setSendProgress({ current: 0, total: recipients.length });
+
+    const allResults: SendResult[] = [];
 
     try {
-      // Build a single batch payload with all recipients
-      const payload = {
-        recipients: recipients.map((r) => ({
-          phone: r.phone,
-          name: r.name,
-          message: r.message,
-          transporterId: r.transporterId,
-          scheduleDate: r.scheduleDate,
-          yearWeek: r.yearWeek,
-        })),
-        message: message.trim(),
-        from: fromNumber,
-        messageType: tab.id,
-      };
+      // Send messages one-by-one to avoid timeout errors
+      for (let i = 0; i < recipients.length; i++) {
+        const r = recipients[i];
+        setSendProgress({ current: i + 1, total: recipients.length });
 
-      const res = await fetch("/api/messaging/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+        try {
+          const payload = {
+            recipients: [{
+              phone: r.phone,
+              name: r.name,
+              message: r.message,
+              transporterId: r.transporterId,
+              scheduleDate: r.scheduleDate,
+              yearWeek: r.yearWeek,
+            }],
+            message: message.trim(),
+            from: fromNumber,
+            messageType: tab.id,
+          };
 
-      const data = await res.json();
+          const res = await fetch("/api/messaging/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
 
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to send messages");
+          const data = await res.json();
+
+          if (!res.ok) {
+            allResults.push({ to: r.phone, name: r.name, success: false, error: data.error || `HTTP ${res.status}` });
+          } else {
+            const result = data.results?.[0];
+            allResults.push({
+              to: result?.to || r.phone,
+              name: result?.name || r.name,
+              success: result?.success ?? true,
+              error: result?.error,
+            });
+          }
+        } catch (err: any) {
+          allResults.push({ to: r.phone, name: r.name, success: false, error: err.message || "Network error" });
+        }
+
+        // Update results in real-time so badges appear as each message completes
+        setSendResults([...allResults]);
       }
 
-      // The API returns per-recipient results — check each one
-      const results: SendResult[] = (data.results || []).map((r: any) => ({
-        to: r.to,
-        name: r.name || "",
-        success: r.success,
-        error: r.error,
-      }));
-
-      setSendResults(results);
-
-      const successCount = results.filter((r) => r.success).length;
-      const failCount = results.filter((r) => !r.success).length;
+      const successCount = allResults.filter((r) => r.success).length;
+      const failCount = allResults.filter((r) => !r.success).length;
 
       if (failCount === 0 && successCount > 0) {
         notify.success(`${successCount} message(s) sent successfully!`);
       } else if (successCount === 0 && failCount > 0) {
         // All failed — show the first error message for user context
-        const firstError = results.find((r) => !r.success)?.error || "Unknown error";
+        const firstError = allResults.find((r) => !r.success)?.error || "Unknown error";
         notify.error(`All ${failCount} message(s) failed: ${firstError}`);
       } else if (failCount > 0) {
         notify.warning(`${successCount} sent, ${failCount} failed`);
@@ -1207,7 +1221,7 @@ function MessagingSubTab({
 
       // Start live polling for successfully sent employees (by transporterId)
       const sentTids = recipients
-        .filter(r => results.find(res => res.to === r.phone && res.success))
+        .filter(r => allResults.find(res => res.to === r.phone && res.success))
         .map(r => r.transporterId)
         .filter(Boolean) as string[];
       if (sentTids.length > 0) {
@@ -1219,6 +1233,7 @@ function MessagingSubTab({
       notify.error(err.message || "Failed to send messages");
     } finally {
       setSending(false);
+      setSendProgress(null);
     }
   };
 
@@ -1827,34 +1842,63 @@ function MessagingSubTab({
                 Select employees from the list to send messages
               </div>
             ) : (
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <p className="text-xs font-medium">
-                    Ready to send to{" "}
-                    <span className="text-primary font-bold">
-                      {selectedCount}
-                    </span>{" "}
-                    recipient{selectedCount !== 1 ? "s" : ""}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    Messages will be sent via Quo SMS
-                    {tab.id === "flyer" && attachments.length > 0 && (
-                      <span className="text-primary font-medium"> • {attachments.length} attachment{attachments.length > 1 ? "s" : ""}</span>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium">
+                      {sending && sendProgress ? (
+                        <>
+                          Sending{" "}
+                          <span className="text-primary font-bold">
+                            {sendProgress.current}
+                          </span>
+                          {" "}of{" "}
+                          <span className="text-primary font-bold">
+                            {sendProgress.total}
+                          </span>
+                          {" "}message{sendProgress.total !== 1 ? "s" : ""}…
+                        </>
+                      ) : (
+                        <>
+                          Ready to send to{" "}
+                          <span className="text-primary font-bold">
+                            {selectedCount}
+                          </span>{" "}
+                          recipient{selectedCount !== 1 ? "s" : ""}
+                        </>
+                      )}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {sending ? "Messages are being sent one by one" : "Messages will be sent via Quo SMS"}
+                      {tab.id === "flyer" && attachments.length > 0 && (
+                        <span className="text-primary font-medium"> • {attachments.length} attachment{attachments.length > 1 ? "s" : ""}</span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleSend}
+                    disabled={sending || !message.trim()}
+                    className="h-9 px-4 gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20"
+                  >
+                    {sending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
                     )}
-                  </p>
+                    {sending && sendProgress
+                      ? `${sendProgress.current}/${sendProgress.total}`
+                      : "Send Messages"}
+                  </Button>
                 </div>
-                <Button
-                  onClick={handleSend}
-                  disabled={sending || !message.trim()}
-                  className="h-9 px-4 gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20"
-                >
-                  {sending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                  {sending ? "Sending..." : "Send Messages"}
-                </Button>
+                {/* Progress bar during sequential send */}
+                {sending && sendProgress && sendProgress.total > 0 && (
+                  <div className="w-full bg-muted/50 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary to-primary/80 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${Math.round((sendProgress.current / sendProgress.total) * 100)}%` }}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>

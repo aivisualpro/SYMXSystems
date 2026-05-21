@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import Vehicle from "@/lib/models/Vehicle";
+import DailyInspection from "@/lib/models/DailyInspection";
 import { authorizeAction } from "@/lib/rbac";
 import { getSession } from "@/lib/auth";
 
@@ -20,11 +21,41 @@ export async function GET(req: NextRequest) {
     const includeReturned = searchParams.get("includeReturned") === "true";
     const filter: any = includeReturned ? {} : { status: { $ne: "Returned" } };
     
-    // Additional filters can be supported here naturally
-    const vehicles = await Vehicle.find(filter)
-      .select("-notes -info -__v")
-      .sort({ createdAt: -1 })
-      .lean();
+    // Fetch vehicles and latest inspection mileage in parallel
+    const [vehiclesRaw, latestMileages] = await Promise.all([
+      Vehicle.find(filter)
+        .select("-notes -info -__v")
+        .sort({ createdAt: -1 })
+        .lean(),
+      // Get the latest non-zero mileage per VIN from daily inspections
+      DailyInspection.aggregate([
+        { $match: { mileage: { $gt: 0 } } },
+        { $sort: { routeDate: -1 } },
+        { $group: {
+          _id: "$vin",
+          lastMileage: { $first: "$mileage" },
+          lastMileageDate: { $first: "$routeDate" },
+        }},
+      ]),
+    ]);
+
+    // Build a lookup map: VIN → { mileage, date }
+    const mileageMap = new Map<string, { mileage: number; date: Date }>();
+    for (const entry of latestMileages) {
+      if (entry._id) {
+        mileageMap.set(entry._id, { mileage: entry.lastMileage, date: entry.lastMileageDate });
+      }
+    }
+
+    // Enrich vehicles with latest inspection mileage
+    const vehicles = vehiclesRaw.map((v: any) => {
+      const inspectionMileage = v.vin ? mileageMap.get(v.vin) : null;
+      if (inspectionMileage) {
+        v.mileage = inspectionMileage.mileage;
+        v.lastMileageDate = inspectionMileage.date;
+      }
+      return v;
+    });
       
     return NextResponse.json({ vehicles });
   } catch (error) {
