@@ -57,14 +57,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const [data, totalCount, employees, metricOptions] = await Promise.all([
+    const [data, totalCount, employees, supervisors, metricOptions] = await Promise.all([
       SYMXCoachingWriteUp.find(filter)
         .sort({ incidentDate: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
       SYMXCoachingWriteUp.countDocuments(filter),
-      SymxEmployee.find({}, { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }).lean(),
+      SymxEmployee.find({}, { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }).sort({ firstName: 1, lastName: 1 }).lean(),
+      SymxEmployee.find({ type: "Operations", status: "Active" }, { _id: 1, firstName: 1, lastName: 1 }).sort({ firstName: 1, lastName: 1 }).lean(),
       DropdownOption.find({ type: "metric" }, { _id: 1, description: 1, icon: 1, color: 1 }).lean(),
     ]);
 
@@ -106,6 +107,8 @@ export async function GET(req: NextRequest) {
       records: enriched,
       totalCount,
       hasMore: skip + limit < totalCount,
+      employees: employees.map((e: any) => ({ _id: e._id.toString(), name: `${e.firstName || ""} ${e.lastName || ""}`.trim() })),
+      supervisors: supervisors.map((e: any) => ({ _id: e._id.toString(), name: `${e.firstName || ""} ${e.lastName || ""}`.trim() })),
     });
   } catch (error: any) {
     console.error("CoachingWriteUps GET error:", error);
