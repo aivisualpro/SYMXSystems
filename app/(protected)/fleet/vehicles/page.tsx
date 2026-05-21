@@ -294,7 +294,7 @@ export default function FleetVehiclesPage() {
                 );
               })}
               {/* Actions column */}
-              <th className="px-3 py-3 sticky right-0 bg-card/95 backdrop-blur-sm w-16" />
+              <th className="px-3 py-3 w-16" />
             </tr>
             {/* Subtle gradient separator */}
             <tr>
@@ -351,7 +351,7 @@ export default function FleetVehiclesPage() {
                   );
                 })}
                 {/* Row actions */}
-                <td className="px-3 py-2.5 sticky right-0 bg-transparent">
+                <td className="px-3 py-2.5">
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150 translate-x-1 group-hover:translate-x-0">
                     <button
                       onClick={(e) => { e.stopPropagation(); openEditModal("vehicle", v); }}

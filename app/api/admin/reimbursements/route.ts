@@ -66,21 +66,22 @@ export async function GET(req: NextRequest) {
           },
         },
       ]),
-      SymxEmployee.find({}, { transporterId: 1, firstName: 1, lastName: 1 }).lean(),
+      SymxEmployee.find({}, { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }).lean(),
     ]);
 
-    // Build a transporterId → full name map
-    const nameMap = new Map<string, string>();
+    // Build lookup maps: transporterId → name, _id → name
+    const nameByTransporter = new Map<string, string>();
+    const nameById = new Map<string, string>();
     for (const emp of employees) {
-      if (emp.transporterId) {
-        nameMap.set(emp.transporterId, `${emp.firstName || ""} ${emp.lastName || ""}`.trim());
-      }
+      const fullName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
+      if (emp.transporterId) nameByTransporter.set(emp.transporterId, fullName);
+      nameById.set(emp._id.toString(), fullName);
     }
 
     // Enrich each record with the resolved employee name
     const enriched = data.map((r: any) => ({
       ...r,
-      employeeName: r.employeeName || nameMap.get(r.transporterId) || "",
+      employeeName: r.employeeName || (r.employeeId && nameById.get(r.employeeId.toString())) || nameByTransporter.get(r.transporterId) || "",
     }));
 
     const kpi = kpiAgg[0] || {
@@ -132,29 +133,49 @@ export async function POST(req: NextRequest) {
       // Parse date
       if (body.date) body.date = new Date(body.date);
 
-      // Handle file upload
-      const file = formData.get("file") as File | null;
-      if (file && file.size > 0) {
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const result: any = await new Promise((resolve, reject) => {
-          cloudinary.uploader.upload_stream(
-            { folder: "symx-systems/reimbursements", resource_type: "auto" },
-            (error, result) => {
-              if (error) reject(error);
-              else resolve(result);
-            }
-          ).end(buffer);
-        });
-        body.attachment = result.secure_url;
+      // Handle file upload(s) — supports multiple files via "file" field
+      const files = formData.getAll("file") as File[];
+      const uploadedUrls: string[] = [];
+      for (const file of files) {
+        if (file && file.size > 0) {
+          const arrayBuffer = await file.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          const result: any = await new Promise((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
+              { folder: "symx-systems/reimbursements", resource_type: "auto" },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            ).end(buffer);
+          });
+          uploadedUrls.push(result.secure_url);
+        }
+      }
+      if (uploadedUrls.length > 0) {
+        body.attachments = uploadedUrls;
+        body.attachment = uploadedUrls[0]; // backward compat
       }
     } else {
       body = await req.json();
     }
 
-    const record = await SymxReimbursement.create(body);
-    return NextResponse.json(record, { status: 201 });
+    // Build a clean record with only allowed fields
+    const record: any = {
+      status: body.status || "Pending",
+      createdBy: session.id || "",
+    };
+    if (body.employeeId) record.employeeId = body.employeeId;
+    if (body.date) record.date = typeof body.date === "string" ? new Date(body.date) : body.date;
+    if (body.amount != null) record.amount = typeof body.amount === "string" ? parseFloat(body.amount) : body.amount;
+    if (body.notes) record.notes = body.notes;
+    if (body.attachments) record.attachments = body.attachments;
+    if (body.attachment) record.attachment = body.attachment;
+
+    const created = await SymxReimbursement.create(record);
+    return NextResponse.json(created, { status: 201 });
   } catch (error: any) {
+    console.error("Reimbursement POST error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

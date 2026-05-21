@@ -14,6 +14,7 @@ export interface ISymxReimbursement extends Document {
   approvedBy?: string;
   notes?: string;
   attachment?: string;
+  attachments?: string[];
   createdBy?: string;
   updatedBy?: string;
   updatedOn?: string;
@@ -23,9 +24,9 @@ export interface ISymxReimbursement extends Document {
 
 const SymxReimbursementSchema = new Schema<ISymxReimbursement>(
   {
-    transporterId: { type: String, required: true, index: true },
+    transporterId: { type: String, index: true },
     employeeName: { type: String },
-    employeeId: { type: Schema.Types.ObjectId, ref: "SymxEmployee" },
+    employeeId: { type: Schema.Types.ObjectId, ref: "SymxEmployee", index: true },
     date: { type: Date },
     week: { type: String, index: true },
     category: { type: String },
@@ -36,6 +37,7 @@ const SymxReimbursementSchema = new Schema<ISymxReimbursement>(
     approvedBy: { type: String },
     notes: { type: String },
     attachment: { type: String },
+    attachments: { type: [String], default: [] },
     createdBy: { type: String },
     updatedBy: { type: String },
     updatedOn: { type: String },

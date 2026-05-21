@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { notify } from "@/lib/notify";
-import { Loader2, Plus, DollarSign, TrendingUp, Clock, CheckCircle2, Trash2, Search, Paperclip, X, Upload, FileSpreadsheet, ArrowRight, CheckCircle, AlertCircle, RotateCw, FileUp, Table2 } from "lucide-react";
+import { Loader2, Plus, DollarSign, TrendingUp, Clock, CheckCircle2, Trash2, Search, Paperclip, X, Upload, FileSpreadsheet, ArrowRight, CheckCircle, AlertCircle, RotateCw, FileUp, Table2, Image as ImageIcon, RefreshCw } from "lucide-react";
 import { ISymxReimbursement } from "@/lib/models/SymxReimbursement";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { useHrReimbursements } from "@/lib/query/hooks/useHr";
@@ -81,6 +81,12 @@ export default function ReimbursementPage() {
   const [editingItem, setEditingItem] = useState<ReimbursementRow | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Attachments modal state
+  const [attachmentsModal, setAttachmentsModal] = useState<{ rowId: string; urls: string[] } | null>(null);
+  const [replacingIdx, setReplacingIdx] = useState<number | null>(null);
+  const replaceFileRef = useRef<HTMLInputElement>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
   // CSV Import state
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importStep, setImportStep] = useState<"upload" | "preview" | "importing" | "done">("upload");
@@ -102,7 +108,9 @@ export default function ReimbursementPage() {
   const [activeEmployees, setActiveEmployees] = useState<ActiveEmployee[]>([]);
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [empDropdownOpen, setEmpDropdownOpen] = useState(false);
+  const empDropdownRef = useRef<HTMLDivElement>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -130,22 +138,32 @@ export default function ReimbursementPage() {
     };
   }, [searchQuery]);
 
-  // Fetch active employees for the dropdown
+  // Close employee dropdown on outside click
+  useEffect(() => {
+    if (!empDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (empDropdownRef.current && !empDropdownRef.current.contains(e.target as Node)) {
+        setEmpDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [empDropdownOpen]);
+
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const res = await fetch("/api/admin/employees");
+        const res = await fetch("/api/admin/employees?status=Active&select=firstName,lastName,transporterId,status&limit=1000");
         if (res.ok) {
-          const data = await res.json();
-          // Filter only active employees and sort by name
-          const active = data
-            .filter((e: any) => e.status === "Active" || !e.status || !["Terminated", "Resigned", "Inactive"].includes(e.status))
-            .sort((a: any, b: any) => {
-              const nameA = `${a.firstName || ""} ${a.lastName || ""}`.trim().toLowerCase();
-              const nameB = `${b.firstName || ""} ${b.lastName || ""}`.trim().toLowerCase();
-              return nameA.localeCompare(nameB);
-            });
-          setActiveEmployees(active);
+          const json = await res.json();
+          // API returns { records: [...] } for paginated or plain array for export
+          const raw: any[] = Array.isArray(json) ? json : (json.records || []);
+          const sorted = raw.sort((a: any, b: any) => {
+            const nameA = `${a.firstName || ""} ${a.lastName || ""}`.trim().toLowerCase();
+            const nameB = `${b.firstName || ""} ${b.lastName || ""}`.trim().toLowerCase();
+            return nameA.localeCompare(nameB);
+          });
+          setActiveEmployees(sorted);
         }
       } catch (err) {
         console.error("Failed to fetch employees:", err);
@@ -368,8 +386,9 @@ export default function ReimbursementPage() {
       description: "", amount: "", receiptNumber: "", status: "Pending",
       approvedBy: "", notes: "",
     });
-    setSelectedFile(null);
+    setSelectedFiles([]);
     setEmployeeSearchQuery("");
+    setEmpDropdownOpen(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setIsDialogOpen(true);
   };
@@ -389,8 +408,9 @@ export default function ReimbursementPage() {
       approvedBy: row.approvedBy || "",
       notes: row.notes || "",
     });
-    setSelectedFile(null);
+    setSelectedFiles([]);
     setEmployeeSearchQuery("");
+    setEmpDropdownOpen(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setIsDialogOpen(true);
   };
@@ -419,18 +439,47 @@ export default function ReimbursementPage() {
   }, [activeEmployees, employeeSearchQuery]);
 
   const handleSave = async () => {
-    if (!formData.transporterId) {
+    if (!editingItem && !formData.selectedEmployeeId) {
+      notify.error("Please select an employee");
+      return;
+    }
+    if (editingItem && !formData.transporterId && !formData.selectedEmployeeId) {
       notify.error("Please select an employee");
       return;
     }
     setSaving(true);
     try {
       if (editingItem) {
-        // Edit uses JSON as before
         const payload: any = { ...formData };
         delete payload.selectedEmployeeId;
         if (payload.amount) payload.amount = parseFloat(payload.amount);
         if (payload.date) payload.date = new Date(payload.date + "T00:00:00.000Z");
+        // If employee was changed, update employeeId
+        if (formData.selectedEmployeeId) {
+          payload.employeeId = formData.selectedEmployeeId;
+        }
+
+        // Upload any new files and append to existing attachments
+        if (selectedFiles.length > 0) {
+          const existingUrls: string[] = [
+            ...((editingItem as any).attachments || []),
+            ...((editingItem as any).attachment && !((editingItem as any).attachments || []).includes((editingItem as any).attachment) ? [(editingItem as any).attachment] : []),
+          ].filter(Boolean);
+
+          const newUrls: string[] = [];
+          for (const file of selectedFiles) {
+            const fd = new FormData();
+            fd.append("file", file);
+            const uploadRes = await fetch("/api/admin/upload?folder=symx-systems/reimbursements", { method: "POST", body: fd });
+            if (uploadRes.ok) {
+              const result = await uploadRes.json();
+              newUrls.push(result.secure_url);
+            }
+          }
+          const allUrls = [...existingUrls, ...newUrls];
+          payload.attachments = allUrls;
+          payload.attachment = allUrls[0] || "";
+        }
 
         const res = await fetch(`/api/admin/reimbursements/${editingItem._id}`, {
           method: "PUT",
@@ -439,15 +488,16 @@ export default function ReimbursementPage() {
         });
         if (!res.ok) throw new Error("Save failed");
       } else {
-        // Create uses FormData for file upload support
+        // Create — send only required fields
         const fd = new FormData();
-        fd.append("transporterId", formData.transporterId);
-        fd.append("employeeName", formData.employeeName);
+        fd.append("employeeId", formData.selectedEmployeeId);
         if (formData.date) fd.append("date", formData.date + "T00:00:00.000Z");
         if (formData.amount) fd.append("amount", formData.amount);
         if (formData.notes) fd.append("notes", formData.notes);
         fd.append("status", "Pending");
-        if (selectedFile) fd.append("file", selectedFile);
+        for (const file of selectedFiles) {
+          fd.append("file", file);
+        }
 
         const res = await fetch("/api/admin/reimbursements", {
           method: "POST",
@@ -458,7 +508,7 @@ export default function ReimbursementPage() {
 
       notify.success(editingItem ? "Reimbursement updated" : "Reimbursement created");
       setIsDialogOpen(false);
-      setSelectedFile(null);
+      setSelectedFiles([]);
       fetchData(true);
     } catch (err: any) {
       notify.error(err.message);
@@ -467,15 +517,21 @@ export default function ReimbursementPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this reimbursement record?")) return;
+  const handleDelete = (id: string) => {
+    setDeleteConfirmId(id);
+  };
+
+  const executeDelete = async () => {
+    if (!deleteConfirmId) return;
     try {
-      const res = await fetch(`/api/admin/reimbursements/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/reimbursements/${deleteConfirmId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
       notify.success("Deleted");
       fetchData(true);
     } catch (err: any) {
       notify.error(err.message);
+    } finally {
+      setDeleteConfirmId(null);
     }
   };
 
@@ -567,12 +623,13 @@ export default function ReimbursementPage() {
           {/* ── Desktop Table (md+) ── */}
           <table className="w-full text-sm border-collapse hidden md:table">
             <colgroup>
-              <col className="w-[15%]" />
+              <col className="w-[14%]" />
               <col className="w-[10%]" />
-              <col className="w-[10%]" />
-              <col className="w-[10%]" />
-              <col className="w-[50%]" />
-              <col className="w-[5%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[45%]" />
+              <col className="w-[7%]" />
+              <col className="w-[6%]" />
             </colgroup>
             <thead className="sticky top-0 z-20">
               <tr className="bg-muted border-b border-border/50">
@@ -581,13 +638,14 @@ export default function ReimbursementPage() {
                 <th className="text-right font-semibold px-3 py-2.5 text-xs uppercase tracking-wider text-muted-foreground whitespace-nowrap">Amount</th>
                 <th className="text-left font-semibold px-3 py-2.5 text-xs uppercase tracking-wider text-muted-foreground whitespace-nowrap">Status</th>
                 <th className="text-left font-semibold px-3 py-2.5 text-xs uppercase tracking-wider text-muted-foreground">Reason</th>
+                <th className="text-center font-semibold px-3 py-2.5 text-xs uppercase tracking-wider text-muted-foreground whitespace-nowrap">Files</th>
                 <th className="px-2 py-2.5"></th>
               </tr>
             </thead>
             <tbody>
               {data.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-16 text-muted-foreground">
+                  <td colSpan={7} className="text-center py-16 text-muted-foreground">
                     No reimbursement records found.
                   </td>
                 </tr>
@@ -634,6 +692,29 @@ export default function ReimbursementPage() {
                         <span className="text-xs text-muted-foreground">
                           {row.notes || "—"}
                         </span>
+                      </td>
+                      <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                        {(() => {
+                          const urls: string[] = [
+                            ...(row.attachments || []),
+                            ...((row as any).attachment && !(row.attachments || []).includes((row as any).attachment) ? [(row as any).attachment] : []),
+                          ].filter(Boolean);
+                          const count = urls.length;
+                          return (
+                            <button
+                              onClick={() => { if (count > 0) setAttachmentsModal({ rowId: row._id, urls }); }}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                                count > 0
+                                  ? "bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20"
+                                  : "bg-muted/40 text-muted-foreground/40 border border-border/30 cursor-default"
+                              }`}
+                              title={`${count} attachment${count !== 1 ? "s" : ""}`}
+                            >
+                              <Paperclip className="h-3 w-3" />
+                              {count}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="px-2 py-2">
                         <Button
@@ -743,202 +824,202 @@ export default function ReimbursementPage() {
             <DialogTitle>{editingItem ? "Edit Reimbursement" : "New Reimbursement"}</DialogTitle>
           </DialogHeader>
 
-          {/* ── CREATE MODE: Simplified form ── */}
-          {!editingItem ? (
+          {/* ── Unified Form (Create & Edit) ── */}
             <div className="space-y-4 py-4">
-              {/* Employee Dropdown */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Employee *</Label>
-                <Select
-                  value={formData.selectedEmployeeId}
-                  onValueChange={handleEmployeeSelect}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select an employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <div className="p-2 sticky top-0 bg-popover">
-                      <Input
-                        placeholder="Search employees..."
-                        value={employeeSearchQuery}
-                        onChange={(e) => setEmployeeSearchQuery(e.target.value)}
-                        className="h-8 text-sm"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    <div className="max-h-[200px] overflow-y-auto">
-                      {filteredEmployees.map((emp) => (
-                        <SelectItem key={emp._id} value={emp._id}>
-                          {`${emp.firstName || ""} ${emp.lastName || ""}`.trim()}
-                          {emp.transporterId && (
-                            <span className="text-muted-foreground ml-1 text-[10px]">({emp.transporterId})</span>
-                          )}
-                        </SelectItem>
+              {/* Row 1: Employee, Date, Amount */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Employee — fast custom searchable dropdown */}
+                <div className="space-y-1.5" ref={empDropdownRef}>
+                  <Label className="text-sm font-semibold">Employee *</Label>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      value={empDropdownOpen ? employeeSearchQuery : formData.employeeName || employeeSearchQuery}
+                      onChange={(e) => {
+                        setEmployeeSearchQuery(e.target.value);
+                        if (!empDropdownOpen) setEmpDropdownOpen(true);
+                      }}
+                      onFocus={() => { if (!formData.employeeName) setEmpDropdownOpen(true); }}
+                      placeholder="Search employee…"
+                      className="pl-8 h-9 text-sm"
+                      autoComplete="off"
+                    />
+                    {formData.employeeName && !empDropdownOpen && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, employeeName: "", transporterId: "", selectedEmployeeId: "" }));
+                          setEmployeeSearchQuery("");
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {empDropdownOpen && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 rounded-lg border border-border bg-popover shadow-xl max-h-[200px] overflow-y-auto">
+                        {filteredEmployees.length === 0 ? (
+                          <div className="text-xs text-muted-foreground text-center py-4">No employees found</div>
+                        ) : (
+                          filteredEmployees.slice(0, 50).map((emp) => {
+                            const name = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
+                            return (
+                              <button
+                                key={emp._id}
+                                type="button"
+                                onClick={() => {
+                                  handleEmployeeSelect(emp._id);
+                                  setEmpDropdownOpen(false);
+                                  setEmployeeSearchQuery("");
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/60 transition-colors ${
+                                  formData.selectedEmployeeId === emp._id ? "bg-primary/10 text-primary font-medium" : "text-foreground"
+                                }`}
+                              >
+                                {name || "—"}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Date of Expense */}
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">Date of Expense *</Label>
+                  <Input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                    className="h-9"
+                  />
+                </div>
+
+                {/* Amount */}
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">Amount ($) *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.amount}
+                    onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+                    placeholder="0.00"
+                    className="h-9"
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Status (edit mode only) */}
+              {editingItem && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">Status</Label>
+                  <Select
+                    value={formData.status}
+                    onValueChange={(val) => setFormData(prev => ({ ...prev, status: val }))}
+                  >
+                    <SelectTrigger className="h-9 w-full sm:w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statuses.map(s => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
-                      {filteredEmployees.length === 0 && (
-                        <div className="text-xs text-muted-foreground text-center py-3">No employees found</div>
-                      )}
-                    </div>
-                  </SelectContent>
-                </Select>
-                {formData.employeeName && (
-                  <p className="text-[11px] text-muted-foreground">Selected: <span className="font-semibold text-foreground">{formData.employeeName}</span></p>
-                )}
-              </div>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
-              {/* Date of Expense */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Date of Expense *</Label>
-                <Input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                />
-              </div>
-
-              {/* Amount */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Amount ($) *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                  placeholder="0.00"
-                />
-              </div>
-
-              {/* Reason */}
-              <div className="space-y-2">
+              {/* Row 3: Reason */}
+              <div className="space-y-1.5">
                 <Label className="text-sm font-semibold">Reason *</Label>
                 <Textarea
                   value={formData.notes}
                   onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                  rows={4}
+                  rows={3}
                   placeholder="Describe the reason for this reimbursement..."
                 />
               </div>
 
-              {/* Attachment Upload */}
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Attachment</Label>
+              {/* Row 4: Multi-file Attachments */}
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold">Attachments</Label>
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/*,.pdf,.doc,.docx"
+                  multiple
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0] || null;
-                    setSelectedFile(f);
+                    const files = e.target.files;
+                    if (files && files.length > 0) {
+                      setSelectedFiles(prev => [...prev, ...Array.from(files)]);
+                    }
+                    e.target.value = "";
                   }}
                 />
-                {!selectedFile ? (
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex flex-col items-center justify-center gap-2 p-6 rounded-xl border-2 border-dashed border-border/60 bg-muted/20 cursor-pointer transition-all hover:bg-muted/40 hover:border-primary/30 active:scale-[0.99]"
-                  >
-                    <Upload className="h-6 w-6 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground font-medium">Click to upload receipt or document</span>
-                    <span className="text-[10px] text-muted-foreground">Images, PDF, DOC (max 10MB)</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3 p-3 rounded-xl border bg-muted/20">
-                    <Paperclip className="h-4 w-4 text-primary flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-foreground truncate">{selectedFile.name}</p>
-                      <p className="text-[10px] text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex flex-col items-center justify-center gap-1.5 p-4 rounded-xl border-2 border-dashed border-border/60 bg-muted/20 cursor-pointer transition-all hover:bg-muted/40 hover:border-primary/30 active:scale-[0.99]"
+                >
+                  <Upload className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground font-medium">Click to upload receipts or documents</span>
+                  <span className="text-[10px] text-muted-foreground">Images, PDF, DOC — multiple files allowed</span>
+                </div>
+
+                {/* Existing attachments (edit mode) */}
+                {editingItem && (() => {
+                  const existingUrls: string[] = [
+                    ...((editingItem as any).attachments || []),
+                    ...((editingItem as any).attachment && !((editingItem as any).attachments || []).includes((editingItem as any).attachment) ? [(editingItem as any).attachment] : []),
+                  ].filter(Boolean);
+                  if (existingUrls.length === 0) return null;
+                  return (
+                    <div className="space-y-1.5 mt-2">
+                      <p className="text-[11px] text-muted-foreground font-medium">Existing files</p>
+                      <div className="flex flex-wrap gap-2">
+                        {existingUrls.map((url, idx) => {
+                          const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(url) || url.includes("/image/");
+                          return (
+                            <a key={idx} href={url} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border/50 bg-muted/10 hover:bg-muted/30 transition-colors text-xs text-primary">
+                              {isImage ? <ImageIcon className="h-3 w-3" /> : <Paperclip className="h-3 w-3" />}
+                              File {idx + 1}
+                            </a>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
-                      onClick={() => {
-                        setSelectedFile(null);
-                        if (fileInputRef.current) fileInputRef.current.value = "";
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                  );
+                })()}
+
+                {/* New files to upload */}
+                {selectedFiles.length > 0 && (
+                  <div className="space-y-1.5 mt-2">
+                    {selectedFiles.map((file, idx) => (
+                      <div key={`${file.name}-${idx}`} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border/50 bg-muted/10">
+                        <Paperclip className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-foreground truncate">{file.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedFiles(prev => prev.filter((_, i) => i !== idx));
+                          }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             </div>
-          ) : (
-            /* ── EDIT MODE: Full form ── */
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
-              <div className="space-y-2">
-                <Label>Transporter ID *</Label>
-                <Input
-                  value={formData.transporterId}
-                  onChange={(e) => setFormData(prev => ({ ...prev, transporterId: e.target.value }))}
-                  placeholder="e.g. A1B2C3"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Employee Name</Label>
-                <Input
-                  value={formData.employeeName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, employeeName: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Date</Label>
-                <Input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Amount ($)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Receipt Number</Label>
-                <Input
-                  value={formData.receiptNumber}
-                  onChange={(e) => setFormData(prev => ({ ...prev, receiptNumber: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(val) => setFormData(prev => ({ ...prev, status: val }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statuses.map(s => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="sm:col-span-2 space-y-2">
-                <Label>Reason</Label>
-                <Textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                  rows={2}
-                />
-              </div>
-            </div>
-          )}
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
@@ -1215,6 +1296,149 @@ export default function ReimbursementPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Attachments Popup ─────────────────────────────────── */}
+      <Dialog open={!!attachmentsModal} onOpenChange={() => setAttachmentsModal(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Paperclip className="h-4 w-4" />
+              Attachments ({attachmentsModal?.urls.length || 0})
+            </DialogTitle>
+          </DialogHeader>
+          <input
+            ref={replaceFileRef}
+            type="file"
+            accept="image/*,.pdf,.doc,.docx"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file || replacingIdx === null || !attachmentsModal) return;
+              e.target.value = "";
+
+              try {
+                // Upload to Cloudinary
+                const fd = new FormData();
+                fd.append("file", file);
+                const uploadRes = await fetch("/api/admin/upload?folder=symx-systems/reimbursements", { method: "POST", body: fd });
+                if (!uploadRes.ok) throw new Error("Upload failed");
+                const result = await uploadRes.json();
+                const newUrl = result.secure_url;
+
+                // Update attachments array
+                const newUrls = [...attachmentsModal.urls];
+                newUrls[replacingIdx] = newUrl;
+
+                // Save to DB
+                const saveRes = await fetch(`/api/admin/reimbursements/${attachmentsModal.rowId}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ attachments: newUrls, attachment: newUrls[0] || "" }),
+                });
+                if (!saveRes.ok) throw new Error("Save failed");
+
+                // Update local state
+                setAttachmentsModal({ ...attachmentsModal, urls: newUrls });
+                setData(prev => prev.map(r => r._id === attachmentsModal.rowId ? { ...r, attachments: newUrls, attachment: newUrls[0] || "" } as any : r));
+                notify.success("Attachment replaced");
+              } catch (err: any) {
+                notify.error(err.message || "Replace failed");
+              } finally {
+                setReplacingIdx(null);
+              }
+            }}
+          />
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-2 max-h-[400px] overflow-y-auto">
+            {attachmentsModal?.urls.map((url, idx) => {
+              const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(url) || url.includes("/image/");
+              return (
+                <div key={idx} className="relative group rounded-xl border border-border/50 overflow-hidden bg-muted/20">
+                  {isImage ? (
+                    <a href={url} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={url}
+                        alt={`Attachment ${idx + 1}`}
+                        className="w-full h-28 object-cover transition-transform group-hover:scale-105"
+                      />
+                    </a>
+                  ) : (
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center h-28 gap-1.5 hover:bg-muted/40 transition-colors">
+                      <Paperclip className="h-6 w-6 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground px-2 text-center truncate w-full">
+                        {url.split("/").pop()?.split("?")[0] || "Document"}
+                      </span>
+                    </a>
+                  )}
+                  {/* Action overlay */}
+                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 p-1.5 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => {
+                        setReplacingIdx(idx);
+                        replaceFileRef.current?.click();
+                      }}
+                      className="p-1.5 rounded-md bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 transition-colors"
+                      title="Replace"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!attachmentsModal) return;
+                        const newUrls = attachmentsModal.urls.filter((_, i) => i !== idx);
+                        try {
+                          const res = await fetch(`/api/admin/reimbursements/${attachmentsModal.rowId}`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ attachments: newUrls, attachment: newUrls[0] || "" }),
+                          });
+                          if (!res.ok) throw new Error("Delete failed");
+                          if (newUrls.length === 0) {
+                            setAttachmentsModal(null);
+                          } else {
+                            setAttachmentsModal({ ...attachmentsModal, urls: newUrls });
+                          }
+                          setData(prev => prev.map(r => r._id === attachmentsModal.rowId ? { ...r, attachments: newUrls, attachment: newUrls[0] || "" } as any : r));
+                          notify.success("Attachment deleted");
+                        } catch (err: any) {
+                          notify.error(err.message || "Delete failed");
+                        }
+                      }}
+                      className="p-1.5 rounded-md bg-red-500/30 backdrop-blur-sm text-white hover:bg-red-500/50 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Confirmation Dialog ─────────────────────────── */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Delete Reimbursement
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            Are you sure you want to delete this reimbursement record? This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setDeleteConfirmId(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" size="sm" onClick={executeDelete}>
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Delete
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

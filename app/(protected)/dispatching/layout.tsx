@@ -21,6 +21,7 @@ import {
     Users,
     TableProperties,
     FileDown,
+    FileText,
 } from "lucide-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { useSchedulingWeeks } from "@/lib/query/hooks/useSchedules";
@@ -46,6 +47,7 @@ export const DISPATCHING_TABS = [
     { id: "time", label: "Time", href: "/dispatching/time", icon: Clock, gradient: "from-rose-500 to-pink-500", description: "Time tracking and shift management" },
     { id: "closing", label: "Closing", href: "/dispatching/closing", icon: DoorClosed, gradient: "from-indigo-500 to-blue-500", description: "End-of-day dispatch closing procedures" },
     { id: "efficiency", label: "Efficiency", href: "/dispatching/efficiency", icon: TrendingUp, gradient: "from-teal-500 to-emerald-500", description: "Route efficiency and performance metrics" },
+    { id: "coaching-writeups", label: "Coaching & Writeups", href: "/dispatching/coaching-writeups", icon: FileText, gradient: "from-amber-500 to-yellow-500", description: "Coaching sessions and corrective writeups" },
 ] as const;
 
 // ── Day names ──
@@ -324,6 +326,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         if (pathname.includes("/dispatching/time")) return "Time";
         if (pathname.includes("/dispatching/closing")) return "Closing";
         if (pathname.includes("/dispatching/efficiency")) return "Efficiency";
+        if (pathname.includes("/dispatching/coaching-writeups")) return "Coaching & Writeups";
         return "Dispatching";
     }, [pathname]);
 

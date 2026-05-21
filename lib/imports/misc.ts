@@ -24,6 +24,7 @@ import VehicleRepair from "@/lib/models/VehicleRepair";
 import DailyInspection from "@/lib/models/DailyInspection";
 import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
 import DropdownOption from "@/lib/models/DropdownOption";
+import SYMXCoachingWriteUp from "@/lib/models/SYMXCoachingWriteUp";
 import { getISOWeek, getISOWeekYear, parseISO } from "date-fns";
 
 const reimbursementHeaderMap: Record<string, string> = {
@@ -490,6 +491,76 @@ const employeeScheduleHeaderMap: Record<string, string> = {
 };
 
 
+const coachingWriteUpsHeaderMap: Record<string, string> = {
+    "transporterId": "transporterId",
+    "Transporter ID": "transporterId",
+    "durationOfIncident": "durationOfIncident",
+    "Duration of Incident": "durationOfIncident",
+    "incidentDate": "incidentDate",
+    "Incident Date": "incidentDate",
+    "incidentWeek": "incidentWeek",
+    "Incident Week": "incidentWeek",
+    "type": "type",
+    "Type": "type",
+    "metric": "metric",
+    "Metric": "metric",
+    "correctiveActionNumber": "correctiveActionNumber",
+    "Corrective Action Number": "correctiveActionNumber",
+    "metricNoticeNumber": "metricNoticeNumber",
+    "Metric Notice Number": "metricNoticeNumber",
+    "correctiveAction": "correctiveAction",
+    "Corrective Action": "correctiveAction",
+    "correctiveActionDate": "correctiveActionDate",
+    "Corrective Action Date": "correctiveActionDate",
+    "supervisor": "supervisor",
+    "Supervisor": "supervisor",
+    "metricValue": "metricValue",
+    "Metric Value": "metricValue",
+    "seatbeltOffRate": "seatbeltOffRate",
+    "Seatbelt Off Rate": "seatbeltOffRate",
+    "speedingEventRate": "speedingEventRate",
+    "Speeding Event Rate": "speedingEventRate",
+    "distractionsRate": "distractionsRate",
+    "Distractions Rate": "distractionsRate",
+    "signSignalViolationsRate": "signSignalViolationsRate",
+    "Sign Signal Violations Rate": "signSignalViolationsRate",
+    "followingDistanceRate": "followingDistanceRate",
+    "Following Distance Rate": "followingDistanceRate",
+    "DAMishandledPackage": "DAMishandledPackage",
+    "DA Mishandled Package": "DAMishandledPackage",
+    "DAWasUnprofessional": "DAWasUnprofessional",
+    "DA Was Unprofessional": "DAWasUnprofessional",
+    "DADidNotFollowMyDeliveryInstructions": "DADidNotFollowMyDeliveryInstructions",
+    "DA Did Not Follow My Delivery Instructions": "DADidNotFollowMyDeliveryInstructions",
+    "deliveredToWrongAddress": "deliveredToWrongAddress",
+    "Delivered To Wrong Address": "deliveredToWrongAddress",
+    "neverReceivedDelivery": "neverReceivedDelivery",
+    "Never Received Delivery": "neverReceivedDelivery",
+    "receivedWrongItem": "receivedWrongItem",
+    "Received Wrong Item": "receivedWrongItem",
+    "improvedByDate": "improvedByDate",
+    "Improved By Date": "improvedByDate",
+    "suggestion": "suggestion",
+    "Suggestion": "suggestion",
+    "totalNegativeFeedbacks": "totalNegativeFeedbacks",
+    "Total Negative Feedbacks": "totalNegativeFeedbacks",
+    "priorDiscussionOrWarningsOnThisSubject": "priorDiscussionOrWarningsOnThisSubject",
+    "Prior Discussion Or Warnings On This Subject": "priorDiscussionOrWarningsOnThisSubject",
+    "goal": "goal",
+    "Goal": "goal",
+    "unSignedPdf": "unSignedPdf",
+    "Un Signed Pdf": "unSignedPdf",
+    "signedPdf": "signedPdf",
+    "Signed Pdf": "signedPdf",
+    "createdBy": "createdBy",
+    "Created By": "createdBy",
+    "createdAt": "createdAt",
+    "Created At": "createdAt",
+};
+
+// Fields that map to the files array
+const coachingFileFields = ["file1", "file2", "file3", "file4", "file5"];
+
 export async function processMisc(type: string, data: any, week: string | undefined) {
   if (type === 'reimbursement') {
             // 1. Gather Transporter IDs (support both camelCase and legacy headers)
@@ -602,6 +673,94 @@ export async function processMisc(type: string, data: any, week: string | undefi
         }
 
         // ── HR Tickets Import ──
-        
+
+  // ── Coaching WriteUps Import ──
+  else if (type === 'coaching-writeups') {
+    // 1. Gather all transporterIds from rows (for both employee and supervisor)
+    const allTransporterIds = new Set<string>();
+    for (const row of data) {
+      const tid = (row["transporterId"] || row["Transporter ID"] || "").toString().trim();
+      const sid = (row["supervisor"] || row["Supervisor"] || "").toString().trim();
+      if (tid) allTransporterIds.add(tid);
+      if (sid) allTransporterIds.add(sid);
+    }
+
+    // 2. Fetch matching employees and build transporterId → ObjectId map
+    const employees = await SymxEmployee.find(
+      { transporterId: { $in: Array.from(allTransporterIds) } },
+      { _id: 1, transporterId: 1 }
+    ).lean();
+    const empMap = new Map<string, any>();
+    for (const emp of employees) {
+      if (emp.transporterId) empMap.set(emp.transporterId, emp._id);
+    }
+
+    // 3. Process rows
+    const operations = data.map((row: any) => {
+      const processedData: any = {};
+      const files: { name: string; url: string }[] = [];
+
+      Object.entries(row).forEach(([header, value]) => {
+        const normalizedHeader = header.trim();
+        const val = value as string;
+
+        // Check if it's a file field (file1–file5)
+        const lowerHeader = normalizedHeader.toLowerCase();
+        if (coachingFileFields.includes(lowerHeader) && val && val.toString().trim()) {
+          files.push({ name: lowerHeader, url: val.toString().trim() });
+          return;
+        }
+
+        const schemaKey = coachingWriteUpsHeaderMap[normalizedHeader];
+        if (schemaKey && val !== undefined && val !== null && val !== "") {
+          if (schemaKey === 'incidentDate' || schemaKey === 'correctiveActionDate' || schemaKey === 'improvedByDate') {
+            const utcDate = parseToUTCMidnight(val);
+            if (utcDate) {
+              processedData[schemaKey] = utcDate;
+              if (schemaKey === 'incidentDate') {
+                const computedWeek = dateToSundayWeek(utcDate.toISOString());
+                if (computedWeek) processedData.incidentWeek = computedWeek;
+              }
+            }
+          } else if (schemaKey === 'createdAt') {
+            const parsed = new Date(val.toString());
+            if (!isNaN(parsed.getTime())) processedData[schemaKey] = parsed;
+          } else if (schemaKey === 'transporterId') {
+            // Always store the raw transporterId, and also resolve to employeeId ObjectId
+            const tid = val.toString().trim();
+            processedData.transporterId = tid;
+            const empId = empMap.get(tid);
+            if (empId) processedData.employeeId = empId;
+          } else if (schemaKey === 'supervisor') {
+            // Resolve supervisor transporterId → supervisor ObjectId
+            const sid = val.toString().trim();
+            const supId = empMap.get(sid);
+            if (supId) processedData.supervisor = supId;
+          } else {
+            processedData[schemaKey] = val.toString().trim();
+          }
+        }
+      });
+
+      if (files.length > 0) {
+        processedData.files = files;
+      }
+
+      return { insertOne: { document: processedData } };
+    }).filter((op: any): op is NonNullable<typeof op> => op !== null);
+
+    if (operations.length > 0) {
+      const result = await SYMXCoachingWriteUp.bulkWrite(operations);
+      return NextResponse.json({
+        success: true,
+        count: result.insertedCount || 0,
+        inserted: result.insertedCount || 0,
+        updated: 0,
+      });
+    }
+
+    return NextResponse.json({ success: true, count: 0, inserted: 0, updated: 0 });
+  }
+
   return null; // Not matched in this group
 }

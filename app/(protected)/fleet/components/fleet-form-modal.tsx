@@ -34,7 +34,11 @@ function SearchableSelect({
   const filtered = useMemo(() => {
     if (!query) return options;
     const q = query.toLowerCase();
-    return options.filter(o => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q));
+    return options.filter(o =>
+      o.label.toLowerCase().includes(q) ||
+      o.value.toLowerCase().includes(q) ||
+      (o.raw?.vin && o.raw.vin.toLowerCase().includes(q))
+    );
   }, [options, query]);
 
   const selectedLabel = useMemo(() => options.find(o => o.value === value)?.label || "", [options, value]);
@@ -844,7 +848,7 @@ export default function FleetFormModal() {
                   placeholder="Search vehicle…"
                   options={vehicles.map((v: any) => ({
                     value: v.vehicleName || "",
-                    label: v.vehicleName || v.vin || "—",
+                    label: `${v.vehicleName || "—"}${v.vin ? " — " + v.vin : ""}`,
                     raw: v,
                   }))}
                   onChange={(val, raw) => {
