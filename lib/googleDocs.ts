@@ -134,12 +134,12 @@ export async function generateCoachingPdf(recordId: string): Promise<string> {
     "{{distractionsRate}}": r.distractionsRate || "",
     "{{signSignalViolationsRate}}": r.signSignalViolationsRate || "",
     "{{followingDistanceRate}}": r.followingDistanceRate || "",
-    "{{DAMishandledPackage}}": r.DAMishandledPackage || "",
-    "{{DAWasUnprofessional}}": r.DAWasUnprofessional || "",
-    "{{DADidNotFollowMyDeliveryInstructions}}": r.DADidNotFollowMyDeliveryInstructions || "",
-    "{{deliveredToWrongAddress}}": r.deliveredToWrongAddress || "",
-    "{{neverReceivedDelivery}}": r.neverReceivedDelivery || "",
-    "{{receivedWrongItem}}": r.receivedWrongItem || "",
+    "{{DAMishandledPackage}}": r.DAMishandledPackage ? `DA Mishandled Package: "${r.DAMishandledPackage}"` : "",
+    "{{DAWasUnprofessional}}": r.DAWasUnprofessional ? `DA was Unprofessional: "${r.DAWasUnprofessional}"` : "",
+    "{{DADidNotFollowMyDeliveryInstructions}}": r.DADidNotFollowMyDeliveryInstructions ? `DA did not follow my delivery instructions: "${r.DADidNotFollowMyDeliveryInstructions}"` : "",
+    "{{deliveredToWrongAddress}}": r.deliveredToWrongAddress ? `Delivered to Wrong Address: "${r.deliveredToWrongAddress}"` : "",
+    "{{neverReceivedDelivery}}": r.neverReceivedDelivery ? `Never Received Delivery: "${r.neverReceivedDelivery}"` : "",
+    "{{receivedWrongItem}}": r.receivedWrongItem ? `Received Wrong Item: "${r.receivedWrongItem}"` : "",
     "{{totalNegativeFeedbacks}}": r.totalNegativeFeedbacks || "",
     "{{priorDiscussionOrWarningsOnThisSubject}}": r.priorDiscussionOrWarningsOnThisSubject || "",
     // Files — insert display labels; hyperlinks applied after
@@ -417,15 +417,25 @@ export async function generateCoachingPdf(recordId: string): Promise<string> {
         const endIdx = fullText.indexOf(endIfStr, ifTextEnd);
         if (endIdx === -1) continue; // no matching EndIf, skip
 
-        // Evaluate condition: supports {{field}}="value" or {{field}}!="value"
+        // Evaluate condition: supports {{field}}="value" or already-replaced actualValue="value"
         let conditionMet = false;
         const eqMatch = conditionExpr.match(/^\{\{(.+?)\}\}\s*(!?=)\s*"(.+?)"$/);
         if (eqMatch) {
+          // Case 1: {{field}}="value" — look up in replacements map
           const fieldName = `{{${eqMatch[1]}}}`;
           const operator = eqMatch[2];
           const expectedValue = eqMatch[3];
           const actualValue = replacements[fieldName] || "";
           conditionMet = operator === "=" ? actualValue === expectedValue : actualValue !== expectedValue;
+        } else {
+          // Case 2: already-replaced value — e.g. Customer Delivery Feedback="Customer Delivery Feedback"
+          const directMatch = conditionExpr.match(/^(.+?)\s*(!?=)\s*"(.+?)"$/);
+          if (directMatch) {
+            const actualValue = directMatch[1].trim();
+            const operator = directMatch[2];
+            const expectedValue = directMatch[3];
+            conditionMet = operator === "=" ? actualValue === expectedValue : actualValue !== expectedValue;
+          }
         }
 
         blocks.push({
