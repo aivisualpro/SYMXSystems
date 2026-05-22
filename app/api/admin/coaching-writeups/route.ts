@@ -5,6 +5,7 @@ import connectToDatabase from "@/lib/db";
 import SYMXCoachingWriteUp from "@/lib/models/SYMXCoachingWriteUp";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import DropdownOption from "@/lib/models/DropdownOption";
+import { generateCoachingPdf } from "@/lib/googleDocs";
 
 export async function GET(req: NextRequest) {
   try {
@@ -159,6 +160,12 @@ export async function POST(req: NextRequest) {
     }
 
     const record = await SYMXCoachingWriteUp.create(body);
+
+    // Generate PDF from Google Doc template (fire-and-forget — don't block the response)
+    generateCoachingPdf(record._id.toString()).catch((pdfErr) =>
+      console.error("PDF generation failed:", pdfErr)
+    );
+
     return NextResponse.json(record, { status: 201 });
   } catch (error: any) {
     console.error("CoachingWriteUps POST error:", error);

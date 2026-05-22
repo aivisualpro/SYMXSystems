@@ -49,3 +49,7 @@ passwords
 # Flutter local build artifacts
 SYMXSystemsApp/build/
 SYMXSystemsApp/.dart_tool/
+
+# Generated coaching PDFs
+public/pdfs/
+public/uploads/

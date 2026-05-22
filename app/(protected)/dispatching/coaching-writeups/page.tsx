@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useDispatching } from "../layout";
 import { cn } from "@/lib/utils";
 import {
@@ -15,6 +15,11 @@ import {
   Plus,
   ChevronsUpDown,
   Check,
+  Paperclip,
+  Upload,
+  Trash2,
+  RefreshCw,
+  Download,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -173,15 +178,45 @@ export default function CoachingWriteupsPage() {
   const { searchQuery, setOnCoachingAdd, availableWeeks, coachingSignedFilter } = useDispatching();
   const [data, setData] = useState<CoachingWriteUp[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
   const [localSearch, setLocalSearch] = useState("");
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm, setAddForm] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
   const [metricOptions, setMetricOptions] = useState<{ _id: string; description: string; metricTypeGoal?: string }[]>([]);
   const [employeeOptions, setEmployeeOptions] = useState<{ _id: string; name: string }[]>([]);
   const [supervisorOptions, setSupervisorOptions] = useState<{ _id: string; name: string }[]>([]);
+  const [filesPopover, setFilesPopover] = useState<{ rowId: string; files: { name: string; url: string }[] } | null>(null);
+  const [filePreview, setFilePreview] = useState<{ url: string; name: string } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ── Unified Modal State ──
+  const [modalMode, setModalMode] = useState<"add" | "edit" | null>(null);
+  const [modalForm, setModalForm] = useState<Record<string, any>>({});
+  const [modalRecord, setModalRecord] = useState<CoachingWriteUp | null>(null); // original record for edit
+  // Track records whose PDF is being generated in the background
+  const [pendingPdf, setPendingPdf] = useState<Set<string>>(new Set());
+
+  const openAddModal = () => {
+    setModalMode("add");
+    setModalForm({});
+    setModalRecord(null);
+    (window as any).__pendingUploadFiles = [];
+  };
+
+  const openEditModal = (row: CoachingWriteUp) => {
+    setModalMode("edit");
+    setModalForm({ ...row });
+    setModalRecord(row);
+    (window as any).__pendingUploadFiles = [];
+  };
+
+  const closeModal = () => {
+    setModalMode(null);
+    setModalForm({});
+    setModalRecord(null);
+    (window as any).__pendingUploadFiles = [];
+  };
 
   // Fetch metric dropdown options
   useEffect(() => {
@@ -192,7 +227,7 @@ export default function CoachingWriteupsPage() {
   }, []);
 
   const fetchData = useCallback(async (pageNum = 1, search = "") => {
-    setLoading(true);
+    if (pageNum === 1) setLoading(true); else setLoadingMore(true);
     try {
       const params = new URLSearchParams();
       params.set("page", String(pageNum));
@@ -202,65 +237,132 @@ export default function CoachingWriteupsPage() {
       const res = await fetch(`/api/admin/coaching-writeups?${params}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const result = await res.json();
-      setData(result.records || []);
+      if (pageNum === 1) {
+        setData(result.records || []);
+        // Clear pendingPdf for any records that now have a valid PDF
+        setPendingPdf(prev => {
+          const next = new Set(prev);
+          for (const r of (result.records || [])) {
+            if (r.unSignedPdf && r.unSignedPdf.startsWith("/pdfs/")) {
+              // Valid new-style URL — clear spinner
+              next.delete(r._id?.toString());
+            } else if (r.unSignedPdf && !r.unSignedPdf.startsWith("/pdfs/")) {
+              // Old broken proxy URL — show spinner so it gets regenerated on next edit
+              // Don't auto-add to pending (user must re-save), just ignore so it shows "—"
+            }
+          }
+          return next;
+        });
+      } else {
+        setData(prev => [...prev, ...(result.records || [])]);
+      }
       setTotalCount(result.totalCount || 0);
+      setHasMore(result.hasMore || false);
       if (result.employees) setEmployeeOptions(result.employees);
       if (result.supervisors) setSupervisorOptions(result.supervisors);
     } catch (err) {
       console.error("Failed to fetch coaching writeups:", err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, []);
 
   useEffect(() => {
     const query = searchQuery || localSearch;
-    fetchData(page, query);
-  }, [page, searchQuery, localSearch, fetchData]);
+    setPage(1);
+    fetchData(1, query);
+  }, [searchQuery, localSearch, fetchData]);
+
+  // Load more when page increments
+  useEffect(() => {
+    if (page > 1) fetchData(page, searchQuery || localSearch);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  // Infinite scroll handler
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      if (loadingMore || !hasMore) return;
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      if (scrollTop + clientHeight >= scrollHeight - 100) {
+        setPage(prev => prev + 1);
+      }
+    };
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [loadingMore, hasMore]);
 
   // Register add handler with layout
   useEffect(() => {
-    setOnCoachingAdd(() => () => {
-      setAddForm({});
-      setShowAddModal(true);
-    });
+    setOnCoachingAdd(() => () => openAddModal());
     return () => setOnCoachingAdd(null);
   }, [setOnCoachingAdd]);
 
-  // Live-calculate correctiveActionNumber and metricNoticeNumber
+  // Poll every 5s while PDF generation is in progress — fetch only pending records, not the full list
   useEffect(() => {
-    if (!addForm.employeeId) {
-      setAddForm(prev => ({ ...prev, correctiveActionNumber: "", metricNoticeNumber: "" }));
+    if (pendingPdf.size === 0) return;
+    const interval = setInterval(async () => {
+      const resolved = new Set<string>();
+      await Promise.all(
+        Array.from(pendingPdf).map(async (id) => {
+          try {
+            const res = await fetch(`/api/admin/coaching-writeups/${id}`);
+            if (!res.ok) return;
+            const updated = await res.json();
+            if (updated.unSignedPdf && updated.unSignedPdf.startsWith("/pdfs/")) {
+              // Silently patch just this row — no full table refresh
+              setData(prev => prev.map(r => r._id?.toString() === id ? { ...r, unSignedPdf: updated.unSignedPdf } : r));
+              resolved.add(id);
+            }
+          } catch { /* ignore */ }
+        })
+      );
+      if (resolved.size > 0) {
+        setPendingPdf(prev => { const next = new Set(prev); resolved.forEach(id => next.delete(id)); return next; });
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [pendingPdf.size]);
+
+  // Live-calculate correctiveActionNumber and metricNoticeNumber (Add mode only)
+  useEffect(() => {
+    if (modalMode !== "add") return;
+    if (!modalForm.employeeId) {
+      setModalForm(prev => ({ ...prev, correctiveActionNumber: "", metricNoticeNumber: "" }));
       return;
     }
-    const params = new URLSearchParams({ action: "counts", employeeId: addForm.employeeId });
-    if (addForm.metric) params.set("metric", addForm.metric);
+    const params = new URLSearchParams({ action: "counts", employeeId: modalForm.employeeId });
+    if (modalForm.metric) params.set("metric", modalForm.metric);
     fetch(`/api/admin/coaching-writeups?${params}`)
       .then(r => r.json())
       .then(d => {
-        setAddForm(prev => ({
+        setModalForm(prev => ({
           ...prev,
           correctiveActionNumber: String((d.correctiveActionCount || 0) + 1),
-          metricNoticeNumber: addForm.metric ? String((d.metricNoticeCount || 0) + 1) : "",
+          metricNoticeNumber: modalForm.metric ? String((d.metricNoticeCount || 0) + 1) : "",
         }));
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addForm.employeeId, addForm.metric]);
+  }, [modalForm.employeeId, modalForm.metric, modalMode]);
 
   // Auto-calculate improvedByDate
   useEffect(() => {
-    const dur = addForm.durationOfIncident;
-    if (dur === "Day" && addForm.incidentDate) {
-      const d = new Date(addForm.incidentDate);
+    if (!modalMode) return;
+    const dur = modalForm.durationOfIncident;
+    if (dur === "Day" && modalForm.incidentDate) {
+      const d = new Date(modalForm.incidentDate);
       d.setDate(d.getDate() + 3);
       const yyyy = d.getFullYear();
       const mm = String(d.getMonth() + 1).padStart(2, "0");
       const dd = String(d.getDate()).padStart(2, "0");
-      setAddForm(prev => ({ ...prev, improvedByDate: `${yyyy}-${mm}-${dd}` }));
-    } else if (dur === "Week" && addForm.incidentWeek) {
+      setModalForm(prev => ({ ...prev, improvedByDate: `${yyyy}-${mm}-${dd}` }));
+    } else if (dur === "Week" && modalForm.incidentWeek) {
       // Parse ISO week like "2026-W21" or "2026-W021"
-      const match = addForm.incidentWeek.match(/(\d{4})-W0*(\d+)/);
+      const match = modalForm.incidentWeek.match(/(\d{4})-W0*(\d+)/);
       if (match) {
         const year = parseInt(match[1]);
         const week = parseInt(match[2]);
@@ -277,41 +379,111 @@ export default function CoachingWriteupsPage() {
         const yyyy = nextWeekStart.getFullYear();
         const mm = String(nextWeekStart.getMonth() + 1).padStart(2, "0");
         const dd = String(nextWeekStart.getDate()).padStart(2, "0");
-        setAddForm(prev => ({ ...prev, improvedByDate: `${yyyy}-${mm}-${dd}` }));
+        setModalForm(prev => ({ ...prev, improvedByDate: `${yyyy}-${mm}-${dd}` }));
       }
     } else {
-      setAddForm(prev => ({ ...prev, improvedByDate: "" }));
+      setModalForm(prev => ({ ...prev, improvedByDate: "" }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addForm.durationOfIncident, addForm.incidentDate, addForm.incidentWeek]);
+  }, [modalForm.durationOfIncident, modalForm.incidentDate, modalForm.incidentWeek, modalMode]);
 
-  const handleAddSave = async () => {
-    setSaving(true);
-    try {
-      const body: any = { ...addForm };
-      if (body.incidentDate) body.incidentDate = new Date(body.incidentDate).toISOString();
-      if (body.correctiveActionDate) body.correctiveActionDate = new Date(body.correctiveActionDate).toISOString();
-      if (body.improvedByDate) body.improvedByDate = new Date(body.improvedByDate).toISOString();
-      // Auto-set goal from selected metric
-      if (body.metric) {
-        const selMetric = metricOptions.find(o => o._id === body.metric);
-        if (selMetric?.metricTypeGoal) body.goal = selMetric.metricTypeGoal;
-      }
-      const res = await fetch("/api/admin/coaching-writeups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error("Failed to create");
-      setShowAddModal(false);
-      setAddForm({});
-      fetchData(page, searchQuery || localSearch);
-    } catch (err) {
-      console.error("Failed to add:", err);
-    } finally {
-      setSaving(false);
+  // ── Unified Save Handler — closes modal instantly, everything else in background ──
+  const handleModalSave = () => {
+    // Snapshot everything synchronously before closing
+    const body: any = { ...modalForm };
+    delete body._id;
+    delete body.employeeName;
+    delete body.supervisorName;
+    delete body.metricName;
+    delete body.metricIcon;
+    delete body.metricColor;
+    delete body.__v;
+    delete body.createdAt;
+    delete body.updatedAt;
+    delete body._pendingFiles;
+
+    // Snap the pending files list and clear the global before modal closes
+    const pendingFiles: File[] = [...((window as any).__pendingUploadFiles || [])];
+    (window as any).__pendingUploadFiles = [];
+
+    const savedMode = modalMode;
+    const savedRecord = modalRecord;
+
+    // For edit: optimistically clear unSignedPdf in the row so the spinner shows immediately
+    if (savedMode === "edit" && savedRecord?._id) {
+      const id = String(savedRecord._id);
+      setPendingPdf(prev => new Set(prev).add(id));
+      setData(prev => prev.map(r => r._id?.toString() === id ? { ...r, unSignedPdf: undefined } : r));
     }
+
+    // Close the modal RIGHT NOW — everything else is async in the background
+    closeModal();
+
+    // Fire-and-forget background work
+    (async () => {
+      try {
+        // Upload pending files in parallel
+        if (pendingFiles.length > 0) {
+          const uploaded = await Promise.all(
+            pendingFiles.map(async (file) => {
+              const fd = new FormData();
+              fd.append("file", file);
+              const r = await fetch("/api/upload/cloudinary", { method: "POST", body: fd });
+              if (r.ok) { const { url } = await r.json(); return { name: file.name, url }; }
+              return null;
+            })
+          );
+          const existing: { name: string; url: string }[] = body.files || [];
+          body.files = [...existing, ...(uploaded.filter(Boolean) as any)];
+        }
+
+        // Convert dates
+        if (body.incidentDate?.length === 10) body.incidentDate = new Date(body.incidentDate).toISOString();
+        if (body.correctiveActionDate?.length === 10) body.correctiveActionDate = new Date(body.correctiveActionDate).toISOString();
+        if (body.improvedByDate?.length === 10) body.improvedByDate = new Date(body.improvedByDate).toISOString();
+
+        // Auto-set goal
+        if (body.metric) {
+          const selMetric = metricOptions.find((o: any) => o._id === body.metric);
+          if (selMetric?.metricTypeGoal) body.goal = selMetric.metricTypeGoal;
+        }
+
+        if (savedMode === "add") {
+          const res = await fetch("/api/admin/coaching-writeups", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) throw new Error("Failed to create");
+          const created = await res.json();
+          // Prepend the new record and mark as pending PDF
+          setData(prev => [created, ...prev]);
+          setPendingPdf(prev => new Set(prev).add(String(created._id)));
+        } else if (savedMode === "edit" && savedRecord) {
+          const res = await fetch(`/api/admin/coaching-writeups/${savedRecord._id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) throw new Error("Failed to update");
+          const updated = await res.json();
+          // Patch just this row's data (files etc.) without touching unSignedPdf — that arrives via poll
+          setData(prev => prev.map(r =>
+            r._id?.toString() === String(savedRecord._id)
+              ? { ...r, ...updated, unSignedPdf: undefined } // keep undefined so spinner stays
+              : r
+          ));
+        }
+      } catch (err) {
+        console.error("Background save failed:", err);
+        // On error, remove from pendingPdf so spinner doesn't hang
+        if (savedRecord?._id) {
+          setPendingPdf(prev => { const n = new Set(prev); n.delete(String(savedRecord._id)); return n; });
+        }
+      }
+    })();
   };
+
 
   // Filter locally by the dispatching layout's search + signed filter
   const filteredData = useMemo(() => {
@@ -363,55 +535,6 @@ export default function CoachingWriteupsPage() {
     return groups;
   }, [filteredData]);
 
-  // Edit modal state
-  const [editModal, setEditModal] = useState<CoachingWriteUp | null>(null);
-  const [editForm, setEditForm] = useState<Record<string, any>>({});
-  const [editSaving, setEditSaving] = useState(false);
-
-  const openEditModal = (row: CoachingWriteUp) => {
-    setEditModal(row);
-    setEditForm({ ...row });
-  };
-
-  const handleEditSave = async () => {
-    if (!editModal) return;
-    setEditSaving(true);
-    try {
-      const body: any = { ...editForm };
-      // Remove enriched fields
-      delete body._id;
-      delete body.employeeName;
-      delete body.supervisorName;
-      delete body.metricName;
-      delete body.metricIcon;
-      delete body.metricColor;
-      delete body.__v;
-      delete body.createdAt;
-      delete body.updatedAt;
-      if (body.incidentDate && typeof body.incidentDate === "string" && body.incidentDate.length === 10) {
-        body.incidentDate = new Date(body.incidentDate).toISOString();
-      }
-      if (body.correctiveActionDate && typeof body.correctiveActionDate === "string" && body.correctiveActionDate.length === 10) {
-        body.correctiveActionDate = new Date(body.correctiveActionDate).toISOString();
-      }
-      if (body.improvedByDate && typeof body.improvedByDate === "string" && body.improvedByDate.length === 10) {
-        body.improvedByDate = new Date(body.improvedByDate).toISOString();
-      }
-      const res = await fetch(`/api/admin/coaching-writeups/${editModal._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error("Failed to update");
-      setEditModal(null);
-      fetchData(page, searchQuery || localSearch);
-    } catch (err) {
-      console.error("Failed to update:", err);
-    } finally {
-      setEditSaving(false);
-    }
-  };
-
   const toDateInputValue = (v?: string) => {
     if (!v) return "";
     try { return new Date(v).toISOString().split("T")[0]; } catch { return ""; }
@@ -421,16 +544,18 @@ export default function CoachingWriteupsPage() {
     <div className="flex flex-col h-full gap-3 px-1">
 
       {/* ── Table ── */}
-      <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-border bg-card">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto rounded-xl border border-border bg-card">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10 border-b border-border">
             <tr>
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Employee</th>
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Date</th>
+              <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Improved By</th>
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Duration</th>
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Week</th>
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Metric</th>
               <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground">Supervisor</th>
+              <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground w-[50px]">Files</th>
               <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground w-[70px]">Unsigned</th>
               <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground w-[70px]">Signed</th>
             </tr>
@@ -438,13 +563,13 @@ export default function CoachingWriteupsPage() {
           <tbody className="divide-y divide-border/50">
             {loading ? (
               <tr>
-                <td colSpan={8} className="text-center py-16">
+                <td colSpan={10} className="text-center py-16">
                   <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
                 </td>
               </tr>
             ) : groupedData.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-16 text-muted-foreground">
+                <td colSpan={10} className="text-center py-16 text-muted-foreground">
                   No coaching writeups found
                 </td>
               </tr>
@@ -453,7 +578,7 @@ export default function CoachingWriteupsPage() {
                 <React.Fragment key={group.type}>
                   {/* ── Group header ── */}
                   <tr className="bg-muted/40 border-t border-border">
-                    <td colSpan={8} className="px-3 py-2">
+                    <td colSpan={10} className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className={cn("inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-bold border", getTypeBadgeColor(group.type))}>
                           {group.type}
@@ -476,6 +601,7 @@ export default function CoachingWriteupsPage() {
                         <span className="font-semibold text-foreground">{row.employeeName || "—"}</span>
                       </td>
                       <td className="px-3 py-2.5 text-muted-foreground">{formatDate(row.incidentDate)}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{formatDate(row.improvedByDate)}</td>
                       <td className="px-3 py-2.5 text-muted-foreground">{row.durationOfIncident || "—"}</td>
                       <td className="px-3 py-2.5 text-muted-foreground font-mono text-[10px]">{row.incidentWeek || "—"}</td>
                       <td className="px-3 py-2.5 text-muted-foreground max-w-[180px]">
@@ -491,7 +617,21 @@ export default function CoachingWriteupsPage() {
                       </td>
                       <td className="px-3 py-2.5 text-muted-foreground">{row.supervisorName || "—"}</td>
                       <td className="px-3 py-2.5 text-center">
-                        {row.unSignedPdf ? (
+                        {(row.files?.length || 0) > 0 ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setFilesPopover({ rowId: row._id, files: row.files || [] }); }}
+                            className="inline-flex items-center justify-center gap-0.5 h-7 px-1.5 rounded-md hover:bg-primary/10 transition-colors relative"
+                            title={`${row.files?.length} file(s)`}
+                          >
+                            <Paperclip className="h-3.5 w-3.5 text-primary" />
+                            <span className="text-[10px] font-bold text-primary">{row.files?.length}</span>
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground/40">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {row.unSignedPdf && row.unSignedPdf.startsWith("/pdfs/") ? (
                           <a
                             href={row.unSignedPdf}
                             target="_blank"
@@ -502,6 +642,10 @@ export default function CoachingWriteupsPage() {
                           >
                             <FileText className="h-4 w-4 text-amber-400" />
                           </a>
+                        ) : pendingPdf.has(row._id?.toString()) ? (
+                          <span className="inline-flex items-center justify-center h-7 w-7" title="Generating PDF…">
+                            <Loader2 className="h-4 w-4 text-amber-400 animate-spin" />
+                          </span>
                         ) : (
                           <span className="text-muted-foreground/40">—</span>
                         )}
@@ -527,262 +671,168 @@ export default function CoachingWriteupsPage() {
                 </React.Fragment>
               ))
             )}
+            {loadingMore && (
+              <tr>
+                <td colSpan={10} className="text-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin mx-auto text-muted-foreground" />
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* ── Pagination ── */}
-      {totalCount > 50 && (
-        <div className="flex items-center justify-between px-2 shrink-0 pb-2">
-          <span className="text-xs text-muted-foreground">
-            Page {page} of {Math.ceil(totalCount / 50)}
-          </span>
-          <div className="flex gap-1.5">
-            <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              Previous
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page * 50 >= totalCount} onClick={() => setPage(page + 1)}>
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Edit Modal ── */}
-      <Dialog open={!!editModal} onOpenChange={() => setEditModal(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
-          <DialogHeader className="shrink-0">
+      {/* ── Files Management Dialog ── */}
+      <Dialog open={!!filesPopover} onOpenChange={() => setFilesPopover(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Edit Coaching & Writeup
+              <Paperclip className="h-5 w-5 text-primary" />
+              Files ({filesPopover?.files.length || 0})
             </DialogTitle>
           </DialogHeader>
-          {editModal && (
-            <>
-            <div className="flex-1 overflow-y-auto space-y-4 text-sm pr-1">
-              {/* Header summary */}
-              <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-muted/30 border border-border/40">
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div>
-                    <span className="text-[10px] text-muted-foreground uppercase block">Employee</span>
-                    <span className="font-semibold text-xs">{editModal.employeeName || "—"}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Target className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div>
-                    <span className="text-[10px] text-muted-foreground uppercase block">Type</span>
-                    <span className={cn("inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border", getTypeBadgeColor(editModal.type))}>
-                      {editModal.type || "—"}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[10px] text-muted-foreground uppercase block">Supervisor</span>
-                  <span className="font-semibold text-xs">{editModal.supervisorName || "—"}</span>
-                </div>
-              </div>
-
-              {/* Row 1: Type + Duration */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Type</label>
-                  <Select value={editForm.type || ""} onValueChange={(v) => setEditForm(prev => ({ ...prev, type: v }))}>
-                    <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Select type" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Coaching">Coaching</SelectItem>
-                      <SelectItem value="Write Up">Write Up</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Duration of Incident</label>
-                  <Select value={editForm.durationOfIncident || ""} onValueChange={(v) => setEditForm(prev => ({ ...prev, durationOfIncident: v }))}>
-                    <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Select duration" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Day">Day</SelectItem>
-                      <SelectItem value="Week">Week</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Incident Week</label>
-                  <Select value={editForm.incidentWeek || ""} onValueChange={(v) => setEditForm(prev => ({ ...prev, incidentWeek: v }))}>
-                    <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Select week" /></SelectTrigger>
-                    <SelectContent className="max-h-[240px]">
-                      {(availableWeeks || []).map((w) => (
-                        <SelectItem key={w} value={w}>{w}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Row 2: Dates */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Incident Date</label>
-                  <Input type="date" value={toDateInputValue(editForm.incidentDate)} onChange={(e) => setEditForm(prev => ({ ...prev, incidentDate: e.target.value }))} className="h-8 text-xs" />
-                </div>
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Corrective Action Date</label>
-                  <Input type="date" value={toDateInputValue(editForm.correctiveActionDate)} onChange={(e) => setEditForm(prev => ({ ...prev, correctiveActionDate: e.target.value }))} className="h-8 text-xs" />
-                </div>
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Improved By Date</label>
-                  <Input type="date" value={toDateInputValue(editForm.improvedByDate)} onChange={(e) => setEditForm(prev => ({ ...prev, improvedByDate: e.target.value }))} className="h-8 text-xs" />
-                </div>
-              </div>
-
-              {/* Metric dropdown */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Metric</label>
-                  <Select value={editForm.metric?.toString() || ""} onValueChange={(v) => setEditForm(prev => ({ ...prev, metric: v }))}>
-                    <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Select metric" /></SelectTrigger>
-                    <SelectContent className="max-h-[240px]">
-                      {metricOptions.map((opt) => (
-                        <SelectItem key={opt._id} value={opt._id}>{opt.description}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Row 3: Value, Numbers */}
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { key: "metricValue", label: "Metric Value" },
-                  { key: "correctiveActionNumber", label: "Corrective Action #" },
-                  { key: "metricNoticeNumber", label: "Metric Notice #" },
-                  { key: "correctiveAction", label: "Corrective Action" },
-                  { key: "totalNegativeFeedbacks", label: "Total Neg. Feedbacks" },
-                  { key: "goal", label: "Goal" },
-                ].map((field) => (
-                  <div key={field.key}>
-                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{field.label}</label>
-                    <Input type="text" value={editForm[field.key] || ""} onChange={(e) => setEditForm(prev => ({ ...prev, [field.key]: e.target.value }))} className="h-8 text-xs" />
-                  </div>
-                ))}
-              </div>
-
-              {/* Safety Metrics */}
-              <div>
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block mb-2">Safety Metrics</span>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { key: "seatbeltOffRate", label: "Seatbelt Off Rate" },
-                    { key: "speedingEventRate", label: "Speeding Event Rate" },
-                    { key: "distractionsRate", label: "Distractions Rate" },
-                    { key: "signSignalViolationsRate", label: "Sign/Signal Violations" },
-                    { key: "followingDistanceRate", label: "Following Distance" },
-                  ].map((field) => (
-                    <div key={field.key}>
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{field.label}</label>
-                      <Input type="text" value={editForm[field.key] || ""} onChange={(e) => setEditForm(prev => ({ ...prev, [field.key]: e.target.value }))} className="h-8 text-xs" />
+          <div className="space-y-3">
+            {filesPopover?.files.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-4">No files attached</p>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              {filesPopover?.files.map((file, idx) => {
+                // Detect file type from name, URL path, or fileName query param
+                const detectName = file.name || (() => { try { const u = new URL(file.url); return u.searchParams.get("fileName") || u.pathname; } catch { return file.url; } })();
+                const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)/i.test(detectName);
+                const isPdf = /\.pdf/i.test(detectName);
+                const isCloudinary = file.url?.includes("res.cloudinary.com");
+                // For Cloudinary PDFs: show page 1 as a JPEG thumbnail
+                const thumbUrl = (isPdf && isCloudinary)
+                  ? file.url.replace("/upload/", "/upload/w_200,h_200,c_fill,pg_1,f_jpg/")
+                  : isImage ? file.url : null;
+                return (
+                  <div key={idx} className="group relative rounded-xl border border-border overflow-hidden bg-muted/30">
+                    <button
+                      onClick={() => setFilePreview({ url: file.url, name: detectName })}
+                      className="block w-full aspect-[4/3]"
+                    >
+                      {thumbUrl ? (
+                        <img src={thumbUrl} alt={file.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-3">
+                          <FileText className="h-10 w-10 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground truncate w-full text-center">{file.name || detectName.split("/").pop()}</span>
+                        </div>
+                      )}
+                    </button>
+                    {/* Overlay actions */}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => setFilePreview({ url: file.url, name: detectName })}
+                        className="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
+                        title="Preview"
+                      >
+                        <Eye className="h-4 w-4 text-white" />
+                      </button>
+                      <a
+                        href={file.url}
+                        download={file.name || detectName.split("/").pop()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
+                        title="Download"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Download className="h-4 w-4 text-white" />
+                      </a>
+                      <button
+                        onClick={() => {
+                          const input = document.createElement("input");
+                          input.type = "file";
+                          input.onchange = async (e) => {
+                            const f = (e.target as HTMLInputElement).files?.[0];
+                            if (!f || !filesPopover) return;
+                            const newFiles = [...filesPopover.files];
+                            newFiles[idx] = { name: f.name, url: URL.createObjectURL(f) };
+                            setFilesPopover({ ...filesPopover, files: newFiles });
+                          };
+                          input.click();
+                        }}
+                        className="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
+                        title="Replace"
+                      >
+                        <RefreshCw className="h-4 w-4 text-white" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!filesPopover) return;
+                          const newFiles = filesPopover.files.filter((_, i) => i !== idx);
+                          setFilesPopover({ ...filesPopover, files: newFiles });
+                        }}
+                        className="p-2 rounded-lg bg-red-500/40 hover:bg-red-500/60 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4 text-white" />
+                      </button>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Customer Feedback */}
-              <div>
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block mb-2">Customer Feedback</span>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { key: "DAMishandledPackage", label: "Mishandled Package" },
-                    { key: "DAWasUnprofessional", label: "Unprofessional" },
-                    { key: "DADidNotFollowMyDeliveryInstructions", label: "Didn't Follow Instructions" },
-                    { key: "deliveredToWrongAddress", label: "Wrong Address" },
-                    { key: "neverReceivedDelivery", label: "Never Received" },
-                    { key: "receivedWrongItem", label: "Wrong Item" },
-                  ].map((field) => (
-                    <div key={field.key}>
-                      <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{field.label}</label>
-                      <Input type="text" value={editForm[field.key] || ""} onChange={(e) => setEditForm(prev => ({ ...prev, [field.key]: e.target.value }))} className="h-8 text-xs" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Text areas */}
-              <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Suggestion</label>
-                  <textarea
-                    value={editForm.suggestion || ""}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, suggestion: e.target.value }))}
-                    className="w-full h-16 text-xs rounded-md border border-border bg-background px-3 py-2 resize-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Prior Discussions / Warnings</label>
-                  <textarea
-                    value={editForm.priorDiscussionOrWarningsOnThisSubject || ""}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, priorDiscussionOrWarningsOnThisSubject: e.target.value }))}
-                    className="w-full h-16 text-xs rounded-md border border-border bg-background px-3 py-2 resize-none"
-                  />
-                </div>
-              </div>
-
-              {/* PDFs (read-only links) */}
-              {(editModal.unSignedPdf || editModal.signedPdf) && (
-                <div className="pt-2 border-t border-border/40">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block mb-2">PDFs</span>
-                  <div className="flex flex-wrap gap-2">
-                    {editModal.unSignedPdf && (
-                      <a href={editModal.unSignedPdf} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 text-xs transition-colors">
-                        <FileText className="h-3.5 w-3.5" /> Unsigned PDF
-                      </a>
-                    )}
-                    {editModal.signedPdf && (
-                      <a href={editModal.signedPdf} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 text-xs transition-colors">
-                        <FileText className="h-3.5 w-3.5" /> Signed PDF
-                      </a>
-                    )}
                   </div>
-                </div>
-              )}
-
-              {/* Files */}
-              {editModal.files && editModal.files.length > 0 && (
-                <div className="pt-2 border-t border-border/40">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block mb-2">Files</span>
-                  <div className="flex flex-wrap gap-2">
-                    {editModal.files.map((f, i) => (
-                      <a key={i} href={f.url} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/40 hover:bg-muted text-xs transition-colors">
-                        <FileText className="h-3.5 w-3.5 text-primary" />
-                        {f.name}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-
+                );
+              })}
             </div>
-            <div className="shrink-0 flex justify-end gap-2 pt-3 border-t border-border">
-              <Button variant="outline" size="sm" onClick={() => setEditModal(null)}>Cancel</Button>
-              <Button size="sm" onClick={handleEditSave} disabled={editSaving} className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
-                {editSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
-                Save Changes
-              </Button>
-            </div>
-            </>
-          )}
+            {/* Upload more */}
+            <label className="cursor-pointer flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-colors">
+              <Upload className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Upload more files</span>
+              <input
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  if (!filesPopover || files.length === 0) return;
+                  const newEntries = files.map(f => ({ name: f.name, url: URL.createObjectURL(f) }));
+                  setFilesPopover({ ...filesPopover, files: [...filesPopover.files, ...newEntries] });
+                  e.target.value = "";
+                  // TODO: persist upload via API
+                }}
+              />
+            </label>
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* ── Add Modal ── */}
-      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+      {/* ── File Preview Dialog ── */}
+      <Dialog open={!!filePreview} onOpenChange={() => setFilePreview(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden p-2">
+          <DialogHeader className="shrink-0 px-2 pt-2">
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <Eye className="h-4 w-4 text-primary" />
+              File Preview
+            </DialogTitle>
+          </DialogHeader>
+          {filePreview && (() => {
+            const detectName = filePreview.name || (() => { try { const u = new URL(filePreview.url); return u.searchParams.get("fileName") || u.pathname; } catch { return filePreview.url; } })();
+            const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)/i.test(detectName);
+            const isPdf = /\.pdf/i.test(detectName);
+            if (isImage) {
+              return <img src={filePreview.url} alt="Preview" className="w-full max-h-[75vh] object-contain rounded-lg" />;
+            } else if (isPdf) {
+              return <iframe src={filePreview.url} className="w-full h-[75vh] rounded-lg border-0" />;
+            } else {
+              return (
+                <div className="flex flex-col items-center justify-center gap-3 py-12">
+                  <FileText className="h-12 w-12 text-muted-foreground" />
+                  <a href={filePreview.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">Open file in new tab</a>
+                </div>
+              );
+            }
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Unified Add/Edit Modal ── */}
+      <Dialog open={!!modalMode} onOpenChange={() => closeModal()}>
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5 text-amber-500" />
-              Add Coaching & Writeup
+              {modalMode === "edit" ? <AlertTriangle className="h-5 w-5 text-amber-500" /> : <Plus className="h-5 w-5 text-amber-500" />}
+              {modalMode === "edit" ? "Edit" : "Add"} Coaching &amp; Writeup
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto space-y-4 text-sm pr-1">
@@ -790,13 +840,8 @@ export default function CoachingWriteupsPage() {
             <div className="grid grid-cols-4 gap-3">
               <div className="min-w-0">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Type</label>
-                <Select
-                  value={addForm.type || ""}
-                  onValueChange={(v) => setAddForm((prev) => ({ ...prev, type: v }))}
-                >
-                  <SelectTrigger size="sm" className="text-xs w-full">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
+                <Select value={modalForm.type || ""} onValueChange={(v) => setModalForm(prev => ({ ...prev, type: v }))}>
+                  <SelectTrigger size="sm" className="text-xs w-full"><SelectValue placeholder="Select type" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Coaching">Coaching</SelectItem>
                     <SelectItem value="Write Up">Write Up</SelectItem>
@@ -805,29 +850,19 @@ export default function CoachingWriteupsPage() {
               </div>
               <div className="min-w-0">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Duration</label>
-                <Select
-                  value={addForm.durationOfIncident || ""}
-                  onValueChange={(v) => setAddForm((prev) => ({ ...prev, durationOfIncident: v, incidentDate: "", incidentWeek: "" }))}
-                >
-                  <SelectTrigger size="sm" className="text-xs w-full">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
+                <Select value={modalForm.durationOfIncident || ""} onValueChange={(v) => setModalForm(prev => ({ ...prev, durationOfIncident: v, incidentDate: "", incidentWeek: "" }))}>
+                  <SelectTrigger size="sm" className="text-xs w-full"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Day">Day</SelectItem>
                     <SelectItem value="Week">Week</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {addForm.durationOfIncident === "Week" ? (
+              {modalForm.durationOfIncident === "Week" ? (
                 <div className="min-w-0">
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Incident Week</label>
-                  <Select
-                    value={addForm.incidentWeek || ""}
-                    onValueChange={(v) => setAddForm((prev) => ({ ...prev, incidentWeek: v }))}
-                  >
-                    <SelectTrigger size="sm" className="text-xs w-full">
-                      <SelectValue placeholder="Select week" />
-                    </SelectTrigger>
+                  <Select value={modalForm.incidentWeek || ""} onValueChange={(v) => setModalForm(prev => ({ ...prev, incidentWeek: v }))}>
+                    <SelectTrigger size="sm" className="text-xs w-full"><SelectValue placeholder="Select week" /></SelectTrigger>
                     <SelectContent className="max-h-[240px]">
                       {(availableWeeks || []).map((w) => (
                         <SelectItem key={w} value={w}>{w}</SelectItem>
@@ -838,18 +873,12 @@ export default function CoachingWriteupsPage() {
               ) : (
                 <div className="min-w-0">
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Incident Date</label>
-                  <Input
-                    type="date"
-                    value={addForm.incidentDate || ""}
-                    onChange={(e) => setAddForm((prev) => ({ ...prev, incidentDate: e.target.value }))}
-                    className="h-8 text-xs w-full"
-                    disabled={!addForm.durationOfIncident}
-                  />
+                  <Input type="date" value={modalMode === "edit" ? toDateInputValue(modalForm.incidentDate) : (modalForm.incidentDate || "")} onChange={(e) => setModalForm(prev => ({ ...prev, incidentDate: e.target.value }))} className="h-8 text-xs w-full" disabled={!modalForm.durationOfIncident} />
                 </div>
               )}
               <div className="min-w-0">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Improved By Date</label>
-                <Input type="text" disabled placeholder="Auto-calculated" value={addForm.improvedByDate || ""} className="h-8 text-xs w-full" />
+                <Input type="text" disabled placeholder="Auto-calculated" value={modalMode === "edit" ? toDateInputValue(modalForm.improvedByDate) : (modalForm.improvedByDate || "")} className="h-8 text-xs w-full" />
               </div>
             </div>
 
@@ -857,7 +886,7 @@ export default function CoachingWriteupsPage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="min-w-0">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Metric</label>
-                <Select value={addForm.metric || ""} onValueChange={(v) => setAddForm(prev => ({ ...prev, metric: v }))}>
+                <Select value={modalForm.metric?.toString() || ""} onValueChange={(v) => setModalForm(prev => ({ ...prev, metric: v }))}>
                   <SelectTrigger size="sm" className="text-xs w-full"><SelectValue placeholder="Select metric" /></SelectTrigger>
                   <SelectContent className="max-h-[240px]">
                     {metricOptions.map((opt) => (
@@ -870,15 +899,15 @@ export default function CoachingWriteupsPage() {
                 label="Employee"
                 placeholder="Search employee..."
                 options={employeeOptions}
-                value={addForm.employeeId || ""}
-                onChange={(v) => setAddForm(prev => ({ ...prev, employeeId: v }))}
+                value={modalForm.employeeId || ""}
+                onChange={(v) => setModalForm(prev => ({ ...prev, employeeId: v }))}
               />
               <SearchableSelect
                 label="Supervisor"
                 placeholder="Search supervisor..."
                 options={supervisorOptions}
-                value={addForm.supervisor || ""}
-                onChange={(v) => setAddForm(prev => ({ ...prev, supervisor: v }))}
+                value={modalForm.supervisor || ""}
+                onChange={(v) => setModalForm(prev => ({ ...prev, supervisor: v }))}
               />
             </div>
 
@@ -886,25 +915,25 @@ export default function CoachingWriteupsPage() {
             <div className="grid grid-cols-4 gap-3">
               <div className="min-w-0">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Metric Notice #</label>
-                <Input type="text" disabled placeholder="Select employee &amp; metric" value={addForm.metricNoticeNumber || ""} className="h-8 text-xs w-full" />
+                <Input type="text" disabled value={modalForm.metricNoticeNumber || ""} className="h-8 text-xs w-full" />
               </div>
               <div className="min-w-0">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Corrective Action #</label>
-                <Input type="text" disabled placeholder="Select employee" value={addForm.correctiveActionNumber || ""} className="h-8 text-xs w-full" />
+                <Input type="text" disabled value={modalForm.correctiveActionNumber || ""} className="h-8 text-xs w-full" />
               </div>
               <div className="min-w-0">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Corrective Action</label>
-                <Input type="text" value={addForm.correctiveAction || ""} onChange={(e) => setAddForm(prev => ({ ...prev, correctiveAction: e.target.value }))} className="h-8 text-xs w-full" />
+                <Input type="text" value={modalForm.correctiveAction || ""} onChange={(e) => setModalForm(prev => ({ ...prev, correctiveAction: e.target.value }))} className="h-8 text-xs w-full" />
               </div>
               <div className="min-w-0">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Goal</label>
-                <Input type="text" disabled placeholder="Select metric" value={metricOptions.find(o => o._id === addForm.metric)?.metricTypeGoal || ""} className="h-8 text-xs w-full" />
+                <Input type="text" disabled value={metricOptions.find(o => o._id === (modalForm.metric?.toString() || ""))?.metricTypeGoal || modalForm.goal || ""} className="h-8 text-xs w-full" />
               </div>
             </div>
 
             {/* Conditional metric section */}
             {(() => {
-              const selMetricDesc = metricOptions.find(o => o._id === addForm.metric)?.description || "";
+              const selMetricDesc = metricOptions.find(o => o._id === (modalForm.metric?.toString() || ""))?.description || "";
               const isSafety = selMetricDesc === "Safety Infraction";
               const isCDF = selMetricDesc === "Customer Delivery Feedback";
 
@@ -927,7 +956,6 @@ export default function CoachingWriteupsPage() {
                     { key: "receivedWrongItem", label: "Received Wrong Item" },
                   ];
 
-              // Chunk into rows of 3
               const rows: typeof fields[] = [];
               for (let i = 0; i < fields.length; i += 3) {
                 rows.push(fields.slice(i, i + 3));
@@ -941,14 +969,14 @@ export default function CoachingWriteupsPage() {
                       {row.map((f) => (
                         <div key={f.key} className="min-w-0">
                           <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{f.label}</label>
-                          <Input type={isCDF ? "number" : "text"} min={isCDF ? 0 : undefined} value={addForm[f.key] || ""} onChange={(e) => setAddForm(prev => ({ ...prev, [f.key]: e.target.value }))} className="h-8 text-xs w-full" />
+                          <Input type={isCDF ? "number" : "text"} min={isCDF ? 0 : undefined} value={modalForm[f.key] || ""} onChange={(e) => setModalForm(prev => ({ ...prev, [f.key]: e.target.value }))} className="h-8 text-xs w-full" />
                         </div>
                       ))}
                     </div>
                   ))}
                   {isCDF && (() => {
                     const total = ["DAMishandledPackage", "DAWasUnprofessional", "DADidNotFollowMyDeliveryInstructions", "deliveredToWrongAddress", "neverReceivedDelivery", "receivedWrongItem"]
-                      .reduce((sum, k) => sum + (parseFloat(addForm[k] || "0") || 0), 0);
+                      .reduce((sum, k) => sum + (parseFloat(modalForm[k] || "0") || 0), 0);
                     return (
                       <div className="grid grid-cols-3 gap-3">
                         <div className="min-w-0">
@@ -966,72 +994,202 @@ export default function CoachingWriteupsPage() {
             <div>
               <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Prior Discussions / Warnings</label>
               <textarea
-                value={addForm.priorDiscussionOrWarningsOnThisSubject || ""}
-                onChange={(e) => setAddForm((prev) => ({ ...prev, priorDiscussionOrWarningsOnThisSubject: e.target.value }))}
+                value={modalForm.priorDiscussionOrWarningsOnThisSubject || ""}
+                onChange={(e) => setModalForm(prev => ({ ...prev, priorDiscussionOrWarningsOnThisSubject: e.target.value }))}
                 className="w-full h-16 text-xs rounded-md border border-border bg-background px-3 py-2 resize-none"
               />
             </div>
 
-            {/* Row 10: File Upload */}
+            {/* File Upload — full-width thumbnail grid */}
             <div>
-              <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Files</label>
-              <div className="flex items-center gap-2">
-                <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border bg-background hover:bg-muted transition-colors">
-                  <Plus className="h-3.5 w-3.5" />
-                  Choose Files
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Attachments</label>
+                <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 text-[10px] rounded-md border border-border bg-background hover:bg-muted transition-colors text-muted-foreground">
+                  <Plus className="h-3 w-3" /> Add Files
                   <input
                     type="file"
                     multiple
+                    accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
                     className="hidden"
                     onChange={(e) => {
-                      const files = Array.from(e.target.files || []);
-                      const existing = addForm._pendingFiles ? JSON.parse(addForm._pendingFiles) : [];
-                      const newFiles = files.map(f => f.name);
-                      setAddForm(prev => ({ ...prev, _pendingFiles: JSON.stringify([...existing, ...newFiles]) }));
-                      // Store actual file objects for upload
+                      const newFiles = Array.from(e.target.files || []);
+                      if (!newFiles.length) return;
+                      // Store names in form state for re-render
+                      const existing = modalForm._pendingFiles ? JSON.parse(modalForm._pendingFiles) : [];
+                      setModalForm(prev => ({ ...prev, _pendingFiles: JSON.stringify([...existing, ...newFiles.map(f => f.name)]) }));
+                      // Store File objects for upload
                       const existingUploads = (window as any).__pendingUploadFiles || [];
-                      (window as any).__pendingUploadFiles = [...existingUploads, ...files];
+                      (window as any).__pendingUploadFiles = [...existingUploads, ...newFiles];
                       e.target.value = "";
                     }}
                   />
                 </label>
-                {addForm._pendingFiles && JSON.parse(addForm._pendingFiles).length > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    {JSON.parse(addForm._pendingFiles).length} file(s) selected
-                  </span>
-                )}
               </div>
-              {addForm._pendingFiles && JSON.parse(addForm._pendingFiles).length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {JSON.parse(addForm._pendingFiles).map((name: string, i: number) => (
-                    <span key={i} className="inline-flex items-center gap-1 text-xs bg-muted px-2 py-0.5 rounded">
-                      <FileText className="h-3 w-3" />
-                      {name}
-                      <button
-                        type="button"
-                        className="hover:text-red-400"
-                        onClick={() => {
-                          const files: string[] = JSON.parse(addForm._pendingFiles);
-                          files.splice(i, 1);
-                          setAddForm(prev => ({ ...prev, _pendingFiles: JSON.stringify(files) }));
-                          const pending = (window as any).__pendingUploadFiles || [];
-                          pending.splice(i, 1);
-                          (window as any).__pendingUploadFiles = pending;
-                        }}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
+
+              {/* Grid box */}
+              <div
+                className="relative min-h-[110px] rounded-xl border-2 border-dashed border-border/50 bg-muted/10 p-3 transition-colors"
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-primary/60", "bg-primary/5"); }}
+                onDragLeave={(e) => { e.currentTarget.classList.remove("border-primary/60", "bg-primary/5"); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.currentTarget.classList.remove("border-primary/60", "bg-primary/5");
+                  const droppedFiles = Array.from(e.dataTransfer.files);
+                  if (!droppedFiles.length) return;
+                  const existing = modalForm._pendingFiles ? JSON.parse(modalForm._pendingFiles) : [];
+                  setModalForm(prev => ({ ...prev, _pendingFiles: JSON.stringify([...existing, ...droppedFiles.map(f => f.name)]) }));
+                  const existingUploads = (window as any).__pendingUploadFiles || [];
+                  (window as any).__pendingUploadFiles = [...existingUploads, ...droppedFiles];
+                }}
+              >
+                {/* Empty state */}
+                {(!modalForm._pendingFiles || JSON.parse(modalForm._pendingFiles).length === 0) &&
+                  (!modalForm.files || modalForm.files.length === 0) && (
+                  <label className="cursor-pointer absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                    <div className="h-10 w-10 rounded-full border-2 border-dashed border-current flex items-center justify-center">
+                      <Plus className="h-5 w-5" />
+                    </div>
+                    <span className="text-[10px]">Drop files or click to upload</span>
+                    <input
+                      type="file" multiple accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt" className="hidden"
+                      onChange={(e) => {
+                        const newFiles = Array.from(e.target.files || []);
+                        if (!newFiles.length) return;
+                        const existing = modalForm._pendingFiles ? JSON.parse(modalForm._pendingFiles) : [];
+                        setModalForm(prev => ({ ...prev, _pendingFiles: JSON.stringify([...existing, ...newFiles.map(f => f.name)]) }));
+                        const existingUploads = (window as any).__pendingUploadFiles || [];
+                        (window as any).__pendingUploadFiles = [...existingUploads, ...newFiles];
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
+
+                {/* Thumbnails grid */}
+                <div className="flex flex-wrap gap-2">
+                  {/* Existing saved files */}
+                  {(modalForm.files || []).map((f: { name: string; url: string }, i: number) => {
+                    const isImg = /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(f.name);
+                    const isPdf = /\.pdf$/i.test(f.name);
+                    const isCloudinary = f.url?.includes("res.cloudinary.com");
+                    // For Cloudinary PDFs: generate a visual thumbnail of page 1
+                    const thumbUrl = (isPdf && isCloudinary)
+                      ? f.url.replace("/upload/", "/upload/w_160,h_192,c_fill,pg_1,f_jpg/")
+                      : isImg ? f.url : null;
+                    return (
+                      <div key={`saved-${i}`} className={`relative group w-20 h-24 rounded-lg overflow-hidden border ${thumbUrl ? "border-border/60 bg-muted/20" : isPdf ? "bg-red-950/40 border-red-800/40" : "bg-blue-950/40 border-blue-800/40"} flex-shrink-0`}>
+                        {thumbUrl ? (
+                          <img src={thumbUrl} alt={f.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 p-2">
+                            <div className={`h-9 w-9 rounded-lg ${isPdf ? "bg-red-500/20" : "bg-blue-500/20"} flex items-center justify-center`}>
+                              <FileText className={`h-5 w-5 ${isPdf ? "text-red-400" : "text-blue-400"}`} />
+                            </div>
+                            <span className={`text-[8px] uppercase font-bold tracking-wider ${isPdf ? "text-red-400" : "text-blue-400"}`}>{f.name.split(".").pop()?.toLowerCase()}</span>
+                            <span className="text-[8px] text-muted-foreground text-center leading-tight line-clamp-2 w-full px-1">{f.name.replace(/\.[^.]+$/, "")}</span>
+                          </div>
+                        )}
+                        {/* Hover overlay */}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                          <a href={f.url} target="_blank" rel="noopener noreferrer"
+                            className="h-7 w-7 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center"
+                            onClick={(e) => e.stopPropagation()} title="View">
+                            <Eye className="h-3.5 w-3.5 text-white" />
+                          </a>
+                          <button type="button" title="Remove"
+                            className="h-7 w-7 rounded-full bg-red-500/80 hover:bg-red-600 flex items-center justify-center"
+                            onClick={() => {
+                              const updated = (modalForm.files || []).filter((_: any, fi: number) => fi !== i);
+                              setModalForm(prev => ({ ...prev, files: updated }));
+                            }}>
+                            <X className="h-3.5 w-3.5 text-white" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Pending (not yet uploaded) files */}
+                  {(modalForm._pendingFiles ? JSON.parse(modalForm._pendingFiles) : []).map((name: string, i: number) => {
+                    const pendingFile = ((window as any).__pendingUploadFiles || [])[i] as File | undefined;
+                    const isImg = pendingFile ? pendingFile.type.startsWith("image/") : /\.(jpg|jpeg|png|gif|webp)$/i.test(name);
+                    const isPdf = /\.pdf$/i.test(name);
+                    const ext = name.split(".").pop()?.toLowerCase() || "file";
+                    const previewUrl = pendingFile && isImg ? URL.createObjectURL(pendingFile) : null;
+                    return (
+                      <div key={`pending-${i}`} className={`relative group w-20 h-24 rounded-lg overflow-hidden border ${isPdf ? "border-red-700/50 bg-red-950/30" : isImg ? "border-primary/40 bg-muted/30" : "border-blue-700/50 bg-blue-950/30"} flex-shrink-0`}>
+                        {previewUrl ? (
+                          <img src={previewUrl} alt={name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 p-2">
+                            <div className={`h-9 w-9 rounded-lg ${isPdf ? "bg-red-500/20" : "bg-blue-500/20"} flex items-center justify-center`}>
+                              <FileText className={`h-5 w-5 ${isPdf ? "text-red-400" : "text-blue-400"}`} />
+                            </div>
+                            <span className={`text-[8px] uppercase font-bold tracking-wider ${isPdf ? "text-red-400" : "text-blue-400"}`}>{ext}</span>
+                            <span className="text-[8px] text-muted-foreground text-center leading-tight line-clamp-2 w-full px-1">{name.replace(/\.[^.]+$/, "")}</span>
+                          </div>
+                        )}
+                        {/* New badge */}
+                        <div className="absolute top-1 left-1">
+                          <span className="text-[8px] bg-primary/80 text-white px-1 rounded">new</span>
+                        </div>
+                        {/* Delete button (always visible) */}
+                        <button type="button" title="Remove"
+                          className="absolute top-1 right-1 h-5 w-5 rounded-full bg-red-500/80 hover:bg-red-600 flex items-center justify-center"
+                          onClick={() => {
+                            const files: string[] = JSON.parse(modalForm._pendingFiles || "[]");
+                            files.splice(i, 1);
+                            setModalForm(prev => ({ ...prev, _pendingFiles: JSON.stringify(files) }));
+                            const pending = (window as any).__pendingUploadFiles || [];
+                            pending.splice(i, 1);
+                            (window as any).__pendingUploadFiles = pending;
+                          }}>
+                          <X className="h-3 w-3 text-white" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* PDF Documents — unSignedPdf & signedPdf (edit mode) */}
+              {modalMode === "edit" && (modalRecord?.unSignedPdf || modalRecord?.signedPdf) && (
+                <div className="mt-3">
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block mb-2">Generated PDFs</label>
+                  <div className="flex gap-2">
+                    {modalRecord?.unSignedPdf && modalRecord.unSignedPdf.startsWith("/pdfs/") && (
+                      <a href={modalRecord.unSignedPdf} target="_blank" rel="noopener noreferrer"
+                        className="group relative w-20 h-24 rounded-lg overflow-hidden border border-amber-700/50 bg-amber-950/30 flex flex-col items-center justify-center gap-1.5 p-2 hover:bg-amber-900/30 transition-colors flex-shrink-0">
+                        <div className="h-9 w-9 rounded-lg bg-amber-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <FileText className="h-5 w-5 text-amber-400" />
+                        </div>
+                        <span className="text-[8px] uppercase font-bold tracking-wider text-amber-400">PDF</span>
+                        <span className="text-[8px] text-amber-300/70 text-center leading-tight">Unsigned</span>
+                        <Eye className="absolute bottom-1 right-1 h-3 w-3 text-amber-400/60 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </a>
+                    )}
+                    {modalRecord?.signedPdf && (
+                      <a href={modalRecord.signedPdf} target="_blank" rel="noopener noreferrer"
+                        className="group relative w-20 h-24 rounded-lg overflow-hidden border border-emerald-700/50 bg-emerald-950/30 flex flex-col items-center justify-center gap-1.5 p-2 hover:bg-emerald-900/30 transition-colors flex-shrink-0">
+                        <div className="h-9 w-9 rounded-lg bg-emerald-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <FileText className="h-5 w-5 text-emerald-400" />
+                        </div>
+                        <span className="text-[8px] uppercase font-bold tracking-wider text-emerald-400">PDF</span>
+                        <span className="text-[8px] text-emerald-300/70 text-center leading-tight">Signed</span>
+                        <Eye className="absolute bottom-1 right-1 h-3 w-3 text-emerald-400/60 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
+
           </div>
           <div className="shrink-0 flex justify-end gap-2 pt-3 border-t border-border">
-            <Button variant="outline" size="sm" onClick={() => setShowAddModal(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleAddSave} disabled={saving} className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-              Save
+            <Button variant="outline" size="sm" onClick={() => closeModal()}>Cancel</Button>
+            <Button size="sm" onClick={handleModalSave} className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+              {modalMode === "edit" ? <Eye className="h-3.5 w-3.5 mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+              {modalMode === "edit" ? "Save Changes" : "Save"}
             </Button>
           </div>
         </DialogContent>
