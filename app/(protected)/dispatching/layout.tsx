@@ -85,6 +85,8 @@ interface DispatchingContextType {
     /** Callback for coaching page to register its add handler */
     onCoachingAdd: (() => void) | null;
     setOnCoachingAdd: (fn: (() => void) | null) => void;
+    coachingSignedFilter: "signed" | "not-signed";
+    setCoachingSignedFilter: (f: "signed" | "not-signed") => void;
 }
 
 const DispatchingContext = createContext<DispatchingContextType>({
@@ -109,6 +111,8 @@ const DispatchingContext = createContext<DispatchingContextType>({
     rawRouteDataLoading: false,
     onCoachingAdd: null,
     setOnCoachingAdd: () => { },
+    coachingSignedFilter: "not-signed" as const,
+    setCoachingSignedFilter: () => { },
 });
 
 export function useDispatching() {
@@ -196,6 +200,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [pdfLoading, setPdfLoading] = useState(false);
     const [confirmationFilter, setConfirmationFilter] = useState("all");
     const [onCoachingAdd, setOnCoachingAdd] = useState<(() => void) | null>(null);
+    const [coachingSignedFilter, setCoachingSignedFilter] = useState<"signed" | "not-signed">("not-signed");
     const currentWeek = useMemo(() => getCurrentYearWeek(), []);
 
     /** Pick best default week: URL > current > closest ≤ current > latest */
@@ -452,6 +457,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                 confirmationFilter, setConfirmationFilter,
                 rawRouteData, rawRouteDataLoading,
                 onCoachingAdd, setOnCoachingAdd,
+                coachingSignedFilter, setCoachingSignedFilter,
             }}
         >
             <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-3">
@@ -594,9 +600,24 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                             </>
                         )}
 
-                        {/* Add button — only on /dispatching/coaching-writeups */}
+                        {/* Signed toggle + Add button — only on /dispatching/coaching-writeups */}
                         {pathname.includes("/dispatching/coaching-writeups") && onCoachingAdd && (
                             <>
+                                <div className="w-px h-6 bg-border/60 mx-1" />
+                                <div className="flex items-center rounded-lg border border-border/60 bg-background/50 p-0.5">
+                                    <button
+                                        onClick={() => setCoachingSignedFilter("signed")}
+                                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all whitespace-nowrap select-none ${coachingSignedFilter === "signed" ? "bg-emerald-500/20 text-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
+                                    >
+                                        Signed
+                                    </button>
+                                    <button
+                                        onClick={() => setCoachingSignedFilter("not-signed")}
+                                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all whitespace-nowrap select-none ${coachingSignedFilter === "not-signed" ? "bg-amber-500/20 text-amber-400" : "text-muted-foreground hover:text-foreground"}`}
+                                    >
+                                        Not Signed
+                                    </button>
+                                </div>
                                 <div className="w-px h-6 bg-border/60 mx-1" />
                                 <button
                                     onClick={onCoachingAdd}

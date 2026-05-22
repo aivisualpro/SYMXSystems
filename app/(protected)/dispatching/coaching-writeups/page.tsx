@@ -170,7 +170,7 @@ function SearchableSelect({
 }
 
 export default function CoachingWriteupsPage() {
-  const { searchQuery, setOnCoachingAdd, availableWeeks } = useDispatching();
+  const { searchQuery, setOnCoachingAdd, availableWeeks, coachingSignedFilter } = useDispatching();
   const [data, setData] = useState<CoachingWriteUp[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
@@ -179,7 +179,7 @@ export default function CoachingWriteupsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [metricOptions, setMetricOptions] = useState<{ _id: string; description: string }[]>([]);
+  const [metricOptions, setMetricOptions] = useState<{ _id: string; description: string; metricTypeGoal?: string }[]>([]);
   const [employeeOptions, setEmployeeOptions] = useState<{ _id: string; name: string }[]>([]);
   const [supervisorOptions, setSupervisorOptions] = useState<{ _id: string; name: string }[]>([]);
 
@@ -227,6 +227,64 @@ export default function CoachingWriteupsPage() {
     return () => setOnCoachingAdd(null);
   }, [setOnCoachingAdd]);
 
+  // Live-calculate correctiveActionNumber and metricNoticeNumber
+  useEffect(() => {
+    if (!addForm.employeeId) {
+      setAddForm(prev => ({ ...prev, correctiveActionNumber: "", metricNoticeNumber: "" }));
+      return;
+    }
+    const params = new URLSearchParams({ action: "counts", employeeId: addForm.employeeId });
+    if (addForm.metric) params.set("metric", addForm.metric);
+    fetch(`/api/admin/coaching-writeups?${params}`)
+      .then(r => r.json())
+      .then(d => {
+        setAddForm(prev => ({
+          ...prev,
+          correctiveActionNumber: String((d.correctiveActionCount || 0) + 1),
+          metricNoticeNumber: addForm.metric ? String((d.metricNoticeCount || 0) + 1) : "",
+        }));
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addForm.employeeId, addForm.metric]);
+
+  // Auto-calculate improvedByDate
+  useEffect(() => {
+    const dur = addForm.durationOfIncident;
+    if (dur === "Day" && addForm.incidentDate) {
+      const d = new Date(addForm.incidentDate);
+      d.setDate(d.getDate() + 3);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      setAddForm(prev => ({ ...prev, improvedByDate: `${yyyy}-${mm}-${dd}` }));
+    } else if (dur === "Week" && addForm.incidentWeek) {
+      // Parse ISO week like "2026-W21" or "2026-W021"
+      const match = addForm.incidentWeek.match(/(\d{4})-W0*(\d+)/);
+      if (match) {
+        const year = parseInt(match[1]);
+        const week = parseInt(match[2]);
+        // Get Monday of the ISO week
+        const jan4 = new Date(year, 0, 4);
+        const dayOfWeek = jan4.getDay() || 7; // Mon=1..Sun=7
+        const mondayW1 = new Date(jan4);
+        mondayW1.setDate(jan4.getDate() - dayOfWeek + 1);
+        const monday = new Date(mondayW1);
+        monday.setDate(mondayW1.getDate() + (week - 1) * 7);
+        // First day of next week (Sunday = Monday + 6)
+        const nextWeekStart = new Date(monday);
+        nextWeekStart.setDate(monday.getDate() + 6);
+        const yyyy = nextWeekStart.getFullYear();
+        const mm = String(nextWeekStart.getMonth() + 1).padStart(2, "0");
+        const dd = String(nextWeekStart.getDate()).padStart(2, "0");
+        setAddForm(prev => ({ ...prev, improvedByDate: `${yyyy}-${mm}-${dd}` }));
+      }
+    } else {
+      setAddForm(prev => ({ ...prev, improvedByDate: "" }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addForm.durationOfIncident, addForm.incidentDate, addForm.incidentWeek]);
+
   const handleAddSave = async () => {
     setSaving(true);
     try {
@@ -234,6 +292,11 @@ export default function CoachingWriteupsPage() {
       if (body.incidentDate) body.incidentDate = new Date(body.incidentDate).toISOString();
       if (body.correctiveActionDate) body.correctiveActionDate = new Date(body.correctiveActionDate).toISOString();
       if (body.improvedByDate) body.improvedByDate = new Date(body.improvedByDate).toISOString();
+      // Auto-set goal from selected metric
+      if (body.metric) {
+        const selMetric = metricOptions.find(o => o._id === body.metric);
+        if (selMetric?.metricTypeGoal) body.goal = selMetric.metricTypeGoal;
+      }
       const res = await fetch("/api/admin/coaching-writeups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -250,18 +313,25 @@ export default function CoachingWriteupsPage() {
     }
   };
 
-  // Filter locally by the dispatching layout's search
+  // Filter locally by the dispatching layout's search + signed filter
   const filteredData = useMemo(() => {
-    if (!searchQuery && !localSearch) return data;
+    let result = data;
+    // Apply signed filter
+    if (coachingSignedFilter === "signed") {
+      result = result.filter(r => r.signedPdf && r.signedPdf.trim() !== "");
+    } else {
+      result = result.filter(r => !r.signedPdf || r.signedPdf.trim() === "");
+    }
+    if (!searchQuery && !localSearch) return result;
     const q = (searchQuery || localSearch).toLowerCase();
-    return data.filter(
+    return result.filter(
       (r) =>
         (r.employeeName || "").toLowerCase().includes(q) ||
         (r.type || "").toLowerCase().includes(q) ||
         (r.metricName || "").toLowerCase().includes(q) ||
         (r.supervisorName || "").toLowerCase().includes(q)
     );
-  }, [data, searchQuery, localSearch]);
+  }, [data, searchQuery, localSearch, coachingSignedFilter]);
 
   const getTypeBadgeColor = (type?: string) => {
     if (!type) return "bg-muted text-muted-foreground";
@@ -480,15 +550,16 @@ export default function CoachingWriteupsPage() {
 
       {/* ── Edit Modal ── */}
       <Dialog open={!!editModal} onOpenChange={() => setEditModal(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
               Edit Coaching & Writeup
             </DialogTitle>
           </DialogHeader>
           {editModal && (
-            <div className="space-y-4 text-sm">
+            <>
+            <div className="flex-1 overflow-y-auto space-y-4 text-sm pr-1">
               {/* Header summary */}
               <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-muted/30 border border-border/40">
                 <div className="flex items-center gap-2">
@@ -518,7 +589,7 @@ export default function CoachingWriteupsPage() {
                 <div>
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Type</label>
                   <Select value={editForm.type || ""} onValueChange={(v) => setEditForm(prev => ({ ...prev, type: v }))}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select type" /></SelectTrigger>
+                    <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Select type" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Coaching">Coaching</SelectItem>
                       <SelectItem value="Write Up">Write Up</SelectItem>
@@ -528,7 +599,7 @@ export default function CoachingWriteupsPage() {
                 <div>
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Duration of Incident</label>
                   <Select value={editForm.durationOfIncident || ""} onValueChange={(v) => setEditForm(prev => ({ ...prev, durationOfIncident: v }))}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select duration" /></SelectTrigger>
+                    <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Select duration" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Day">Day</SelectItem>
                       <SelectItem value="Week">Week</SelectItem>
@@ -538,7 +609,7 @@ export default function CoachingWriteupsPage() {
                 <div>
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Incident Week</label>
                   <Select value={editForm.incidentWeek || ""} onValueChange={(v) => setEditForm(prev => ({ ...prev, incidentWeek: v }))}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select week" /></SelectTrigger>
+                    <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Select week" /></SelectTrigger>
                     <SelectContent className="max-h-[240px]">
                       {(availableWeeks || []).map((w) => (
                         <SelectItem key={w} value={w}>{w}</SelectItem>
@@ -569,7 +640,7 @@ export default function CoachingWriteupsPage() {
                 <div>
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Metric</label>
                   <Select value={editForm.metric?.toString() || ""} onValueChange={(v) => setEditForm(prev => ({ ...prev, metric: v }))}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select metric" /></SelectTrigger>
+                    <SelectTrigger size="sm" className="text-xs"><SelectValue placeholder="Select metric" /></SelectTrigger>
                     <SelectContent className="max-h-[240px]">
                       {metricOptions.map((opt) => (
                         <SelectItem key={opt._id} value={opt._id}>{opt.description}</SelectItem>
@@ -692,29 +763,30 @@ export default function CoachingWriteupsPage() {
                 </div>
               )}
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
-                <Button variant="outline" size="sm" onClick={() => setEditModal(null)}>Cancel</Button>
-                <Button size="sm" onClick={handleEditSave} disabled={editSaving} className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
-                  {editSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
-                  Save Changes
-                </Button>
-              </div>
             </div>
+            <div className="shrink-0 flex justify-end gap-2 pt-3 border-t border-border">
+              <Button variant="outline" size="sm" onClick={() => setEditModal(null)}>Cancel</Button>
+              <Button size="sm" onClick={handleEditSave} disabled={editSaving} className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+                {editSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
+                Save Changes
+              </Button>
+            </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
 
       {/* ── Add Modal ── */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Plus className="h-5 w-5 text-amber-500" />
               Add Coaching & Writeup
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 text-sm">
-            {/* Row 1: Type, Duration, Date, Week */}
+          <div className="flex-1 overflow-y-auto space-y-4 text-sm pr-1">
+            {/* Row 1: Type, Duration, Date/Week, Improved By Date */}
             <div className="grid grid-cols-4 gap-3">
               <div className="min-w-0">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Type</label>
@@ -722,7 +794,7 @@ export default function CoachingWriteupsPage() {
                   value={addForm.type || ""}
                   onValueChange={(v) => setAddForm((prev) => ({ ...prev, type: v }))}
                 >
-                  <SelectTrigger className="h-8 text-xs w-full">
+                  <SelectTrigger size="sm" className="text-xs w-full">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -737,7 +809,7 @@ export default function CoachingWriteupsPage() {
                   value={addForm.durationOfIncident || ""}
                   onValueChange={(v) => setAddForm((prev) => ({ ...prev, durationOfIncident: v, incidentDate: "", incidentWeek: "" }))}
                 >
-                  <SelectTrigger className="h-8 text-xs w-full">
+                  <SelectTrigger size="sm" className="text-xs w-full">
                     <SelectValue placeholder="Select" />
                   </SelectTrigger>
                   <SelectContent>
@@ -746,41 +818,47 @@ export default function CoachingWriteupsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {addForm.durationOfIncident === "Week" ? (
+                <div className="min-w-0">
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Incident Week</label>
+                  <Select
+                    value={addForm.incidentWeek || ""}
+                    onValueChange={(v) => setAddForm((prev) => ({ ...prev, incidentWeek: v }))}
+                  >
+                    <SelectTrigger size="sm" className="text-xs w-full">
+                      <SelectValue placeholder="Select week" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[240px]">
+                      {(availableWeeks || []).map((w) => (
+                        <SelectItem key={w} value={w}>{w}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="min-w-0">
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Incident Date</label>
+                  <Input
+                    type="date"
+                    value={addForm.incidentDate || ""}
+                    onChange={(e) => setAddForm((prev) => ({ ...prev, incidentDate: e.target.value }))}
+                    className="h-8 text-xs w-full"
+                    disabled={!addForm.durationOfIncident}
+                  />
+                </div>
+              )}
               <div className="min-w-0">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Incident Date</label>
-                <Input
-                  type="date"
-                  value={addForm.incidentDate || ""}
-                  onChange={(e) => setAddForm((prev) => ({ ...prev, incidentDate: e.target.value }))}
-                  className="h-8 text-xs w-full"
-                  disabled={addForm.durationOfIncident !== "Day"}
-                />
-              </div>
-              <div className="min-w-0">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Incident Week</label>
-                <Select
-                  value={addForm.incidentWeek || ""}
-                  onValueChange={(v) => setAddForm((prev) => ({ ...prev, incidentWeek: v }))}
-                  disabled={addForm.durationOfIncident !== "Week"}
-                >
-                  <SelectTrigger className="h-8 text-xs w-full">
-                    <SelectValue placeholder="Select week" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[240px]">
-                    {(availableWeeks || []).map((w) => (
-                      <SelectItem key={w} value={w}>{w}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Improved By Date</label>
+                <Input type="text" disabled placeholder="Auto-calculated" value={addForm.improvedByDate || ""} className="h-8 text-xs w-full" />
               </div>
             </div>
 
-            {/* Row 2: Metric, Value, Notice # */}
+            {/* Row 2: Metric, Employee, Supervisor */}
             <div className="grid grid-cols-3 gap-3">
               <div className="min-w-0">
                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Metric</label>
                 <Select value={addForm.metric || ""} onValueChange={(v) => setAddForm(prev => ({ ...prev, metric: v }))}>
-                  <SelectTrigger className="h-8 text-xs w-full"><SelectValue placeholder="Select metric" /></SelectTrigger>
+                  <SelectTrigger size="sm" className="text-xs w-full"><SelectValue placeholder="Select metric" /></SelectTrigger>
                   <SelectContent className="max-h-[240px]">
                     {metricOptions.map((opt) => (
                       <SelectItem key={opt._id} value={opt._id}>{opt.description}</SelectItem>
@@ -788,34 +866,6 @@ export default function CoachingWriteupsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="min-w-0">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Metric Value</label>
-                <Input type="text" value={addForm.metricValue || ""} onChange={(e) => setAddForm(prev => ({ ...prev, metricValue: e.target.value }))} className="h-8 text-xs w-full" />
-              </div>
-              <div className="min-w-0">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Metric Notice #</label>
-                <Input type="text" value={addForm.metricNoticeNumber || ""} onChange={(e) => setAddForm(prev => ({ ...prev, metricNoticeNumber: e.target.value }))} className="h-8 text-xs w-full" />
-              </div>
-            </div>
-
-            {/* Row 3: Corrective Action #, Date, Action */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="min-w-0">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Corrective Action #</label>
-                <Input type="text" value={addForm.correctiveActionNumber || ""} onChange={(e) => setAddForm(prev => ({ ...prev, correctiveActionNumber: e.target.value }))} className="h-8 text-xs w-full" />
-              </div>
-              <div className="min-w-0">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Corrective Action Date</label>
-                <Input type="date" value={addForm.correctiveActionDate || ""} onChange={(e) => setAddForm(prev => ({ ...prev, correctiveActionDate: e.target.value }))} className="h-8 text-xs w-full" />
-              </div>
-              <div className="min-w-0">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Corrective Action</label>
-                <Input type="text" value={addForm.correctiveAction || ""} onChange={(e) => setAddForm(prev => ({ ...prev, correctiveAction: e.target.value }))} className="h-8 text-xs w-full" />
-              </div>
-            </div>
-
-            {/* Row 4: Employee, Supervisor */}
-            <div className="grid grid-cols-2 gap-3">
               <SearchableSelect
                 label="Employee"
                 placeholder="Search employee..."
@@ -832,84 +882,94 @@ export default function CoachingWriteupsPage() {
               />
             </div>
 
-            {/* Row 5: Safety Metrics */}
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { key: "seatbeltOffRate", label: "Seatbelt Off Rate" },
-                { key: "speedingEventRate", label: "Speeding Event Rate" },
-                { key: "distractionsRate", label: "Distractions Rate" },
-              ].map((f) => (
-                <div key={f.key} className="min-w-0">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{f.label}</label>
-                  <Input type="text" value={addForm[f.key] || ""} onChange={(e) => setAddForm(prev => ({ ...prev, [f.key]: e.target.value }))} className="h-8 text-xs w-full" />
-                </div>
-              ))}
-            </div>
-
-            {/* Row 6 */}
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { key: "signSignalViolationsRate", label: "Sign/Signal Violations" },
-                { key: "followingDistanceRate", label: "Following Distance" },
-                { key: "DAMishandledPackage", label: "Mishandled Package" },
-              ].map((f) => (
-                <div key={f.key} className="min-w-0">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{f.label}</label>
-                  <Input type="text" value={addForm[f.key] || ""} onChange={(e) => setAddForm(prev => ({ ...prev, [f.key]: e.target.value }))} className="h-8 text-xs w-full" />
-                </div>
-              ))}
-            </div>
-
-            {/* Row 7 */}
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { key: "DAWasUnprofessional", label: "Unprofessional" },
-                { key: "DADidNotFollowMyDeliveryInstructions", label: "Didn't Follow Instructions" },
-                { key: "deliveredToWrongAddress", label: "Wrong Address" },
-              ].map((f) => (
-                <div key={f.key} className="min-w-0">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{f.label}</label>
-                  <Input type="text" value={addForm[f.key] || ""} onChange={(e) => setAddForm(prev => ({ ...prev, [f.key]: e.target.value }))} className="h-8 text-xs w-full" />
-                </div>
-              ))}
-            </div>
-
-            {/* Row 8 */}
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { key: "neverReceivedDelivery", label: "Never Received" },
-                { key: "receivedWrongItem", label: "Received Wrong Item" },
-                { key: "improvedByDate", label: "Improved By Date", type: "date" },
-              ].map((f) => (
-                <div key={f.key} className="min-w-0">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{f.label}</label>
-                  <Input type={(f as any).type || "text"} value={addForm[f.key] || ""} onChange={(e) => setAddForm(prev => ({ ...prev, [f.key]: e.target.value }))} className="h-8 text-xs w-full" />
-                </div>
-              ))}
-            </div>
-
-            {/* Row 9 */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Row 3: Metric Notice #, Corrective Action #, Corrective Action, Goal */}
+            <div className="grid grid-cols-4 gap-3">
               <div className="min-w-0">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Suggestion</label>
-                <textarea
-                  value={addForm.suggestion || ""}
-                  onChange={(e) => setAddForm((prev) => ({ ...prev, suggestion: e.target.value }))}
-                  className="w-full h-16 text-xs rounded-md border border-border bg-background px-3 py-2 resize-none"
-                />
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Metric Notice #</label>
+                <Input type="text" disabled placeholder="Select employee &amp; metric" value={addForm.metricNoticeNumber || ""} className="h-8 text-xs w-full" />
               </div>
               <div className="min-w-0">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Total Neg. Feedbacks</label>
-                <Input type="text" value={addForm.totalNegativeFeedbacks || ""} onChange={(e) => setAddForm(prev => ({ ...prev, totalNegativeFeedbacks: e.target.value }))} className="h-8 text-xs w-full" />
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Corrective Action #</label>
+                <Input type="text" disabled placeholder="Select employee" value={addForm.correctiveActionNumber || ""} className="h-8 text-xs w-full" />
               </div>
               <div className="min-w-0">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Prior Discussions / Warnings</label>
-                <textarea
-                  value={addForm.priorDiscussionOrWarningsOnThisSubject || ""}
-                  onChange={(e) => setAddForm((prev) => ({ ...prev, priorDiscussionOrWarningsOnThisSubject: e.target.value }))}
-                  className="w-full h-16 text-xs rounded-md border border-border bg-background px-3 py-2 resize-none"
-                />
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Corrective Action</label>
+                <Input type="text" value={addForm.correctiveAction || ""} onChange={(e) => setAddForm(prev => ({ ...prev, correctiveAction: e.target.value }))} className="h-8 text-xs w-full" />
               </div>
+              <div className="min-w-0">
+                <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Goal</label>
+                <Input type="text" disabled placeholder="Select metric" value={metricOptions.find(o => o._id === addForm.metric)?.metricTypeGoal || ""} className="h-8 text-xs w-full" />
+              </div>
+            </div>
+
+            {/* Conditional metric section */}
+            {(() => {
+              const selMetricDesc = metricOptions.find(o => o._id === addForm.metric)?.description || "";
+              const isSafety = selMetricDesc === "Safety Infraction";
+              const isCDF = selMetricDesc === "Customer Delivery Feedback";
+
+              if (!isSafety && !isCDF) return null;
+
+              const fields: { key: string; label: string }[] = isSafety
+                ? [
+                    { key: "seatbeltOffRate", label: "Seatbelt Off Rate" },
+                    { key: "speedingEventRate", label: "Speeding Event Rate" },
+                    { key: "distractionsRate", label: "Distractions Rate" },
+                    { key: "signSignalViolationsRate", label: "Sign/Signal Violations" },
+                    { key: "followingDistanceRate", label: "Following Distance" },
+                  ]
+                : [
+                    { key: "DAMishandledPackage", label: "Mishandled Package" },
+                    { key: "DAWasUnprofessional", label: "Unprofessional" },
+                    { key: "DADidNotFollowMyDeliveryInstructions", label: "Didn't Follow Instructions" },
+                    { key: "deliveredToWrongAddress", label: "Wrong Address" },
+                    { key: "neverReceivedDelivery", label: "Never Received" },
+                    { key: "receivedWrongItem", label: "Received Wrong Item" },
+                  ];
+
+              // Chunk into rows of 3
+              const rows: typeof fields[] = [];
+              for (let i = 0; i < fields.length; i += 3) {
+                rows.push(fields.slice(i, i + 3));
+              }
+
+              return (
+                <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-3">
+                  <span className="text-[10px] text-amber-500 uppercase tracking-wider font-semibold">{selMetricDesc}</span>
+                  {rows.map((row, ri) => (
+                    <div key={ri} className={`grid gap-3 ${row.length === 3 ? "grid-cols-3" : row.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+                      {row.map((f) => (
+                        <div key={f.key} className="min-w-0">
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">{f.label}</label>
+                          <Input type={isCDF ? "number" : "text"} min={isCDF ? 0 : undefined} value={addForm[f.key] || ""} onChange={(e) => setAddForm(prev => ({ ...prev, [f.key]: e.target.value }))} className="h-8 text-xs w-full" />
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  {isCDF && (() => {
+                    const total = ["DAMishandledPackage", "DAWasUnprofessional", "DADidNotFollowMyDeliveryInstructions", "deliveredToWrongAddress", "neverReceivedDelivery", "receivedWrongItem"]
+                      .reduce((sum, k) => sum + (parseFloat(addForm[k] || "0") || 0), 0);
+                    return (
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="min-w-0">
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Total Neg. Feedbacks</label>
+                          <Input type="text" disabled value={String(total)} className="h-8 text-xs w-full" />
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })()}
+
+            {/* Prior Discussions */}
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Prior Discussions / Warnings</label>
+              <textarea
+                value={addForm.priorDiscussionOrWarningsOnThisSubject || ""}
+                onChange={(e) => setAddForm((prev) => ({ ...prev, priorDiscussionOrWarningsOnThisSubject: e.target.value }))}
+                className="w-full h-16 text-xs rounded-md border border-border bg-background px-3 py-2 resize-none"
+              />
             </div>
 
             {/* Row 10: File Upload */}
@@ -966,14 +1026,13 @@ export default function CoachingWriteupsPage() {
                 </div>
               )}
             </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" size="sm" onClick={() => setShowAddModal(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleAddSave} disabled={saving} className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-                Save
-              </Button>
-            </div>
+          </div>
+          <div className="shrink-0 flex justify-end gap-2 pt-3 border-t border-border">
+            <Button variant="outline" size="sm" onClick={() => setShowAddModal(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleAddSave} disabled={saving} className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+              Save
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

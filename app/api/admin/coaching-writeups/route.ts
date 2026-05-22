@@ -18,6 +18,20 @@ export async function GET(req: NextRequest) {
     await connectToDatabase();
 
     const { searchParams } = new URL(req.url);
+
+    // Lightweight count lookup for auto-calculated fields
+    const action = searchParams.get("action");
+    if (action === "counts") {
+      const empId = searchParams.get("employeeId");
+      if (!empId) return NextResponse.json({ correctiveActionCount: 0, metricNoticeCount: 0 });
+      const correctiveActionCount = await SYMXCoachingWriteUp.countDocuments({ employeeId: empId });
+      const metricId = searchParams.get("metric");
+      const metricNoticeCount = metricId
+        ? await SYMXCoachingWriteUp.countDocuments({ employeeId: empId, metric: metricId })
+        : 0;
+      return NextResponse.json({ correctiveActionCount, metricNoticeCount });
+    }
+
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
     const search = searchParams.get("search") || "";
@@ -131,6 +145,18 @@ export async function POST(req: NextRequest) {
     await connectToDatabase();
     const body = await req.json();
     body.createdBy = session.id || "";
+
+    // Auto-calculate correctiveActionNumber: count of existing records for this employee + 1
+    if (body.employeeId) {
+      const existingCount = await SYMXCoachingWriteUp.countDocuments({ employeeId: body.employeeId });
+      body.correctiveActionNumber = String(existingCount + 1);
+    }
+
+    // Auto-calculate metricNoticeNumber: count of existing records for this employee + same metric + 1
+    if (body.employeeId && body.metric) {
+      const metricCount = await SYMXCoachingWriteUp.countDocuments({ employeeId: body.employeeId, metric: body.metric });
+      body.metricNoticeNumber = String(metricCount + 1);
+    }
 
     const record = await SYMXCoachingWriteUp.create(body);
     return NextResponse.json(record, { status: 201 });
