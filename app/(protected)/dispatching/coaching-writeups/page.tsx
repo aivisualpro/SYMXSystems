@@ -1156,27 +1156,57 @@ export default function CoachingWriteupsPage() {
               {modalMode === "edit" && (modalRecord?.unSignedPdf || modalRecord?.signedPdf) && (
                 <div className="mt-3">
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block mb-2">Generated PDFs</label>
-                  <div className="flex gap-2">
-                    {modalRecord?.unSignedPdf && modalRecord.unSignedPdf.startsWith("/pdfs/") && (
-                      <a href={modalRecord.unSignedPdf} target="_blank" rel="noopener noreferrer"
-                        className="group relative w-20 h-24 rounded-lg overflow-hidden border border-amber-700/50 bg-amber-950/30 flex flex-col items-center justify-center gap-1.5 p-2 hover:bg-amber-900/30 transition-colors flex-shrink-0">
-                        <div className="h-9 w-9 rounded-lg bg-amber-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <FileText className="h-5 w-5 text-amber-400" />
+                  <div className="flex gap-3">
+                    {modalRecord?.unSignedPdf && modalRecord.unSignedPdf.startsWith("/pdfs/") && !modalForm.unSignedPdf?.toString().startsWith("") === false && modalForm.unSignedPdf !== "" && (
+                      <div
+                        className="group relative w-24 h-28 rounded-lg overflow-hidden border border-amber-700/50 bg-white flex-shrink-0 hover:border-amber-500 transition-colors cursor-pointer">
+                        {/* Scaled PDF preview */}
+                        <div className="w-full h-full overflow-hidden pointer-events-none">
+                          <iframe
+                            src={`${modalRecord.unSignedPdf}#toolbar=0&navpanes=0&scrollbar=0`}
+                            className="border-0 pointer-events-none"
+                            style={{ width: "480px", height: "560px", transform: "scale(0.2)", transformOrigin: "top left" }}
+                            tabIndex={-1}
+                          />
                         </div>
-                        <span className="text-[8px] uppercase font-bold tracking-wider text-amber-400">PDF</span>
-                        <span className="text-[8px] text-amber-300/70 text-center leading-tight">Unsigned</span>
-                        <Eye className="absolute bottom-1 right-1 h-3 w-3 text-amber-400/60 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </a>
+                        {/* Label overlay */}
+                        <div className="absolute bottom-0 inset-x-0 bg-amber-900/90 py-1 px-2 flex items-center justify-center gap-1">
+                          <FileText className="h-3 w-3 text-amber-300" />
+                          <span className="text-[9px] font-semibold text-amber-200">Unsigned</span>
+                        </div>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <a href={modalRecord.unSignedPdf} target="_blank" rel="noopener noreferrer"
+                            className="p-2 rounded-lg bg-white/20 hover:bg-white/40 transition-colors" title="View">
+                            <Eye className="h-4 w-4 text-white" />
+                          </a>
+                          <button type="button" title="Delete"
+                            className="p-2 rounded-lg bg-red-500/60 hover:bg-red-600 transition-colors"
+                            onClick={() => setModalForm(prev => ({ ...prev, unSignedPdf: "" }))}>
+                            <Trash2 className="h-4 w-4 text-white" />
+                          </button>
+                        </div>
+                      </div>
                     )}
                     {modalRecord?.signedPdf && (
                       <a href={modalRecord.signedPdf} target="_blank" rel="noopener noreferrer"
-                        className="group relative w-20 h-24 rounded-lg overflow-hidden border border-emerald-700/50 bg-emerald-950/30 flex flex-col items-center justify-center gap-1.5 p-2 hover:bg-emerald-900/30 transition-colors flex-shrink-0">
-                        <div className="h-9 w-9 rounded-lg bg-emerald-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <FileText className="h-5 w-5 text-emerald-400" />
+                        className="group relative w-24 h-28 rounded-lg overflow-hidden border border-emerald-700/50 bg-white flex-shrink-0 hover:border-emerald-500 transition-colors">
+                        {/* Scaled PDF preview */}
+                        <div className="w-full h-full overflow-hidden pointer-events-none">
+                          <iframe
+                            src={`${modalRecord.signedPdf}#toolbar=0&navpanes=0&scrollbar=0`}
+                            className="border-0 pointer-events-none"
+                            style={{ width: "480px", height: "560px", transform: "scale(0.2)", transformOrigin: "top left" }}
+                            tabIndex={-1}
+                          />
                         </div>
-                        <span className="text-[8px] uppercase font-bold tracking-wider text-emerald-400">PDF</span>
-                        <span className="text-[8px] text-emerald-300/70 text-center leading-tight">Signed</span>
-                        <Eye className="absolute bottom-1 right-1 h-3 w-3 text-emerald-400/60 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        {/* Label overlay */}
+                        <div className="absolute bottom-0 inset-x-0 bg-emerald-900/90 py-1 px-2 flex items-center justify-center gap-1">
+                          <FileText className="h-3 w-3 text-emerald-300" />
+                          <span className="text-[9px] font-semibold text-emerald-200">Signed</span>
+                        </div>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Eye className="h-5 w-5 text-white" />
+                        </div>
                       </a>
                     )}
                   </div>
@@ -1185,12 +1215,33 @@ export default function CoachingWriteupsPage() {
             </div>
 
           </div>
-          <div className="shrink-0 flex justify-end gap-2 pt-3 border-t border-border">
-            <Button variant="outline" size="sm" onClick={() => closeModal()}>Cancel</Button>
-            <Button size="sm" onClick={handleModalSave} className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
-              {modalMode === "edit" ? <Eye className="h-3.5 w-3.5 mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-              {modalMode === "edit" ? "Save Changes" : "Save"}
-            </Button>
+          <div className="shrink-0 flex items-center pt-3 border-t border-border">
+            {modalMode === "edit" && (
+              <Button variant="ghost" size="sm"
+                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                onClick={async () => {
+                  if (!modalRecord?._id) return;
+                  if (!confirm("Are you sure you want to delete this record? This cannot be undone.")) return;
+                  try {
+                    const res = await fetch(`/api/admin/coaching-writeups/${modalRecord._id}`, { method: "DELETE" });
+                    if (!res.ok) throw new Error("Delete failed");
+                    closeModal();
+                    fetchData();
+                  } catch (err) {
+                    console.error("Delete error:", err);
+                    alert("Failed to delete record");
+                  }
+                }}>
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+              </Button>
+            )}
+            <div className="ml-auto flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => closeModal()}>Cancel</Button>
+              <Button size="sm" onClick={handleModalSave} className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white">
+                {modalMode === "edit" ? <Eye className="h-3.5 w-3.5 mr-1" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                {modalMode === "edit" ? "Save Changes" : "Save"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -87,6 +87,25 @@ export async function generateCoachingPdf(recordId: string): Promise<string> {
     if (met) metricName = (met as any).description || "";
   }
 
+  // ── 2b. Query past records for same employee + same metric ──
+  const pastRecords: { type: string; incidentDate: string }[] = [];
+  if ((record as any).employeeId && (record as any).metric) {
+    const pastDocs = await SYMXCoachingWriteUp.find({
+      _id: { $ne: (record as any)._id },
+      employeeId: (record as any).employeeId,
+      metric: (record as any).metric,
+    })
+      .sort({ incidentDate: -1 })
+      .select({ type: 1, incidentDate: 1 })
+      .lean();
+    for (const p of pastDocs) {
+      pastRecords.push({
+        type: (p as any).type || "",
+        incidentDate: formatDateStr((p as any).incidentDate),
+      });
+    }
+  }
+
   // ── 3. Build replacement map ──
   const r: any = record;
 
@@ -156,6 +175,310 @@ export async function generateCoachingPdf(recordId: string): Promise<string> {
       documentId: tempDocId,
       requestBody: { requests },
     });
+
+    // ── 6a. Replace {{pastRecords}} with a dynamic table ──
+    {
+      const prDoc = await docs.documents.get({ documentId: tempDocId });
+      const prBody = prDoc.data.body?.content || [];
+
+      // Find {{pastRecords}} placeholder position
+      let prIndex = -1;
+      let prEndIndex = -1;
+      const placeholder = "{{pastRecords}}";
+      for (const block of prBody) {
+        if (block.paragraph?.elements) {
+          for (const el of block.paragraph.elements) {
+            if (el.textRun?.content && el.startIndex != null && el.endIndex != null) {
+              const idx = el.textRun.content.indexOf(placeholder);
+              if (idx !== -1) {
+                prIndex = el.startIndex + idx;
+                prEndIndex = prIndex + placeholder.length;
+              }
+            }
+          }
+        }
+      }
+
+      if (prIndex !== -1) {
+        if (pastRecords.length === 0) {
+          // No past records — just remove the placeholder and its paragraph
+          // Find the paragraph boundaries to remove the whole line
+          let paraStart = prIndex;
+          let paraEnd = prEndIndex;
+          for (const block of prBody) {
+            if (block.paragraph?.elements && block.startIndex != null && block.endIndex != null) {
+              if (block.startIndex <= prIndex && block.endIndex! >= prEndIndex) {
+                paraStart = block.startIndex;
+                paraEnd = block.endIndex!;
+                break;
+              }
+            }
+          }
+          await docs.documents.batchUpdate({
+            documentId: tempDocId,
+            requestBody: {
+              requests: [{ deleteContentRange: { range: { startIndex: paraStart, endIndex: paraEnd } } }],
+            },
+          });
+        } else {
+          // Delete the placeholder text first
+          await docs.documents.batchUpdate({
+            documentId: tempDocId,
+            requestBody: {
+              requests: [{ deleteContentRange: { range: { startIndex: prIndex, endIndex: prEndIndex } } }],
+            },
+          });
+
+          // Insert a table at the placeholder position
+          const numRows = pastRecords.length + 1; // +1 for header
+          await docs.documents.batchUpdate({
+            documentId: tempDocId,
+            requestBody: {
+              requests: [{
+                insertTable: {
+                  rows: numRows,
+                  columns: 2,
+                  location: { index: prIndex },
+                },
+              }],
+            },
+          });
+
+          // Read the doc again to get the table cell indices
+          const tableDoc = await docs.documents.get({ documentId: tempDocId });
+          const tableBody = tableDoc.data.body?.content || [];
+
+          // Find the table we just inserted (should be near prIndex)
+          let table: any = null;
+          let tableStartIndex = -1;
+          for (const block of tableBody) {
+            if (block.table && block.startIndex != null && block.startIndex >= prIndex - 2) {
+              table = block.table;
+              tableStartIndex = block.startIndex;
+              break;
+            }
+          }
+
+          if (table) {
+            // Set narrow column widths: Type=100pt, Incident Date=120pt
+            await docs.documents.batchUpdate({
+              documentId: tempDocId,
+              requestBody: {
+                requests: [
+                  {
+                    updateTableColumnProperties: {
+                      tableStartLocation: { index: tableStartIndex },
+                      columnIndices: [0],
+                      tableColumnProperties: { widthType: "FIXED_WIDTH", width: { magnitude: 100, unit: "PT" } },
+                      fields: "widthType,width",
+                    },
+                  },
+                  {
+                    updateTableColumnProperties: {
+                      tableStartLocation: { index: tableStartIndex },
+                      columnIndices: [1],
+                      tableColumnProperties: { widthType: "FIXED_WIDTH", width: { magnitude: 120, unit: "PT" } },
+                      fields: "widthType,width",
+                    },
+                  },
+                ],
+              },
+            });
+
+            // Re-read the doc to get updated cell indices after column resize
+            const tableDoc2 = await docs.documents.get({ documentId: tempDocId });
+            const tableBody2 = tableDoc2.data.body?.content || [];
+            let table2: any = null;
+            for (const block of tableBody2) {
+              if (block.table && block.startIndex != null && block.startIndex >= prIndex - 2) {
+                table2 = block.table;
+                break;
+              }
+            }
+            if (table2) table = table2;
+
+            // Build data: header + rows
+            const data = [["Type", "Incident Date"], ...pastRecords.map(pr => [pr.type, pr.incidentDate])];
+            const insertRequests: any[] = [];
+
+            // Process rows bottom-to-top to avoid index shifting
+            for (let rowIdx = data.length - 1; rowIdx >= 0; rowIdx--) {
+              for (let colIdx = 1; colIdx >= 0; colIdx--) {
+                const cell = table.tableRows?.[rowIdx]?.tableCells?.[colIdx];
+                if (cell?.content?.[0]?.paragraph?.elements?.[0]?.startIndex != null) {
+                  const cellIndex = cell.content[0].paragraph.elements[0].startIndex;
+                  insertRequests.push({
+                    insertText: {
+                      location: { index: cellIndex },
+                      text: data[rowIdx][colIdx],
+                    },
+                  });
+                }
+              }
+            }
+
+            if (insertRequests.length > 0) {
+              await docs.documents.batchUpdate({
+                documentId: tempDocId,
+                requestBody: { requests: insertRequests },
+              });
+            }
+
+            // Now style: bold headers, un-bold data rows
+            // Re-read doc to get correct indices after text insertion
+            const styledDoc = await docs.documents.get({ documentId: tempDocId });
+            const styledBody = styledDoc.data.body?.content || [];
+            let styledTable: any = null;
+            for (const block of styledBody) {
+              if (block.table && block.startIndex != null && block.startIndex >= prIndex - 2) {
+                styledTable = block.table;
+                break;
+              }
+            }
+
+            if (styledTable) {
+              const styleRequests: any[] = [];
+              for (let rowIdx = 0; rowIdx < styledTable.tableRows.length; rowIdx++) {
+                const row = styledTable.tableRows[rowIdx];
+                const isBold = rowIdx === 0; // only header row
+                for (const cell of row.tableCells || []) {
+                  for (const content of cell.content || []) {
+                    if (content.paragraph?.elements) {
+                      for (const el of content.paragraph.elements) {
+                        if (el.startIndex != null && el.endIndex != null && el.endIndex > el.startIndex) {
+                          styleRequests.push({
+                            updateTextStyle: {
+                              range: { startIndex: el.startIndex, endIndex: el.endIndex },
+                              textStyle: { bold: isBold, fontSize: { magnitude: 9, unit: "PT" } },
+                              fields: "bold,fontSize",
+                            },
+                          });
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              if (styleRequests.length > 0) {
+                await docs.documents.batchUpdate({
+                  documentId: tempDocId,
+                  requestBody: { requests: styleRequests },
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // ── 6b. Process conditional blocks: <<If: {{field}}="value">> ... <<EndIf>> ──
+    {
+      const condDoc = await docs.documents.get({ documentId: tempDocId });
+      const condBody = condDoc.data.body?.content || [];
+
+      // Concatenate all text with character indices
+      let fullText = "";
+      const indexMap: { docIndex: number; textIndex: number }[] = [];
+      for (const block of condBody) {
+        if (block.paragraph?.elements) {
+          for (const el of block.paragraph.elements) {
+            if (el.textRun?.content && el.startIndex != null) {
+              const startTextIdx = fullText.length;
+              fullText += el.textRun.content;
+              indexMap.push({ docIndex: el.startIndex, textIndex: startTextIdx });
+            }
+          }
+        }
+      }
+
+      // Helper: convert text offset to doc character index
+      const toDocIndex = (textOffset: number): number => {
+        let last = indexMap[0];
+        for (const m of indexMap) {
+          if (m.textIndex > textOffset) break;
+          last = m;
+        }
+        return last.docIndex + (textOffset - last.textIndex);
+      };
+
+      // Find all <<If: ...>> ... <<EndIf>> blocks
+      const ifRegex = /<<If:\s*(.+?)\s*>>/g;
+      const endIfStr = "<<EndIf>>";
+      type CondBlock = { ifStart: number; ifEnd: number; endIfStart: number; endIfEnd: number; conditionMet: boolean };
+      const blocks: CondBlock[] = [];
+
+      let match;
+      while ((match = ifRegex.exec(fullText)) !== null) {
+        const ifTextStart = match.index;
+        const ifTextEnd = match.index + match[0].length;
+        const conditionExpr = match[1].trim(); // e.g. {{metricName}}="Customer Delivery Feedback"
+
+        // Find matching <<EndIf>>
+        const endIdx = fullText.indexOf(endIfStr, ifTextEnd);
+        if (endIdx === -1) continue; // no matching EndIf, skip
+
+        // Evaluate condition: supports {{field}}="value" or {{field}}!="value"
+        let conditionMet = false;
+        const eqMatch = conditionExpr.match(/^\{\{(.+?)\}\}\s*(!?=)\s*"(.+?)"$/);
+        if (eqMatch) {
+          const fieldName = `{{${eqMatch[1]}}}`;
+          const operator = eqMatch[2];
+          const expectedValue = eqMatch[3];
+          const actualValue = replacements[fieldName] || "";
+          conditionMet = operator === "=" ? actualValue === expectedValue : actualValue !== expectedValue;
+        }
+
+        blocks.push({
+          // Expand ranges to include surrounding newlines to avoid leftover blank lines
+          ifStart: toDocIndex(
+            // eat newline before <<If>> if present
+            ifTextStart > 0 && fullText[ifTextStart - 1] === "\n" ? ifTextStart - 1 : ifTextStart
+          ),
+          ifEnd: toDocIndex(
+            // eat newline after <<If:...>> marker
+            ifTextEnd < fullText.length && fullText[ifTextEnd] === "\n" ? ifTextEnd + 1 : ifTextEnd
+          ),
+          endIfStart: toDocIndex(
+            // eat newline before <<EndIf>>
+            endIdx > 0 && fullText[endIdx - 1] === "\n" ? endIdx - 1 : endIdx
+          ),
+          endIfEnd: toDocIndex(
+            // eat newline after <<EndIf>>
+            endIdx + endIfStr.length < fullText.length && fullText[endIdx + endIfStr.length] === "\n"
+              ? endIdx + endIfStr.length + 1
+              : endIdx + endIfStr.length
+          ),
+          conditionMet,
+        });
+      }
+
+      // Process blocks bottom-to-top to preserve indices
+      if (blocks.length > 0) {
+        const deleteRequests: any[] = [];
+        for (const b of blocks.reverse()) {
+          if (!b.conditionMet) {
+            // Delete the entire block (from <<If>> start to <<EndIf>> end)
+            deleteRequests.push({
+              deleteContentRange: { range: { startIndex: b.ifStart, endIndex: b.endIfEnd } },
+            });
+          } else {
+            // Keep content, delete only the markers
+            // Delete <<EndIf>> first (higher index)
+            deleteRequests.push({
+              deleteContentRange: { range: { startIndex: b.endIfStart, endIndex: b.endIfEnd } },
+            });
+            // Delete <<If: ...>>
+            deleteRequests.push({
+              deleteContentRange: { range: { startIndex: b.ifStart, endIndex: b.ifEnd } },
+            });
+          }
+        }
+        await docs.documents.batchUpdate({
+          documentId: tempDocId,
+          requestBody: { requests: deleteRequests },
+        });
+      }
+    }
 
     // ── 7. Apply hyperlinks to file button labels ──
     // The Docs API requires character index ranges to apply links,
