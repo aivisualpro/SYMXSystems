@@ -419,7 +419,23 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                         <div className="px-6 pb-8">
                             {/* Greeting */}
                             <div className="text-center mb-5">
-                                <p className="text-zinc-400 text-sm">Please confirm or request a change for your upcoming schedule.</p>
+                                {data.messageType === "future-shift" || data.messageType === "shift" ? (
+                                    <>
+                                        <p className="text-white font-semibold text-base mb-1">
+                                            {data.messageType === "future-shift" ? "You're Scheduled Tomorrow" : "You're Scheduled Today"}
+                                        </p>
+                                        <p className="text-zinc-400 text-sm">
+                                            Please confirm that you&apos;re working your shift{data.messageType === "future-shift" ? " tomorrow" : ""}.
+                                        </p>
+                                        <p className="text-zinc-400 text-sm mt-2">
+                                            Tap <span className="text-emerald-400 font-medium">Confirm Shift</span> below, or text Dispatch at{" "}
+                                            <a href="tel:9254417969" className="text-blue-400 underline font-medium">(925) 441-7969</a>{" "}
+                                            if there&apos;s an issue.
+                                        </p>
+                                    </>
+                                ) : (
+                                    <p className="text-zinc-400 text-sm">Please confirm or request a change for your upcoming schedule.</p>
+                                )}
                             </div>
 
 
@@ -471,17 +487,19 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                         </svg>
-                                        Confirm Schedule
+                                        {(data.messageType === "future-shift" || data.messageType === "shift") ? "Confirm Shift" : "Confirm Schedule"}
                                     </button>
-                                    <button
-                                        onClick={() => setShowRemarks(true)}
-                                        className="w-full py-3.5 rounded-2xl bg-zinc-800/80 text-zinc-300 text-sm font-semibold border border-zinc-700/60 hover:border-amber-500/40 hover:text-amber-400 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                        </svg>
-                                        Request Change
-                                    </button>
+                                    {data.messageType !== "future-shift" && data.messageType !== "shift" && (
+                                        <button
+                                            onClick={() => setShowRemarks(true)}
+                                            className="w-full py-3.5 rounded-2xl bg-zinc-800/80 text-zinc-300 text-sm font-semibold border border-zinc-700/60 hover:border-amber-500/40 hover:text-amber-400 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            Request Change
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>
