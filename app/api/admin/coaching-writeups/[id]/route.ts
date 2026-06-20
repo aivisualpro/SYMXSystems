@@ -32,6 +32,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // background PDF generation can write a fresh URL. MongoDB disallows the same
     // field in both $set and $unset simultaneously (ConflictingUpdateOperators).
     delete body.unSignedPdf;
+    // Strip enrichment / read-only fields that the frontend may accidentally include
+    delete body._id;
+    delete body.__v;
+    delete body.createdAt;
+    delete body.updatedAt;
+    delete body.employeeName;
+    delete body.supervisorName;
+    delete body.metricName;
+    delete body.metricIcon;
+    delete body.metricColor;
+    // Don't overwrite signedPdf with empty string
+    if (!body.signedPdf) delete body.signedPdf;
+
     const updated = await SYMXCoachingWriteUp.findByIdAndUpdate(
       id,
       { $set: body, $unset: { unSignedPdf: 1 } },

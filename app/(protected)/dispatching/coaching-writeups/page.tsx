@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useDispatching } from "../layout";
 import { cn } from "@/lib/utils";
+import { notify } from "@/lib/notify";
 import {
   Search,
   Eye,
@@ -437,10 +438,19 @@ export default function CoachingWriteupsPage() {
           body.files = [...existing, ...(uploaded.filter(Boolean) as any)];
         }
 
-        // Convert dates
-        if (body.incidentDate?.length === 10) body.incidentDate = new Date(body.incidentDate).toISOString();
-        if (body.correctiveActionDate?.length === 10) body.correctiveActionDate = new Date(body.correctiveActionDate).toISOString();
-        if (body.improvedByDate?.length === 10) body.improvedByDate = new Date(body.improvedByDate).toISOString();
+        // Convert dates — guard against invalid date strings
+        if (body.incidentDate?.length === 10) {
+          const d = new Date(body.incidentDate);
+          if (!isNaN(d.getTime())) body.incidentDate = d.toISOString();
+        }
+        if (body.correctiveActionDate?.length === 10) {
+          const d = new Date(body.correctiveActionDate);
+          if (!isNaN(d.getTime())) body.correctiveActionDate = d.toISOString();
+        }
+        if (body.improvedByDate?.length === 10) {
+          const d = new Date(body.improvedByDate);
+          if (!isNaN(d.getTime())) body.improvedByDate = d.toISOString();
+        }
 
         // Auto-set goal
         if (body.metric) {
@@ -454,18 +464,25 @@ export default function CoachingWriteupsPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           });
-          if (!res.ok) throw new Error("Failed to create");
+          if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody.error || `Failed to create (${res.status})`);
+          }
           const created = await res.json();
           // Prepend the new record and mark as pending PDF
           setData(prev => [created, ...prev]);
           setPendingPdf(prev => new Set(prev).add(String(created._id)));
+          notify.success("Coaching writeup saved");
         } else if (savedMode === "edit" && savedRecord) {
           const res = await fetch(`/api/admin/coaching-writeups/${savedRecord._id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           });
-          if (!res.ok) throw new Error("Failed to update");
+          if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody.error || `Failed to update (${res.status})`);
+          }
           const updated = await res.json();
           // Patch just this row's data (files etc.) without touching unSignedPdf — that arrives via poll
           setData(prev => prev.map(r =>
@@ -473,13 +490,17 @@ export default function CoachingWriteupsPage() {
               ? { ...r, ...updated, unSignedPdf: undefined } // keep undefined so spinner stays
               : r
           ));
+          notify.success("Coaching writeup updated");
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Background save failed:", err);
-        // On error, remove from pendingPdf so spinner doesn't hang
+        notify.error(err.message || "Failed to save coaching writeup");
+        // On error, remove from pendingPdf so spinner doesn't hang and re-fetch to restore state
         if (savedRecord?._id) {
           setPendingPdf(prev => { const n = new Set(prev); n.delete(String(savedRecord._id)); return n; });
         }
+        // Re-fetch data to restore the correct state after failed save
+        fetchData(1, searchQuery || localSearch);
       }
     })();
   };
