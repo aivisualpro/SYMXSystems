@@ -71,7 +71,6 @@ flutter:
     - assets/lottie/rocket.json
     - assets/symx-logo.png
     - assets/logo.png
-    - assets/login-bg.jpg
 
 # ── Launcher icon generation ──
 # Run:  dart run flutter_launcher_icons
