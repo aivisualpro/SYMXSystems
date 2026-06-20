@@ -125,6 +125,27 @@ export async function createInspectionForRoute(
     // Back-fill the route if needed (fire-and-forget)
     writeBackToRoute(input.routeId, inspectionTime, inspectionId);
 
+    // If this submission says anyRepairs = TRUE but no VehicleRepair was
+    // previously created for this inspection, create one now.
+    if (input.anyRepairs === "TRUE") {
+      VehicleRepair.findOne({ sourceInspectionId: existing._id })
+        .lean()
+        .then((existingRepair) => {
+          if (!existingRepair) {
+            writeRepairRecord({
+              vehicleId,
+              vin,
+              unitNumber,
+              description: input.repairDescription || "",
+              currentStatus: input.repairCurrentStatus || "Not Started",
+              repairImage: input.repairImage || null,
+              inspectionId,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
     return {
       inspection: {
         _id: inspectionId,

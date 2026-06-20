@@ -120,6 +120,7 @@ export default function RouteInspectionModal({ open, onClose, onSaved, route }: 
                 driver: route.transporterId || "",
                 employeeName: route.employeeName || "",
                 vin,
+                van: route.van || "",
                 vanDisplay: route.van ? `Van ${route.van}` : "",
                 routeDate: route.date ? toPacificDate(route.date) : "",
                 mileage: "",
