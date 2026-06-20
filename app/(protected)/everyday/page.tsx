@@ -84,6 +84,11 @@ export default function EverydayAfterDispatchingPage() {
     const [pdfLoading, setPdfLoading] = useState(false);
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
+    // ── Global Search ──
+    const [searchQuery, setSearchQuery] = useState("");
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const [searchFocused, setSearchFocused] = useState(false);
+
     const [debounceNotes, setDebounceNotes] = useState(notes);
 
     // ── Refs to prevent auto-save race conditions on date switch ──
@@ -732,9 +737,12 @@ export default function EverydayAfterDispatchingPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ transporterId, dateStr: targetDate, dayBeforeConfirmation: nextVal })
             });
-            if (!res.ok) throw new Error("Update failed");
-        } catch (err) {
-            notify.error("Failed to update status");
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || "Update failed");
+            }
+        } catch (err: any) {
+            notify.error(err.message || "Failed to update status");
             // revert locally
             if (isTomorrow) {
                 setTomorrowSchedulesMap(prev => ({ ...prev, [transporterId]: { ...prev[transporterId], dayBeforeConfirmation: currentVal } }));
@@ -880,6 +888,58 @@ export default function EverydayAfterDispatchingPage() {
             });
     }, [tomorrowRoutes, tomorrowSchedulesMap, employeesMap, routeTypeConfigs]);
 
+    // ── Search: filter both grouped tables ──
+    const normalizedSearch = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
+
+    const filterGroups = useCallback((groups: { type: string; rows: RoutesTableRow[]; count: number }[]) => {
+        if (!normalizedSearch) return groups;
+        return groups
+            .map(g => {
+                const filtered = g.rows.filter(r => {
+                    const haystack = [
+                        r.employeeName,
+                        r.transporterId,
+                        r.van,
+                        r.routeNumber,
+                        r.type,
+                        r.phone,
+                    ].filter(Boolean).join(" ").toLowerCase();
+                    return haystack.includes(normalizedSearch);
+                });
+                return { ...g, rows: filtered, count: filtered.length };
+            })
+            .filter(g => g.count > 0);
+    }, [normalizedSearch]);
+
+    const filteredGroupedRoutes = useMemo(() => filterGroups(groupedRoutes), [filterGroups, groupedRoutes]);
+    const filteredGroupedTomorrowRoutes = useMemo(() => filterGroups(groupedTomorrowRoutes), [filterGroups, groupedTomorrowRoutes]);
+
+    const searchStats = useMemo(() => {
+        if (!normalizedSearch) return null;
+        const todayTotal = groupedRoutes.reduce((s, g) => s + g.count, 0);
+        const todayMatched = filteredGroupedRoutes.reduce((s, g) => s + g.count, 0);
+        const tomorrowTotal = groupedTomorrowRoutes.reduce((s, g) => s + g.count, 0);
+        const tomorrowMatched = filteredGroupedTomorrowRoutes.reduce((s, g) => s + g.count, 0);
+        return { todayTotal, todayMatched, tomorrowTotal, tomorrowMatched };
+    }, [normalizedSearch, groupedRoutes, filteredGroupedRoutes, groupedTomorrowRoutes, filteredGroupedTomorrowRoutes]);
+
+
+    // ⌘K / Ctrl+K keyboard shortcut for search focus
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+                e.preventDefault();
+                searchInputRef.current?.focus();
+            }
+            if (e.key === "Escape" && searchFocused) {
+                searchInputRef.current?.blur();
+                setSearchQuery("");
+            }
+        };
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
+    }, [searchFocused]);
+
     const rtsEntries = useMemo(() => {
         return Object.values(rtsMap).flat().map((rts: any) => {
             const route = routes.find(r => r._id === rts.routeId);
@@ -918,6 +978,23 @@ export default function EverydayAfterDispatchingPage() {
         }).sort((a, b) => (a.employeeName || "").localeCompare(b.employeeName || ""));
     }, [rescueMap, routes, employeesMap, allEmployees]);
 
+    const filteredRescueEntries = useMemo(() => {
+        if (!normalizedSearch) return rescueEntries;
+        return rescueEntries.filter(r => {
+            const haystack = [
+                r.employeeName,
+                r.rescuerName,
+                r.reason,
+            ].filter(Boolean).join(" ").toLowerCase();
+            return haystack.includes(normalizedSearch);
+        });
+    }, [normalizedSearch, rescueEntries]);
+
+    const rescueSearchStats = useMemo(() => {
+        if (!normalizedSearch) return null;
+        return { total: rescueEntries.length, matched: filteredRescueEntries.length };
+    }, [normalizedSearch, rescueEntries, filteredRescueEntries]);
+
     if (!date || weeks.length === 0) {
         return (
             <div className="flex-1 flex items-center justify-center p-8">
@@ -937,11 +1014,12 @@ export default function EverydayAfterDispatchingPage() {
 
     return (
         <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-background">
-            {/* Top row: Horizontal Date Selector & Notes inline */}
-            <div className="mb-2 shrink-0 overflow-x-auto scrollbar-none">
-                <div className="flex items-stretch gap-1 p-1 rounded-xl bg-muted/50 border border-border min-w-max flex-1">
-                    {/* Horizontal Date Selector — identical to dispatching */}
-                    {weekDates.length > 0 && weekDates.map((dateStr) => {
+            {/* Top row: Horizontal Date Selector, Search & Notes inline */}
+            <div className="mb-2 shrink-0 flex items-center gap-1.5">
+                {/* Scrollable Date Pills + PDF */}
+                <div className="overflow-x-auto scrollbar-none shrink min-w-0">
+                    <div className="flex items-stretch gap-1 p-1 rounded-xl bg-muted/50 border border-border min-w-max">
+                        {weekDates.length > 0 && weekDates.map((dateStr) => {
                         const isActive = date === dateStr;
                         const d = new Date(dateStr + "T00:00:00Z");
                         const dayNum = d.getUTCDate();
@@ -999,58 +1077,115 @@ export default function EverydayAfterDispatchingPage() {
                         )}
                         PDF
                     </button>
+                    </div>
+                </div>
 
-                    {/* Notes Input inline */}
-                    <div className="flex-1 flex items-center relative group min-w-[300px] h-[34px] self-center">
-                        <FileText className="absolute left-3 h-4 w-4 text-muted-foreground/50 pointer-events-none" />
-                        <input
-                            type="text"
-                            value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
-                            placeholder="Notes"
-                            className="w-full h-full bg-background border border-primary ring-1 ring-primary rounded-lg pl-9 pr-[85px] text-sm font-medium placeholder:text-muted-foreground/40 placeholder:font-bold placeholder:text-base focus:outline-none transition-all shadow-sm"
-                        />
-                        <div className="absolute right-1 flex items-center gap-1.5 pointer-events-auto">
-                            <Button 
-                                onClick={() => setIsAttachmentsModalOpen(true)}
-                                variant="outline" 
-                                size="sm" 
-                                className="h-8 relative border-border/50 hover:bg-muted bg-background"
-                            >
-                                <Paperclip className="h-4 w-4 mr-1.5 text-muted-foreground" />
-                                Attachments
-                                {attachments.length > 0 && (
-                                    <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-primary text-[10px] font-bold text-primary-foreground flex items-center justify-center ring-2 ring-background">
-                                        {attachments.length}
-                                    </span>
+                {/* ── Global Indexed Search ── */}
+                <div className={cn(
+                    "relative flex items-center shrink-0 h-[42px] transition-all duration-300 ease-out",
+                    searchFocused || searchQuery ? "w-[220px] sm:w-[260px]" : "w-[180px] sm:w-[200px]"
+                )}>
+                    <Search className={cn(
+                        "absolute left-2.5 h-3.5 w-3.5 pointer-events-none transition-colors duration-200 z-10",
+                        searchFocused ? "text-primary" : "text-muted-foreground/50"
+                    )} strokeWidth={2.5} />
+                    <input
+                        ref={searchInputRef}
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onFocus={() => setSearchFocused(true)}
+                        onBlur={() => setSearchFocused(false)}
+                        placeholder="Search employees…"
+                        className="w-full h-full bg-background border border-primary ring-1 ring-primary rounded-lg pl-8 pr-14 text-sm font-medium placeholder:text-muted-foreground/40 placeholder:font-bold focus:outline-none transition-all shadow-sm"
+                    />
+                    {/* Shortcut badge / match count / clear */}
+                    <div className="absolute right-2 flex items-center gap-1 pointer-events-auto z-10">
+                        {searchQuery ? (
+                            <>
+                                {searchStats && (
+                                    <div className="flex items-center gap-0.5 mr-0.5">
+                                        <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-orange-500/15 text-orange-600 border border-orange-500/20">
+                                            {searchStats.todayMatched}
+                                        </span>
+                                        <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-indigo-500/15 text-indigo-600 border border-indigo-500/20">
+                                            {searchStats.tomorrowMatched}
+                                        </span>
+                                        {rescueSearchStats && (
+                                            <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-teal-500/15 text-teal-600 border border-teal-500/20">
+                                                {rescueSearchStats.matched}
+                                            </span>
+                                        )}
+                                    </div>
                                 )}
-                            </Button>
-                            <Button
-                                onClick={handleSaveNotes}
-                                disabled={savingNotes}
-                                size="sm"
-                                className={cn(
-                                    "h-7 px-3 text-[11px] font-bold tracking-wide rounded-md transition-all shadow-sm",
-                                    debounceNotes === notes && notes.length > 0 && !savingNotes
-                                        ? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 shadow-none border border-emerald-500/20"
-                                        : "bg-primary text-primary-foreground hover:bg-primary/90"
-                                )}
-                            >
-                                {savingNotes ? (
-                                    <>
-                                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                        Saving
-                                    </>
-                                ) : debounceNotes === notes && notes.length > 0 ? (
-                                    <>
-                                        <Check className="h-3 w-3 mr-1" />
-                                        Saved
-                                    </>
-                                ) : (
-                                    "Save"
-                                )}
-                            </Button>
-                        </div>
+                                <button
+                                    onMouseDown={(e) => { e.preventDefault(); setSearchQuery(""); searchInputRef.current?.focus(); }}
+                                    className="p-0.5 rounded-full hover:bg-muted transition-colors"
+                                >
+                                    <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                                </button>
+                            </>
+                        ) : (
+                            <kbd className={cn(
+                                "hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold transition-opacity duration-200",
+                                searchFocused ? "opacity-0" : "opacity-60 bg-muted border border-border/80 text-muted-foreground"
+                            )}>
+                                ⌘K
+                            </kbd>
+                        )}
+                    </div>
+                </div>
+
+                {/* Notes Input inline */}
+                <div className="flex-1 flex items-center relative group min-w-0 h-[42px]">
+                    <FileText className="absolute left-3 h-4 w-4 text-muted-foreground/50 pointer-events-none" />
+                    <input
+                        type="text"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Notes"
+                        className="w-full h-full bg-background border border-primary ring-1 ring-primary rounded-lg pl-9 pr-[85px] text-sm font-medium placeholder:text-muted-foreground/40 placeholder:font-bold placeholder:text-base focus:outline-none transition-all shadow-sm"
+                    />
+                    <div className="absolute right-1 flex items-center gap-1.5 pointer-events-auto">
+                        <Button 
+                            onClick={() => setIsAttachmentsModalOpen(true)}
+                            variant="outline" 
+                            size="sm" 
+                            className="h-8 relative border-border/50 hover:bg-muted bg-background"
+                        >
+                            <Paperclip className="h-4 w-4 mr-1.5 text-muted-foreground" />
+                            Attachments
+                            {attachments.length > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-primary text-[10px] font-bold text-primary-foreground flex items-center justify-center ring-2 ring-background">
+                                    {attachments.length}
+                                </span>
+                            )}
+                        </Button>
+                        <Button
+                            onClick={handleSaveNotes}
+                            disabled={savingNotes}
+                            size="sm"
+                            className={cn(
+                                "h-7 px-3 text-[11px] font-bold tracking-wide rounded-md transition-all shadow-sm",
+                                debounceNotes === notes && notes.length > 0 && !savingNotes
+                                    ? "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 shadow-none border border-emerald-500/20"
+                                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                            )}
+                        >
+                            {savingNotes ? (
+                                <>
+                                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                    Saving
+                                </>
+                            ) : debounceNotes === notes && notes.length > 0 ? (
+                                <>
+                                    <Check className="h-3 w-3 mr-1" />
+                                    Saved
+                                </>
+                            ) : (
+                                "Save"
+                            )}
+                        </Button>
                     </div>
                 </div>
             </div>
@@ -1066,13 +1201,19 @@ export default function EverydayAfterDispatchingPage() {
                                     <div>
                                         <h2 className="text-sm font-bold text-foreground leading-none tracking-tight flex items-center">
                                             Routes Overview <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-orange-500/10 text-foreground px-1.5 py-0.5 rounded-sm">({formattedDate})</span>
+                                            {searchStats && (
+                                                <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/10 text-orange-600 border border-orange-500/20 animate-in fade-in slide-in-from-left-2 duration-200">
+                                                    <Search className="h-2.5 w-2.5" />
+                                                    {searchStats.todayMatched} of {searchStats.todayTotal}
+                                                </span>
+                                            )}
                                         </h2>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         <RoutesTable
-                            groups={groupedRoutes}
+                            groups={filteredGroupedRoutes}
                             loading={loading}
                             columns={[
                                 { key: "employee", label: "Employee", minW: 100, className: "w-[160px] max-w-[160px]", sticky: true },
@@ -1194,13 +1335,19 @@ export default function EverydayAfterDispatchingPage() {
                                     <div>
                                         <h2 className="text-sm font-bold text-foreground leading-none tracking-tight flex items-center">
                                             Roster Plan <span className="text-[11px] opacity-60 font-medium ml-1.5 bg-indigo-500/10 text-foreground px-1.5 py-0.5 rounded-sm">({formattedTomorrow})</span>
+                                            {searchStats && (
+                                                <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 animate-in fade-in slide-in-from-left-2 duration-200">
+                                                    <Search className="h-2.5 w-2.5" />
+                                                    {searchStats.tomorrowMatched} of {searchStats.tomorrowTotal}
+                                                </span>
+                                            )}
                                         </h2>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         <RoutesTable
-                            groups={groupedTomorrowRoutes}
+                            groups={filteredGroupedTomorrowRoutes}
                             loading={loading}
                             columns={[
                                 { key: "employee", label: "Employee", minW: 100, className: "w-[160px] max-w-[160px]", sticky: true },
@@ -1420,10 +1567,18 @@ export default function EverydayAfterDispatchingPage() {
                     {/* Rescue */}
                     <Card className="md:col-span-1 xl:col-auto xl:flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-[300px] auto-rows-max xl:min-h-0">
                         <div className="py-2.5 px-3.5 border-b border-border/50 bg-muted/20 shrink-0">
-                            <h3 className="text-sm font-bold tracking-wide">Rescue</h3>
+                            <h3 className="text-sm font-bold tracking-wide flex items-center">
+                                Rescue
+                                {rescueSearchStats && (
+                                    <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/10 text-teal-600 border border-teal-500/20 animate-in fade-in slide-in-from-left-2 duration-200">
+                                        <Search className="h-2.5 w-2.5" />
+                                        {rescueSearchStats.matched} of {rescueSearchStats.total}
+                                    </span>
+                                )}
+                            </h3>
                         </div>
                         <div className="flex-1 min-h-0 overflow-auto bg-background/40">
-                            {rescueEntries.length === 0 ? (
+                            {filteredRescueEntries.length === 0 ? (
                                 <div className="flex h-full items-center justify-center p-4">
                                     <span className="text-muted-foreground/50 text-xs font-medium uppercase tracking-wider">No rescue records found</span>
                                 </div>
@@ -1439,7 +1594,7 @@ export default function EverydayAfterDispatchingPage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border/40">
-                                        {rescueEntries.map((rescue) => (
+                                        {filteredRescueEntries.map((rescue) => (
                                             <tr key={rescue._id} className="hover:bg-muted/20 transition-colors">
                                                 <td className="p-2 pl-3 font-normal text-foreground/90 whitespace-nowrap">
                                                     <div className="flex items-center gap-2 max-w-[140px] xl:max-w-max">

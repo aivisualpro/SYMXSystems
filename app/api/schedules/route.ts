@@ -149,6 +149,9 @@ export async function GET(req: NextRequest) {
     const wstMap = new Map((wstOptions as any[]).map(w => [(w.wst || '').trim().toLowerCase(), w.revenue || 0]));
 
     const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp]));
+    const activeTransporterIds = new Set(
+      (employees as any[]).filter(e => (e.status || "").toLowerCase() === "active").map(e => e.transporterId)
+    );
     const theoryHrsMap = new Map((routeTypes as any[]).map(rt => [(rt.name || '').trim().toLowerCase(), rt.theoryHrs || 0]));
     const routeTypeGroupMap = new Map((routeTypes as any[]).map(rt => [(rt.name || '').trim().toLowerCase(), (rt.group || '').trim().toLowerCase()]));
 
@@ -461,11 +464,16 @@ export async function GET(req: NextRequest) {
         }
     });
 
+    // Filter out inactive employees from the grouped result
+    const activeGrouped = Object.fromEntries(
+      Object.entries(grouped).filter(([tid]) => activeTransporterIds.has(tid))
+    );
+
     return NextResponse.json({
       yearWeek,
       dates,
-      employees: Object.values(grouped),
-      totalEmployees: Object.keys(grouped).length,
+      employees: Object.values(activeGrouped),
+      totalEmployees: Object.keys(activeGrouped).length,
       prevWeekTrailing,
       auditCounts,
       everydayRecords,

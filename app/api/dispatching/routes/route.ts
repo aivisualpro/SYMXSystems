@@ -163,7 +163,7 @@ export async function GET(req: NextRequest) {
         const [employees, routeCountsByDate, auditCountsRaw, vehicleDocs, confirmationDocs] = await Promise.all([
             SymxEmployee.find(
                 { transporterId: { $in: transporterIds } },
-                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, profileImage: 1, routesComp: 1, rate: 1, hiredDate: 1 }
+                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, status: 1, profileImage: 1, routesComp: 1, rate: 1, hiredDate: 1 }
             ).lean(),
             SYMXRoute.aggregate([
                 { $match: routeCountMatch },
@@ -195,6 +195,7 @@ export async function GET(req: NextRequest) {
         // ── Build maps (all O(n), very fast) ──
         const employeeMap: Record<string, any> = {};
         const initialCompMap: Record<string, number> = {};
+        const activeTransporterIds = new Set<string>();
         employees.forEach((emp: any) => {
             const normalizedTid = (emp.transporterId || "").trim().toUpperCase();
             employeeMap[normalizedTid] = {
@@ -208,6 +209,9 @@ export async function GET(req: NextRequest) {
                 hiredDate: emp.hiredDate || null,
             };
             initialCompMap[normalizedTid] = parseInt(emp.routesComp) || 0;
+            if ((emp.status || "").toLowerCase() === "active") {
+                activeTransporterIds.add(normalizedTid);
+            }
         });
 
         // Build per-employee per-date count map: { transporterId: { "2026-03-15": 1, ... } }
@@ -285,7 +289,12 @@ export async function GET(req: NextRequest) {
 
         // ── Enrich routes with vin resolved from vehicleName → vin map ──
         const backfillVinOps: any[] = [];
-        const enrichedRoutes = routes.map((r: any) => {
+        const enrichedRoutes = routes
+            .filter((r: any) => {
+                const tid = (r.transporterId || "").trim().toUpperCase();
+                return activeTransporterIds.has(tid);
+            })
+            .map((r: any) => {
             const typeId = r.typeId ? String(r.typeId) : "";
             const resolvedType = typeId ? (rtIdToName.get(typeId) || r.type || "") : (r.type || "");
             const emp = employeeMap[(r.transporterId || "").trim().toUpperCase()] || {};

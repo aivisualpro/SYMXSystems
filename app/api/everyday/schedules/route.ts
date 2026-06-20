@@ -32,9 +32,16 @@ export async function PUT(req: NextRequest) {
                 transporterId, 
                 date: { $gte: startOfDay, $lte: endOfDay }
             },
-            { dayBeforeConfirmation },
+            { $set: { dayBeforeConfirmation } },
             { new: true }
         );
+
+        if (!record) {
+            return NextResponse.json(
+                { error: "No schedule record found for this employee on this date" },
+                { status: 404 }
+            );
+        }
 
         return NextResponse.json({ success: true, record });
     } catch (error: any) {
