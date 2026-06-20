@@ -199,15 +199,19 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  try { await requirePermission("Fleet", "edit"); } catch (e: any) {
-    if (e.name === "ForbiddenError") return NextResponse.json({ error: e.message }, { status: 403 });
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Allow EITHER Fleet.edit OR Dispatching.edit — dispatchers create inspections
+  // from the closing page but only have Dispatching permissions, not Fleet.
+  let hasPermission = false;
+  try { await requirePermission("Fleet", "edit"); hasPermission = true; } catch { /* try Dispatching */ }
+  if (!hasPermission) {
+    try { await requirePermission("Dispatching", "edit"); hasPermission = true; } catch (e: any) {
+      if (e.name === "ForbiddenError") return NextResponse.json({ error: e.message }, { status: 403 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   try {
-    const auth = await authorizeAction("Fleet", "create");
-    if (!auth.authorized) return auth.response;
-
+    await connectToDatabase();
     const body = await req.json();
     const data = body.data || body;
 
