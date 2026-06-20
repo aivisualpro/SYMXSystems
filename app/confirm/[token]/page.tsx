@@ -433,6 +433,15 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                                             if there&apos;s an issue.
                                         </p>
                                     </>
+                                ) : data.messageType === "week-schedule" ? (
+                                    <>
+                                        <p className="text-zinc-400 text-sm">Your schedule for next week is now available.</p>
+                                        <p className="text-zinc-400 text-sm mt-2">
+                                            Please review it and tap <span className="text-emerald-400 font-medium">Confirm Schedule</span>, or text Dispatch at{" "}
+                                            <a href="tel:9254417969" className="text-blue-400 underline font-medium">(925) 441-7969</a>{" "}
+                                            if there&apos;s an issue.
+                                        </p>
+                                    </>
                                 ) : (
                                     <p className="text-zinc-400 text-sm">Please confirm or request a change for your upcoming schedule.</p>
                                 )}
@@ -489,7 +498,7 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                                         </svg>
                                         {(data.messageType === "future-shift" || data.messageType === "shift") ? "Confirm Shift" : "Confirm Schedule"}
                                     </button>
-                                    {data.messageType !== "future-shift" && data.messageType !== "shift" && (
+                                    {data.messageType !== "future-shift" && data.messageType !== "shift" && data.messageType !== "week-schedule" && (
                                         <button
                                             onClick={() => setShowRemarks(true)}
                                             className="w-full py-3.5 rounded-2xl bg-zinc-800/80 text-zinc-300 text-sm font-semibold border border-zinc-700/60 hover:border-amber-500/40 hover:text-amber-400 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
