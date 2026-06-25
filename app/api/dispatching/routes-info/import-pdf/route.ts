@@ -54,45 +54,43 @@ export async function POST(req: NextRequest) {
         await connectToDatabase();
         const dateObj = new Date(date);
 
-        // ── 1. Upload PDF to Cloudinary ──
+        // ── 1. Upload PDF to Cloudinary (optional — fails gracefully) ──
         let cloudinaryUrl = "";
         if (file) {
-            const arrayBuffer = await file.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
 
-            const uploadResult: any = await new Promise((resolve, reject) => {
-                cloudinary.uploader.upload_stream(
-                    {
-                        folder: "symx-systems/route-sheets",
-                        resource_type: "raw",
-                        public_id: `route-sheet-${date}`,
-                        overwrite: true,
-                    },
-                    (error, result) => {
-                        if (error) reject(error);
-                        else resolve(result);
-                    }
-                ).end(buffer);
-            });
+                const uploadResult: any = await new Promise((resolve, reject) => {
+                    cloudinary.uploader.upload_stream(
+                        {
+                            folder: "symx-systems/route-sheets",
+                            resource_type: "raw",
+                            public_id: `route-sheet-${date}`,
+                            overwrite: true,
+                        },
+                        (error, result) => {
+                            if (error) reject(error);
+                            else resolve(result);
+                        }
+                    ).end(buffer);
+                });
 
-            cloudinaryUrl = uploadResult.secure_url || uploadResult.url || "";
-
-            // ── 2. Save URL + parsed data to SYMXEveryday ──
-            if (cloudinaryUrl) {
-                await SymxEveryday.findOneAndUpdate(
-                    { date },
-                    { $set: { SYMXRouteSheet: cloudinaryUrl, SYMXRouteSheetData: pages } },
-                    { upsert: true, new: true }
-                );
+                cloudinaryUrl = uploadResult.secure_url || uploadResult.url || "";
+            } catch (uploadErr: any) {
+                // Non-fatal: log and continue — parsed data is still saved below
+                console.warn("[import-pdf] Cloudinary upload failed (non-fatal):", uploadErr?.message || uploadErr);
             }
-        } else {
-            // No file (refetch scenario) — still save the pages data
-            await SymxEveryday.findOneAndUpdate(
-                { date },
-                { $set: { SYMXRouteSheetData: pages } },
-                { upsert: true, new: true }
-            );
         }
+
+        // ── 2. Save URL + parsed data to SYMXEveryday ──
+        const everydayUpdate: Record<string, any> = { SYMXRouteSheetData: pages };
+        if (cloudinaryUrl) everydayUpdate.SYMXRouteSheet = cloudinaryUrl;
+        await SymxEveryday.findOneAndUpdate(
+            { date },
+            { $set: everydayUpdate },
+            { upsert: true, new: true }
+        );
 
         // ── 3. Bulk-update RoutesInfo records ──
         const existingRows = await SYMXRoutesInfo.find({ date: dateObj }).lean() as any[];
