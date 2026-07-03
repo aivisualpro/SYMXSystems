@@ -96,7 +96,7 @@ const COLUMNS = [
     { key: "actions", label: "", width: "w-[40px]" },
 ] as const;
 
-const GRID_TEMPLATE = "minmax(140px, 1fr) 95px 75px 70px 75px 70px 70px 110px 75px 70px 65px 80px 80px 70px 40px";
+const GRID_TEMPLATE = "260px 95px 75px 70px 75px 70px 70px 110px 75px 70px 65px 80px 80px 70px 40px";
 
 // ── Editable fields ──
 const EDITABLE_FIELDS = new Set([
