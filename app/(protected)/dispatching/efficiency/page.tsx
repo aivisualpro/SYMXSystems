@@ -401,9 +401,13 @@ export default function EfficiencyPage() {
     };
 
     // ── Filter + sort ──
-    const { groups, totalFiltered, totalForDate } = useMemo(() => {
+    const { filteredRoutes, totalFiltered, totalForDate } = useMemo(() => {
         let dateFiltered = allRoutes;
         if (selectedDate) dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
+        
+        // Filter: Show ONLY "Route" type
+        dateFiltered = dateFiltered.filter(r => (r.type || "").trim().toLowerCase() === "route");
+        
         const totalForDate = dateFiltered.length;
 
         let filtered = dateFiltered;
@@ -430,41 +434,15 @@ export default function EfficiencyPage() {
             return sortDir === "asc" ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
         });
 
-        // Group by type (matching Routes/Time tabs)
-        const typeGroups: Record<string, RouteRow[]> = {};
-        sorted.forEach(r => {
-            const resolvedName = r.typeId ? (routeTypeIdMap.get(r.typeId)?.name || r.type || "Unassigned") : (r.type || "Unassigned");
-            if (!typeGroups[resolvedName]) typeGroups[resolvedName] = [];
-            typeGroups[resolvedName].push(r);
-        });
-
         if (sortKey === "employee") {
-            Object.values(typeGroups).forEach(group => {
-                group.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-            });
+            sorted.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
         }
 
-        const groupKeys = Object.keys(typeGroups).sort((a, b) => {
-            const aLower = a.toLowerCase();
-            const bLower = b.toLowerCase();
-            if (aLower === "route") return -1;
-            if (bLower === "route") return 1;
-            if (aLower === "off" || aLower === "unassigned" || aLower === "") return 1;
-            if (bLower === "off" || bLower === "unassigned" || bLower === "") return -1;
-            return a.localeCompare(b);
-        });
-
-        const groups = groupKeys.map(key => ({
-            type: key,
-            rows: typeGroups[key],
-            count: typeGroups[key].length,
-        }));
-
-        return { groups, totalFiltered: sorted.length, totalForDate };
-    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir, routeTypeIdMap]);
+        return { filteredRoutes: sorted, totalFiltered: sorted.length, totalForDate };
+    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir]);
 
     // ── Stats ──
-    useEffect(() => { setStats({ employeeCount: totalFiltered, groupCount: groups.length }); }, [totalFiltered, groups.length, setStats]);
+    useEffect(() => { setStats({ employeeCount: totalFiltered }); }, [totalFiltered, setStats]);
     useEffect(() => { return () => setStats({}); }, [setStats]);
 
     if (rawRouteData?.routes?.length > 0 && allRoutes.length === 0) {
@@ -627,43 +605,7 @@ export default function EfficiencyPage() {
 
                         {/* Rows */}
                         <div className="flex-1">
-                            {groups.map((group) => {
-                                const isCollapsed = collapsedGroups[group.type] ?? false;
-                                const typeOpt = TYPE_MAP.get(group.type.toLowerCase());
-                                const GroupIcon = typeOpt?.icon;
-                                const groupStyle = getTypeStyle(group.type);
-                                return (
-                                    <div key={group.type}>
-                                        {/* Group Header */}
-                                        <div
-                                            onClick={() => toggleGroup(group.type)}
-                                            className="cursor-pointer hover:bg-muted/60 transition-colors bg-muted/30 border-b border-border/30 px-3 py-1.5 flex items-center sticky top-[37px] z-25"
-                                        >
-                                            <div className="flex items-center gap-2 sticky left-0">
-                                                <ChevronRight className={cn(
-                                                    "h-3 w-3 text-muted-foreground transition-transform",
-                                                    !isCollapsed && "rotate-90"
-                                                )} />
-                                                <div className={cn(
-                                                    "flex items-center gap-1 px-2 py-0.5 rounded text-[12px] font-semibold border shadow-sm",
-                                                    !groupStyle.colorHex && groupStyle.bg,
-                                                    !groupStyle.colorHex && groupStyle.text,
-                                                    !groupStyle.colorHex && groupStyle.border
-                                                )} style={{
-                                                    backgroundColor: groupStyle.colorHex || undefined,
-                                                    color: groupStyle.colorHex ? getContrastText(groupStyle.colorHex) : undefined,
-                                                    borderColor: groupStyle.colorHex ? 'transparent' : undefined
-                                                }}>
-                                                    {GroupIcon && <GroupIcon className="h-3 w-3" />}
-                                                    {group.type || "Unassigned"}
-                                                </div>
-                                                <span className="text-[12px] font-semibold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-full">
-                                                    {group.count}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        {/* Group Rows */}
-                                        {!isCollapsed && group.rows.map((row) => (
+                            {filteredRoutes.map((row) => (
                                 <div key={row._id} className="flex items-center gap-1 py-1.5 border-b border-border/20 hover:bg-muted/20 transition-colors group/row">
                                     <div className="w-[260px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold flex items-center gap-1.5 min-w-0 pl-3 pr-2 overflow-hidden self-stretch">
                                         <span
@@ -711,11 +653,8 @@ export default function EfficiencyPage() {
                                     </div>
                                 </div>
                             ))}
-                                    </div>
-                                );
-                            })}
 
-                            {groups.length === 0 && (
+                            {filteredRoutes.length === 0 && (
                                 <div className="flex items-center justify-center py-12 text-sm text-muted-foreground w-full absolute left-0">
                                     No employees found for this date
                                 </div>

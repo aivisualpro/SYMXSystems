@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
-import { useDropdowns } from "@/lib/query/hooks/useShared";
+import { useDropdowns, useRouteTypes } from "@/lib/query/hooks/useShared";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
@@ -79,7 +79,7 @@ const getAttendanceStyle = (value: string) => {
 
 // ── Column Definitions ──
 const COLUMNS = [
-    { key: "employee", label: "Employee", width: "flex-1 min-w-[100px] max-w-[150px]" },
+    { key: "employee", label: "Employee", width: "w-[260px] shrink-0 sticky left-0 z-20 bg-muted text-left" },
     { key: "attendance", label: "Attendance", width: "w-[95px]" },
     { key: "routeNumber", label: "Route #", width: "w-[75px]" },
     { key: "paycomInDay", label: "In Day", width: "w-[70px]" },
@@ -163,6 +163,7 @@ interface RouteRow {
     amazonAppLogout: string;
     inspectionTime: string;
     totalHours: string;
+    typeId?: string;
     profileImage?: string;
 }
 
@@ -412,6 +413,13 @@ type SortKey = typeof COLUMNS[number]["key"];
 export default function TimePage() {
     const queryClient = useQueryClient();
     const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats, globalEditMode } = useDispatching();
+    const { data: storeRouteTypes } = useRouteTypes();
+
+    const routeTypeNameMap = useMemo(() => {
+        const map = new Map<string, any>();
+        if (Array.isArray(storeRouteTypes)) storeRouteTypes.forEach((rt: any) => map.set((rt.name || "").trim().toLowerCase(), rt));
+        return map;
+    }, [storeRouteTypes]);
 
     const [allRoutes, setAllRoutes] = useState<RouteRow[]>([]);
     const [loading, setLoading] = useState(false);
@@ -482,6 +490,7 @@ export default function TimePage() {
                 amazonAppLogout: rec.amazonAppLogout || "",
                 inspectionTime: rec.inspectionTime || "",
                 totalHours: rec.totalHours || "",
+                typeId: rec.typeId || "",
                 profileImage: emp?.profileImage || "",
             };
         });
@@ -579,6 +588,25 @@ export default function TimePage() {
     const { groups, totalFiltered, totalForDate } = useMemo(() => {
         let dateFiltered = allRoutes;
         if (selectedDate) dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
+        
+        // Filter out "Off" types strictly
+        dateFiltered = dateFiltered.filter(r => {
+            const typeNorm = (r.type || "").trim().toLowerCase();
+            const excludedKeywords = ["off", "reduction", "call out"];
+            
+            // 1. Check if the type name itself contains any excluded keyword
+            if (excludedKeywords.some(kw => typeNorm.includes(kw))) return false;
+            
+            // 2. Check the canonical name from metadata (if we have a typeId match)
+            const rt = routeTypeNameMap.get(typeNorm);
+            if (rt) {
+                const canonicalName = (rt.name || "").trim().toLowerCase();
+                if (excludedKeywords.some(kw => canonicalName.includes(kw))) return false;
+            }
+            
+            return true;
+        });
+
         const totalForDate = dateFiltered.length;
 
         let filtered = dateFiltered;
@@ -840,9 +868,9 @@ export default function TimePage() {
                                     {/* Group Header Row */}
                                     <div
                                         onClick={() => toggleGroup(group.type)}
-                                        className="cursor-pointer hover:bg-muted/60 transition-colors bg-muted/30 border-b border-border/30 px-3 py-1.5 flex items-center"
+                                        className="cursor-pointer hover:bg-muted/60 transition-colors bg-muted/30 border-b border-border/30 px-3 py-1.5 flex items-center sticky top-[37px] z-25"
                                     >
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 sticky left-0">
                                             <ChevronRight className={cn(
                                                 "h-3 w-3 text-muted-foreground transition-transform",
                                                 !isCollapsed && "rotate-90"
@@ -876,7 +904,7 @@ export default function TimePage() {
                                         )}
                                             style={{ gridTemplateColumns: GRID_TEMPLATE }}>
                                             {/* Employee (sticky) */}
-                                            <div className="flex items-center gap-2 min-w-0 pr-2 sticky left-0 z-10 bg-[initial] group-hover/row:bg-muted/20 transition-colors">
+                                            <div className="flex items-center gap-2 min-w-0 pr-2 sticky left-0 z-10 bg-card group-hover/row:bg-muted/20 transition-colors border-r border-border/50">
                                                 {row.profileImage ? (
                                                     <img src={row.profileImage} alt={row.employeeName} className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-border" />
                                                 ) : (

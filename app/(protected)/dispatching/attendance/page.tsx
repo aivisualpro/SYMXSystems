@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useDispatching } from "../layout";
+import { useRouteTypes } from "@/lib/query/hooks/useShared";
 
 import { cn } from "@/lib/utils";
 import {
@@ -118,6 +119,7 @@ interface RouteRow {
     stagingLocation: string;
     attendanceTime: string;
     dashcam: string;
+    typeId?: string;
     profileImage?: string;
 }
 
@@ -126,6 +128,13 @@ type SortKey = typeof COLUMNS[number]["key"];
 export default function AttendancePage() {
     const queryClient = useQueryClient();
     const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, setStats, rawRouteData, rawRouteDataLoading } = useDispatching();
+    const { data: storeRouteTypes } = useRouteTypes();
+
+    const routeTypeNameMap = useMemo(() => {
+        const map = new Map<string, any>();
+        if (Array.isArray(storeRouteTypes)) storeRouteTypes.forEach((rt: any) => map.set((rt.name || "").trim().toLowerCase(), rt));
+        return map;
+    }, [storeRouteTypes]);
 
     const mapData = useCallback((data: any): RouteRow[] => {
         if (!data || !data.routes || data.routes.length === 0) return [];
@@ -147,6 +156,7 @@ export default function AttendancePage() {
                 stagingLocation: rec.stagingLocation || "",
                 attendanceTime: rec.attendanceTime || "",
                 dashcam: rec.dashcam || "",
+                typeId: rec.typeId || "",
                 profileImage: emp?.profileImage || "",
             };
         });
@@ -289,6 +299,24 @@ export default function AttendancePage() {
         if (selectedDate) {
             dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         }
+
+        // Filter out "Off" types strictly
+        dateFiltered = dateFiltered.filter(r => {
+            const typeNorm = (r.type || "").trim().toLowerCase();
+            const excludedKeywords = ["off", "reduction", "call out"];
+            
+            // 1. Check if the type name itself contains any excluded keyword
+            if (excludedKeywords.some(kw => typeNorm.includes(kw))) return false;
+            
+            // 2. Check the canonical name from metadata (if we have a typeId match)
+            const rt = routeTypeNameMap.get(typeNorm);
+            if (rt) {
+                const canonicalName = (rt.name || "").trim().toLowerCase();
+                if (excludedKeywords.some(kw => canonicalName.includes(kw))) return false;
+            }
+            
+            return true;
+        });
 
         let filtered = dateFiltered;
         if (searchQuery) {
