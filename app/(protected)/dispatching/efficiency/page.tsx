@@ -639,7 +639,7 @@ export default function EfficiencyPage() {
                                             onClick={() => toggleGroup(group.type)}
                                             className="cursor-pointer hover:bg-muted/60 transition-colors bg-muted/30 border-b border-border/30 px-3 py-1.5 flex items-center sticky top-[37px] z-25"
                                         >
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 sticky left-0">
                                                 <ChevronRight className={cn(
                                                     "h-3 w-3 text-muted-foreground transition-transform",
                                                     !isCollapsed && "rotate-90"
