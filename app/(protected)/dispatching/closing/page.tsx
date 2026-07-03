@@ -195,8 +195,8 @@ function ClosingPageContent() {
             dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         }
 
-        // Only include "Route" type for closing as only Routes need inspections
-        dateFiltered = dateFiltered.filter(r => (r.type || "").toLowerCase() === "route");
+        // Only include records where van is not blank
+        dateFiltered = dateFiltered.filter(r => (r.van || "").trim() !== "");
 
         let filtered = dateFiltered;
         if (searchQuery) {

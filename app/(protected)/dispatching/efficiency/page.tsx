@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../layout";
 import { useRouteTypes } from "@/lib/query/hooks/useShared";
 import { getContrastText } from "@/lib/route-types";
+import { parseTime, fmtDur, fmtTime } from "../routes/_components/routes-utils";
 
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +13,7 @@ import {
     Loader2,
     ChevronUp,
     ChevronDown,
+    ChevronRight,
     Pencil,
     Check,
     X,
@@ -71,8 +73,7 @@ function isDelayPositive(d: string): boolean {
 
 // ── Column Definitions ──
 const COLUMNS = [
-    { key: "employee", label: "Employee", width: "w-[200px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold pl-3" },
-    { key: "type", label: "Type", width: "w-[115px] shrink-0" },
+    { key: "employee", label: "Employee", width: "w-[260px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold pl-3" },
     { key: "routeNumber", label: "Route #", width: "w-[80px] shrink-0" },
     { key: "stopCount", label: "Stops", width: "w-[70px] shrink-0" },
     { key: "routeDuration", label: "Duration", width: "w-[80px] shrink-0" },
@@ -169,6 +170,8 @@ export default function EfficiencyPage() {
     const [loading, setLoading] = useState(false);
     const [sortKey, setSortKey] = useState<SortKey>("employee");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+    const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+    const toggleGroup = useCallback((type: string) => setCollapsedGroups(prev => ({ ...prev, [type]: !prev[type] })), []);
 
     // ── Quick Edit Modal State ──
     const [quickEditRow, setQuickEditRow] = useState<RouteRow | null>(null);
@@ -218,6 +221,53 @@ export default function EfficiencyPage() {
         }
         const rows: RouteRow[] = rawRouteData.routes.map((rec: any) => {
             const emp = rawRouteData.employees?.[rec.transporterId];
+
+            // Parse raw time values for computed fields
+            const waveM = parseTime(rec.waveTime || "");
+            const durM = parseTime(rec.routeDuration || "");
+            const actDepM = parseTime(rec.actualDepartureTime || "");
+            const planOBM = parseTime(rec.plannedOutboundStem || "");
+            const actOBM = parseTime(rec.actualOutboundStem || "");
+            const planFirstM = parseTime(rec.plannedFirstStop || "");
+            const actFirstM = parseTime(rec.actualFirstStop || "");
+            const planLastM = parseTime(rec.plannedLastStop || "");
+            const actLastM = parseTime(rec.actualLastStop || "");
+            const dctM = parseTime(rec.deliveryCompletionTime || "");
+
+            // Compute derived fields (same logic as routes/page.tsx)
+            const departureDelay = (actDepM !== null && waveM !== null) ? fmtDur(actDepM - (waveM + 20)) : "";
+            const outboundDelay = (actOBM !== null && planOBM !== null) ? fmtDur(actOBM - planOBM) : "";
+            const firstStopDelay = (actFirstM !== null && planFirstM !== null) ? fmtDur(actFirstM - planFirstM) : "";
+            const lastStopDelay = (actLastM !== null && planLastM !== null) ? fmtDur(actLastM - planLastM) : "";
+
+            const plannedRTSM = (waveM !== null && durM !== null) ? waveM + durM + 20 : null;
+            const plannedRTSTime = fmtTime(plannedRTSM);
+
+            const planDur1LM = (planLastM !== null && planFirstM !== null) ? planLastM - planFirstM : null;
+            const plannedDuration1stToLast = fmtDur(planDur1LM);
+
+            const actDur1LM = (actLastM !== null && actFirstM !== null) ? actLastM - actFirstM : null;
+            const actualDuration1stToLast = fmtDur(actDur1LM);
+
+            const planIBM = (plannedRTSM !== null && planLastM !== null) ? plannedRTSM - planLastM : null;
+            const plannedInboundStem = fmtDur(planIBM);
+
+            const estRTSM = (dctM !== null && planIBM !== null) ? dctM + planIBM : null;
+            const estimatedRTSTime = fmtTime(estRTSM);
+
+            const stopCount = rec.stopCount || 0;
+            const stopsPerHour = (planDur1LM && planDur1LM > 0 && stopCount > 0)
+                ? Math.round((stopCount / (planDur1LM / 60)) * 10) / 10 : 0;
+
+            const dctDelay = (dctM !== null && actLastM !== null) ? fmtDur(dctM - actLastM) : "";
+
+            let driverEfficiency = rec.driverEfficiency || 0;
+            if (planDur1LM && planDur1LM > 0 && actDur1LM && actDur1LM > 0) {
+                const rescuedMins = stopsPerHour > 0 ? ((rec.stopsRescued || 0) * (60 / stopsPerHour)) : 0;
+                const eff = (planDur1LM / (actDur1LM + rescuedMins)) * 100;
+                if (isFinite(eff)) driverEfficiency = Math.round(eff);
+            }
+
             return {
                 _id: rec._id,
                 transporterId: rec.transporterId,
@@ -226,32 +276,32 @@ export default function EfficiencyPage() {
                 employeeName: emp?.name || rec.transporterId,
                 type: rec.type || "",
                 typeId: rec.typeId || "",
-                typeColor: "", // resolved below via routeTypeIdMap
+                typeColor: "",
                 routeNumber: rec.routeNumber || "",
-                stopCount: rec.stopCount || 0,
+                stopCount,
                 routeDuration: rec.routeDuration || "",
                 waveTime: rec.waveTime || "",
                 actualDepartureTime: rec.actualDepartureTime || "",
-                departureDelay: rec.departureDelay || "",
+                departureDelay,
                 plannedOutboundStem: rec.plannedOutboundStem || "",
                 actualOutboundStem: rec.actualOutboundStem || "",
-                outboundDelay: rec.outboundDelay || "",
+                outboundDelay,
                 plannedFirstStop: rec.plannedFirstStop || "",
                 actualFirstStop: rec.actualFirstStop || "",
-                firstStopDelay: rec.firstStopDelay || "",
+                firstStopDelay,
                 plannedLastStop: rec.plannedLastStop || "",
                 actualLastStop: rec.actualLastStop || "",
-                lastStopDelay: rec.lastStopDelay || "",
-                plannedRTSTime: rec.plannedRTSTime || "",
-                estimatedRTSTime: rec.estimatedRTSTime || "",
-                plannedInboundStem: rec.plannedInboundStem || "",
-                plannedDuration1stToLast: rec.plannedDuration1stToLast || "",
-                actualDuration1stToLast: rec.actualDuration1stToLast || "",
-                stopsPerHour: rec.stopsPerHour || 0,
+                lastStopDelay,
+                plannedRTSTime,
+                estimatedRTSTime,
+                plannedInboundStem,
+                plannedDuration1stToLast,
+                actualDuration1stToLast,
+                stopsPerHour,
                 deliveryCompletionTime: rec.deliveryCompletionTime || "",
-                dctDelay: rec.dctDelay || "",
+                dctDelay,
                 stopsRescued: rec.stopsRescued || 0,
-                driverEfficiency: rec.driverEfficiency || 0,
+                driverEfficiency: Math.round(driverEfficiency * 10) / 10,
             };
         });
         // Resolve typeColor from DB types
@@ -351,7 +401,7 @@ export default function EfficiencyPage() {
     };
 
     // ── Filter + sort ──
-    const { rows: displayRows, totalFiltered, totalForDate } = useMemo(() => {
+    const { groups, totalFiltered, totalForDate } = useMemo(() => {
         let dateFiltered = allRoutes;
         if (selectedDate) dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         const totalForDate = dateFiltered.length;
@@ -380,11 +430,41 @@ export default function EfficiencyPage() {
             return sortDir === "asc" ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
         });
 
-        return { rows: sorted, totalFiltered: sorted.length, totalForDate };
-    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir]);
+        // Group by type (matching Routes/Time tabs)
+        const typeGroups: Record<string, RouteRow[]> = {};
+        sorted.forEach(r => {
+            const resolvedName = r.typeId ? (routeTypeIdMap.get(r.typeId)?.name || r.type || "Unassigned") : (r.type || "Unassigned");
+            if (!typeGroups[resolvedName]) typeGroups[resolvedName] = [];
+            typeGroups[resolvedName].push(r);
+        });
+
+        if (sortKey === "employee") {
+            Object.values(typeGroups).forEach(group => {
+                group.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+            });
+        }
+
+        const groupKeys = Object.keys(typeGroups).sort((a, b) => {
+            const aLower = a.toLowerCase();
+            const bLower = b.toLowerCase();
+            if (aLower === "route") return -1;
+            if (bLower === "route") return 1;
+            if (aLower === "off" || aLower === "unassigned" || aLower === "") return 1;
+            if (bLower === "off" || bLower === "unassigned" || bLower === "") return -1;
+            return a.localeCompare(b);
+        });
+
+        const groups = groupKeys.map(key => ({
+            type: key,
+            rows: typeGroups[key],
+            count: typeGroups[key].length,
+        }));
+
+        return { groups, totalFiltered: sorted.length, totalForDate };
+    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir, routeTypeIdMap]);
 
     // ── Stats ──
-    useEffect(() => { setStats({ employeeCount: totalFiltered }); }, [totalFiltered, setStats]);
+    useEffect(() => { setStats({ employeeCount: totalFiltered, groupCount: groups.length }); }, [totalFiltered, groups.length, setStats]);
     useEffect(() => { return () => setStats({}); }, [setStats]);
 
     if (rawRouteData?.routes?.length > 0 && allRoutes.length === 0) {
@@ -547,18 +627,51 @@ export default function EfficiencyPage() {
 
                         {/* Rows */}
                         <div className="flex-1">
-                            {displayRows.map((row) => (
+                            {groups.map((group) => {
+                                const isCollapsed = collapsedGroups[group.type] ?? false;
+                                const typeOpt = TYPE_MAP.get(group.type.toLowerCase());
+                                const GroupIcon = typeOpt?.icon;
+                                const groupStyle = getTypeStyle(group.type);
+                                return (
+                                    <div key={group.type}>
+                                        {/* Group Header */}
+                                        <div
+                                            onClick={() => toggleGroup(group.type)}
+                                            className="cursor-pointer hover:bg-muted/60 transition-colors bg-muted/30 border-b border-border/30 px-3 py-1.5 flex items-center sticky top-[37px] z-25"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <ChevronRight className={cn(
+                                                    "h-3 w-3 text-muted-foreground transition-transform",
+                                                    !isCollapsed && "rotate-90"
+                                                )} />
+                                                <div className={cn(
+                                                    "flex items-center gap-1 px-2 py-0.5 rounded text-[12px] font-semibold border shadow-sm",
+                                                    !groupStyle.colorHex && groupStyle.bg,
+                                                    !groupStyle.colorHex && groupStyle.text,
+                                                    !groupStyle.colorHex && groupStyle.border
+                                                )} style={{
+                                                    backgroundColor: groupStyle.colorHex || undefined,
+                                                    color: groupStyle.colorHex ? getContrastText(groupStyle.colorHex) : undefined,
+                                                    borderColor: groupStyle.colorHex ? 'transparent' : undefined
+                                                }}>
+                                                    {GroupIcon && <GroupIcon className="h-3 w-3" />}
+                                                    {group.type || "Unassigned"}
+                                                </div>
+                                                <span className="text-[12px] font-semibold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-full">
+                                                    {group.count}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {/* Group Rows */}
+                                        {!isCollapsed && group.rows.map((row) => (
                                 <div key={row._id} className="flex items-center gap-1 py-1.5 border-b border-border/20 hover:bg-muted/20 transition-colors group/row">
-                                    <div className="w-[200px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold flex items-center gap-1.5 min-w-0 pl-3 pr-2 overflow-hidden self-stretch">
+                                    <div className="w-[260px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold flex items-center gap-1.5 min-w-0 pl-3 pr-2 overflow-hidden self-stretch">
                                         <span
                                             className="text-[11px] font-semibold truncate"
                                             style={{ color: row.typeColor || getTypeStyle(row.type).colorHex || "inherit" }}
                                         >
                                             {row.employeeName}
                                         </span>
-                                    </div>
-                                    <div className="w-[115px] shrink-0 pr-2">
-                                        {renderType(row)}
                                     </div>
                                     <div className="w-[80px] shrink-0">{renderCell(row, "routeNumber", row.routeNumber)}</div>
                                     <div className="w-[70px] shrink-0">{renderCell(row, "stopCount", row.stopCount)}</div>
@@ -598,8 +711,11 @@ export default function EfficiencyPage() {
                                     </div>
                                 </div>
                             ))}
+                                    </div>
+                                );
+                            })}
 
-                            {displayRows.length === 0 && (
+                            {groups.length === 0 && (
                                 <div className="flex items-center justify-center py-12 text-sm text-muted-foreground w-full absolute left-0">
                                     No employees found for this date
                                 </div>
