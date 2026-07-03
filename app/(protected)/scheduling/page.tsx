@@ -336,6 +336,7 @@ function SchedulingPageContent() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [daysSortDir, setDaysSortDir] = useState<"asc" | "desc" | null>(null);
 
   // ── Magical Day-Level Filters ──
   const [dayFilters, setDayFilters] = useState<Record<number, string[]>>({});
@@ -1595,7 +1596,16 @@ function SchedulingPageContent() {
                             </th>
                           );
                         })}
-                        <th className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[36px] sm:min-w-[40px]">Days</th>
+                        <th
+                          className="text-center font-semibold px-1 sm:px-2 py-2 sm:py-2.5 min-w-[36px] sm:min-w-[40px] cursor-pointer select-none hover:text-primary transition-colors"
+                          onClick={() => setDaysSortDir(prev => prev === null ? "desc" : prev === "desc" ? "asc" : null)}
+                        >
+                          <div className="inline-flex items-center gap-0.5">
+                            Days
+                            {daysSortDir === "desc" && <ChevronDown className="h-3 w-3" />}
+                            {daysSortDir === "asc" && <ChevronDown className="h-3 w-3 rotate-180" />}
+                          </div>
+                        </th>
                         <th className="w-[30px] hidden md:table-cell py-2 px-0"></th>
                         <th className="text-left font-semibold px-2 sm:px-3 py-2 sm:py-2.5 min-w-[100px] sm:min-w-[140px] hidden md:table-cell">Employee Notes</th>
                         <th className="text-center font-semibold px-0.5 sm:px-1 py-2 sm:py-2.5 min-w-[40px] sm:min-w-[50px]">
@@ -1662,8 +1672,16 @@ function SchedulingPageContent() {
                                   // 1. New hires to the bottom
                                   if (aIsNewHire && !bIsNewHire) return 1;
                                   if (!aIsNewHire && bIsNewHire) return -1;
-                                  
-                                  // 2. Alphabetical by name
+
+                                  // 2. Sort by working days if daysSortDir is active
+                                  if (daysSortDir) {
+                                    const aDays = countWorkingDays(a, routeTypeIdMap);
+                                    const bDays = countWorkingDays(b, routeTypeIdMap);
+                                    const diff = daysSortDir === "asc" ? aDays - bDays : bDays - aDays;
+                                    if (diff !== 0) return diff;
+                                  }
+
+                                  // 3. Alphabetical by name
                                   const nameA = (a.employee?.name || a.transporterId || "").toLowerCase();
                                   const nameB = (b.employee?.name || b.transporterId || "").toLowerCase();
                                   return nameA.localeCompare(nameB);
