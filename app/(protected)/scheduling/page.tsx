@@ -61,12 +61,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
 import { useSchedulingWeeks, useWeekSchedules, useUpdateSchedule } from "@/lib/query/hooks/useSchedules";
 import { useDropdowns, useRouteTypes } from "@/lib/query/hooks/useShared";
 import { formatRouteTypes, getDynamicTypeStyle, getContrastText } from "@/lib/route-types";
@@ -1703,98 +1698,137 @@ function SchedulingPageContent() {
 
                                         return (
                                           <td key={dayIdx} className="text-center px-0.5 sm:px-1 py-0.5 sm:py-1">
-                                            <Tooltip delayDuration={150}>
-                                              <DropdownMenu>
-                                                <TooltipTrigger asChild>
-                                                  <DropdownMenuTrigger asChild>
-                                                    <div
-                                                      className={cn(
-                                                        "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
-                                                        "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
-                                                      )}
-                                                      style={{ backgroundColor: chipColor, color: getContrastText(chipColor), borderColor: chipColor }}
-                                                    >
-                                                      {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
-                                                      <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
-                                                      {warning && (
-                                                        <span className={cn(
-                                                          "flex items-center justify-center h-4 min-w-[16px] rounded-full text-[9px] font-bold text-white leading-none px-1 ml-0.5 shrink-0",
-                                                          warning.type === 'danger'
-                                                            ? "bg-red-500 animate-pulse"
-                                                            : "bg-orange-400"
-                                                        )}>
-                                                          {warning.consecutive}
-                                                        </span>
-                                                      )}
-                                                    </div>
-                                                  </DropdownMenuTrigger>
-                                                </TooltipTrigger>
-                                                <TooltipContent
-                                                  side="top"
-                                                  align="center"
-                                                  sideOffset={6}
-                                                  avoidCollisions
-                                                  collisionPadding={8}
-                                                  className="flex flex-col gap-1 p-2.5 text-xs w-[220px] shadow-xl bg-card border-border/60 rounded-xl z-[100] pointer-events-none"
+                                            <Popover>
+                                              <PopoverTrigger asChild>
+                                                <div
+                                                  className={cn(
+                                                    "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
+                                                    "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                                                  )}
+                                                  style={{ backgroundColor: chipColor, color: getContrastText(chipColor), borderColor: chipColor }}
                                                 >
-                                                  <div className="font-bold text-[13px] uppercase tracking-tight text-foreground flex items-center justify-between pb-1">
-                                                    <span className="truncate">{emp.employee?.name || emp.transporterId}</span>
+                                                  {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
+                                                  <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
+                                                  {warning && (
+                                                    <span className={cn(
+                                                      "flex items-center justify-center h-4 min-w-[16px] rounded-full text-[9px] font-bold text-white leading-none px-1 ml-0.5 shrink-0",
+                                                      warning.type === 'danger'
+                                                        ? "bg-red-500 animate-pulse"
+                                                        : "bg-orange-400"
+                                                    )}>
+                                                      {warning.consecutive}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </PopoverTrigger>
+                                              <PopoverContent
+                                                side="bottom"
+                                                align="center"
+                                                sideOffset={6}
+                                                avoidCollisions
+                                                collisionPadding={8}
+                                                className="w-[280px] p-0 overflow-hidden rounded-xl border-border/40 shadow-2xl bg-card/95 backdrop-blur-xl"
+                                                onOpenAutoFocus={e => e.preventDefault()}
+                                              >
+                                                {/* ── Info Header ── */}
+                                                <div className="px-3.5 pt-3.5 pb-2.5">
+                                                  {/* Employee Name + Confirmation */}
+                                                  <div className="flex items-center justify-between gap-2 mb-2">
+                                                    <span className="font-bold text-[13px] uppercase tracking-tight text-foreground truncate">{emp.employee?.name || emp.transporterId}</span>
                                                     {day?.dayBeforeConfirmation === "true" && <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />}
                                                   </div>
-                                                  <div className="font-semibold text-muted-foreground/80 mb-1 flex items-center gap-1.5 bg-muted/40 p-1.5 rounded-lg text-[11px]">
-                                                    <CalendarDays className="h-3 w-3" />
-                                                    {day?.weekDay || FULL_DAY_NAMES[dayIdx]} — {day?.date ? formatDate(day.date) : ""}
+
+                                                  {/* Day + Date chip */}
+                                                  <div className="flex items-center gap-1.5 bg-muted/40 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-muted-foreground/80 mb-3">
+                                                    <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                                                    <span>{day?.weekDay || FULL_DAY_NAMES[dayIdx]} — {day?.date ? formatDate(day.date) : ""}</span>
                                                   </div>
-                                                  <div className="flex flex-col gap-1.5 mt-0.5 pl-0.5">
-                                                    {status && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[80px]">Confirmation:</span><span className="font-semibold text-foreground uppercase tracking-wide">{status}</span></div>}
-                                                    {(resolvedRT?.routeStatus || day?.routeStatus) && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[80px]">Shift:</span><span className="font-semibold text-emerald-500 uppercase tracking-wide">{resolvedRT?.routeStatus || day?.routeStatus}</span></div>}
-                                                    {displayValue && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[80px]">Type:</span><span className="font-semibold text-primary drop-shadow-[0_0_8px_rgba(59,130,246,0.2)]">{displayValue}</span></div>}
-                                                    {startTime && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[80px]">startTime:</span><span className="font-semibold text-blue-500 font-mono tracking-wider">{startTime}</span></div>}
-                                                    {van && <div className="flex items-center gap-1.5"><span className="text-muted-foreground font-medium w-[80px]">Van:</span><span className="font-semibold text-emerald-600 font-mono">{van}</span></div>}
+
+                                                  {/* Schedule Details */}
+                                                  <div className="flex flex-col gap-2">
+                                                    {(resolvedRT?.routeStatus || day?.routeStatus) && (
+                                                      <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] text-muted-foreground/70 font-medium w-[70px] shrink-0">Shift</span>
+                                                        <span className="text-[11px] font-bold text-emerald-500 uppercase tracking-wide">{resolvedRT?.routeStatus || day?.routeStatus}</span>
+                                                      </div>
+                                                    )}
+                                                    {displayValue && (
+                                                      <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] text-muted-foreground/70 font-medium w-[70px] shrink-0">Type</span>
+                                                        <div
+                                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold"
+                                                          style={{ backgroundColor: chipColor, color: getContrastText(chipColor) }}
+                                                        >
+                                                          {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
+                                                          {displayValue}
+                                                        </div>
+                                                      </div>
+                                                    )}
+                                                    {status && (
+                                                      <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] text-muted-foreground/70 font-medium w-[70px] shrink-0">Confirmation</span>
+                                                        <span className="text-[11px] font-semibold text-foreground/90 uppercase tracking-wide">{status}</span>
+                                                      </div>
+                                                    )}
+                                                    {startTime && (
+                                                      <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] text-muted-foreground/70 font-medium w-[70px] shrink-0">Start Time</span>
+                                                        <span className="text-[11px] font-bold text-blue-400 font-mono tracking-wider">{startTime}</span>
+                                                      </div>
+                                                    )}
+                                                    {van && (
+                                                      <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] text-muted-foreground/70 font-medium w-[70px] shrink-0">Van</span>
+                                                        <span className="text-[11px] font-bold text-emerald-500 font-mono">{van}</span>
+                                                      </div>
+                                                    )}
                                                   </div>
+
+                                                  {/* Consecutive Warning */}
                                                   {warning && (
-                                                    <div className="mt-2 text-[10px] flex items-center gap-1.5 text-red-500 font-bold bg-red-500/10 border border-red-500/20 px-2 py-1.5 rounded-lg leading-tight">
-                                                      <span className="text-[14px]">⚠️</span> {warning.consecutive} consecutive work days
+                                                    <div className="mt-2.5 text-[10px] flex items-center gap-1.5 text-red-400 font-bold bg-red-500/10 border border-red-500/20 px-2.5 py-1.5 rounded-lg leading-tight">
+                                                      <span className="text-sm">⚠️</span> {warning.consecutive} consecutive work days
                                                     </div>
                                                   )}
-                                                </TooltipContent>
-                                                <DropdownMenuContent
-                                                  align="start"
-                                                  side="bottom"
-                                                  avoidCollisions
-                                                  className="w-48 p-0 overflow-hidden group"
-                                                >
-                                                  <div className="max-h-[320px] overflow-y-auto flex flex-col py-1">
+                                                </div>
+
+                                                {/* ── Divider ── */}
+                                                <div className="h-px bg-border/40 mx-3" />
+
+                                                {/* ── Type Selector ── */}
+                                                <div className="px-3 py-2.5">
+                                                  <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2">Change Type</p>
+                                                  <div className="max-h-[200px] overflow-y-auto flex flex-col gap-0.5 pr-1 -mr-1">
                                                     {dynamicTypeOptions.map(opt => {
                                                       const Icon = opt.icon;
                                                       const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();
+                                                      const optBg = opt.colorHex || "#555";
                                                       return (
-                                                        <DropdownMenuItem
+                                                        <button
                                                           key={opt.label}
                                                           className={cn(
-                                                            "flex items-center gap-2 cursor-pointer text-xs mx-1 rounded",
-                                                            isActive && "bg-accent"
+                                                            "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all",
+                                                            isActive
+                                                              ? "ring-1 ring-primary/50 shadow-sm bg-accent/50"
+                                                              : "hover:bg-muted/50 opacity-80 hover:opacity-100"
                                                           )}
                                                           onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name)}
                                                         >
                                                           <div
-                                                            className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0", "")}
-                                                            style={opt.colorHex ? { backgroundColor: opt.colorHex } : undefined}
+                                                            className="h-5 w-5 rounded flex items-center justify-center shrink-0"
+                                                            style={{ backgroundColor: optBg }}
                                                           >
-                                                            <Icon
-                                                              className={cn("h-3 w-3", "")}
-                                                              style={opt.colorHex ? { color: getContrastText(opt.colorHex) } : undefined}
-                                                            />
+                                                            <Icon className="h-3 w-3" style={{ color: getContrastText(optBg) }} />
                                                           </div>
-                                                          <span className="font-medium">{opt.label}</span>
-                                                          {isActive && <CheckCircle2 className="h-3.5 w-3.5 ml-auto text-primary" />}
-                                                        </DropdownMenuItem>
+                                                          <span className="flex-1 text-left truncate">{opt.label}</span>
+                                                          {isActive && <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />}
+                                                        </button>
                                                       );
                                                     })}
                                                   </div>
-                                                </DropdownMenuContent>
-                                              </DropdownMenu>
-                                            </Tooltip>
+                                                </div>
+                                              </PopoverContent>
+                                            </Popover>
                                           </td>
                                         );
                                       })}
