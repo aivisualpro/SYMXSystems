@@ -2,7 +2,9 @@
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { cn } from "@/lib/utils";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   IconEdit, IconTrash, IconArrowUp, IconArrowDown, IconArrowsSort,
@@ -16,9 +18,15 @@ import FleetFormModal from "../components/fleet-form-modal";
 const fmtDate = (d: string | Date | undefined) => {
   if (!d) return "—";
   try {
-    return new Date(d).toLocaleDateString("en-US", {
-      month: "short", day: "numeric", year: "numeric",
-    });
+    // Extract the YYYY-MM-DD portion and parse it at local noon to avoid
+    // any UTC-to-local timezone shifting (routeDate is a calendar date, not a timestamp)
+    const iso = typeof d === "string" ? d : (d as Date).toISOString();
+    const datePart = iso.split("T")[0]; // "2026-07-02"
+    if (!datePart) return "—";
+    const [year, month, day] = datePart.split("-").map(Number);
+    // Construct at local noon so no timezone boundary is crossed
+    const local = new Date(year, month - 1, day, 12, 0, 0);
+    return local.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   } catch { return "—"; }
 };
 
@@ -30,7 +38,7 @@ interface Column {
   label: string;
   sortable?: boolean;
   accessor: (r: any) => any;
-  render?: (r: any) => React.ReactNode;
+  render?: (r: any, context?: any) => React.ReactNode;
   className?: string;
 }
 
@@ -45,7 +53,7 @@ const columns: Column[] = [
   },
   {
     key: "routeDate", label: "Date", accessor: r => r.routeDate || "",
-    render: r => <>{fmtDate(r.routeDate)}</>,
+    render: (r) => <>{fmtDate(r.routeDate)}</>,
   },
   {
     key: "driverName", label: "Driver", accessor: r => r.driverName || r.driver || "",
@@ -139,6 +147,17 @@ function FleetInspectionsPageContent() {
   // Client-side sort
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [systemTimezone, setSystemTimezone] = useState("America/Los_Angeles");
+
+  // Fetch system timezone setting
+  useEffect(() => {
+    fetch("/api/admin/settings/general?key=system_timezone")
+      .then(r => r.json())
+      .then(data => {
+        if (data?.value) setSystemTimezone(data.value);
+      })
+      .catch(err => console.error("Failed to fetch timezone:", err));
+  }, []);
   const handleSort = (key: string) => {
     if (sortKey === key) {
       if (sortDir === "asc") setSortDir("desc");
@@ -320,19 +339,11 @@ function FleetInspectionsPageContent() {
                   ${idx % 2 === 0 ? "bg-transparent" : "bg-muted/[0.015]"}
                   ${isHighlighted ? "animate-[highlightBlink_3s_ease-in-out]" : ""}`}
                 >
-                  {columns.map(col => {
-                    const val = col.accessor(r);
-                    const display = col.render ? col.render(r) : (val || "—");
-                    const isTruncated = col.key === "comments";
-                    return (
-                      <td key={col.key}
-                        className={`px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap ${col.className || ""}`}
-                        title={isTruncated ? (val || "") : undefined}
-                      >
-                        {display}
-                      </td>
-                    );
-                  })}
+                  {columns.map(col => (
+                    <td key={col.key} className={cn("px-3 py-2.5 text-[12px] text-muted-foreground transition-colors group-hover/row:text-foreground", col.className)}>
+                      {col.render ? col.render(r, { timeZone: systemTimezone }) : col.accessor(r)}
+                    </td>
+                  ))}
                   <td className="px-3 py-2.5">
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150 translate-x-1 group-hover:translate-x-0">
                       <button onClick={e => { e.stopPropagation(); openEditModal("inspection", r); }}
