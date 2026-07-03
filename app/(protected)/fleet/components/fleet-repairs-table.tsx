@@ -523,7 +523,9 @@ export function FleetRepairsTable({ vin, isTab }: { vin?: string; isTab?: boolea
                 className={`
                   relative group cursor-pointer transition-all duration-150
                   hover:bg-primary/[0.035] hover:shadow-[inset_3px_0_0_hsl(var(--primary))]
-                  ${idx % 2 === 0 ? "bg-transparent" : "bg-muted/[0.015]"}
+                  ${r.currentStatus === "Completed"
+                    ? "bg-emerald-500/[0.04] hover:bg-emerald-500/[0.07]"
+                    : idx % 2 === 0 ? "bg-transparent" : "bg-muted/[0.015]"}
                 `}
               >
                 {columns.map((col) => {
@@ -531,9 +533,17 @@ export function FleetRepairsTable({ vin, isTab }: { vin?: string; isTab?: boolea
 
                   // Status column — clickable dropdown with dynamic config
                   if (col.key === "currentStatus") {
-                    const statusOpt = statusMap[r.currentStatus];
-                    const statusColor = statusOpt?.color || "";
-                    const StatusIcon = statusOpt?.icon ? (LucideIcons as any)[statusOpt.icon] : null;
+                    // Case-insensitive match: DB may store "Not Started" while admin configured "Not started"
+                    const dbStatus = r.currentStatus || "";
+                    const matchedOpt = repairStatusOptions.find(
+                      opt => opt.description.toLowerCase() === dbStatus.toLowerCase()
+                    );
+                    const canonicalStatus = matchedOpt?.description || dbStatus;
+                    const statusOpt = matchedOpt || statusMap[dbStatus];
+                    const isCompleted = canonicalStatus.toLowerCase() === "completed";
+                    // Force emerald for Completed — always consistent regardless of admin config
+                    const statusColor = isCompleted ? "#10b981" : (statusOpt?.color || "");
+                    const StatusIcon = statusOpt?.icon ? (LucideIcons as any)[statusOpt.icon] : (isCompleted ? IconCheck : null);
                     return (
                       <td key={col.key} className="px-3 py-2.5 text-xs" onClick={(e) => e.stopPropagation()}>
                         <div className="relative inline-flex items-center">
@@ -544,8 +554,8 @@ export function FleetRepairsTable({ vin, isTab }: { vin?: string; isTab?: boolea
                             />
                           )}
                           <select
-                            disabled={r.currentStatus === "Completed"}
-                            value={r.currentStatus || "Not Started"}
+                            disabled={isCompleted}
+                            value={canonicalStatus || repairStatusOptions[0]?.description || "Not started"}
                             onChange={async (e) => {
                               const newStatus = e.target.value;
                               
@@ -574,18 +584,18 @@ export function FleetRepairsTable({ vin, isTab }: { vin?: string; isTab?: boolea
                                 // revert will happen on next fetch
                               }
                             }}
-                            className={`rounded-md text-[11px] font-medium border focus:outline-none focus:ring-1 focus:ring-primary/40 ${r.currentStatus === "Completed" ? "cursor-default opacity-80" : "cursor-pointer"}`}
+                            className={`rounded-md text-[11px] font-medium border focus:outline-none focus:ring-1 focus:ring-primary/40 ${isCompleted ? "cursor-default opacity-90" : "cursor-pointer"}`}
                             style={{
                               appearance: "none",
                               WebkitAppearance: "none",
                               paddingLeft: StatusIcon ? "22px" : "8px",
-                              paddingRight: r.currentStatus === "Completed" ? "8px" : "18px",
+                              paddingRight: isCompleted ? "8px" : "18px",
                               paddingTop: "2px",
                               paddingBottom: "2px",
-                              backgroundColor: statusColor ? `${statusColor}15` : undefined,
+                              backgroundColor: statusColor ? `${statusColor}18` : undefined,
                               color: statusColor || undefined,
                               borderColor: statusColor ? `${statusColor}50` : undefined,
-                              backgroundImage: r.currentStatus === "Completed" ? "none" : "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+                              backgroundImage: isCompleted ? "none" : "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
                               backgroundRepeat: "no-repeat",
                               backgroundPosition: "right 4px center",
                             }}

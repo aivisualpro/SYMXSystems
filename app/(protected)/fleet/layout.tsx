@@ -256,13 +256,21 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
         label: "Delete",
         onClick: async () => {
           try {
-            await fetch(`/api/fleet?type=${type}&id=${id}`, { method: "DELETE" });
+            const res = await fetch(`/api/fleet?type=${type}&id=${id}`, { method: "DELETE" });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.error || "Delete failed");
+            }
             fetchData();
             setModalOpen(false);
             notify.success(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully.`);
-          } catch (err) {
+            // Broadcast so dispatching/closing page re-fetches route data to clear inspection status
+            if (type === "inspection") {
+              window.dispatchEvent(new CustomEvent("inspection-deleted", { detail: { id } }));
+            }
+          } catch (err: any) {
             console.error("Delete error:", err);
-            notify.error(`Failed to delete ${type}.`);
+            notify.error(err.message || `Failed to delete ${type}.`);
           }
         }
       },

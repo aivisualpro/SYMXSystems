@@ -27,6 +27,7 @@ import {
     ShieldAlert,
     Clock,
     Search,
+    Copy,
 } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
@@ -94,6 +95,26 @@ function ClosingPageContent() {
     const [inspectingRoute, setInspectingRoute] = useState<RouteRow | null>(null);
     const [highlightId, setHighlightId] = useState<string | null>(null);
     const [systemTimezone, setSystemTimezone] = useState<string>("America/Los_Angeles");
+    const [currentUserEmail, setCurrentUserEmail] = useState<string>("");
+    const [copiedId, setCopiedId] = useState<string | null>(null);
+
+    // ── Fetch current user email (for dev-only copy button) ──
+    useEffect(() => {
+        fetch("/api/user/profile")
+            .then(r => r.json())
+            .then(d => { if (d?.email) setCurrentUserEmail(d.email.toLowerCase()); })
+            .catch(() => {});
+    }, []);
+
+    const isDevUser = currentUserEmail === "adeel@symxlogistics.com";
+
+    const copyId = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(id).then(() => {
+            setCopiedId(id);
+            setTimeout(() => setCopiedId(null), 1500);
+        });
+    };
 
     // ── Fetch system timezone ──
     useEffect(() => {
@@ -125,6 +146,15 @@ function ClosingPageContent() {
     }, [searchParams, router]);
 
     const { data: fleetVehicles } = useVehicles();
+
+    // ── Listen for inspection deletions from fleet/inspections page ──
+    // When a fleet inspection is deleted, we need to re-fetch route data so
+    // this page no longer shows the route as "inspected"
+    useEffect(() => {
+        const handler = () => refreshRoutes();
+        window.addEventListener("inspection-deleted", handler);
+        return () => window.removeEventListener("inspection-deleted", handler);
+    }, [refreshRoutes]);
 
     // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
     const { rawRouteData, rawRouteDataLoading } = useDispatching();
@@ -353,6 +383,18 @@ function ClosingPageContent() {
 
                                 {/* Action Buttons */}
                                 <div className="flex items-center gap-2 pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {isDevUser && (
+                                        <div
+                                            role="button"
+                                            onClick={(e) => copyId(e, row._id)}
+                                            title={`Copy _id: ${row._id}`}
+                                            className="p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors z-10 cursor-pointer"
+                                        >
+                                            {copiedId === row._id
+                                                ? <Check className="h-3 w-3 text-emerald-500" />
+                                                : <Copy className="h-3 w-3" />}
+                                        </div>
+                                    )}
                                     {isFutureDate ? (
                                         <div className="px-2.5 py-1.5 rounded-md bg-muted text-muted-foreground border border-border font-bold text-[10px] uppercase tracking-wider">
                                             Future Date
@@ -489,6 +531,19 @@ function ClosingPageContent() {
 
                                     {renderCell(row.actualDepartureTime)}
                                     {renderCell(row.deliveryCompletionTime)}
+
+                                    {/* Dev-only: copy _id button */}
+                                    {isDevUser && (
+                                        <button
+                                            onClick={(e) => copyId(e, row._id)}
+                                            title={`Copy _id: ${row._id}`}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover/row:opacity-100 hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all z-20"
+                                        >
+                                            {copiedId === row._id
+                                                ? <Check className="h-3 w-3 text-emerald-500" />
+                                                : <Copy className="h-3 w-3" />}
+                                        </button>
+                                    )}
                                 </div>
                             );
                         })}

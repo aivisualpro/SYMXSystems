@@ -5,6 +5,7 @@ import connectToDatabase from "@/lib/db";
 import Vehicle from "@/lib/models/Vehicle";
 import DailyInspection from "@/lib/models/DailyInspection";
 import VehicleInspection from "@/lib/models/VehicleInspection";
+import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxUser from "@/lib/models/SymxUser";
 import DropdownOption from "@/lib/models/DropdownOption";
@@ -298,7 +299,24 @@ export async function DELETE(req: NextRequest) {
 
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
-    await VehicleInspection.findByIdAndDelete(id);
+    // Fetch first so we can get the routeId for SYMXRoute cleanup
+    const inspection = await DailyInspection.findById(id).select("routeId").lean() as any;
+    if (!inspection) return NextResponse.json({ error: "Record not found" }, { status: 404 });
+
+    // Delete the inspection from DailyInspection
+    await DailyInspection.findByIdAndDelete(id);
+
+    // Clear inspectionId + inspectionTime on the linked SYMXRoute so the
+    // dispatching closing page shows the route as pending again
+    if (inspection.routeId) {
+      SYMXRoute.findOneAndUpdate(
+        { _id: inspection.routeId, inspectionId: String(id) },
+        { $set: { inspectionId: "", inspectionTime: "" } }
+      ).exec().catch((err: any) => {
+        console.error("[DELETE inspection] SYMXRoute cleanup failed:", err);
+      });
+    }
+
     return NextResponse.json({ message: "Record deleted successfully" });
   } catch (error: any) {
     console.error("Fleet Inspections DELETE Error:", error);

@@ -16,14 +16,32 @@ import { useFleet } from "../../layout";
 import FleetFormModal from "../../components/fleet-form-modal";
 
 /* ── helpers ─────────────────────────────────────────────────────── */
-const fmtDate = (d: any, tz?: string) => !d ? "—" : new Date(d).toLocaleDateString("en-US", {
-    weekday: "short", month: "long", day: "numeric", year: "numeric",
-    ...(tz ? { timeZone: tz } : {}),
-});
-const fmtDateShort = (d: any, tz?: string) => !d ? "—" : new Date(d).toLocaleDateString("en-US", {
-    month: "short", day: "numeric", year: "numeric",
-    ...(tz ? { timeZone: tz } : {}),
-});
+/** For calendar dates (routeDate): extract YYYY-MM-DD, construct at local noon */
+const parseCalendarDate = (d: any): Date | null => {
+    if (!d) return null;
+    try {
+        const iso = typeof d === "string" ? d : (d as Date).toISOString();
+        const datePart = iso.split("T")[0]; // "2026-07-02"
+        if (!datePart) return null;
+        const [year, month, day] = datePart.split("-").map(Number);
+        return new Date(year, month - 1, day, 12, 0, 0); // local noon — no tz shift
+    } catch { return null; }
+};
+const fmtDate = (d: any, tz?: string) => {
+    if (!d) return "—";
+    // If a tz is passed (e.g. for timeStamp), use the old UTC path
+    if (tz) return new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric", timeZone: tz });
+    const cal = parseCalendarDate(d);
+    if (!cal) return "—";
+    return cal.toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric" });
+};
+const fmtDateShort = (d: any, tz?: string) => {
+    if (!d) return "—";
+    if (tz) return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: tz });
+    const cal = parseCalendarDate(d);
+    if (!cal) return "—";
+    return cal.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
 const fmtTime = (d: any, tz?: string) => !d ? "—" : new Date(d).toLocaleTimeString("en-US", {
     hour: "numeric", minute: "2-digit",
     ...(tz ? { timeZone: tz } : {}),
