@@ -479,7 +479,14 @@ export default function EfficiencyPage() {
     const renderCell = (row: RouteRow, field: keyof RouteRow, value: any) => {
         const isEditable = EDITABLE_FIELDS.has(field);
         const raw = value === 0 || value === "" ? "—" : String(value);
-        const displayVal = raw === "—" ? raw : stripSec(raw);
+        
+        let displayVal = raw === "—" ? raw : stripSec(raw);
+        if (field === "actualDepartureTime" && raw !== "—") {
+            const mins = parseTime(raw);
+            if (mins !== null) displayVal = fmtTime(mins);
+        } else if (field === "driverEfficiency" && raw !== "—") {
+            displayVal = `${raw}%`;
+        }
 
         const isTimeField = field.toLowerCase().includes("time") || field.toLowerCase().includes("delay") || field.toLowerCase().includes("duration") || field.toLowerCase().includes("stem") || field.toLowerCase().includes("stop");
         const isNumeric = ["stopCount", "stopsPerHour", "stopsRescued", "driverEfficiency"].includes(field);
@@ -575,7 +582,8 @@ export default function EfficiencyPage() {
 
     // ── Efficiency cell with color ──
     const renderEfficiency = (row: RouteRow) => {
-        return renderCell(row, "driverEfficiency", row.driverEfficiency);
+        const displayVal = row.driverEfficiency !== undefined && row.driverEfficiency !== 0 ? `${row.driverEfficiency}%` : "—";
+        return renderCell(row, "driverEfficiency", displayVal);
     };
 
     // ── Table ──
