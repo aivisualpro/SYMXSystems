@@ -332,6 +332,63 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         setRefreshKey((k) => k + 1);
     }, [queryClient]);
 
+    // ── Auto-sync: re-fetch when schedules are updated on /scheduling ──
+    useEffect(() => {
+        const handleScheduleUpdated = () => {
+            refreshRoutes();
+        };
+
+        // Same-tab: listen for CustomEvent dispatched by useUpdateSchedule
+        window.addEventListener("schedule-updated", handleScheduleUpdated);
+
+        // Cross-tab: listen for BroadcastChannel messages from other tabs
+        let bc: BroadcastChannel | null = null;
+        try {
+            bc = new BroadcastChannel("symx-schedule-sync");
+            bc.onmessage = (event) => {
+                if (event.data?.type === "schedule-updated") {
+                    handleScheduleUpdated();
+                }
+            };
+        } catch {
+            // BroadcastChannel not supported — graceful no-op
+        }
+
+        return () => {
+            window.removeEventListener("schedule-updated", handleScheduleUpdated);
+            if (bc) {
+                bc.close();
+                bc = null;
+            }
+        };
+    }, [refreshRoutes]);
+
+    // ── Auto-sync: re-fetch when data is updated on /everyday ──
+    useEffect(() => {
+        const handleEverydayUpdated = () => {
+            refreshRoutes();
+        };
+
+        window.addEventListener("everyday-updated", handleEverydayUpdated);
+
+        let bc: BroadcastChannel | null = null;
+        try {
+            bc = new BroadcastChannel("symx-everyday-sync");
+            bc.onmessage = (event) => {
+                if (event.data?.type === "everyday-updated") {
+                    handleEverydayUpdated();
+                }
+            };
+        } catch {
+            // BroadcastChannel not supported
+        }
+
+        return () => {
+            window.removeEventListener("everyday-updated", handleEverydayUpdated);
+            if (bc) { bc.close(); bc = null; }
+        };
+    }, [refreshRoutes]);
+
     // ── Push title into global header ──
     const pageTitle = useMemo(() => {
         if (pathname.includes("/dispatching/routes")) return "Routes";

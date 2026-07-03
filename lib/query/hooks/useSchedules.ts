@@ -95,12 +95,32 @@ export function useUpdateSchedule() {
       const yw = variables.payload?.yearWeek || (context as any)?.yearWeek;
       if (yw) {
         queryClient.invalidateQueries({ queryKey: qk.schedules.week(yw) });
-        queryClient.invalidateQueries({ queryKey: qk.dispatching.routes(yw) });
+        // Invalidate ALL dispatching.routes queries (prefix match) so both
+        // the week-level and day-level queries in the layout refetch
+        queryClient.invalidateQueries({ queryKey: ["dispatching", "routes"] });
       } else {
         queryClient.invalidateQueries({ queryKey: ["schedules"] });
         queryClient.invalidateQueries({ queryKey: ["dispatching"] });
       }
       queryClient.invalidateQueries({ queryKey: qk.hr.dashboard });
+
+      // ── Cross-page / cross-tab sync ──
+      // Notify pages that don't use TanStack Query (e.g. /everyday)
+      const detail = { yearWeek: yw, timestamp: Date.now() };
+
+      // Same-tab: CustomEvent so /everyday in the same SPA can re-fetch
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("schedule-updated", { detail }));
+      }
+
+      // Cross-tab: BroadcastChannel so other browser tabs auto-refresh
+      try {
+        const bc = new BroadcastChannel("symx-schedule-sync");
+        bc.postMessage({ type: "schedule-updated", ...detail });
+        bc.close();
+      } catch {
+        // BroadcastChannel not supported — graceful no-op
+      }
     },
   });
 }

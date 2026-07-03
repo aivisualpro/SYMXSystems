@@ -632,6 +632,33 @@ function SchedulingPageContent() {
     }
   }, [storeWeekData]);
 
+  // ── Auto-sync: re-fetch when data is updated on /everyday ──
+  useEffect(() => {
+    const handleEverydayUpdated = () => {
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dispatching"] });
+    };
+
+    window.addEventListener("everyday-updated", handleEverydayUpdated);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("symx-everyday-sync");
+      bc.onmessage = (event) => {
+        if (event.data?.type === "everyday-updated") {
+          handleEverydayUpdated();
+        }
+      };
+    } catch {
+      // BroadcastChannel not supported
+    }
+
+    return () => {
+      window.removeEventListener("everyday-updated", handleEverydayUpdated);
+      if (bc) { bc.close(); bc = null; }
+    };
+  }, [queryClient]);
+
   // Track which weeks have been auto-synced to avoid redundant generate calls
   const syncedWeeksRef = useRef<Set<string>>(new Set());
 
@@ -1514,8 +1541,8 @@ function SchedulingPageContent() {
                                           <span className="text-[13px] font-bold text-foreground leading-none">{planningData[3].values[i]}</span>
                                         </div>
                                         <div className={cn("flex items-center gap-0.5 pointer-events-none", planningData[4].values[i] < 0 && "text-red-500")}>
-                                          <UserPlus className={cn("h-2.5 w-2.5 text-purple-500", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat inline-block")} />
-                                          <span className={cn("text-[13px] font-bold text-foreground leading-none", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat drop-shadow-[0_0_6px_rgba(239,68,68,0.8)] inline-block")}>{planningData[4].values[i]}</span>
+                                          <UserPlus className={cn("h-2.5 w-2.5 text-purple-500", planningData[4].values[i] < 0 && "text-red-500 inline-block")} />
+                                          <span className={cn("text-[13px] font-bold text-foreground leading-none", planningData[4].values[i] < 0 && "text-red-500 drop-shadow-[0_0_6px_rgba(239,68,68,0.8)] inline-block")}>{planningData[4].values[i]}</span>
                                         </div>
                                       </div>
                                     </TooltipTrigger>
@@ -1554,10 +1581,10 @@ function SchedulingPageContent() {
                                         </div>
                                         <div className="flex items-center justify-between px-3 py-1.5 hover:bg-muted/30 transition-colors">
                                           <div className="flex items-center gap-2">
-                                            <UserPlus className={cn("h-3.5 w-3.5 text-purple-500", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat inline-block")} />
+                                            <UserPlus className={cn("h-3.5 w-3.5 text-purple-500", planningData[4].values[i] < 0 && "text-red-500 inline-block")} />
                                             <span className={cn("text-xs font-medium", planningData[4].values[i] < 0 && "text-red-500 font-bold")}>Extra DA's</span>
                                           </div>
-                                          <span className={cn("text-sm font-bold font-mono", planningData[4].values[i] < 0 && "text-red-500 animate-heartbeat drop-shadow-[0_0_8px_rgba(239,68,68,0.8)] z-10 inline-block")}>{planningData[4].values[i]}</span>
+                                          <span className={cn("text-sm font-bold font-mono", planningData[4].values[i] < 0 && "text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)] z-10 inline-block")}>{planningData[4].values[i]}</span>
                                         </div>
                                       </div>
                                     </TooltipContent>
@@ -1793,10 +1820,10 @@ function SchedulingPageContent() {
                                                 </div>
 
                                                 {/* ── Divider ── */}
-                                                <div className="h-px bg-border/40 mx-3" />
+                                                <div className="h-px bg-border/40 mx-3.5" />
 
                                                 {/* ── Type Selector ── */}
-                                                <div className="px-3 py-2.5">
+                                                <div className="px-3.5 py-2.5">
                                                   <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2">Change Type</p>
                                                   <div className="max-h-[200px] overflow-y-auto flex flex-col gap-0.5 pr-1 -mr-1">
                                                     {dynamicTypeOptions.map(opt => {

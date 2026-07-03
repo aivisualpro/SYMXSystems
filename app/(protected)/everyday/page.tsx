@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSchedulingWeeks } from "@/lib/query/hooks/useSchedules";
+import { useQueryClient } from "@tanstack/react-query";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, Edit2, Phone, Timer, Package, Hash, ThumbsUp, type LucideIcon , Paperclip, ImagePlus, Plus } from "lucide-react";
 import { notify } from "@/lib/notify";
@@ -55,8 +56,31 @@ const HeaderIcon = ({ icon: Icon, title, className, strokeWidth }: any) => (
     </TooltipProvider>
 );
 
+/** Broadcast that data was changed on /everyday so other pages auto-refresh */
+function broadcastEverydayUpdate(queryClient?: any) {
+    // Immediately invalidate TanStack Query cache (same SPA tab)
+    // so /scheduling and /dispatching see fresh data on next mount
+    if (queryClient) {
+        queryClient.invalidateQueries({ queryKey: ["schedules"] });
+        queryClient.invalidateQueries({ queryKey: ["dispatching"] });
+    }
+
+    const detail = { source: "everyday", timestamp: Date.now() };
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("everyday-updated", { detail }));
+    }
+    try {
+        const bc = new BroadcastChannel("symx-everyday-sync");
+        bc.postMessage({ type: "everyday-updated", ...detail });
+        bc.close();
+    } catch {
+        // BroadcastChannel not supported — graceful no-op
+    }
+}
+
 export default function EverydayAfterDispatchingPage() {
     const router = useRouter();
+    const queryClient = useQueryClient();
     const { setLeftContent, setRightContent } = useHeaderActions();
 
     const [weeks, setWeeks] = useState<string[]>([]);
@@ -175,6 +199,7 @@ export default function EverydayAfterDispatchingPage() {
             if (!res.ok) throw new Error("Failed to save RTS");
 
             notify.success("RTS recorded successfully");
+            broadcastEverydayUpdate(queryClient);
             setRtsModalOpen(false);
 
             // Update Map optimistically so the icon refreshes immediately
@@ -209,6 +234,7 @@ export default function EverydayAfterDispatchingPage() {
             const res = await fetch(`/api/everyday/rts?id=${rtsModalEditId}`, { method: "DELETE" });
             if (!res.ok) throw new Error("Failed to delete RTS");
             notify.success("RTS record deleted");
+            broadcastEverydayUpdate(queryClient);
             setRtsModalOpen(false);
             setRtsMap(prev => {
                 const newMap = { ...prev };
@@ -262,6 +288,7 @@ export default function EverydayAfterDispatchingPage() {
             if (!res.ok) throw new Error("Failed to save Rescue");
 
             notify.success("Rescue recorded successfully");
+            broadcastEverydayUpdate(queryClient);
             setRescueModalOpen(false);
 
             if (res.ok) {
@@ -295,6 +322,7 @@ export default function EverydayAfterDispatchingPage() {
             const res = await fetch(`/api/everyday/rescue?id=${rescueModalEditId}`, { method: "DELETE" });
             if (!res.ok) throw new Error("Failed to delete Rescue");
             notify.success("Rescue record deleted");
+            broadcastEverydayUpdate(queryClient);
             setRescueModalOpen(false);
             setRescueMap(prev => {
                 const newMap = { ...prev };
@@ -349,6 +377,7 @@ export default function EverydayAfterDispatchingPage() {
             if (!res.ok) throw new Error("Failed to end day");
 
             notify.success("Day ended successfully");
+            broadcastEverydayUpdate(queryClient);
             setEndDay(true);
         } catch (error) {
             notify.error("Failed to mark day as ended");
@@ -668,6 +697,37 @@ export default function EverydayAfterDispatchingPage() {
         fetchData();
     }, [fetchData]);
 
+    // ── Auto-sync: re-fetch when schedules are updated on /scheduling ──
+    useEffect(() => {
+        const handleScheduleUpdated = () => {
+            fetchData();
+        };
+
+        // Same-tab: listen for CustomEvent dispatched by useUpdateSchedule
+        window.addEventListener("schedule-updated", handleScheduleUpdated);
+
+        // Cross-tab: listen for BroadcastChannel messages from other tabs
+        let bc: BroadcastChannel | null = null;
+        try {
+            bc = new BroadcastChannel("symx-schedule-sync");
+            bc.onmessage = (event) => {
+                if (event.data?.type === "schedule-updated") {
+                    handleScheduleUpdated();
+                }
+            };
+        } catch {
+            // BroadcastChannel not supported — graceful no-op
+        }
+
+        return () => {
+            window.removeEventListener("schedule-updated", handleScheduleUpdated);
+            if (bc) {
+                bc.close();
+                bc = null;
+            }
+        };
+    }, [fetchData]);
+
     // Auto-save logic — uses refs for date/attachments to avoid re-creating the callback
     // when date changes, which would trigger a spurious save of old notes to the new date.
     const saveNotesToDB = useCallback(async (notesToSave: string, attsToSave?: string[]) => {
@@ -741,6 +801,7 @@ export default function EverydayAfterDispatchingPage() {
                 const errData = await res.json().catch(() => ({}));
                 throw new Error(errData.error || "Update failed");
             }
+            broadcastEverydayUpdate(queryClient);
         } catch (err: any) {
             notify.error(err.message || "Failed to update status");
             // revert locally
@@ -768,6 +829,7 @@ export default function EverydayAfterDispatchingPage() {
                 body: JSON.stringify({ routeId, updates: { deliveryCompletionTime: timeStr } })
             });
             if (!res.ok) throw new Error("Update failed");
+            broadcastEverydayUpdate(queryClient);
             if (timeStr) notify.success(`Marked delivery at ${timeStr}`);
         } catch (err) {
             notify.error("Failed to update delivery time");
@@ -785,15 +847,60 @@ export default function EverydayAfterDispatchingPage() {
             r._id === routeId ? { ...r, type: newType } : r
         ));
 
+        // Compute tomorrow date and week info for schedule update
+        const tomorrow = (() => {
+            const tDate = new Date(date + "T12:00:00Z");
+            tDate.setUTCDate(tDate.getUTCDate() + 1);
+            return tDate.toISOString().split("T")[0];
+        })();
+        const tomorrowWeek = getCurrentYearWeek(tomorrow);
+        const tomorrowDateObj = new Date(tomorrow + "T00:00:00Z");
+        const dayIdx = tomorrowDateObj.getUTCDay(); // 0=Sun … 6=Sat
+
+        // Resolve route type config for typeId and routeStatus
+        const rtConfig = routeTypeConfigs[newType.toLowerCase()];
+        const routeStatus = rtConfig?.routeStatus || (["off", "call out", "request off", "suspension", "stand by"].includes(newType.toLowerCase()) ? "Off" : "Scheduled");
+
         try {
-            const res = await fetch("/api/dispatching/routes", {
+            // 1. Update the dispatching route record
+            const routeRes = await fetch("/api/dispatching/routes", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ routeId, updates: { type: newType } }),
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Failed to update");
+            const routeData = await routeRes.json();
+            if (!routeRes.ok) throw new Error(routeData.error || "Failed to update route");
+
+            // 2. Also update the schedule record so /scheduling stays in sync
+            const schedulePayload: Record<string, any> = {
+                type: newType,
+                status: routeStatus,
+                transporterId,
+                dayIdx,
+                yearWeek: tomorrowWeek,
+                date: tomorrow,
+            };
+            if (rtConfig?._id) {
+                schedulePayload.typeId = String(rtConfig._id);
+            }
+            if (rtConfig?.startTime) {
+                schedulePayload.startTime = rtConfig.startTime;
+            }
+
+            // Find the schedule ID from tomorrowSchedulesMap if available
+            const tomorrowSchedule = tomorrowSchedulesMap[transporterId];
+            if (tomorrowSchedule?._id) {
+                schedulePayload.scheduleId = tomorrowSchedule._id;
+            }
+
+            await fetch("/api/schedules", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(schedulePayload),
+            });
+
             notify.success(`Type updated to ${newType}`);
+            broadcastEverydayUpdate(queryClient);
         } catch (err: any) {
             notify.error(err.message || "Failed to update type");
             // Revert on error
@@ -801,7 +908,7 @@ export default function EverydayAfterDispatchingPage() {
                 r._id === routeId ? { ...r, type: r.type } : r
             ));
         }
-    }, []);
+    }, [date, routeTypeConfigs, tomorrowSchedulesMap, queryClient]);
 
     const groupedRoutes = useMemo(() => {
         const map: Record<string, RoutesTableRow[]> = {};
