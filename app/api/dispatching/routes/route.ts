@@ -90,21 +90,20 @@ export async function GET(req: NextRequest) {
         const allRouteTypes = await RouteType.find({}, { _id: 1, name: 1, routeStatus: 1, partOf: 1 }).lean() as any[];
         const rtNameToId = new Map<string, string>();   // name.lower → typeId string
 
-        // Only include typeIds that have "Dispatching" in partOf AND are not "Off"
+        // Include all types except those whose name is literally "Off"
         const dispatchingTypeIds: string[] = [];
         const offTypeIds: string[] = [];
 
         for (const rt of allRouteTypes) {
             const id = String(rt._id);
             rtNameToId.set((rt.name || "").trim().toLowerCase(), id);
-            const partOf: string[] = Array.isArray(rt.partOf) ? rt.partOf : [];
-            const isDispatchingType = partOf.includes("Dispatching");
-            const isOff = ["off", "Off", "OFF"].includes(rt.routeStatus || "");
+            const nameNorm = (rt.name || "").trim().toLowerCase();
+            const isOff = nameNorm === "off";
 
-            if (isDispatchingType && !isOff) {
+            if (!isOff) {
                 dispatchingTypeIds.push(id);
             } else {
-                offTypeIds.push(id); // everything else is excluded
+                offTypeIds.push(id);
             }
         }
 
