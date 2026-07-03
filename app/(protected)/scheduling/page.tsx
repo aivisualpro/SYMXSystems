@@ -1018,17 +1018,19 @@ function SchedulingPageContent() {
   }, []);
 
   // Collect all unique schedule types from data for filter dropdowns
+  // Resolves typeId through routeTypeIdMap for modern records, falls back to legacy day.type
   const allScheduleTypes = useMemo(() => {
     if (!weekData?.employees) return [];
     const types = new Set<string>();
     weekData.employees.forEach(emp => {
       Object.values(emp.days).forEach((d: DayData) => {
-        const t = (d.type || "").trim();
+        const rt = d.typeId ? routeTypeIdMap.get(String(d.typeId)) : null;
+        const t = (rt?.name || d.type || "").trim();
         if (t) types.add(t);
       });
     });
     return Array.from(types).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-  }, [weekData]);
+  }, [weekData, routeTypeIdMap]);
 
   // Filter employees
   const filteredEmployees = useMemo(() => {
@@ -1058,18 +1060,20 @@ function SchedulingPageContent() {
         if (!hasStatus) return false;
       }
       // ── Per-day type filters ──
+      // Resolves typeId through routeTypeIdMap for modern records, falls back to legacy day.type
       const dayFilterEntries = Object.entries(dayFilters);
       if (dayFilterEntries.length > 0) {
         for (const [dayIdxStr, allowedTypes] of dayFilterEntries) {
           const dayIdx = parseInt(dayIdxStr);
           const day = emp.days[dayIdx];
-          const dayType = (day?.type || "").trim().toLowerCase();
+          const rt = day?.typeId ? routeTypeIdMap.get(String(day.typeId)) : null;
+          const dayType = (rt?.name || day?.type || "").trim().toLowerCase();
           if (!allowedTypes.some(t => t.toLowerCase() === dayType)) return false;
         }
       }
       return true;
     });
-  }, [weekData, deferredSearchQuery, typeFilter, statusFilter, dayFilters]);
+  }, [weekData, deferredSearchQuery, typeFilter, statusFilter, dayFilters, routeTypeIdMap]);
 
   const isFiltered = deferredSearchQuery || typeFilter !== "all" || statusFilter !== "all" || hasDayFilters;
 
