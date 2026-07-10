@@ -152,8 +152,11 @@ export async function GET(req: NextRequest) {
     const activeTransporterIds = new Set(
       (employees as any[]).filter(e => (e.status || "").toLowerCase() === "active").map(e => e.transporterId)
     );
+    // Name-based maps (legacy fallback)
     const theoryHrsMap = new Map((routeTypes as any[]).map(rt => [(rt.name || '').trim().toLowerCase(), rt.theoryHrs || 0]));
     const routeTypeGroupMap = new Map((routeTypes as any[]).map(rt => [(rt.name || '').trim().toLowerCase(), (rt.group || '').trim().toLowerCase()]));
+    // Id-based map for typeId resolution (primary lookup)
+    const routeTypeByIdMap = new Map((routeTypes as any[]).map(rt => [String(rt._id), rt]));
 
     // Group schedules by transporter → days of week
     const grouped: Record<string, any> = {};
@@ -230,8 +233,12 @@ export async function GET(req: NextRequest) {
         const statusStr = (s.status || "").trim().toLowerCase();
         if (statusStr === "off") return; // Skip off days
 
-        const typeStr = (s.type || "").trim().toLowerCase();
-        const theoryHrs = theoryHrsMap.get(typeStr) || 0;
+        // Resolve theoryHrs via typeId first, fallback to legacy type string
+        const resolvedRT = s.typeId ? routeTypeByIdMap.get(String(s.typeId)) : null;
+        const theoryHrs = resolvedRT
+          ? (resolvedRT.theoryHrs || 0)
+          : (theoryHrsMap.get((s.type || "").trim().toLowerCase()) || 0);
+        const resolvedTypeName = resolvedRT ? (resolvedRT.name || "") : (s.type || "");
         
         if (theoryHrs > 0) {
             const emp = employeeMap.get(s.transporterId);
@@ -248,7 +255,7 @@ export async function GET(req: NextRequest) {
                     dailyLaborTheoryCost[dateStr] += cost;
                     dailyLaborTheoryCostBreakdown[dateStr].push({
                         employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
-                        type: s.type || "",
+                        type: resolvedTypeName,
                         rate,
                         theoryHrs,
                         cost
@@ -314,7 +321,7 @@ export async function GET(req: NextRequest) {
       const dateObjects = dates.map(d => new Date(d));
       const routeRecords = await SYMXRoute.find(
         { date: { $in: dateObjects } },
-        { date: 1, transporterId: 1, type: 1, wst: 1, wstDuration: 1, totalCost: 1, paycomInDay: 1, paycomOutLunch: 1, paycomInLunch: 1, paycomOutDay: 1, totalHours: 1 }
+        { date: 1, transporterId: 1, type: 1, typeId: 1, wst: 1, wstDuration: 1, totalCost: 1, paycomInDay: 1, paycomOutLunch: 1, paycomInLunch: 1, paycomOutDay: 1, totalHours: 1 }
       ).lean();
 
       routeRecords.forEach((r: any) => {
@@ -383,10 +390,16 @@ export async function GET(req: NextRequest) {
         const otPay = Math.round(rate * 1.5 * otHrs * 100) / 100;
         const actualCost = Math.round((regPay + otPay) * 100) / 100;
 
+        // Resolve route type via typeId first, fallback to legacy type string
+        const resolvedRouteRT = r.typeId ? routeTypeByIdMap.get(String(r.typeId)) : null;
+        const resolvedRouteTypeName = resolvedRouteRT ? (resolvedRouteRT.name || "") : (r.type || "");
+
         if (dailyLaborActualCost[dStr] !== undefined && actualCost > 0) {
             dailyLaborActualCost[dStr] += actualCost;
             
-            const groupName = routeTypeGroupMap.get((r.type || "").trim().toLowerCase()) || "";
+            const groupName = resolvedRouteRT
+              ? (resolvedRouteRT.group || "").trim().toLowerCase()
+              : (routeTypeGroupMap.get((r.type || "").trim().toLowerCase()) || "");
             if (groupName === "driver" || groupName === "drivers") {
                 dailyDriverActualCost[dStr] += actualCost;
             } else if (groupName === "operations" || groupName === "operation" || groupName === "ops") {
@@ -395,7 +408,7 @@ export async function GET(req: NextRequest) {
 
             dailyLaborActualCostBreakdown[dStr].push({
                 employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
-                type: r.type || "",
+                type: resolvedRouteTypeName,
                 regHrs,
                 otHrs,
                 rate,
@@ -406,18 +419,16 @@ export async function GET(req: NextRequest) {
         // Revenue Evaluation
         const wstVal = (r.wst || "").trim().toLowerCase();
         const wstHourlyRate = wstMap.get(wstVal) || 0;
-        
-        const rawTotalHours = durToHrs(r.totalHours || "");
 
-        const generatedRevenue = Math.round((wstHourlyRate * rawTotalHours) * 100) / 100;
+        const generatedRevenue = Math.round((wstHourlyRate * totalHrsDecimal) * 100) / 100;
         
         if (generatedRevenue > 0 && dailyRevenue[dStr] !== undefined) {
              dailyRevenue[dStr] += generatedRevenue;
              dailyRevenueBreakdown[dStr].push({
                 employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Unknown",
-                type: r.type || "",
+                type: resolvedRouteTypeName,
                 wst: r.wst || "—",
-                hrs: rawTotalHours,
+                hrs: totalHrsDecimal,
                 cost: generatedRevenue
              });
         }
