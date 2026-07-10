@@ -5,7 +5,7 @@ import {
   BarChart3, DollarSign, Users, Wrench, AlertTriangle,
   TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight,
   CalendarDays, Loader2, ChevronLeft, ChevronRight,
-  Minus,
+  Minus, Calendar,
 } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Line, ComposedChart, Area, AreaChart, ResponsiveContainer } from "recharts"
 
@@ -34,11 +34,26 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components/ui/toggle-group"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 // ── Types ──
 interface MonthlyKPI {
   month: string
+  revenue: number
+  driverPct: number
+  opsPct: number
+  laborTheoryPct: number
+  laborActualPct: number
+  laborCostTheory: number
+  laborCostActual: number
+  laborVarDol: number
+  laborVarPct: number
+}
+
+interface DailyKPI {
+  day: string
+  dayLabel: string
   revenue: number
   driverPct: number
   opsPct: number
@@ -115,6 +130,56 @@ function formatMonthShort(month: string): string {
   return date.toLocaleDateString("en-US", { month: "short" })
 }
 
+function formatDayLabel(day: string): string {
+  const d = new Date(day + "T00:00:00Z")
+  return d.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" })
+}
+
+function formatDayFull(day: string): string {
+  const d = new Date(day + "T00:00:00Z")
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })
+}
+
+function formatWeekLabel(week: string): string {
+  const match = week.match(/(\d{4})-W(\d{2})/)
+  if (!match) return week
+  return `${match[1]} – Week ${parseInt(match[2])}`
+}
+
+/** Compute current yearWeek (Sun-based) from today's date in Pacific Time. */
+function getCurrentYearWeek(): string {
+  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date())
+  const date = new Date(todayStr + "T00:00:00.000Z")
+  const dayOfWeek = date.getUTCDay()
+  const sundayOfThisWeek = new Date(date)
+  sundayOfThisWeek.setUTCDate(date.getUTCDate() - dayOfWeek)
+  const year = sundayOfThisWeek.getUTCFullYear()
+  const jan1 = new Date(Date.UTC(year, 0, 1))
+  const jan1Day = jan1.getUTCDay()
+  const firstSunday = new Date(jan1)
+  firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day)
+  const diffMs = sundayOfThisWeek.getTime() - firstSunday.getTime()
+  const diffDays = Math.round(diffMs / 86400000)
+  const weekNum = Math.floor(diffDays / 7) + 1
+  return `${year}-W${weekNum.toString().padStart(2, "0")}`
+}
+
+function getNextYearWeek(yw: string): string {
+  const m = yw.match(/(\d{4})-W(\d{2})/)
+  if (!m) return yw
+  let yr = parseInt(m[1]), wk = parseInt(m[2]) + 1
+  if (wk > 52) { yr++; wk = 1 }
+  return `${yr}-W${String(wk).padStart(2, "0")}`
+}
+
+function getPrevYearWeek(yw: string): string {
+  const m = yw.match(/(\d{4})-W(\d{2})/)
+  if (!m) return yw
+  let yr = parseInt(m[1]), wk = parseInt(m[2]) - 1
+  if (wk < 1) { yr--; wk = 52 }
+  return `${yr}-W${String(wk).padStart(2, "0")}`
+}
+
 // ── Delta Badge ──
 function DeltaBadge({ current, previous, format }: { current: number; previous: number; format: string }) {
   if (previous === 0 || current === 0) return null
@@ -149,7 +214,7 @@ function DeltaBadge({ current, previous, format }: { current: number; previous: 
 }
 
 // ── Sparkline ──
-function Sparkline({ data, dataKey, color, className }: { data: MonthlyKPI[]; dataKey: MetricKey; color: string; className?: string }) {
+function Sparkline({ data, dataKey, color, className }: { data: any[]; dataKey: MetricKey; color: string; className?: string }) {
   const values = data.map(d => d[dataKey] as number)
   const max = Math.max(...values, 1)
   const min = Math.min(...values, 0)
@@ -178,18 +243,27 @@ function Sparkline({ data, dataKey, color, className }: { data: MonthlyKPI[]; da
 
 // ── Main Component ──
 export function ChartMomKpi() {
+  const [timeframe, setTimeframe] = React.useState<"month" | "week">("month")
   const [period, setPeriod] = React.useState("12")
   const [view, setView] = React.useState<"table" | "chart" | "trend">("table")
   const [loading, setLoading] = React.useState(true)
   const [monthlyData, setMonthlyData] = React.useState<MonthlyKPI[]>([])
+  const [weeklyData, setWeeklyData] = React.useState<DailyKPI[]>([])
   const [totals, setTotals] = React.useState<KPITotals | null>(null)
   const [isMounted, setIsMounted] = React.useState(false)
   const scrollRef = React.useRef<HTMLDivElement>(null)
 
+  // ── Week state ──
+  const [weeks, setWeeks] = React.useState<string[]>([])
+  const [selectedWeek, setSelectedWeek] = React.useState<string>("")
+  const [weeksLoading, setWeeksLoading] = React.useState(false)
+  const currentWeek = React.useMemo(() => getCurrentYearWeek(), [])
+
   React.useEffect(() => { setIsMounted(true) }, [])
 
-  // Fetch data
+  // Fetch monthly data
   React.useEffect(() => {
+    if (timeframe !== "month") return
     setLoading(true)
     fetch(`/api/dashboard/mom-kpi?months=${period}`)
       .then(r => r.json())
@@ -199,20 +273,64 @@ export function ChartMomKpi() {
       })
       .catch(() => { setMonthlyData([]); setTotals(null) })
       .finally(() => setLoading(false))
-  }, [period])
+  }, [period, timeframe])
 
-  // Filter to selected period
+  // Fetch available weeks when switching to week mode
+  React.useEffect(() => {
+    if (timeframe !== "week") return
+    setWeeksLoading(true)
+    fetch("/api/schedules?weeksList=true")
+      .then(r => r.json())
+      .then(json => {
+        const weeksList: string[] = json?.weeks || []
+        setWeeks(weeksList)
+        // Auto-select current week or closest prior
+        if (!selectedWeek || !weeksList.includes(selectedWeek)) {
+          if (weeksList.includes(currentWeek)) {
+            setSelectedWeek(currentWeek)
+          } else {
+            const prior = weeksList.filter(w => w <= currentWeek).sort((a, b) => b.localeCompare(a))
+            setSelectedWeek(prior.length > 0 ? prior[0] : weeksList[0] || "")
+          }
+        }
+      })
+      .catch(() => setWeeks([]))
+      .finally(() => setWeeksLoading(false))
+  }, [timeframe])
+
+  // Fetch weekly KPI data when week changes
+  React.useEffect(() => {
+    if (timeframe !== "week" || !selectedWeek) return
+    setLoading(true)
+    fetch(`/api/dashboard/week-kpi?yearWeek=${encodeURIComponent(selectedWeek)}`)
+      .then(r => r.json())
+      .then(json => {
+        setWeeklyData(json.days || [])
+        setTotals(json.totals || null)
+      })
+      .catch(() => { setWeeklyData([]); setTotals(null) })
+      .finally(() => setLoading(false))
+  }, [selectedWeek, timeframe])
+
+  // Filter to selected period (monthly only)
   const filteredData = React.useMemo(() => {
     const count = parseInt(period)
     return monthlyData.slice(-count)
   }, [monthlyData, period])
+
+  // Active data for rendering
+  const activeData: any[] = timeframe === "month" ? filteredData : weeklyData
+  const columnKey = timeframe === "month" ? "month" : "day"
 
   // Scroll helper
   const scroll = (dir: "left" | "right") => {
     scrollRef.current?.scrollBy({ left: dir === "left" ? -200 : 200, behavior: "smooth" })
   }
 
-  if (!isMounted || loading) {
+  // Week navigation
+  const weekIdx = weeks.indexOf(selectedWeek)
+
+  if (!isMounted || (loading && activeData.length === 0)) {
     return (
       <Card className="@container/card">
         <CardHeader>
@@ -244,7 +362,7 @@ export function ChartMomKpi() {
   const totalVarDol = totals?.totalLaborVarDol || 0
 
   return (
-    <Card className="@container/card overflow-hidden">
+    <Card className="@container/card overflow-hidden py-0">
       {/* ── Gradient Accent Bar ── */}
       <div className="h-1 bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500" />
 
@@ -257,9 +375,15 @@ export function ChartMomKpi() {
               </div>
               MoM KPIs Model
             </span>
-            <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-violet-500/10 text-violet-400 font-bold">
-              {filteredData.length} Months
-            </Badge>
+            {timeframe === "month" ? (
+              <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-violet-500/10 text-violet-400 font-bold">
+                {filteredData.length} Months
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-[9px] h-4 px-1.5 bg-indigo-500/10 text-indigo-400 font-bold">
+                {selectedWeek ? `Week ${parseInt(selectedWeek.split("-W")[1] || "0")}` : "Weekly"}
+              </Badge>
+            )}
           </CardTitle>
 
           {/* ── Summary Stats ── */}
@@ -292,11 +416,84 @@ export function ChartMomKpi() {
                 {totalVarDol < 0 ? "-" : ""}${Math.abs(totalVarDol) >= 1000 ? `${(Math.abs(totalVarDol) / 1000).toFixed(1)}k` : Math.abs(totalVarDol).toFixed(0)}
               </span>
             </div>
+
+            {/* ── Week Selector (inline in summary row when weekly mode) ── */}
+            {timeframe === "week" && weeks.length > 0 && (
+              <>
+                <div className="w-px h-4 bg-border/60 hidden sm:block" />
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => {
+                      if (weekIdx >= weeks.length - 1) {
+                        const prevW = getPrevYearWeek(weeks[weeks.length - 1])
+                        setWeeks(prev => [...prev, prevW])
+                        setSelectedWeek(prevW)
+                      } else {
+                        setSelectedWeek(weeks[weekIdx + 1])
+                      }
+                    }}
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </Button>
+                  <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+                    <SelectTrigger
+                      className={cn(
+                        "w-[150px] h-7 text-xs",
+                        selectedWeek === currentWeek && "text-emerald-600 font-bold"
+                      )}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[240px]">
+                      {weeks.map(w => (
+                        <SelectItem
+                          key={w}
+                          value={w}
+                          className={cn(w === currentWeek && "text-emerald-600 focus:text-emerald-600 font-bold")}
+                        >
+                          {formatWeekLabel(w)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => {
+                      if (weekIdx <= 0) {
+                        const nextW = getNextYearWeek(weeks[0])
+                        setWeeks(prev => [nextW, ...prev])
+                        setSelectedWeek(nextW)
+                      } else {
+                        setSelectedWeek(weeks[weekIdx - 1])
+                      }
+                    }}
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
         <CardAction>
           <div className="flex items-center gap-2">
+            {/* Timeframe Toggle */}
+            <ToggleGroup
+              type="single"
+              value={timeframe}
+              onValueChange={(v) => { if (v) setTimeframe(v as any) }}
+              variant="outline"
+              className="hidden *:data-[slot=toggle-group-item]:!px-3 @[580px]/card:flex"
+            >
+              <ToggleGroupItem value="month" className="text-xs">Monthly</ToggleGroupItem>
+              <ToggleGroupItem value="week" className="text-xs">Weekly</ToggleGroupItem>
+            </ToggleGroup>
             {/* View Toggle */}
             <ToggleGroup
               type="single"
@@ -309,23 +506,34 @@ export function ChartMomKpi() {
               <ToggleGroupItem value="chart" className="text-xs">Chart</ToggleGroupItem>
               <ToggleGroupItem value="trend" className="text-xs">Trends</ToggleGroupItem>
             </ToggleGroup>
-            {/* Period Toggle */}
-            <ToggleGroup
-              type="single"
-              value={period}
-              onValueChange={(v) => { if (v) setPeriod(v) }}
-              variant="outline"
-              className="hidden *:data-[slot=toggle-group-item]:!px-3 @[767px]/card:flex"
-            >
-              <ToggleGroupItem value="3">3M</ToggleGroupItem>
-              <ToggleGroupItem value="6">6M</ToggleGroupItem>
-              <ToggleGroupItem value="9">9M</ToggleGroupItem>
-              <ToggleGroupItem value="12">12M</ToggleGroupItem>
-              <ToggleGroupItem value="24">24M</ToggleGroupItem>
-            </ToggleGroup>
+            {/* Period Toggle (monthly only) */}
+            {timeframe === "month" && (
+              <ToggleGroup
+                type="single"
+                value={period}
+                onValueChange={(v) => { if (v) setPeriod(v) }}
+                variant="outline"
+                className="hidden *:data-[slot=toggle-group-item]:!px-3 @[767px]/card:flex"
+              >
+                <ToggleGroupItem value="3">3M</ToggleGroupItem>
+                <ToggleGroupItem value="6">6M</ToggleGroupItem>
+                <ToggleGroupItem value="9">9M</ToggleGroupItem>
+                <ToggleGroupItem value="12">12M</ToggleGroupItem>
+                <ToggleGroupItem value="24">24M</ToggleGroupItem>
+              </ToggleGroup>
+            )}
           </div>
           {/* Mobile dropdowns */}
           <div className="flex gap-2 @[767px]/card:hidden">
+            <Select value={timeframe} onValueChange={(v) => setTimeframe(v as any)}>
+              <SelectTrigger className="w-24" size="sm" aria-label="Timeframe" suppressHydrationWarning>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                <SelectItem value="month" className="rounded-lg">Monthly</SelectItem>
+                <SelectItem value="week" className="rounded-lg">Weekly</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={view} onValueChange={(v) => setView(v as any)}>
               <SelectTrigger className="w-24" size="sm" aria-label="View" suppressHydrationWarning>
                 <SelectValue />
@@ -336,26 +544,33 @@ export function ChartMomKpi() {
                 <SelectItem value="trend" className="rounded-lg">Trends</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={period} onValueChange={setPeriod}>
-              <SelectTrigger className="w-20" size="sm" aria-label="Period" suppressHydrationWarning>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl">
-                <SelectItem value="3" className="rounded-lg">3M</SelectItem>
-                <SelectItem value="6" className="rounded-lg">6M</SelectItem>
-                <SelectItem value="9" className="rounded-lg">9M</SelectItem>
-                <SelectItem value="12" className="rounded-lg">12M</SelectItem>
-                <SelectItem value="24" className="rounded-lg">24M</SelectItem>
-              </SelectContent>
-            </Select>
+            {timeframe === "month" && (
+              <Select value={period} onValueChange={setPeriod}>
+                <SelectTrigger className="w-20" size="sm" aria-label="Period" suppressHydrationWarning>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="3" className="rounded-lg">3M</SelectItem>
+                  <SelectItem value="6" className="rounded-lg">6M</SelectItem>
+                  <SelectItem value="9" className="rounded-lg">9M</SelectItem>
+                  <SelectItem value="12" className="rounded-lg">12M</SelectItem>
+                  <SelectItem value="24" className="rounded-lg">24M</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </CardAction>
       </CardHeader>
 
       <CardContent className="px-0 pt-0 sm:px-0">
-        {filteredData.length === 0 ? (
+        {loading ? (
           <div className="flex items-center justify-center h-[300px] text-muted-foreground/50 text-sm">
-            No KPI data available for this period
+            <Loader2 className="h-5 w-5 animate-spin mr-2" />
+            Loading KPI data…
+          </div>
+        ) : activeData.length === 0 ? (
+          <div className="flex items-center justify-center h-[300px] text-muted-foreground/50 text-sm">
+            No KPI data available for this {timeframe === "month" ? "period" : "week"}
           </div>
         ) : view === "table" ? (
           /* ═══ TABLE VIEW ═══ */
@@ -374,19 +589,19 @@ export function ChartMomKpi() {
               <ChevronRight className="h-4 w-4" />
             </button>
 
-            <div ref={scrollRef} className="overflow-x-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-              <table className="w-full min-w-[700px] text-sm">
+            <div ref={scrollRef} className="overflow-x-auto scrollbar-none">
+              <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-border/40">
-                    <th className="px-3 sm:px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground sticky left-0 bg-card z-10 w-[150px] sm:w-[170px]">
+                  <tr className="border-b border-border/30 bg-muted/30">
+                    <th className="px-3 sm:px-4 py-2 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky left-0 bg-muted/30 z-10 min-w-[120px]">
                       Metric
                     </th>
-                    {filteredData.map((m) => (
-                      <th key={m.month} className="px-2 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-[80px]">
-                        {formatMonthLabel(m.month)}
+                    {activeData.map((item) => (
+                      <th key={item[columnKey]} className="px-2 py-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider min-w-[70px]">
+                        {timeframe === "month" ? formatMonthShort(item.month) : item.dayLabel}
                       </th>
                     ))}
-                    <th className="px-2 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-violet-400 min-w-[60px]">
+                    <th className="px-2 py-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider min-w-[70px]">
                       Trend
                     </th>
                   </tr>
@@ -402,9 +617,9 @@ export function ChartMomKpi() {
                             <span className="text-xs font-semibold truncate">{metric.label}</span>
                           </div>
                         </td>
-                        {filteredData.map((m, idx) => {
-                          const val = m[metric.key] as number
-                          const prev = idx > 0 ? filteredData[idx - 1][metric.key] as number : 0
+                        {activeData.map((item, idx) => {
+                          const val = item[metric.key] as number
+                          const prev = idx > 0 ? activeData[idx - 1][metric.key] as number : 0
 
                           // Dynamic coloring for signed metrics
                           let valColor: string = metric.color
@@ -413,7 +628,7 @@ export function ChartMomKpi() {
                           }
 
                           return (
-                            <td key={m.month} className="px-2 py-2 text-center">
+                            <td key={item[columnKey]} className="px-2 py-2 text-center">
                               <div className="flex flex-col items-center gap-0.5">
                                 <span className={cn(
                                   "text-[12px] font-bold tabular-nums",
@@ -432,7 +647,7 @@ export function ChartMomKpi() {
                         })}
                         <td className="px-2 py-2 text-center">
                           <div className="flex items-center justify-center">
-                            <Sparkline data={filteredData} dataKey={metric.key} color={metric.color} />
+                            <Sparkline data={activeData} dataKey={metric.key} color={metric.color} />
                           </div>
                         </td>
                       </tr>
@@ -451,14 +666,14 @@ export function ChartMomKpi() {
               className="aspect-auto h-[320px] w-full"
               style={{ minWidth: "100%", minHeight: "320px" }}
             >
-              <BarChart data={filteredData} margin={{ left: 22, right: 22, top: 10 }}>
+              <BarChart data={activeData} margin={{ left: 22, right: 22, top: 10 }}>
                 <CartesianGrid vertical={false} strokeOpacity={0.2} />
                 <XAxis
-                  dataKey="month"
+                  dataKey={timeframe === "month" ? "month" : "dayLabel"}
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
-                  tickFormatter={formatMonthShort}
+                  tickFormatter={timeframe === "month" ? formatMonthShort : undefined}
                 />
                 <YAxis
                   tickLine={false}
@@ -471,7 +686,7 @@ export function ChartMomKpi() {
                   cursor={false}
                   content={
                     <ChartTooltipContent
-                      labelFormatter={(value) => formatMonthLabel(value)}
+                      labelFormatter={(value) => timeframe === "month" ? formatMonthLabel(value) : formatDayFull(value)}
                       indicator="dot"
                       formatter={(value: number | string, name: string) => {
                         const num = typeof value === "string" ? parseFloat(value) : value
@@ -496,7 +711,7 @@ export function ChartMomKpi() {
               className="aspect-auto h-[320px] w-full"
               style={{ minWidth: "100%", minHeight: "320px" }}
             >
-              <AreaChart data={filteredData} margin={{ left: 22, right: 22, top: 10 }}>
+              <AreaChart data={activeData} margin={{ left: 22, right: 22, top: 10 }}>
                 <defs>
                   <linearGradient id="fillRevenueMom" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="var(--color-revenue)" stopOpacity={0.4} />
@@ -513,11 +728,11 @@ export function ChartMomKpi() {
                 </defs>
                 <CartesianGrid vertical={false} strokeOpacity={0.2} />
                 <XAxis
-                  dataKey="month"
+                  dataKey={timeframe === "month" ? "month" : "dayLabel"}
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
-                  tickFormatter={formatMonthShort}
+                  tickFormatter={timeframe === "month" ? formatMonthShort : undefined}
                 />
                 <YAxis
                   tickLine={false}
@@ -530,7 +745,7 @@ export function ChartMomKpi() {
                   cursor={false}
                   content={
                     <ChartTooltipContent
-                      labelFormatter={(value) => formatMonthLabel(value)}
+                      labelFormatter={(value) => timeframe === "month" ? formatMonthLabel(value) : formatDayFull(value)}
                       indicator="dot"
                       formatter={(value: number | string, name: string) => {
                         const num = typeof value === "string" ? parseFloat(value) : value
