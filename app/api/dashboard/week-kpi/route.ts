@@ -127,6 +127,7 @@ export async function GET(req: NextRequest) {
                 paycomOutDay: 1,
                 totalHours: 1,
                 wst: 1,
+                wstDuration: 1,
                 wstRevenue: { $ifNull: ["$wstRevenue", 0] },
               },
             },
@@ -265,11 +266,13 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // WST-based revenue computation
+        // WST-based revenue computation (prefers stored custom wstRevenue, otherwise computes it)
         const wstVal = (r.wst || "").trim().toLowerCase();
         const wstHourlyRate = wstMap.get(wstVal) || 0;
-        const wstRevenue = Math.round(wstHourlyRate * totalHrsDecimal * 100) / 100;
-        if (wstRevenue > 0) computedRevenue += wstRevenue;
+        const wstDuration = r.wstDuration || durToHrs(r.totalHours || "");
+        const computedRev = Math.round(wstHourlyRate * wstDuration * 100) / 100;
+        const finalRev = (r.wstRevenue !== undefined && r.wstRevenue > 0) ? r.wstRevenue : computedRev;
+        if (finalRev > 0) computedRevenue += finalRev;
       }
 
       actualMap.set(day, {

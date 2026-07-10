@@ -2003,14 +2003,10 @@ function SchedulingPageContent() {
 
                           {/* KPI Metric Rows */}
                           {kpiOpen && [
-                            { label: "Revenue", color: "text-green-500", icon: DollarSign },
                             { label: "Driver %", color: "text-emerald-400", icon: Users },
                             { label: "Operations %", color: "text-blue-400", icon: Wrench },
                             { label: "Labor Theory %", color: "text-amber-400", icon: BarChart3 },
                             { label: "Labor Actual %", color: "text-orange-400", icon: BarChart3 },
-                            { label: "Labor Cost Theory", color: "text-cyan-400", icon: CalendarDays },
-                            { label: "Labor Cost Actual", color: "text-indigo-400", icon: CalendarDays },
-                            { label: "Labor Var $", color: "text-rose-400", icon: AlertTriangle },
                             { label: "Labor Var %", color: "text-purple-400", icon: AlertTriangle },
                           ].map((metric) => (
                             <tr
@@ -2086,31 +2082,14 @@ function SchedulingPageContent() {
                                 return (
                                   <td key={date} className="text-center px-0.5 sm:px-1 py-1">
                                     {isActiveMetric && val !== "—" ? (
-                                      <button
-                                        onClick={() => {
-                                          if (isActiveClickable) {
-                                            const isFormulaModal = ["Driver %", "Operations %", "Labor Theory %", "Labor Actual %", "Labor Var $", "Labor Var %"].includes(metric.label);
-                                            const modalType: "revenue" | "theory" | "actual" | "formula" = isFormulaModal ? "formula" : isRevenue ? "revenue" : (isLaborTheory || isLaborTheoryPct) ? "theory" : "actual";
-                                            setCostModal({
-                                              open: true,
-                                              date,
-                                              type: modalType,
-                                              metricLabel: metric.label,
-                                              theoryData: weekData.dailyLaborTheoryCostBreakdown?.[date] || [],
-                                              actualData: weekData.dailyLaborActualCostBreakdown?.[date] || [],
-                                              revenueData: weekData.dailyRevenueBreakdown?.[date] || []
-                                            });
-                                          }
-                                        }}
+                                      <span
                                         className={cn(
-                                          "text-[12px] font-bold px-2 py-1 transition-colors outline-none",
-                                          isActiveClickable && "cursor-pointer rounded-md hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring",
-                                          !isActiveClickable && "cursor-default",
+                                          "text-[12px] font-bold px-2 py-1 select-none",
                                           customColorClass || metric.color
                                         )}
                                       >
                                         {val}
-                                      </button>
+                                      </span>
                                     ) : (
                                       <span className={cn("text-[12px] font-medium transition-colors", val !== "—" ? (customColorClass || "text-muted-foreground") : "text-muted-foreground")}>{val}</span>
                                     )}
