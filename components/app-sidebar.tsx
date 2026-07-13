@@ -162,6 +162,7 @@ const data = {
       icon: IconUsersGroup,
       subModules: [
         { name: "Employees", url: "/hr/employees" },
+        { name: "Callouts", url: "/hr/callouts" },
         { name: "Reimbursement", url: "/hr/reimbursement" },
         { name: "Incidents", url: "/hr/incidents" },
         { name: "Employee Audit", url: "/hr/audit" },
