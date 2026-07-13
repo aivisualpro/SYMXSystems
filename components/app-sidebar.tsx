@@ -164,7 +164,6 @@ const data = {
         { name: "Employees", url: "/hr/employees" },
         { name: "Callouts", url: "/hr/callouts" },
         { name: "Reimbursement", url: "/hr/reimbursement" },
-        { name: "Incidents", url: "/hr/incidents" },
         { name: "Employee Audit", url: "/hr/audit" },
         { name: "HR Tickets", url: "/hr/tickets" },
         { name: "Timesheet", url: "/hr/timesheet" },
@@ -174,6 +173,18 @@ const data = {
         { name: "Uniforms", url: "/hr/uniforms" },
         { name: "Terminations", url: "/hr/terminations" },
       ]
+    },
+    {
+      name: "Incidents",
+      url: "/incidents",
+      icon: IconAlertTriangle,
+      subModules: []
+    },
+    {
+      name: "Insurance",
+      url: "/insurance",
+      icon: IconShield,
+      subModules: []
     },
     {
       name: "Scorecard",

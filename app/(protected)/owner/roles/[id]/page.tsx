@@ -62,7 +62,9 @@ const FALLBACK_MODULES: any[] = [
       { name: "Dispatching", subModules: ["Roster", "Opening", "Attendance", "Repairs", "Time", "Closing", "Efficiency", "Routes"] },
       { name: "Everyday" },
       { name: "Load Out" },
-      { name: "HR", subModules: ["Employees", "Callouts", "Reimbursement", "Claims", "Employee Audit", "HR Tickets", "Timesheet", "Interviews", "Onboarding", "Hired", "Uniforms", "Terminations"] },
+      { name: "HR", subModules: ["Employees", "Callouts", "Reimbursement", "Employee Audit", "HR Tickets", "Timesheet", "Interviews", "Onboarding", "Hired", "Uniforms", "Terminations"] },
+      { name: "Incidents" },
+      { name: "Insurance" },
       { name: "Scorecard" },
       { name: "Notifications" },
       { name: "Settings" }

@@ -9,7 +9,6 @@ import {
   IconLayoutDashboard,
   IconUsers,
   IconReceipt2,
-  IconReportAnalytics,
   IconFileSearch,
   IconTicket,
   IconClock,
@@ -20,12 +19,13 @@ import {
 } from "@tabler/icons-react";
 
 // ── Tabs config ───────────────────────────────────────────────────────
+// Note: Incidents moved to its own top-level module (/incidents) so it can
+// have independent, broader permissions than the rest of HR — see app-sidebar.tsx.
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: IconLayoutDashboard, href: "/hr" },
   { id: "employees", label: "Employees", icon: IconUsers, href: "/hr/employees" },
   { id: "callouts", label: "Callouts", icon: IconPhoneOff, href: "/hr/callouts" },
   { id: "reimbursement", label: "Reimbursement", icon: IconReceipt2, href: "/hr/reimbursement" },
-  { id: "incidents", label: "Incidents", icon: IconReportAnalytics, href: "/hr/incidents" },
   { id: "audit", label: "Employee Audit", icon: IconFileSearch, href: "/hr/audit" },
   { id: "tickets", label: "HR Tickets", icon: IconTicket, href: "/hr/tickets" },
   { id: "timesheet", label: "Timesheet", icon: IconClock, href: "/hr/timesheet" },

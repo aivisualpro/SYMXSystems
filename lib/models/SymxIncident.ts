@@ -23,9 +23,11 @@ export interface ISymxIncident extends Document {
   thirdPartyEmail?: string;
   withInsurance?: boolean;
   insurancePolicy?: string;
+  insurancePolicyId?: mongoose.Types.ObjectId;
   paid?: number;
   reserved?: number;
   incidentUploadFile?: string;
+  attachments?: { name: string; url: string }[];
   createdBy?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -55,9 +57,11 @@ const SymxIncidentSchema = new Schema<ISymxIncident>(
     thirdPartyEmail: { type: String },
     withInsurance: { type: Boolean, default: false },
     insurancePolicy: { type: String },
+    insurancePolicyId: { type: Schema.Types.ObjectId, ref: "InsurancePolicy" },
     paid: { type: Number, default: 0 },
     reserved: { type: Number, default: 0 },
     incidentUploadFile: { type: String },
+    attachments: [{ name: { type: String }, url: { type: String }, _id: false }],
     createdBy: { type: String },
   },
   { timestamps: true, collection: "symxincidents" }
@@ -65,6 +69,8 @@ const SymxIncidentSchema = new Schema<ISymxIncident>(
 
 SymxIncidentSchema.index({ transporterId: 1, incidentDate: 1 });
 SymxIncidentSchema.index({ claimNumber: 1 }, { sparse: true });
+SymxIncidentSchema.index({ claimStatus: 1, incidentDate: -1 });
+SymxIncidentSchema.index({ insurancePolicyId: 1 });
 
 const SymxIncident =
   mongoose.models.SymxIncident ||
