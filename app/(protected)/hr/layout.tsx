@@ -16,12 +16,14 @@ import {
   IconUserSearch,
   IconShirt,
   IconUserOff,
+  IconPhoneOff,
 } from "@tabler/icons-react";
 
 // ── Tabs config ───────────────────────────────────────────────────────
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: IconLayoutDashboard, href: "/hr" },
   { id: "employees", label: "Employees", icon: IconUsers, href: "/hr/employees" },
+  { id: "callouts", label: "Callouts", icon: IconPhoneOff, href: "/hr/callouts" },
   { id: "reimbursement", label: "Reimbursement", icon: IconReceipt2, href: "/hr/reimbursement" },
   { id: "incidents", label: "Incidents", icon: IconReportAnalytics, href: "/hr/incidents" },
   { id: "audit", label: "Employee Audit", icon: IconFileSearch, href: "/hr/audit" },
