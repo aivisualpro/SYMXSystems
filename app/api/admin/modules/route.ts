@@ -5,7 +5,7 @@ import connectToDatabase from "@/lib/db";
 import SymxAppModule from "@/lib/models/SymxAppModule";
 
 // ── VERSION: bump this whenever DEFAULT_MODULES changes to force a DB reseed ──
-const MODULES_VERSION = 11;
+const MODULES_VERSION = 12;
 
 // Default modules — must match actual routes in /app/(protected)/
 const DEFAULT_MODULES = [
@@ -54,7 +54,6 @@ const DEFAULT_MODULES = [
       { name: "Employees", url: "/hr/employees" },
       { name: "Callouts", url: "/hr/callouts" },
       { name: "Reimbursement", url: "/hr/reimbursement" },
-      { name: "Incidents", url: "/hr/incidents" },
       { name: "Employee Audit", url: "/hr/audit" },
       { name: "HR Tickets", url: "/hr/tickets" },
       { name: "Timesheet", url: "/hr/timesheet" },
@@ -65,6 +64,13 @@ const DEFAULT_MODULES = [
       { name: "Terminations", url: "/hr/terminations" },
     ]
   },
+  // Own top-level module (not nested under HR) so it can be granted to any
+  // role independently — default-open in the app itself (any logged-in user
+  // can view/create), this listing is what lets an admin explicitly *restrict*
+  // it for a role if ever needed.
+  { name: "Incidents", url: "/incidents", icon: "IconAlertTriangle", order: 7.5, subModules: [] },
+  // Admin-only — financial/legal insurance data.
+  { name: "Insurance", url: "/insurance", icon: "IconShield", order: 7.6, subModules: [] },
   { name: "Scorecard", url: "/scorecard", icon: "IconChartBar", order: 8, subModules: [] },
 ];
 

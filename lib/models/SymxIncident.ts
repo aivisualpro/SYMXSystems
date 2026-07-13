@@ -23,9 +23,39 @@ export interface ISymxIncident extends Document {
   thirdPartyEmail?: string;
   withInsurance?: boolean;
   insurancePolicy?: string;
+  insurancePolicyId?: mongoose.Types.ObjectId;
   paid?: number;
   reserved?: number;
   incidentUploadFile?: string;
+  attachments?: { name: string; url: string; category: string }[];
+
+  // ── Fields from the official SYMX Safety Incident Report Form ──
+  policeReportFiled?: boolean;
+  policeReportNumber?: string;
+  medicalTreatmentRequired?: boolean;
+  medicalTreatmentType?: string; // Triage / First Aid / Clinical / Emergency / Other
+  witnesses?: string;            // free text — matches the paper form's blank-line format
+  thirdPartyInvolvementType?: string; // None / Animal / Person / Vehicle / Equipment / Other
+
+  // ── Contact / follow-up log — HR/Admin only, same tier as supervisorNotes ──
+  contactLog?: { date: Date; contactedBy: string; method: string; note: string }[];
+
+  // ── Injury & regulatory tracking — body part is factual/open; recordability
+  // and return-to-work are claims-admin determinations, HR/Admin only ──
+  bodyPartInjured?: string;
+  oshaRecordable?: boolean;
+  dotRecordable?: boolean;
+  daysMissedFromWork?: number;
+  returnToWorkStatus?: string; // N/A / Full Duty / Modified Duty / Not Yet Returned
+  returnToWorkDate?: Date;
+
+  // ── Third-party insurance & adjuster info — HR/Admin only ──
+  thirdPartyInsuranceCarrier?: string;
+  thirdPartyPolicyNumber?: string;
+  thirdPartyAdjusterName?: string;
+  thirdPartyAdjusterPhone?: string;
+  thirdPartyClaimNumber?: string;
+
   createdBy?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -55,9 +85,40 @@ const SymxIncidentSchema = new Schema<ISymxIncident>(
     thirdPartyEmail: { type: String },
     withInsurance: { type: Boolean, default: false },
     insurancePolicy: { type: String },
+    insurancePolicyId: { type: Schema.Types.ObjectId, ref: "InsurancePolicy" },
     paid: { type: Number, default: 0 },
     reserved: { type: Number, default: 0 },
     incidentUploadFile: { type: String },
+    attachments: [{ name: { type: String }, url: { type: String }, category: { type: String, default: "Other" }, _id: false }],
+
+    policeReportFiled: { type: Boolean, default: false },
+    policeReportNumber: { type: String, default: "" },
+    medicalTreatmentRequired: { type: Boolean, default: false },
+    medicalTreatmentType: { type: String, default: "" },
+    witnesses: { type: String, default: "" },
+    thirdPartyInvolvementType: { type: String, default: "" },
+
+    contactLog: [{
+      date: { type: Date, default: Date.now },
+      contactedBy: { type: String, default: "" },
+      method: { type: String, default: "" },
+      note: { type: String, default: "" },
+      _id: false,
+    }],
+
+    bodyPartInjured: { type: String, default: "" },
+    oshaRecordable: { type: Boolean, default: false },
+    dotRecordable: { type: Boolean, default: false },
+    daysMissedFromWork: { type: Number, default: 0 },
+    returnToWorkStatus: { type: String, default: "" },
+    returnToWorkDate: { type: Date },
+
+    thirdPartyInsuranceCarrier: { type: String, default: "" },
+    thirdPartyPolicyNumber: { type: String, default: "" },
+    thirdPartyAdjusterName: { type: String, default: "" },
+    thirdPartyAdjusterPhone: { type: String, default: "" },
+    thirdPartyClaimNumber: { type: String, default: "" },
+
     createdBy: { type: String },
   },
   { timestamps: true, collection: "symxincidents" }
@@ -65,6 +126,8 @@ const SymxIncidentSchema = new Schema<ISymxIncident>(
 
 SymxIncidentSchema.index({ transporterId: 1, incidentDate: 1 });
 SymxIncidentSchema.index({ claimNumber: 1 }, { sparse: true });
+SymxIncidentSchema.index({ claimStatus: 1, incidentDate: -1 });
+SymxIncidentSchema.index({ insurancePolicyId: 1 });
 
 const SymxIncident =
   mongoose.models.SymxIncident ||

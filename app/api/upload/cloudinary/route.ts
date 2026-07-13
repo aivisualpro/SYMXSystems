@@ -1,4 +1,5 @@
 import { requirePermission } from "@/lib/auth/require-permission";
+import { authorizeAction } from "@/lib/rbac";
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -8,17 +9,44 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export async function POST(req: NextRequest) {
-  try {
-    await requirePermission("Dispatching", "edit");
-  } catch (e: any) {
-    if (e.name === "ForbiddenError") return NextResponse.json({ error: e.message }, { status: 403 });
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+// Which modules are allowed to use this shared upload endpoint, and what
+// action + Cloudinary folder each maps to. Callers pass a `module` field in
+// the FormData; anything not in this list is rejected. "Dispatching" stays
+// first and is the default so the existing coaching-writeups caller keeps
+// working unchanged if it ever omits the field.
+const UPLOAD_TARGETS: Record<string, { action: "view" | "create" | "edit" | "delete" | "approve" | "download"; folder: string; useAuthorizeAction?: boolean }> = {
+  Dispatching: { action: "edit", folder: "symx-systems/coaching-writeups/attachments" },
+  Insurance: { action: "edit", folder: "symx-systems/insurance/loss-runs" },
+  Incidents: { action: "create", folder: "symx-systems/incidents/attachments", useAuthorizeAction: true },
+};
 
+export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
+    const moduleField = String(formData.get("module") || "Dispatching");
+
+    const target = UPLOAD_TARGETS[moduleField];
+    if (!target) {
+      return NextResponse.json({ error: `Unknown upload module: ${moduleField}` }, { status: 400 });
+    }
+
+    // Incidents uploads use the same default-open check as the rest of the
+    // Incidents module (any logged-in user can attach a photo to a report
+    // they're creating); everything else stays on the stricter, default-
+    // closed permission check.
+    if (target.useAuthorizeAction) {
+      const auth = await authorizeAction("Incidents", target.action);
+      if (!auth.authorized) return auth.response;
+    } else {
+      try {
+        await requirePermission(moduleField, target.action);
+      } catch (e: any) {
+        if (e.name === "ForbiddenError") return NextResponse.json({ error: e.message }, { status: 403 });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+    }
+
     if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
     const bytes = await file.arrayBuffer();
@@ -28,7 +56,7 @@ export async function POST(req: NextRequest) {
       cloudinary.uploader
         .upload_stream(
           {
-            folder: "symx-systems/coaching-writeups/attachments",
+            folder: target.folder,
             resource_type: "auto",
             public_id: `attachment-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`,
           },

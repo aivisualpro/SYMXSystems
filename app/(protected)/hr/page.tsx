@@ -460,7 +460,7 @@ export default function EmployeesDashboardPage() {
                 </div>
                 <h3 className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">Open Incidents</h3>
               </div>
-              <button onClick={() => router.push("/hr/incidents")} className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 transition-colors">
+              <button onClick={() => router.push("/incidents")} className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 transition-colors">
                 View All <ArrowUpRight className="h-3 w-3" />
               </button>
             </div>
@@ -508,7 +508,7 @@ export default function EmployeesDashboardPage() {
           {/* Incident Quick Stats */}
           <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-3">
             {/* Total Incidents */}
-            <div onClick={() => router.push("/hr/incidents")}
+            <div onClick={() => router.push("/incidents")}
               className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-rose-500/30 active:scale-[0.98]">
               <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-rose-400 to-rose-600" />
               <div className="flex items-center justify-between mb-2">
@@ -520,7 +520,7 @@ export default function EmployeesDashboardPage() {
             </div>
 
             {/* Open */}
-            <div onClick={() => router.push("/hr/incidents")}
+            <div onClick={() => router.push("/incidents")}
               className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-amber-500/30 active:scale-[0.98]">
               <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-amber-400 to-amber-600" />
               <div className="flex items-center justify-between mb-2">
@@ -534,7 +534,7 @@ export default function EmployeesDashboardPage() {
             </div>
 
             {/* Total Paid */}
-            <div onClick={() => router.push("/hr/incidents")}
+            <div onClick={() => router.push("/incidents")}
               className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-red-500/30 active:scale-[0.98]">
               <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-red-400 to-red-600" />
               <div className="flex items-center justify-between mb-2">
@@ -546,7 +546,7 @@ export default function EmployeesDashboardPage() {
             </div>
 
             {/* Reserved */}
-            <div onClick={() => router.push("/hr/incidents")}
+            <div onClick={() => router.push("/incidents")}
               className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-blue-500/30 active:scale-[0.98]">
               <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-blue-400 to-blue-600" />
               <div className="flex items-center justify-between mb-2">
