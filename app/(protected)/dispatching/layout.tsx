@@ -21,7 +21,6 @@ import {
     Users,
     TableProperties,
     FileDown,
-    FileText,
 } from "lucide-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { useSchedulingWeeks } from "@/lib/query/hooks/useSchedules";
@@ -47,7 +46,6 @@ export const DISPATCHING_TABS = [
     { id: "time", label: "Time", href: "/dispatching/time", icon: Clock, gradient: "from-rose-500 to-pink-500", description: "Time tracking and shift management" },
     { id: "closing", label: "Closing", href: "/dispatching/closing", icon: DoorClosed, gradient: "from-indigo-500 to-blue-500", description: "End-of-day dispatch closing procedures" },
     { id: "efficiency", label: "Efficiency", href: "/dispatching/efficiency", icon: TrendingUp, gradient: "from-teal-500 to-emerald-500", description: "Route efficiency and performance metrics" },
-    { id: "coaching-writeups", label: "Coaching & Writeups", href: "/dispatching/coaching-writeups", icon: FileText, gradient: "from-amber-500 to-yellow-500", description: "Coaching sessions and corrective writeups" },
 ] as const;
 
 // ── Day names ──
@@ -82,11 +80,6 @@ interface DispatchingContextType {
     /** Shared raw route data for the selected week — fetched once by layout, consumed by all tabs */
     rawRouteData: any;
     rawRouteDataLoading: boolean;
-    /** Callback for coaching page to register its add handler */
-    onCoachingAdd: (() => void) | null;
-    setOnCoachingAdd: (fn: (() => void) | null) => void;
-    coachingSignedFilter: "signed" | "not-signed";
-    setCoachingSignedFilter: (f: "signed" | "not-signed") => void;
 }
 
 const DispatchingContext = createContext<DispatchingContextType>({
@@ -109,10 +102,6 @@ const DispatchingContext = createContext<DispatchingContextType>({
     setConfirmationFilter: () => { },
     rawRouteData: null,
     rawRouteDataLoading: false,
-    onCoachingAdd: null,
-    setOnCoachingAdd: () => { },
-    coachingSignedFilter: "not-signed" as const,
-    setCoachingSignedFilter: () => { },
 });
 
 export function useDispatching() {
@@ -199,8 +188,6 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [globalEditMode, setGlobalEditMode] = useState(false);
     const [pdfLoading, setPdfLoading] = useState(false);
     const [confirmationFilter, setConfirmationFilter] = useState("all");
-    const [onCoachingAdd, setOnCoachingAdd] = useState<(() => void) | null>(null);
-    const [coachingSignedFilter, setCoachingSignedFilter] = useState<"signed" | "not-signed">("not-signed");
     const currentWeek = useMemo(() => getCurrentYearWeek(), []);
 
     /** Pick best default week: URL > current > closest ≤ current > latest */
@@ -396,7 +383,6 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         if (pathname.includes("/dispatching/time")) return "Time";
         if (pathname.includes("/dispatching/closing")) return "Closing";
         if (pathname.includes("/dispatching/efficiency")) return "Efficiency";
-        if (pathname.includes("/dispatching/coaching-writeups")) return "Coaching & Writeups";
         return "Dispatching";
     }, [pathname]);
 
@@ -513,8 +499,6 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                 globalEditMode, setGlobalEditMode,
                 confirmationFilter, setConfirmationFilter,
                 rawRouteData, rawRouteDataLoading,
-                onCoachingAdd, setOnCoachingAdd,
-                coachingSignedFilter, setCoachingSignedFilter,
             }}
         >
             <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-3">
@@ -653,35 +637,6 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                 >
                                     <Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                     {globalEditMode ? "Finish Editing" : "Quick Edit Table"}
-                                </button>
-                            </>
-                        )}
-
-                        {/* Signed toggle + Add button — only on /dispatching/coaching-writeups */}
-                        {pathname.includes("/dispatching/coaching-writeups") && onCoachingAdd && (
-                            <>
-                                <div className="w-px h-6 bg-border/60 mx-1" />
-                                <div className="flex items-center rounded-lg border border-border/60 bg-background/50 p-0.5">
-                                    <button
-                                        onClick={() => setCoachingSignedFilter("signed")}
-                                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all whitespace-nowrap select-none ${coachingSignedFilter === "signed" ? "bg-emerald-500/20 text-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
-                                    >
-                                        Signed
-                                    </button>
-                                    <button
-                                        onClick={() => setCoachingSignedFilter("not-signed")}
-                                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all whitespace-nowrap select-none ${coachingSignedFilter === "not-signed" ? "bg-amber-500/20 text-amber-400" : "text-muted-foreground hover:text-foreground"}`}
-                                    >
-                                        Not Signed
-                                    </button>
-                                </div>
-                                <div className="w-px h-6 bg-border/60 mx-1" />
-                                <button
-                                    onClick={onCoachingAdd}
-                                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap select-none bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-lg shadow-amber-500/25 hover:brightness-110 hover:shadow-xl hover:shadow-amber-500/30"
-                                >
-                                    <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                    Add
                                 </button>
                             </>
                         )}

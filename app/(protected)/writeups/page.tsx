@@ -1,0 +1,661 @@
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import SignaturePad from "@/components/ui/signature-pad";
+import { notify } from "@/lib/notify";
+import { Loader2, Plus, ClipboardList, FileText, Printer, Upload, AlertTriangle, Download, ThumbsDown } from "lucide-react";
+
+interface PriorSnapshot { writeupId: string; incidentDate: string; warningLevel: string }
+interface SignatureInfo { name: string; signatureImage: string; signedAt: string }
+interface Refusal { refused: boolean; note?: string; witnessName?: string; witnessSignatureImage?: string; refusedAt?: string }
+interface Attachment { name: string; url: string; category: string }
+
+interface Writeup {
+  _id: string;
+  transporterId?: string;
+  employeeId?: string;
+  employeeName: string;
+  categoryId?: string;
+  categoryLabel: string;
+  warningLevel: string;
+  warningLevelAuto: string;
+  warningLevelOverrideReason?: string;
+  incidentDate: string;
+  description?: string;
+  planForImprovement?: string;
+  consequences?: string;
+  priorWriteups: PriorSnapshot[];
+  status: string;
+  managerName: string;
+  managerSignature?: SignatureInfo;
+  employeeSignature?: SignatureInfo;
+  refusal?: Refusal;
+  attachments: Attachment[];
+  isHistorical: boolean;
+  createdBy?: string;
+}
+
+interface EmployeeOption { transporterId: string; firstName: string; lastName: string; _id: string }
+interface CategoryOption { _id: string; description: string }
+
+const WARNING_LEVELS = ["first_warning", "second_warning", "third_warning", "final_warning", "suspension_review"];
+const WARNING_LEVEL_LABELS: Record<string, string> = {
+  first_warning: "First Warning",
+  second_warning: "Second Warning",
+  third_warning: "Third Warning",
+  final_warning: "Final Warning",
+  suspension_review: "Suspension Review",
+};
+const WARNING_LEVEL_COLORS: Record<string, string> = {
+  first_warning: "bg-blue-500 text-white border-blue-600",
+  second_warning: "bg-amber-500 text-white border-amber-600",
+  third_warning: "bg-orange-500 text-white border-orange-600",
+  final_warning: "bg-red-500 text-white border-red-600",
+  suspension_review: "bg-red-800 text-white border-red-900",
+};
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Draft — needs signature",
+  signed: "Signed",
+  refused_to_sign: "Refused to Sign",
+  uploaded_signed_copy: "Signed (Uploaded Copy)",
+  escalated: "Escalated to Admin/HR",
+  closed: "Closed",
+};
+
+const EMPTY_FORM = {
+  employeeId: "", transporterId: "", employeeName: "",
+  categoryId: "", incidentDate: new Date().toISOString().split("T")[0],
+  description: "", planForImprovement: "", consequences: "",
+};
+
+function fmtDate(d?: string) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString();
+}
+
+export default function WriteupsPage() {
+  const [writeups, setWriteups] = useState<Writeup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Create dialog
+  const [createOpen, setCreateOpen] = useState(false);
+  const [form, setForm] = useState<any>(EMPTY_FORM);
+  const [creating, setCreating] = useState(false);
+  const [recommendation, setRecommendation] = useState<{ recommended: string; priorCount: number; priors: PriorSnapshot[]; rationale: string } | null>(null);
+  const [loadingRec, setLoadingRec] = useState(false);
+  const [levelOverride, setLevelOverride] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+
+  // Detail / sign dialog
+  const [selected, setSelected] = useState<Writeup | null>(null);
+  const [managerName, setManagerName] = useState("");
+  const [managerSig, setManagerSig] = useState("");
+  const [employeeName, setEmployeeSignerName] = useState("");
+  const [employeeSig, setEmployeeSig] = useState("");
+  const [savingSign, setSavingSign] = useState(false);
+  const [refuseOpen, setRefuseOpen] = useState(false);
+  const [refuseNote, setRefuseNote] = useState("");
+  const [witnessName, setWitnessName] = useState("");
+  const [witnessSig, setWitnessSig] = useState("");
+  const [uploadingSigned, setUploadingSigned] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      const res = await fetch(`/api/writeups?${params}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to load write-ups");
+      setWriteups(json.writeups || []);
+    } catch (err: any) {
+      notify.error(err.message || "Failed to load write-ups");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
+
+  useEffect(() => {
+    fetch("/api/admin/employees?terminated=false&export=true&select=firstName,lastName,transporterId,status")
+      .then((res) => res.json())
+      .then((json) => {
+        const list = (json.employees || json || []).map((e: any) => ({
+          _id: e._id, transporterId: e.transporterId || "", firstName: e.firstName || "", lastName: e.lastName || "",
+        }));
+        setEmployees(list.sort((a: EmployeeOption, b: EmployeeOption) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
+      })
+      .catch(() => {});
+    fetch("/api/admin/settings/dropdowns?type=metric")
+      .then((res) => res.json())
+      .then((d) => setCategories(Array.isArray(d) ? d.filter((c: any) => c.isActive !== false) : []))
+      .catch(() => {});
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!searchQuery.trim()) return writeups;
+    const q = searchQuery.trim().toLowerCase();
+    return writeups.filter(
+      (w) => (w.employeeName || "").toLowerCase().includes(q) || (w.categoryLabel || "").toLowerCase().includes(q)
+    );
+  }, [writeups, searchQuery]);
+
+  const summary = useMemo(() => {
+    const pending = writeups.filter((w) => w.status === "draft").length;
+    const escalated = writeups.filter((w) => w.status === "escalated").length;
+    return { total: writeups.length, pending, escalated };
+  }, [writeups]);
+
+  // ── Live recommendation preview ──
+  useEffect(() => {
+    if (!form.employeeId || !form.categoryId) {
+      setRecommendation(null);
+      return;
+    }
+    setLoadingRec(true);
+    fetch(`/api/writeups/recommend?employeeId=${form.employeeId}&categoryId=${form.categoryId}`)
+      .then((r) => r.json())
+      .then((rec) => {
+        setRecommendation(rec);
+        setLevelOverride(rec.recommended || "");
+      })
+      .catch(() => setRecommendation(null))
+      .finally(() => setLoadingRec(false));
+  }, [form.employeeId, form.categoryId]);
+
+  const openCreate = () => {
+    setForm(EMPTY_FORM);
+    setRecommendation(null);
+    setLevelOverride("");
+    setOverrideReason("");
+    setCreateOpen(true);
+  };
+
+  const handleCreate = async () => {
+    if (!form.employeeId) {
+      notify.error("Employee is required");
+      return;
+    }
+    if (!form.categoryId) {
+      notify.error("Category is required");
+      return;
+    }
+    const isOverride = recommendation && levelOverride !== recommendation.recommended;
+    if (isOverride && overrideReason.trim().length < 10) {
+      notify.error("Override reason must be at least 10 characters");
+      return;
+    }
+    setCreating(true);
+    try {
+      const res = await fetch("/api/writeups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          warningLevelOverride: isOverride ? levelOverride : undefined,
+          warningLevelOverrideReason: isOverride ? overrideReason : undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to create write-up");
+      notify.success("Write-up saved as draft");
+      setCreateOpen(false);
+      await load();
+      openDetail(json.writeup);
+    } catch (err: any) {
+      notify.error(err.message || "Failed to create write-up");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // ── Detail / sign ──
+  const openDetail = (w: Writeup) => {
+    setSelected(w);
+    setManagerName(w.managerSignature?.name || w.managerName || "");
+    setManagerSig(w.managerSignature?.signatureImage || "");
+    setEmployeeSignerName(w.employeeSignature?.name || w.employeeName || "");
+    setEmployeeSig(w.employeeSignature?.signatureImage || "");
+    setRefuseOpen(false);
+    setRefuseNote("");
+    setWitnessName("");
+    setWitnessSig("");
+  };
+
+  const refreshSelected = async (id: string) => {
+    const res = await fetch(`/api/writeups/${id}`);
+    const json = await res.json();
+    if (res.ok) {
+      setSelected(json.writeup);
+      setWriteups((prev) => prev.map((w) => (w._id === id ? json.writeup : w)));
+    }
+  };
+
+  const handleSaveManagerSignature = async () => {
+    if (!selected) return;
+    if (!managerName.trim() || !managerSig) {
+      notify.error("Manager name and signature are required");
+      return;
+    }
+    setSavingSign(true);
+    try {
+      const res = await fetch(`/api/writeups/${selected._id}/sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ managerSignature: { name: managerName.trim(), signatureImage: managerSig } }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to sign");
+      notify.success("Manager signature saved — hand the device to the employee to sign");
+      await refreshSelected(selected._id);
+    } catch (err: any) {
+      notify.error(err.message || "Failed to sign");
+    } finally {
+      setSavingSign(false);
+    }
+  };
+
+  const handleSaveEmployeeSignature = async () => {
+    if (!selected) return;
+    if (!employeeName.trim() || !employeeSig) {
+      notify.error("Employee name and signature are required");
+      return;
+    }
+    setSavingSign(true);
+    try {
+      const res = await fetch(`/api/writeups/${selected._id}/sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeSignature: { name: employeeName.trim(), signatureImage: employeeSig } }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to sign");
+      notify.success("Write-up signed and closed");
+      await refreshSelected(selected._id);
+      await load();
+    } catch (err: any) {
+      notify.error(err.message || "Failed to sign");
+    } finally {
+      setSavingSign(false);
+    }
+  };
+
+  const handleRefuse = async () => {
+    if (!selected) return;
+    if (!refuseNote.trim()) {
+      notify.error("A short note explaining the refusal is required");
+      return;
+    }
+    setSavingSign(true);
+    try {
+      const res = await fetch(`/api/writeups/${selected._id}/refuse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: refuseNote.trim(), witnessName: witnessName.trim(), witnessSignatureImage: witnessSig }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to record refusal");
+      notify.success("Refusal recorded");
+      setRefuseOpen(false);
+      await refreshSelected(selected._id);
+      await load();
+    } catch (err: any) {
+      notify.error(err.message || "Failed to record refusal");
+    } finally {
+      setSavingSign(false);
+    }
+  };
+
+  const handleUploadSigned = async (file: File) => {
+    if (!selected) return;
+    setUploadingSigned(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("module", "Write-Ups");
+      const uploadRes = await fetch("/api/upload/cloudinary", { method: "POST", body: fd });
+      const uploadJson = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadJson.error || "Upload failed");
+
+      const res = await fetch(`/api/writeups/${selected._id}/upload-signed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: uploadJson.url, name: file.name }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to attach signed copy");
+      notify.success("Signed copy uploaded");
+      await refreshSelected(selected._id);
+      await load();
+    } catch (err: any) {
+      notify.error(err.message || "Failed to upload signed copy");
+    } finally {
+      setUploadingSigned(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4 p-4 md:p-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="h-5 w-5 text-muted-foreground" />
+          <h1 className="text-xl font-semibold">Write-Ups</h1>
+        </div>
+        <Button onClick={openCreate}>
+          <Plus className="h-4 w-4" />
+          New Write-Up
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <Card><CardContent className="pt-0"><div className="text-2xl font-bold">{summary.total}</div><div className="text-xs text-muted-foreground">Total write-ups</div></CardContent></Card>
+        <Card><CardContent className="pt-0"><div className="text-2xl font-bold text-amber-600">{summary.pending}</div><div className="text-xs text-muted-foreground">Awaiting signature</div></CardContent></Card>
+        <Card><CardContent className="pt-0"><div className="text-2xl font-bold text-red-600">{summary.escalated}</div><div className="text-xs text-muted-foreground">Escalated to Admin/HR</div></CardContent></Card>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex gap-1">
+          <Button size="sm" variant={statusFilter === "all" ? "default" : "outline"} onClick={() => setStatusFilter("all")}>All</Button>
+          <Button size="sm" variant={statusFilter === "draft" ? "default" : "outline"} onClick={() => setStatusFilter("draft")}>Awaiting Signature</Button>
+          <Button size="sm" variant={statusFilter === "escalated" ? "default" : "outline"} onClick={() => setStatusFilter("escalated")}>Escalated</Button>
+        </div>
+        <div className="ml-auto flex flex-col gap-1.5">
+          <Label htmlFor="search">Search</Label>
+          <Input id="search" placeholder="Employee or category..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-64" />
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium">Date</th>
+              <th className="px-3 py-2 text-left font-medium">Employee</th>
+              <th className="px-3 py-2 text-left font-medium">Category</th>
+              <th className="px-3 py-2 text-left font-medium">Warning Level</th>
+              <th className="px-3 py-2 text-left font-medium">Status</th>
+              <th className="px-3 py-2 text-left font-medium">Manager</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></td></tr>
+            )}
+            {!loading && filtered.length === 0 && (
+              <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No write-ups found.</td></tr>
+            )}
+            {filtered.map((w) => (
+              <tr key={w._id} className="cursor-pointer border-t hover:bg-muted/30" onClick={() => openDetail(w)}>
+                <td className="px-3 py-2">{fmtDate(w.incidentDate)}</td>
+                <td className="px-3 py-2 font-medium">{w.employeeName}</td>
+                <td className="px-3 py-2"><Badge variant="outline">{w.categoryLabel}</Badge></td>
+                <td className="px-3 py-2">
+                  <Badge className={WARNING_LEVEL_COLORS[w.warningLevel] || ""}>{WARNING_LEVEL_LABELS[w.warningLevel] || w.warningLevel}</Badge>
+                </td>
+                <td className="px-3 py-2 text-xs">
+                  {w.status === "escalated" && <AlertTriangle className="mr-1 inline h-3.5 w-3.5 text-red-600" />}
+                  {STATUS_LABELS[w.status] || w.status}
+                </td>
+                <td className="px-3 py-2 text-muted-foreground">{w.managerName}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ── New Write-Up dialog ── */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+          <DialogHeader><DialogTitle>New Write-Up</DialogTitle></DialogHeader>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label>Employee *</Label>
+              <Select
+                value={form.employeeId}
+                onValueChange={(v) => {
+                  const emp = employees.find((e) => e._id === v);
+                  setForm({ ...form, employeeId: v, transporterId: emp?.transporterId || "", employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "" });
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                <SelectContent>
+                  {employees.map((e) => (
+                    <SelectItem key={e._id} value={e._id}>{e.firstName} {e.lastName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label>Category *</Label>
+                <Select value={form.categoryId} onValueChange={(v) => setForm({ ...form, categoryId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>
+                    {categories.map((c) => <SelectItem key={c._id} value={c._id}>{c.description}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Incident Date</Label>
+                <Input type="date" value={form.incidentDate} onChange={(e) => setForm({ ...form, incidentDate: e.target.value })} />
+              </div>
+            </div>
+
+            {loadingRec && <div className="text-xs text-muted-foreground"><Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> Checking prior history...</div>}
+
+            {recommendation && (
+              <div className="flex flex-col gap-2 rounded-md border p-3">
+                <div className="text-xs font-medium uppercase text-muted-foreground">Prior History ({recommendation.priorCount})</div>
+                {recommendation.priors.length > 0 ? (
+                  <ul className="flex flex-col gap-1 text-sm">
+                    {recommendation.priors.map((p, i) => (
+                      <li key={i} className="flex items-center justify-between">
+                        <span>{fmtDate(p.incidentDate)}</span>
+                        <Badge variant="outline" className="text-xs">{WARNING_LEVEL_LABELS[p.warningLevel] || p.warningLevel}</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No prior write-ups for this category.</p>
+                )}
+                <p className="text-xs text-muted-foreground">{recommendation.rationale}</p>
+                <div className="flex flex-col gap-1.5 pt-1">
+                  <Label className="text-xs">Warning Level</Label>
+                  <Select value={levelOverride} onValueChange={setLevelOverride}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {WARNING_LEVELS.map((l) => <SelectItem key={l} value={l}>{WARNING_LEVEL_LABELS[l]}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {levelOverride !== recommendation.recommended && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">Reason for override (required)</Label>
+                    <Textarea value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} rows={2} placeholder="Explain why you're changing the recommended level..." />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1.5">
+              <Label>Description</Label>
+              <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Plan for Improvement</Label>
+              <Textarea value={form.planForImprovement} onChange={(e) => setForm({ ...form, planForImprovement: e.target.value })} rows={2} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Consequences</Label>
+              <Textarea value={form.consequences} onChange={(e) => setForm({ ...form, consequences: e.target.value })} rows={2} />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+              <Button onClick={handleCreate} disabled={creating}>
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                Save Draft
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Detail / Sign dialog ── */}
+      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+        <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
+          <DialogHeader><DialogTitle>Write-Up — {selected?.employeeName}</DialogTitle></DialogHeader>
+          {selected && (
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div><div className="text-muted-foreground">Category</div><div>{selected.categoryLabel}</div></div>
+                <div><div className="text-muted-foreground">Date</div><div>{fmtDate(selected.incidentDate)}</div></div>
+                <div><div className="text-muted-foreground">Warning Level</div><Badge className={WARNING_LEVEL_COLORS[selected.warningLevel] || ""}>{WARNING_LEVEL_LABELS[selected.warningLevel]}</Badge></div>
+                <div><div className="text-muted-foreground">Status</div><div>{STATUS_LABELS[selected.status] || selected.status}</div></div>
+              </div>
+
+              {selected.warningLevelOverrideReason && (
+                <div className="rounded-md border border-amber-300 bg-amber-50/60 p-2 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                  Level overridden from {WARNING_LEVEL_LABELS[selected.warningLevelAuto]} — reason: {selected.warningLevelOverrideReason}
+                </div>
+              )}
+
+              {selected.description && (
+                <div className="text-sm"><div className="text-muted-foreground text-xs uppercase">Description</div><p className="whitespace-pre-wrap">{selected.description}</p></div>
+              )}
+              {selected.planForImprovement && (
+                <div className="text-sm"><div className="text-muted-foreground text-xs uppercase">Plan for Improvement</div><p className="whitespace-pre-wrap">{selected.planForImprovement}</p></div>
+              )}
+              {selected.consequences && (
+                <div className="text-sm"><div className="text-muted-foreground text-xs uppercase">Consequences</div><p className="whitespace-pre-wrap">{selected.consequences}</p></div>
+              )}
+
+              {selected.priorWriteups.length > 0 && (
+                <div className="rounded-md border p-3">
+                  <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">Prior {selected.categoryLabel} write-ups</div>
+                  <ul className="flex flex-col gap-1 text-sm">
+                    {selected.priorWriteups.map((p, i) => (
+                      <li key={i} className="flex items-center justify-between">
+                        <span>{fmtDate(p.incidentDate)}</span>
+                        <Badge variant="outline" className="text-xs">{WARNING_LEVEL_LABELS[p.warningLevel] || p.warningLevel}</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <a href={`/api/writeups/${selected._id}/pdf`} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm"><FileText className="h-4 w-4" /> View PDF</Button>
+                </a>
+                <a href={`/api/writeups/${selected._id}/pdf`} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm"><Printer className="h-4 w-4" /> Print</Button>
+                </a>
+              </div>
+
+              {selected.status === "draft" && (
+                <div className="flex flex-col gap-4 rounded-md border p-3">
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Sign In Person</div>
+
+                  {!selected.managerSignature?.signatureImage ? (
+                    <div className="flex flex-col gap-2">
+                      <Label className="text-xs">Manager Name</Label>
+                      <Input value={managerName} onChange={(e) => setManagerName(e.target.value)} />
+                      <SignaturePad value={managerSig} onChange={setManagerSig} label="Manager Signature" height={100} />
+                      <Button size="sm" onClick={handleSaveManagerSignature} disabled={savingSign}>
+                        {savingSign ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save Manager Signature
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-sm text-emerald-600">Manager signed by {selected.managerSignature.name} on {fmtDate(selected.managerSignature.signedAt)}</div>
+
+                      {!refuseOpen ? (
+                        <div className="flex flex-col gap-2">
+                          <Label className="text-xs">Now hand the device to the employee — Employee Name</Label>
+                          <Input value={employeeName} onChange={(e) => setEmployeeSignerName(e.target.value)} />
+                          <SignaturePad value={employeeSig} onChange={setEmployeeSig} label="Employee Signature" height={100} />
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={handleSaveEmployeeSignature} disabled={savingSign}>
+                              {savingSign ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Sign & Close
+                            </Button>
+                            <Button size="sm" variant="outline" className="text-destructive" onClick={() => setRefuseOpen(true)}>
+                              <ThumbsDown className="h-4 w-4" /> Employee Refuses to Sign
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2 rounded-md border border-destructive/40 p-2">
+                          <Label className="text-xs">Refusal note (required)</Label>
+                          <Textarea value={refuseNote} onChange={(e) => setRefuseNote(e.target.value)} rows={2} placeholder="Describe the circumstance..." />
+                          <Label className="text-xs">Witness Name (optional)</Label>
+                          <Input value={witnessName} onChange={(e) => setWitnessName(e.target.value)} />
+                          {witnessName && <SignaturePad value={witnessSig} onChange={setWitnessSig} label="Witness Signature" height={80} />}
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setRefuseOpen(false)}>Cancel</Button>
+                            <Button size="sm" className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleRefuse} disabled={savingSign}>
+                              {savingSign ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Record Refusal
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  <div className="flex flex-col gap-2 border-t pt-3">
+                    <Label className="text-xs">Or: print, get it signed on paper, then upload the signed copy</Label>
+                    <div className="flex items-center gap-2">
+                      <Input type="file" accept="image/*,.pdf" disabled={uploadingSigned} onChange={(e) => e.target.files?.[0] && handleUploadSigned(e.target.files[0])} />
+                      {uploadingSigned && <Loader2 className="h-4 w-4 animate-spin" />}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selected.refusal?.refused && (
+                <div className="rounded-md border border-destructive/40 p-3 text-sm">
+                  <div className="font-medium text-destructive">Employee refused to sign</div>
+                  <p className="text-muted-foreground">{selected.refusal.note}</p>
+                  {selected.refusal.witnessName && <p className="text-xs text-muted-foreground">Witness: {selected.refusal.witnessName}</p>}
+                </div>
+              )}
+
+              {selected.attachments.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs uppercase text-muted-foreground">Signed Copies</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {selected.attachments.map((a, i) => (
+                      <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-primary hover:underline">
+                        <Download className="h-3 w-3" /> {a.name}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

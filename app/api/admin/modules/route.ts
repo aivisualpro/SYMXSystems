@@ -5,7 +5,7 @@ import connectToDatabase from "@/lib/db";
 import SymxAppModule from "@/lib/models/SymxAppModule";
 
 // ── VERSION: bump this whenever DEFAULT_MODULES changes to force a DB reseed ──
-const MODULES_VERSION = 12;
+const MODULES_VERSION = 13;
 
 // Default modules — must match actual routes in /app/(protected)/
 const DEFAULT_MODULES = [
@@ -71,6 +71,12 @@ const DEFAULT_MODULES = [
   { name: "Incidents", url: "/incidents", icon: "IconAlertTriangle", order: 7.5, subModules: [] },
   // Admin-only — financial/legal insurance data.
   { name: "Insurance", url: "/insurance", icon: "IconShield", order: 7.6, subModules: [] },
+  // Manager/admin tool — DAs have no login, so this is never default-open.
+  {
+    name: "Write-Ups", url: "/writeups", icon: "IconClipboardText", order: 7.7, subModules: [
+      { name: "Settings", url: "/admin/writeup-settings" },
+    ]
+  },
   { name: "Scorecard", url: "/scorecard", icon: "IconChartBar", order: 8, subModules: [] },
 ];
 

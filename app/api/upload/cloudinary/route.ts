@@ -11,20 +11,20 @@ cloudinary.config({
 
 // Which modules are allowed to use this shared upload endpoint, and what
 // action + Cloudinary folder each maps to. Callers pass a `module` field in
-// the FormData; anything not in this list is rejected. "Dispatching" stays
-// first and is the default so the existing coaching-writeups caller keeps
-// working unchanged if it ever omits the field.
+// the FormData; anything not in this list is rejected.
+// Note: the legacy "Dispatching" / coaching-writeups target was removed
+// when that feature was retired in favor of the Write-Ups module.
 const UPLOAD_TARGETS: Record<string, { action: "view" | "create" | "edit" | "delete" | "approve" | "download"; folder: string; useAuthorizeAction?: boolean }> = {
-  Dispatching: { action: "edit", folder: "symx-systems/coaching-writeups/attachments" },
   Insurance: { action: "edit", folder: "symx-systems/insurance/loss-runs" },
   Incidents: { action: "create", folder: "symx-systems/incidents/attachments", useAuthorizeAction: true },
+  "Write-Ups": { action: "edit", folder: "symx-systems/writeups/attachments" },
 };
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const moduleField = String(formData.get("module") || "Dispatching");
+    const moduleField = String(formData.get("module") || "");
 
     const target = UPLOAD_TARGETS[moduleField];
     if (!target) {

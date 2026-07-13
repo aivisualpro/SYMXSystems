@@ -26,6 +26,7 @@ import {
   IconChartBar,
   IconTarget,
   IconRoute,
+  IconClipboardText,
 } from "@tabler/icons-react";
 
 import { NavDocuments } from "@/components/nav-documents";
@@ -72,6 +73,7 @@ const ICON_MAP: Record<string, any> = {
   IconUser,
   IconUsers,
   IconRoute,
+  IconClipboardText,
 };
 
 const data = {
@@ -185,6 +187,14 @@ const data = {
       url: "/insurance",
       icon: IconShield,
       subModules: []
+    },
+    {
+      name: "Write-Ups",
+      url: "/writeups",
+      icon: IconClipboardText,
+      subModules: [
+        { name: "Settings", url: "/admin/writeup-settings" },
+      ]
     },
     {
       name: "Scorecard",
