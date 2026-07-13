@@ -11,7 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { notify } from "@/lib/notify";
-import { Loader2, Plus, AlertTriangle, Trash2, Paperclip, Lock } from "lucide-react";
+import { Loader2, Plus, AlertTriangle, Trash2, Paperclip, Lock, PhoneCall, FileText, Camera, File as FileIcon } from "lucide-react";
+
+interface Attachment { name: string; url: string; category: string }
+interface ContactNote { date: string; contactedBy: string; method: string; note: string }
 
 interface Incident {
   _id: string;
@@ -40,29 +43,20 @@ interface Incident {
   insurancePolicyId?: string;
   paid?: number;
   reserved?: number;
-  attachments?: { name: string; url: string }[];
+  attachments?: Attachment[];
+  policeReportFiled?: boolean;
+  policeReportNumber?: string;
+  medicalTreatmentRequired?: boolean;
+  medicalTreatmentType?: string;
+  witnesses?: string;
+  thirdPartyInvolvementType?: string;
+  contactLog?: ContactNote[];
   createdBy?: string;
 }
 
-interface EmployeeOption {
-  transporterId: string;
-  firstName: string;
-  lastName: string;
-  _id: string;
-}
-
-interface ClaimTypeOption {
-  _id: string;
-  description: string;
-}
-
-interface PolicyOption {
-  _id: string;
-  policyNumber: string;
-  company: string;
-  type: string;
-  coversDate: boolean;
-}
+interface EmployeeOption { transporterId: string; firstName: string; lastName: string; _id: string }
+interface ClaimTypeOption { _id: string; description: string }
+interface PolicyOption { _id: string; policyNumber: string; company: string; type: string; coversDate: boolean }
 
 const STATUS_COLORS: Record<string, string> = {
   New: "bg-blue-500 text-white border-blue-600",
@@ -70,14 +64,42 @@ const STATUS_COLORS: Record<string, string> = {
   Close: "bg-emerald-500 text-white border-emerald-600",
 };
 
+const MEDICAL_TYPES = ["Triage", "First Aid", "Clinical", "Emergency", "Other"];
+const THIRD_PARTY_TYPES = ["None", "Animal", "Person/Colleague", "Vehicle", "Equipment", "Other"];
+const CONTACT_METHODS = ["Phone Call", "Text", "Email", "In Person"];
+const ATTACHMENT_CATEGORIES: { key: string; label: string; icon: any }[] = [
+  { key: "Report Form", label: "Incident Report Form", icon: FileText },
+  { key: "Photo", label: "Photos", icon: Camera },
+  { key: "Other", label: "Other Files", icon: FileIcon },
+];
+
 const EMPTY_QUICK_FORM = {
   transporterId: "", employeeName: "", incidentDate: new Date().toISOString().split("T")[0],
   claimType: "", van: "", shortDescription: "", employeeNotes: "",
+  policeReportFiled: false, policeReportNumber: "",
+  medicalTreatmentRequired: false, medicalTreatmentType: "",
+  witnesses: "", thirdPartyInvolvementType: "None",
 };
 
 function money(n?: number) {
   if (n === undefined || n === null) return "$0";
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+}
+
+async function uploadFiles(files: File[], category: string): Promise<Attachment[]> {
+  if (files.length === 0) return [];
+  const uploads = await Promise.all(
+    files.map(async (file) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("module", "Incidents");
+      const r = await fetch("/api/upload/cloudinary", { method: "POST", body: fd });
+      if (!r.ok) return null;
+      const { url } = await r.json();
+      return { name: file.name, url, category };
+    })
+  );
+  return uploads.filter(Boolean) as Attachment[];
 }
 
 export default function IncidentsPage() {
@@ -93,13 +115,18 @@ export default function IncidentsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<any>(EMPTY_QUICK_FORM);
   const [creating, setCreating] = useState(false);
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [reportFiles, setReportFiles] = useState<File[]>([]);
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [otherFiles, setOtherFiles] = useState<File[]>([]);
 
   // Detail / edit dialog
   const [selected, setSelected] = useState<Incident | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
   const [policyOptions, setPolicyOptions] = useState<PolicyOption[]>([]);
+  const [newContactMethod, setNewContactMethod] = useState(CONTACT_METHODS[0]);
+  const [newContactNote, setNewContactNote] = useState("");
+  const [addingNote, setAddingNote] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -156,7 +183,9 @@ export default function IncidentsPage() {
   // ── Quick create ──
   const openCreate = () => {
     setCreateForm(EMPTY_QUICK_FORM);
-    setPendingFiles([]);
+    setReportFiles([]);
+    setPhotoFiles([]);
+    setOtherFiles([]);
     setCreateOpen(true);
   };
 
@@ -171,21 +200,11 @@ export default function IncidentsPage() {
     }
     setCreating(true);
     try {
-      let attachments: { name: string; url: string }[] = [];
-      if (pendingFiles.length > 0) {
-        const uploads = await Promise.all(
-          pendingFiles.map(async (file) => {
-            const fd = new FormData();
-            fd.append("file", file);
-            fd.append("module", "Incidents");
-            const r = await fetch("/api/upload/cloudinary", { method: "POST", body: fd });
-            if (!r.ok) return null;
-            const { url } = await r.json();
-            return { name: file.name, url };
-          })
-        );
-        attachments = uploads.filter(Boolean) as { name: string; url: string }[];
-      }
+      const attachments = [
+        ...(await uploadFiles(reportFiles, "Report Form")),
+        ...(await uploadFiles(photoFiles, "Photo")),
+        ...(await uploadFiles(otherFiles, "Other")),
+      ];
 
       const res = await fetch("/api/incidents", {
         method: "POST",
@@ -207,10 +226,18 @@ export default function IncidentsPage() {
   // ── Detail / edit ──
   const openDetail = (incident: Incident) => {
     setSelected(incident);
+    setNewContactMethod(CONTACT_METHODS[0]);
+    setNewContactNote("");
     setEditForm({
       claimStatus: incident.claimStatus || "New",
       shortDescription: incident.shortDescription || "",
       employeeNotes: incident.employeeNotes || "",
+      policeReportFiled: !!incident.policeReportFiled,
+      policeReportNumber: incident.policeReportNumber || "",
+      medicalTreatmentRequired: !!incident.medicalTreatmentRequired,
+      medicalTreatmentType: incident.medicalTreatmentType || "",
+      witnesses: incident.witnesses || "",
+      thirdPartyInvolvementType: incident.thirdPartyInvolvementType || "None",
       claimantName: incident.claimantName || "",
       claimNumber: incident.claimNumber || "",
       claimantLawyer: incident.claimantLawyer || "",
@@ -231,6 +258,12 @@ export default function IncidentsPage() {
     }
   };
 
+  const refreshSelected = async (id: string) => {
+    const res = await fetch(`/api/incidents/${id}`);
+    const json = await res.json();
+    if (res.ok) setSelected(json.incident);
+  };
+
   const handleSaveDetail = async () => {
     if (!selected) return;
     setSaving(true);
@@ -249,6 +282,31 @@ export default function IncidentsPage() {
       notify.error(err.message || "Failed to save");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAddContactNote = async () => {
+    if (!selected) return;
+    if (!newContactNote.trim()) {
+      notify.error("Enter a note before saving");
+      return;
+    }
+    setAddingNote(true);
+    try {
+      const res = await fetch(`/api/incidents/${selected._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newContactNote: { method: newContactMethod, note: newContactNote.trim() } }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to add note");
+      notify.success("Contact note added");
+      setNewContactNote("");
+      await refreshSelected(selected._id);
+    } catch (err: any) {
+      notify.error(err.message || "Failed to add note");
+    } finally {
+      setAddingNote(false);
     }
   };
 
@@ -295,7 +353,7 @@ export default function IncidentsPage() {
         </div>
         {!canManage && (
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <Lock className="h-3 w-3" /> Claim amounts, lawyer, and insurance details are visible to HR/Admin only
+            <Lock className="h-3 w-3" /> Claim amounts, lawyer, insurance details, and contact notes are visible to HR/Admin only
           </span>
         )}
         <div className="ml-auto flex flex-col gap-1.5">
@@ -388,13 +446,61 @@ export default function IncidentsPage() {
               <Label>Notes</Label>
               <Textarea value={createForm.employeeNotes} onChange={(e) => setCreateForm({ ...createForm, employeeNotes: e.target.value })} rows={2} />
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Photos (optional)</Label>
-              <Input type="file" multiple accept="image/*,.pdf" onChange={(e) => setPendingFiles(e.target.files ? Array.from(e.target.files) : [])} />
-              {pendingFiles.length > 0 && (
-                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Paperclip className="h-3 w-3" /> {pendingFiles.length} file(s) selected</span>
+
+            <div className="grid grid-cols-2 gap-4 rounded-md border p-3">
+              <div className="flex items-center gap-2">
+                <Switch checked={createForm.policeReportFiled} onCheckedChange={(v) => setCreateForm({ ...createForm, policeReportFiled: v })} />
+                <Label>Police Report Filed</Label>
+              </div>
+              {createForm.policeReportFiled && (
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">Report Number</Label>
+                  <Input value={createForm.policeReportNumber} onChange={(e) => setCreateForm({ ...createForm, policeReportNumber: e.target.value })} />
+                </div>
               )}
+              <div className="flex items-center gap-2">
+                <Switch checked={createForm.medicalTreatmentRequired} onCheckedChange={(v) => setCreateForm({ ...createForm, medicalTreatmentRequired: v })} />
+                <Label>Medical Treatment Required</Label>
+              </div>
+              {createForm.medicalTreatmentRequired && (
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">Treatment Type</Label>
+                  <Select value={createForm.medicalTreatmentType} onValueChange={(v) => setCreateForm({ ...createForm, medicalTreatmentType: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      {MEDICAL_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="col-span-2 flex flex-col gap-1.5">
+                <Label className="text-xs">Third-Party Involvement</Label>
+                <Select value={createForm.thirdPartyInvolvementType} onValueChange={(v) => setCreateForm({ ...createForm, thirdPartyInvolvementType: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {THIRD_PARTY_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2 flex flex-col gap-1.5">
+                <Label className="text-xs">Witnesses (name & contact info, if any)</Label>
+                <Textarea value={createForm.witnesses} onChange={(e) => setCreateForm({ ...createForm, witnesses: e.target.value })} rows={2} />
+              </div>
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="flex items-center gap-1"><FileText className="h-3.5 w-3.5" /> Incident Report Form</Label>
+              <Input type="file" multiple accept="image/*,.pdf" onChange={(e) => setReportFiles(e.target.files ? Array.from(e.target.files) : [])} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="flex items-center gap-1"><Camera className="h-3.5 w-3.5" /> Photos</Label>
+              <Input type="file" multiple accept="image/*" onChange={(e) => setPhotoFiles(e.target.files ? Array.from(e.target.files) : [])} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="flex items-center gap-1"><FileIcon className="h-3.5 w-3.5" /> Other Files</Label>
+              <Input type="file" multiple onChange={(e) => setOtherFiles(e.target.files ? Array.from(e.target.files) : [])} />
+            </div>
+
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
               <Button onClick={handleCreate} disabled={creating}>
@@ -440,16 +546,66 @@ export default function IncidentsPage() {
                 <Textarea value={editForm.employeeNotes} onChange={(e) => setEditForm({ ...editForm, employeeNotes: e.target.value })} rows={2} />
               </div>
 
-              {selected.attachments && selected.attachments.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  <Label>Attachments</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {selected.attachments.map((a, i) => (
-                      <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-primary hover:underline">
-                        <Paperclip className="h-3 w-3" /> {a.name}
-                      </a>
-                    ))}
+              <div className="grid grid-cols-2 gap-4 rounded-md border p-3">
+                <div className="flex items-center gap-2">
+                  <Switch checked={editForm.policeReportFiled} onCheckedChange={(v) => setEditForm({ ...editForm, policeReportFiled: v })} />
+                  <Label>Police Report Filed</Label>
+                </div>
+                {editForm.policeReportFiled && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">Report Number</Label>
+                    <Input value={editForm.policeReportNumber} onChange={(e) => setEditForm({ ...editForm, policeReportNumber: e.target.value })} />
                   </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <Switch checked={editForm.medicalTreatmentRequired} onCheckedChange={(v) => setEditForm({ ...editForm, medicalTreatmentRequired: v })} />
+                  <Label>Medical Treatment Required</Label>
+                </div>
+                {editForm.medicalTreatmentRequired && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">Treatment Type</Label>
+                    <Select value={editForm.medicalTreatmentType} onValueChange={(v) => setEditForm({ ...editForm, medicalTreatmentType: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        {MEDICAL_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="col-span-2 flex flex-col gap-1.5">
+                  <Label className="text-xs">Third-Party Involvement</Label>
+                  <Select value={editForm.thirdPartyInvolvementType} onValueChange={(v) => setEditForm({ ...editForm, thirdPartyInvolvementType: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {THIRD_PARTY_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2 flex flex-col gap-1.5">
+                  <Label className="text-xs">Witnesses</Label>
+                  <Textarea value={editForm.witnesses} onChange={(e) => setEditForm({ ...editForm, witnesses: e.target.value })} rows={2} />
+                </div>
+              </div>
+
+              {selected.attachments && selected.attachments.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <Label>Attachments</Label>
+                  {ATTACHMENT_CATEGORIES.map(({ key, label, icon: Icon }) => {
+                    const files = (selected.attachments || []).filter((a) => a.category === key);
+                    if (files.length === 0) return null;
+                    return (
+                      <div key={key} className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">{label}</span>
+                        <div className="flex flex-wrap gap-2">
+                          {files.map((a, i) => (
+                            <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-primary hover:underline">
+                              <Icon className="h-3 w-3" /> {a.name}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -512,6 +668,41 @@ export default function IncidentsPage() {
                   <div className="flex flex-col gap-1.5">
                     <Label>Supervisor Notes</Label>
                     <Textarea value={editForm.supervisorNotes} onChange={(e) => setEditForm({ ...editForm, supervisorNotes: e.target.value })} rows={2} />
+                  </div>
+
+                  <div className="flex flex-col gap-2 border-t pt-3">
+                    <Label className="flex items-center gap-1"><PhoneCall className="h-3.5 w-3.5" /> Contact Log</Label>
+                    <p className="text-xs text-muted-foreground">A running record of check-ins — e.g. calling the employee to ask how they're doing.</p>
+                    {selected.contactLog && selected.contactLog.length > 0 && (
+                      <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+                        {[...selected.contactLog].reverse().map((c, i) => (
+                          <div key={i} className="rounded-md bg-muted/50 p-2 text-sm">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>{c.method} • {c.contactedBy}</span>
+                              <span>{new Date(c.date).toLocaleString()}</span>
+                            </div>
+                            <div className="mt-1">{c.note}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Select value={newContactMethod} onValueChange={setNewContactMethod}>
+                        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CONTACT_METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        placeholder="e.g. Called to check on his condition, said he's doing fine"
+                        value={newContactNote}
+                        onChange={(e) => setNewContactNote(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button size="sm" onClick={handleAddContactNote} disabled={addingNote}>
+                        {addingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}

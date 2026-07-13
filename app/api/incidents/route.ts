@@ -11,7 +11,7 @@ import SymxIncident from "@/lib/models/SymxIncident";
 const PRIVILEGED_FIELDS = [
   "claimNumber", "claimantLawyer", "statusDetail", "coverageDescription",
   "claimIncurred", "supervisorNotes", "paid", "reserved", "insurancePolicy",
-  "insurancePolicyId", "withInsurance",
+  "insurancePolicyId", "withInsurance", "contactLog",
 ];
 
 function redact(row: any) {
@@ -97,6 +97,12 @@ export async function POST(req: NextRequest) {
       shortDescription: body.shortDescription || "",
       employeeNotes: body.employeeNotes || "",
       attachments: Array.isArray(body.attachments) ? body.attachments : [],
+      policeReportFiled: !!body.policeReportFiled,
+      policeReportNumber: body.policeReportNumber || "",
+      medicalTreatmentRequired: !!body.medicalTreatmentRequired,
+      medicalTreatmentType: body.medicalTreatmentType || "",
+      witnesses: body.witnesses || "",
+      thirdPartyInvolvementType: body.thirdPartyInvolvementType || "",
       claimStatus: "New",
       withInsurance: false,
       paid: 0,

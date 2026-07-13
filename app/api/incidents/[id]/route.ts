@@ -1,22 +1,29 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { authorizeAction } from "@/lib/rbac";
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxIncident from "@/lib/models/SymxIncident";
 
 const PRIVILEGED_FIELDS = [
   "claimNumber", "claimantLawyer", "statusDetail", "coverageDescription",
   "claimIncurred", "supervisorNotes", "paid", "reserved", "insurancePolicy",
-  "insurancePolicyId", "withInsurance",
+  "insurancePolicyId", "withInsurance", "contactLog",
 ];
 
 // Fields anyone with basic "Incidents" edit access (any logged-in user, by
 // default) may change — this is what lets a non-privileged user carry an
-// incident they reported through its lifecycle.
-const OPEN_EDIT_FIELDS = ["claimStatus", "employeeNotes", "shortDescription", "attachments"];
+// incident they reported through its lifecycle. Includes the report-form
+// fields (police report, medical treatment, witnesses, third-party type)
+// since those are factual "what happened" details, not claim management.
+const OPEN_EDIT_FIELDS = [
+  "claimStatus", "employeeNotes", "shortDescription", "attachments",
+  "policeReportFiled", "policeReportNumber", "medicalTreatmentRequired",
+  "medicalTreatmentType", "witnesses", "thirdPartyInvolvementType",
+];
 
-// Fields that reassign or restate the core facts of the incident (who, when,
-// what, financial/legal handling) — HR/Admin only.
+// Fields that reassign or restate the core identity/financial/legal facts of
+// the incident — HR/Admin only.
 const PRIVILEGED_EDIT_FIELDS = [
   "transporterId", "employeeId", "employeeName", "claimantName", "claimNumber",
   "claimantLawyer", "statusDetail", "coverageDescription", "claimIncurred",
@@ -99,12 +106,33 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` }, { status: 400 });
     }
 
-    if (Object.keys(updates).length === 0) {
+    // Contact/follow-up log — append-only, HR/Admin only (same tier as
+    // supervisorNotes). e.g. "called the employee to check on their condition."
+    let contactPush: any = null;
+    if (body.newContactNote && canManage) {
+      const session = await getSession();
+      const note = body.newContactNote;
+      if (!note.note || !String(note.note).trim()) {
+        return NextResponse.json({ error: "Contact note text is required" }, { status: 400 });
+      }
+      contactPush = {
+        date: new Date(),
+        contactedBy: session?.email || "",
+        method: note.method || "",
+        note: String(note.note).trim(),
+      };
+    }
+
+    if (Object.keys(updates).length === 0 && !contactPush) {
       return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
     }
 
     await connectToDatabase();
-    const incident = await SymxIncident.findByIdAndUpdate(id, { $set: updates }, { new: true, lean: true });
+    const updateDoc: any = {};
+    if (Object.keys(updates).length > 0) updateDoc.$set = updates;
+    if (contactPush) updateDoc.$push = { contactLog: contactPush };
+
+    const incident = await SymxIncident.findByIdAndUpdate(id, updateDoc, { new: true, lean: true });
     if (!incident) return NextResponse.json({ error: "Incident not found" }, { status: 404 });
 
     return NextResponse.json({ incident: canManage ? incident : redact(incident), canManage });

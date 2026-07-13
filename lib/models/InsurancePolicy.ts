@@ -24,8 +24,10 @@ export interface IInsurancePolicy extends Document {
   openClaims?: number;
   policyLimit?: number;
 
-  lossRunFile?: string;      // Cloudinary URL
-  lossRunTimestamp?: Date;   // when the loss run doc was last uploaded/refreshed
+  // Full upload history — never pruned. Insurers issue loss runs periodically
+  // (often multiple times a year) and older ones stay here for audit trail;
+  // the most recently uploaded entry is treated as "current" by the UI.
+  lossRuns?: { url: string; filename: string; uploadedAt: Date; uploadedBy: string }[];
 
   notes?: string;
   createdBy?: string;
@@ -49,8 +51,13 @@ const InsurancePolicySchema = new Schema<IInsurancePolicy>(
     openClaims: { type: Number },
     policyLimit: { type: Number },
 
-    lossRunFile: { type: String, default: "" },
-    lossRunTimestamp: { type: Date },
+    lossRuns: [{
+      url: { type: String, required: true },
+      filename: { type: String, default: "" },
+      uploadedAt: { type: Date, default: Date.now },
+      uploadedBy: { type: String, default: "" },
+      _id: false,
+    }],
 
     notes: { type: String, default: "" },
     createdBy: { type: String, default: "" },

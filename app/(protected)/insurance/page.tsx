@@ -13,6 +13,13 @@ import { notify } from "@/lib/notify";
 import { Loader2, Plus, ShieldCheck, FileText, Upload, Trash2, AlertTriangle } from "lucide-react";
 import { INSURANCE_POLICY_TYPES } from "@/lib/constants/insurance";
 
+interface LossRun {
+  url: string;
+  filename: string;
+  uploadedAt: string;
+  uploadedBy: string;
+}
+
 interface Policy {
   _id: string;
   policyNumber: string;
@@ -27,8 +34,7 @@ interface Policy {
   totalClaims?: number;
   openClaims?: number;
   policyLimit?: number;
-  lossRunFile?: string;
-  lossRunTimestamp?: string;
+  lossRuns?: LossRun[];
   notes?: string;
   computedTotalClaims: number;
   computedOpenClaims: number;
@@ -39,8 +45,15 @@ interface Policy {
 const EMPTY_FORM = {
   policyNumber: "", startDate: "", endDate: "", company: "", type: "Auto",
   lossRatio: "", claimsIncurred: "", claimsPaid: "", premiumPaid: "",
-  totalClaims: "", openClaims: "", policyLimit: "", notes: "", lossRunFile: "",
+  totalClaims: "", openClaims: "", policyLimit: "", notes: "",
+  lossRunFile: "", lossRunFilename: "",
 };
+
+// Most recently uploaded loss run, by uploadedAt — every prior upload stays
+// in the array (never deleted) as an audit trail across years/renewals.
+function sortedLossRuns(runs?: LossRun[]) {
+  return [...(runs || [])].sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+}
 
 function money(n?: number) {
   if (n === undefined || n === null) return "—";
@@ -118,7 +131,8 @@ export default function InsurancePoliciesPage() {
       openClaims: p.openClaims ?? "",
       policyLimit: p.policyLimit ?? "",
       notes: p.notes || "",
-      lossRunFile: p.lossRunFile || "",
+      lossRunFile: "",
+      lossRunFilename: "",
     });
     setDialogOpen(true);
   };
@@ -132,8 +146,10 @@ export default function InsurancePoliciesPage() {
       const res = await fetch("/api/upload/cloudinary", { method: "POST", body: fd });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Upload failed");
-      setForm((f: any) => ({ ...f, lossRunFile: json.url }));
-      notify.success("Loss run file uploaded");
+      // Staged for this save — appended to the policy's loss-run history on
+      // submit, never overwriting prior uploads.
+      setForm((f: any) => ({ ...f, lossRunFile: json.url, lossRunFilename: file.name }));
+      notify.success("Loss run file staged — save the policy to attach it");
     } catch (err: any) {
       notify.error(err.message || "Upload failed");
     } finally {
@@ -228,7 +244,7 @@ export default function InsurancePoliciesPage() {
               <th className="px-3 py-2 text-left font-medium">Status</th>
               <th className="px-3 py-2 text-left font-medium">Premium Paid</th>
               <th className="px-3 py-2 text-left font-medium">Policy Limit</th>
-              <th className="px-3 py-2 text-left font-medium">Loss Run</th>
+              <th className="px-3 py-2 text-left font-medium">Loss Runs</th>
             </tr>
           </thead>
           <tbody>
@@ -258,10 +274,17 @@ export default function InsurancePoliciesPage() {
                 <td className="px-3 py-2">{money(p.premiumPaid)}</td>
                 <td className="px-3 py-2">{money(p.policyLimit)}</td>
                 <td className="px-3 py-2">
-                  {p.lossRunFile ? (
-                    <a href={p.lossRunFile} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
-                      <FileText className="h-3.5 w-3.5" /> View
-                    </a>
+                  {p.lossRuns && p.lossRuns.length > 0 ? (
+                    (() => {
+                      const runs = sortedLossRuns(p.lossRuns);
+                      const latest = runs[0];
+                      return (
+                        <a href={latest.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+                          <FileText className="h-3.5 w-3.5" /> {new Date(latest.uploadedAt).toLocaleDateString()}
+                          {runs.length > 1 && <span className="text-muted-foreground">(+{runs.length - 1} more)</span>}
+                        </a>
+                      );
+                    })()
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
@@ -355,8 +378,12 @@ export default function InsurancePoliciesPage() {
             </div>
           )}
 
-          <div className="flex flex-col gap-1.5">
-            <Label>Loss Run File</Label>
+          <div className="flex flex-col gap-2">
+            <Label>Loss Run Upload</Label>
+            <p className="text-xs text-muted-foreground">
+              Upload a new loss-run report any time — for renewals, or a mid-year refresh. Every upload is kept; nothing is
+              overwritten or archived away, so the full history stays available for audit.
+            </p>
             <div className="flex items-center gap-2">
               <Input
                 type="file"
@@ -367,9 +394,32 @@ export default function InsurancePoliciesPage() {
               {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
             </div>
             {form.lossRunFile && (
-              <a href={form.lossRunFile} target="_blank" rel="noopener noreferrer" className="inline-flex w-fit items-center gap-1 text-sm text-primary hover:underline">
-                <FileText className="h-3.5 w-3.5" /> Current file
-              </a>
+              <div className="flex items-center gap-1 text-sm text-emerald-600">
+                <FileText className="h-3.5 w-3.5" /> "{form.lossRunFilename}" staged — will attach when you save
+              </div>
+            )}
+
+            {editingPolicy && sortedLossRuns(editingPolicy.lossRuns).length > 0 && (
+              <div className="mt-1 flex flex-col gap-1 rounded-md border p-2">
+                <div className="text-xs font-medium uppercase text-muted-foreground">Upload history</div>
+                {sortedLossRuns(editingPolicy.lossRuns).map((r, i) => (
+                  <a
+                    key={i}
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between rounded px-1 py-1 text-sm hover:bg-muted/50"
+                  >
+                    <span className="inline-flex items-center gap-1 text-primary hover:underline">
+                      <FileText className="h-3.5 w-3.5" /> {r.filename || "Loss run file"}
+                    </span>
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {i === 0 && <Badge variant="secondary">Current</Badge>}
+                      {new Date(r.uploadedAt).toLocaleDateString()} {r.uploadedBy ? `· ${r.uploadedBy}` : ""}
+                    </span>
+                  </a>
+                ))}
+              </div>
             )}
           </div>
 

@@ -1,5 +1,6 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import InsurancePolicy from "@/lib/models/InsurancePolicy";
 
@@ -39,13 +40,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
-    // A new loss-run file upload refreshes the timestamp
-    if (body.lossRunFile !== undefined) {
-      updates.lossRunFile = body.lossRunFile;
-      if (body.lossRunFile) updates.lossRunTimestamp = new Date();
+    // A new loss-run upload APPENDS to history — never overwrites. Old loss
+    // runs stay for audit trail; the most recent (by uploadedAt) is treated
+    // as "current" by the UI.
+    const updateDoc: any = { $set: updates };
+    if (body.lossRunFile) {
+      const session = await getSession();
+      updateDoc.$push = {
+        lossRuns: {
+          url: body.lossRunFile,
+          filename: body.lossRunFilename || "",
+          uploadedAt: new Date(),
+          uploadedBy: session?.email || "",
+        },
+      };
     }
 
-    const policy = await InsurancePolicy.findByIdAndUpdate(id, { $set: updates }, { new: true, lean: true });
+    const policy = await InsurancePolicy.findByIdAndUpdate(id, updateDoc, { new: true, lean: true });
     if (!policy) {
       return NextResponse.json({ error: "Policy not found" }, { status: 404 });
     }

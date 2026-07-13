@@ -1,5 +1,6 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import InsurancePolicy from "@/lib/models/InsurancePolicy";
 import SymxIncident from "@/lib/models/SymxIncident";
@@ -88,6 +89,17 @@ export async function POST(req: NextRequest) {
     }
 
     await connectToDatabase();
+    const session = await getSession();
+
+    const lossRuns = [];
+    if (body.lossRunFile) {
+      lossRuns.push({
+        url: body.lossRunFile,
+        filename: body.lossRunFilename || "",
+        uploadedAt: new Date(),
+        uploadedBy: session?.email || "",
+      });
+    }
 
     const policy = await InsurancePolicy.create({
       policyNumber: String(body.policyNumber).trim(),
@@ -102,10 +114,9 @@ export async function POST(req: NextRequest) {
       totalClaims: body.totalClaims !== undefined && body.totalClaims !== "" ? Number(body.totalClaims) : undefined,
       openClaims: body.openClaims !== undefined && body.openClaims !== "" ? Number(body.openClaims) : undefined,
       policyLimit: body.policyLimit !== undefined && body.policyLimit !== "" ? Number(body.policyLimit) : undefined,
-      lossRunFile: body.lossRunFile || "",
-      lossRunTimestamp: body.lossRunFile ? new Date() : undefined,
+      lossRuns,
       notes: body.notes || "",
-      createdBy: body.createdBy || "",
+      createdBy: body.createdBy || session?.email || "",
     });
 
     return NextResponse.json({ policy });

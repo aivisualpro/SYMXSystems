@@ -27,7 +27,19 @@ export interface ISymxIncident extends Document {
   paid?: number;
   reserved?: number;
   incidentUploadFile?: string;
-  attachments?: { name: string; url: string }[];
+  attachments?: { name: string; url: string; category: string }[];
+
+  // ── Fields from the official SYMX Safety Incident Report Form ──
+  policeReportFiled?: boolean;
+  policeReportNumber?: string;
+  medicalTreatmentRequired?: boolean;
+  medicalTreatmentType?: string; // Triage / First Aid / Clinical / Emergency / Other
+  witnesses?: string;            // free text — matches the paper form's blank-line format
+  thirdPartyInvolvementType?: string; // None / Animal / Person / Vehicle / Equipment / Other
+
+  // ── Contact / follow-up log — HR/Admin only, same tier as supervisorNotes ──
+  contactLog?: { date: Date; contactedBy: string; method: string; note: string }[];
+
   createdBy?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -61,7 +73,23 @@ const SymxIncidentSchema = new Schema<ISymxIncident>(
     paid: { type: Number, default: 0 },
     reserved: { type: Number, default: 0 },
     incidentUploadFile: { type: String },
-    attachments: [{ name: { type: String }, url: { type: String }, _id: false }],
+    attachments: [{ name: { type: String }, url: { type: String }, category: { type: String, default: "Other" }, _id: false }],
+
+    policeReportFiled: { type: Boolean, default: false },
+    policeReportNumber: { type: String, default: "" },
+    medicalTreatmentRequired: { type: Boolean, default: false },
+    medicalTreatmentType: { type: String, default: "" },
+    witnesses: { type: String, default: "" },
+    thirdPartyInvolvementType: { type: String, default: "" },
+
+    contactLog: [{
+      date: { type: Date, default: Date.now },
+      contactedBy: { type: String, default: "" },
+      method: { type: String, default: "" },
+      note: { type: String, default: "" },
+      _id: false,
+    }],
+
     createdBy: { type: String },
   },
   { timestamps: true, collection: "symxincidents" }
