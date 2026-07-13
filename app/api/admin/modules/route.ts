@@ -5,7 +5,7 @@ import connectToDatabase from "@/lib/db";
 import SymxAppModule from "@/lib/models/SymxAppModule";
 
 // ── VERSION: bump this whenever DEFAULT_MODULES changes to force a DB reseed ──
-const MODULES_VERSION = 10;
+const MODULES_VERSION = 11;
 
 // Default modules — must match actual routes in /app/(protected)/
 const DEFAULT_MODULES = [
@@ -52,6 +52,7 @@ const DEFAULT_MODULES = [
   {
     name: "HR", url: "/hr", icon: "IconUsersGroup", order: 7, subModules: [
       { name: "Employees", url: "/hr/employees" },
+      { name: "Callouts", url: "/hr/callouts" },
       { name: "Reimbursement", url: "/hr/reimbursement" },
       { name: "Incidents", url: "/hr/incidents" },
       { name: "Employee Audit", url: "/hr/audit" },
