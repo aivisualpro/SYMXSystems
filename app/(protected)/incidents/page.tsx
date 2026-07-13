@@ -110,6 +110,7 @@ export default function IncidentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [claimTypes, setClaimTypes] = useState<ClaimTypeOption[]>([]);
+  const [vans, setVans] = useState<string[]>([]);
 
   // Quick-create dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -127,6 +128,10 @@ export default function IncidentsPage() {
   const [newContactMethod, setNewContactMethod] = useState(CONTACT_METHODS[0]);
   const [newContactNote, setNewContactNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  const [newReportFiles, setNewReportFiles] = useState<File[]>([]);
+  const [newPhotoFiles, setNewPhotoFiles] = useState<File[]>([]);
+  const [newOtherFiles, setNewOtherFiles] = useState<File[]>([]);
+  const [addingAttachments, setAddingAttachments] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -158,6 +163,10 @@ export default function IncidentsPage() {
       .then((res) => res.json())
       .then((opts: any[]) => setClaimTypes((opts || []).filter((o) => o.isActive !== false).map((o) => ({ _id: o._id, description: o.description }))))
       .catch(() => {});
+    fetch("/api/incidents/vans")
+      .then((res) => res.json())
+      .then((json) => setVans(json.vans || []))
+      .catch(() => {});
   }, []);
 
   const filtered = useMemo(() => {
@@ -180,6 +189,13 @@ export default function IncidentsPage() {
     return { total: incidents.length, open, closed };
   }, [incidents]);
 
+  const lastContact = (i: Incident) => {
+    const log = i.contactLog || [];
+    if (log.length === 0) return null;
+    const latest = [...log].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+    return { date: latest.date, count: log.length };
+  };
+
   // ── Quick create ──
   const openCreate = () => {
     setCreateForm(EMPTY_QUICK_FORM);
@@ -196,6 +212,10 @@ export default function IncidentsPage() {
     }
     if (!createForm.claimType) {
       notify.error("Incident type is required");
+      return;
+    }
+    if (createForm.claimType === "Auto" && !createForm.van) {
+      notify.error("Van is required for Auto incidents");
       return;
     }
     setCreating(true);
@@ -228,6 +248,9 @@ export default function IncidentsPage() {
     setSelected(incident);
     setNewContactMethod(CONTACT_METHODS[0]);
     setNewContactNote("");
+    setNewReportFiles([]);
+    setNewPhotoFiles([]);
+    setNewOtherFiles([]);
     setEditForm({
       claimStatus: incident.claimStatus || "New",
       shortDescription: incident.shortDescription || "",
@@ -282,6 +305,39 @@ export default function IncidentsPage() {
       notify.error(err.message || "Failed to save");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAddAttachments = async () => {
+    if (!selected) return;
+    if (newReportFiles.length === 0 && newPhotoFiles.length === 0 && newOtherFiles.length === 0) {
+      notify.error("Choose at least one file to attach");
+      return;
+    }
+    setAddingAttachments(true);
+    try {
+      const uploaded = [
+        ...(await uploadFiles(newReportFiles, "Report Form")),
+        ...(await uploadFiles(newPhotoFiles, "Photo")),
+        ...(await uploadFiles(newOtherFiles, "Other")),
+      ];
+      const merged = [...(selected.attachments || []), ...uploaded];
+      const res = await fetch(`/api/incidents/${selected._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attachments: merged }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to attach files");
+      notify.success("Files attached");
+      setNewReportFiles([]);
+      setNewPhotoFiles([]);
+      setNewOtherFiles([]);
+      await refreshSelected(selected._id);
+    } catch (err: any) {
+      notify.error(err.message || "Failed to attach files");
+    } finally {
+      setAddingAttachments(false);
     }
   };
 
@@ -371,15 +427,16 @@ export default function IncidentsPage() {
               <th className="px-3 py-2 text-left font-medium">Type</th>
               <th className="px-3 py-2 text-left font-medium">Description</th>
               <th className="px-3 py-2 text-left font-medium">Status</th>
+              {canManage && <th className="px-3 py-2 text-left font-medium">Last Contact</th>}
               {canManage && <th className="px-3 py-2 text-left font-medium">Paid / Reserved</th>}
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={canManage ? 6 : 5} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></td></tr>
+              <tr><td colSpan={canManage ? 7 : 5} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></td></tr>
             )}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={canManage ? 6 : 5} className="px-3 py-8 text-center text-muted-foreground">No incidents found.</td></tr>
+              <tr><td colSpan={canManage ? 7 : 5} className="px-3 py-8 text-center text-muted-foreground">No incidents found.</td></tr>
             )}
             {filtered.map((i) => (
               <tr key={i._id} className="cursor-pointer border-t hover:bg-muted/30" onClick={() => openDetail(i)}>
@@ -390,6 +447,25 @@ export default function IncidentsPage() {
                 <td className="px-3 py-2">
                   <Badge className={STATUS_COLORS[i.claimStatus || "New"] || ""}>{i.claimStatus || "New"}</Badge>
                 </td>
+                {canManage && (
+                  <td className="px-3 py-2">
+                    {(() => {
+                      const lc = lastContact(i);
+                      if (!lc) {
+                        return (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+                            <PhoneCall className="h-3 w-3" /> No contact logged
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="inline-flex items-center gap-1 text-xs">
+                          <PhoneCall className="h-3 w-3 text-muted-foreground" /> {new Date(lc.date).toLocaleDateString()} ({lc.count})
+                        </span>
+                      );
+                    })()}
+                  </td>
+                )}
                 {canManage && <td className="px-3 py-2">{money(i.paid)} / {money(i.reserved)}</td>}
               </tr>
             ))}
@@ -435,8 +511,16 @@ export default function IncidentsPage() {
               </div>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Van (optional)</Label>
-              <Input value={createForm.van} onChange={(e) => setCreateForm({ ...createForm, van: e.target.value })} placeholder="VIN" />
+              <Label>Van {createForm.claimType === "Auto" ? "*" : "(optional)"}</Label>
+              <Select value={createForm.van} onValueChange={(v) => setCreateForm({ ...createForm, van: v })}>
+                <SelectTrigger><SelectValue placeholder="Select van" /></SelectTrigger>
+                <SelectContent>
+                  {vans.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {createForm.claimType === "Auto" && (
+                <p className="text-xs text-muted-foreground">Required for Auto incidents.</p>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>What happened?</Label>
@@ -537,6 +621,52 @@ export default function IncidentsPage() {
                 </Select>
               </div>
 
+              {canManage && (
+                <div className="flex flex-col gap-2 rounded-md border-2 border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900 dark:bg-amber-950/20">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-1.5 text-sm font-semibold"><PhoneCall className="h-4 w-4" /> Contact Log</Label>
+                    {selected.contactLog && selected.contactLog.length > 0 && (
+                      <Badge variant="secondary">{selected.contactLog.length} note{selected.contactLog.length === 1 ? "" : "s"}</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Every check-in with the employee or a third party — condition, status updates, anything discussed by phone, text, or in person.
+                  </p>
+                  {selected.contactLog && selected.contactLog.length > 0 ? (
+                    <div className="flex max-h-56 flex-col gap-2 overflow-y-auto">
+                      {[...selected.contactLog].reverse().map((c, i) => (
+                        <div key={i} className="rounded-md bg-white p-2 text-sm shadow-sm dark:bg-black/20">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="font-medium">{c.method} • {c.contactedBy}</span>
+                            <span>{new Date(c.date).toLocaleString()}</span>
+                          </div>
+                          <div className="mt-1">{c.note}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm font-medium text-amber-700 dark:text-amber-400">No contact logged yet.</div>
+                  )}
+                  <div className="flex gap-2 pt-1">
+                    <Select value={newContactMethod} onValueChange={setNewContactMethod}>
+                      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {CONTACT_METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      placeholder="e.g. Called to check on his condition, said he's doing fine"
+                      value={newContactNote}
+                      onChange={(e) => setNewContactNote(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button size="sm" onClick={handleAddContactNote} disabled={addingNote}>
+                      {addingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col gap-1.5">
                 <Label>What happened?</Label>
                 <Textarea value={editForm.shortDescription} onChange={(e) => setEditForm({ ...editForm, shortDescription: e.target.value })} rows={2} />
@@ -587,27 +717,49 @@ export default function IncidentsPage() {
                 </div>
               </div>
 
-              {selected.attachments && selected.attachments.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <Label>Attachments</Label>
-                  {ATTACHMENT_CATEGORIES.map(({ key, label, icon: Icon }) => {
-                    const files = (selected.attachments || []).filter((a) => a.category === key);
-                    if (files.length === 0) return null;
-                    return (
-                      <div key={key} className="flex flex-col gap-1">
-                        <span className="text-xs text-muted-foreground">{label}</span>
-                        <div className="flex flex-wrap gap-2">
-                          {files.map((a, i) => (
-                            <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-primary hover:underline">
-                              <Icon className="h-3 w-3" /> {a.name}
-                            </a>
-                          ))}
+              <div className="flex flex-col gap-2">
+                <Label className="flex items-center gap-1"><Paperclip className="h-3.5 w-3.5" /> Attachments</Label>
+                {selected.attachments && selected.attachments.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {ATTACHMENT_CATEGORIES.map(({ key, label, icon: Icon }) => {
+                      const files = (selected.attachments || []).filter((a) => a.category === key);
+                      if (files.length === 0) return null;
+                      return (
+                        <div key={key} className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">{label}</span>
+                          <div className="flex flex-wrap gap-2">
+                            {files.map((a, i) => (
+                              <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-primary hover:underline">
+                                <Icon className="h-3 w-3" /> {a.name}
+                              </a>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 gap-2 rounded-md border border-dashed p-2 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1">
+                    <Label className="flex items-center gap-1 text-xs"><FileText className="h-3 w-3" /> Add Report Form</Label>
+                    <Input type="file" multiple accept="image/*,.pdf" onChange={(e) => setNewReportFiles(e.target.files ? Array.from(e.target.files) : [])} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="flex items-center gap-1 text-xs"><Camera className="h-3 w-3" /> Add Photos</Label>
+                    <Input type="file" multiple accept="image/*" onChange={(e) => setNewPhotoFiles(e.target.files ? Array.from(e.target.files) : [])} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="flex items-center gap-1 text-xs"><FileIcon className="h-3 w-3" /> Add Other</Label>
+                    <Input type="file" multiple onChange={(e) => setNewOtherFiles(e.target.files ? Array.from(e.target.files) : [])} />
+                  </div>
+                  <div className="flex justify-end sm:col-span-3">
+                    <Button size="sm" variant="outline" onClick={handleAddAttachments} disabled={addingAttachments}>
+                      {addingAttachments ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+                      Attach Files
+                    </Button>
+                  </div>
                 </div>
-              )}
+              </div>
 
               {canManage && (
                 <div className="flex flex-col gap-4 rounded-md border p-3">
@@ -668,41 +820,6 @@ export default function IncidentsPage() {
                   <div className="flex flex-col gap-1.5">
                     <Label>Supervisor Notes</Label>
                     <Textarea value={editForm.supervisorNotes} onChange={(e) => setEditForm({ ...editForm, supervisorNotes: e.target.value })} rows={2} />
-                  </div>
-
-                  <div className="flex flex-col gap-2 border-t pt-3">
-                    <Label className="flex items-center gap-1"><PhoneCall className="h-3.5 w-3.5" /> Contact Log</Label>
-                    <p className="text-xs text-muted-foreground">A running record of check-ins — e.g. calling the employee to ask how they're doing.</p>
-                    {selected.contactLog && selected.contactLog.length > 0 && (
-                      <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
-                        {[...selected.contactLog].reverse().map((c, i) => (
-                          <div key={i} className="rounded-md bg-muted/50 p-2 text-sm">
-                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                              <span>{c.method} • {c.contactedBy}</span>
-                              <span>{new Date(c.date).toLocaleString()}</span>
-                            </div>
-                            <div className="mt-1">{c.note}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <Select value={newContactMethod} onValueChange={setNewContactMethod}>
-                        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {CONTACT_METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        placeholder="e.g. Called to check on his condition, said he's doing fine"
-                        value={newContactNote}
-                        onChange={(e) => setNewContactNote(e.target.value)}
-                        className="flex-1"
-                      />
-                      <Button size="sm" onClick={handleAddContactNote} disabled={addingNote}>
-                        {addingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
-                      </Button>
-                    </div>
                   </div>
                 </div>
               )}
