@@ -9,6 +9,9 @@ const PRIVILEGED_FIELDS = [
   "claimNumber", "claimantLawyer", "statusDetail", "coverageDescription",
   "claimIncurred", "supervisorNotes", "paid", "reserved", "insurancePolicy",
   "insurancePolicyId", "withInsurance", "contactLog",
+  "oshaRecordable", "dotRecordable", "daysMissedFromWork", "returnToWorkStatus",
+  "returnToWorkDate", "thirdPartyInsuranceCarrier", "thirdPartyPolicyNumber",
+  "thirdPartyAdjusterName", "thirdPartyAdjusterPhone", "thirdPartyClaimNumber",
 ];
 
 // Fields anyone with basic "Incidents" edit access (any logged-in user, by
@@ -20,6 +23,7 @@ const OPEN_EDIT_FIELDS = [
   "claimStatus", "employeeNotes", "shortDescription", "attachments",
   "policeReportFiled", "policeReportNumber", "medicalTreatmentRequired",
   "medicalTreatmentType", "witnesses", "thirdPartyInvolvementType",
+  "bodyPartInjured",
 ];
 
 // Fields that reassign or restate the core identity/financial/legal facts of
@@ -30,6 +34,9 @@ const PRIVILEGED_EDIT_FIELDS = [
   "supervisorNotes", "thirdPartyName", "thirdPartyPhone", "thirdPartyEmail",
   "withInsurance", "insurancePolicy", "insurancePolicyId", "paid", "reserved",
   "incidentDate", "reportedDate", "claimType", "van",
+  "oshaRecordable", "dotRecordable", "daysMissedFromWork", "returnToWorkStatus",
+  "returnToWorkDate", "thirdPartyInsuranceCarrier", "thirdPartyPolicyNumber",
+  "thirdPartyAdjusterName", "thirdPartyAdjusterPhone", "thirdPartyClaimNumber",
 ];
 
 const VALID_STATUSES = ["New", "Open", "Close"];
@@ -92,10 +99,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (canManage) {
       for (const field of PRIVILEGED_EDIT_FIELDS) {
         if (body[field] === undefined) continue;
-        if (field === "incidentDate" || field === "reportedDate") {
+        if (field === "incidentDate" || field === "reportedDate" || field === "returnToWorkDate") {
           updates[field] = body[field] ? new Date(body[field]) : undefined;
-        } else if (field === "paid" || field === "reserved") {
+        } else if (field === "paid" || field === "reserved" || field === "daysMissedFromWork") {
           updates[field] = body[field] === "" ? 0 : Number(body[field]);
+        } else if (field === "oshaRecordable" || field === "dotRecordable") {
+          updates[field] = !!body[field];
         } else {
           updates[field] = body[field];
         }

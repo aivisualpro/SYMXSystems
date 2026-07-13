@@ -51,6 +51,17 @@ interface Incident {
   witnesses?: string;
   thirdPartyInvolvementType?: string;
   contactLog?: ContactNote[];
+  bodyPartInjured?: string;
+  oshaRecordable?: boolean;
+  dotRecordable?: boolean;
+  daysMissedFromWork?: number;
+  returnToWorkStatus?: string;
+  returnToWorkDate?: string;
+  thirdPartyInsuranceCarrier?: string;
+  thirdPartyPolicyNumber?: string;
+  thirdPartyAdjusterName?: string;
+  thirdPartyAdjusterPhone?: string;
+  thirdPartyClaimNumber?: string;
   createdBy?: string;
 }
 
@@ -67,6 +78,7 @@ const STATUS_COLORS: Record<string, string> = {
 const MEDICAL_TYPES = ["Triage", "First Aid", "Clinical", "Emergency", "Other"];
 const THIRD_PARTY_TYPES = ["None", "Animal", "Person/Colleague", "Vehicle", "Equipment", "Other"];
 const CONTACT_METHODS = ["Phone Call", "Text", "Email", "In Person"];
+const RETURN_TO_WORK_STATUSES = ["N/A", "Full Duty", "Modified Duty", "Not Yet Returned"];
 const ATTACHMENT_CATEGORIES: { key: string; label: string; icon: any }[] = [
   { key: "Report Form", label: "Incident Report Form", icon: FileText },
   { key: "Photo", label: "Photos", icon: Camera },
@@ -77,7 +89,7 @@ const EMPTY_QUICK_FORM = {
   transporterId: "", employeeName: "", incidentDate: new Date().toISOString().split("T")[0],
   claimType: "", van: "", shortDescription: "", employeeNotes: "",
   policeReportFiled: false, policeReportNumber: "",
-  medicalTreatmentRequired: false, medicalTreatmentType: "",
+  medicalTreatmentRequired: false, medicalTreatmentType: "", bodyPartInjured: "",
   witnesses: "", thirdPartyInvolvementType: "None",
 };
 
@@ -259,6 +271,7 @@ export default function IncidentsPage() {
       policeReportNumber: incident.policeReportNumber || "",
       medicalTreatmentRequired: !!incident.medicalTreatmentRequired,
       medicalTreatmentType: incident.medicalTreatmentType || "",
+      bodyPartInjured: incident.bodyPartInjured || "",
       witnesses: incident.witnesses || "",
       thirdPartyInvolvementType: incident.thirdPartyInvolvementType || "None",
       claimantName: incident.claimantName || "",
@@ -272,6 +285,16 @@ export default function IncidentsPage() {
       insurancePolicyId: incident.insurancePolicyId || "",
       paid: incident.paid ?? 0,
       reserved: incident.reserved ?? 0,
+      oshaRecordable: !!incident.oshaRecordable,
+      dotRecordable: !!incident.dotRecordable,
+      daysMissedFromWork: incident.daysMissedFromWork ?? 0,
+      returnToWorkStatus: incident.returnToWorkStatus || "N/A",
+      returnToWorkDate: incident.returnToWorkDate ? incident.returnToWorkDate.split("T")[0] : "",
+      thirdPartyInsuranceCarrier: incident.thirdPartyInsuranceCarrier || "",
+      thirdPartyPolicyNumber: incident.thirdPartyPolicyNumber || "",
+      thirdPartyAdjusterName: incident.thirdPartyAdjusterName || "",
+      thirdPartyAdjusterPhone: incident.thirdPartyAdjusterPhone || "",
+      thirdPartyClaimNumber: incident.thirdPartyClaimNumber || "",
     });
     if (canManage && incident.incidentDate) {
       fetch(`/api/insurance/policies/lookup?date=${incident.incidentDate.split("T")[0]}`)
@@ -557,6 +580,12 @@ export default function IncidentsPage() {
                   </Select>
                 </div>
               )}
+              {createForm.medicalTreatmentRequired && (
+                <div className="col-span-2 flex flex-col gap-1.5">
+                  <Label className="text-xs">Body Part Injured</Label>
+                  <Input value={createForm.bodyPartInjured} onChange={(e) => setCreateForm({ ...createForm, bodyPartInjured: e.target.value })} placeholder="e.g. Lower back, left ankle" />
+                </div>
+              )}
               <div className="col-span-2 flex flex-col gap-1.5">
                 <Label className="text-xs">Third-Party Involvement</Label>
                 <Select value={createForm.thirdPartyInvolvementType} onValueChange={(v) => setCreateForm({ ...createForm, thirdPartyInvolvementType: v })}>
@@ -702,6 +731,12 @@ export default function IncidentsPage() {
                     </Select>
                   </div>
                 )}
+                {editForm.medicalTreatmentRequired && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">Body Part Injured</Label>
+                    <Input value={editForm.bodyPartInjured} onChange={(e) => setEditForm({ ...editForm, bodyPartInjured: e.target.value })} />
+                  </div>
+                )}
                 <div className="col-span-2 flex flex-col gap-1.5">
                   <Label className="text-xs">Third-Party Involvement</Label>
                   <Select value={editForm.thirdPartyInvolvementType} onValueChange={(v) => setEditForm({ ...editForm, thirdPartyInvolvementType: v })}>
@@ -816,6 +851,67 @@ export default function IncidentsPage() {
                       <Input value={editForm.thirdPartyPhone} onChange={(e) => setEditForm({ ...editForm, thirdPartyPhone: e.target.value })} />
                     </div>
                   </div>
+
+                  {editForm.thirdPartyInvolvementType && editForm.thirdPartyInvolvementType !== "None" && (
+                    <div className="flex flex-col gap-2 border-t pt-3">
+                      <Label className="text-xs font-medium uppercase text-muted-foreground">Third Party's Insurance</Label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs">Their Insurance Carrier</Label>
+                          <Input value={editForm.thirdPartyInsuranceCarrier} onChange={(e) => setEditForm({ ...editForm, thirdPartyInsuranceCarrier: e.target.value })} />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs">Their Policy Number</Label>
+                          <Input value={editForm.thirdPartyPolicyNumber} onChange={(e) => setEditForm({ ...editForm, thirdPartyPolicyNumber: e.target.value })} />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs">Their Adjuster Name</Label>
+                          <Input value={editForm.thirdPartyAdjusterName} onChange={(e) => setEditForm({ ...editForm, thirdPartyAdjusterName: e.target.value })} />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs">Their Adjuster Phone</Label>
+                          <Input value={editForm.thirdPartyAdjusterPhone} onChange={(e) => setEditForm({ ...editForm, thirdPartyAdjusterPhone: e.target.value })} />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs">Their Claim Number</Label>
+                          <Input value={editForm.thirdPartyClaimNumber} onChange={(e) => setEditForm({ ...editForm, thirdPartyClaimNumber: e.target.value })} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {editForm.medicalTreatmentRequired && (
+                    <div className="flex flex-col gap-2 border-t pt-3">
+                      <Label className="text-xs font-medium uppercase text-muted-foreground">Injury & Regulatory Tracking</Label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-center gap-2">
+                          <Switch checked={editForm.oshaRecordable} onCheckedChange={(v) => setEditForm({ ...editForm, oshaRecordable: v })} />
+                          <Label>OSHA Recordable</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch checked={editForm.dotRecordable} onCheckedChange={(v) => setEditForm({ ...editForm, dotRecordable: v })} />
+                          <Label>DOT Recordable</Label>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs">Days Missed From Work</Label>
+                          <Input type="number" value={editForm.daysMissedFromWork} onChange={(e) => setEditForm({ ...editForm, daysMissedFromWork: e.target.value })} />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs">Return to Work Status</Label>
+                          <Select value={editForm.returnToWorkStatus} onValueChange={(v) => setEditForm({ ...editForm, returnToWorkStatus: v })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {RETURN_TO_WORK_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs">Return to Work Date</Label>
+                          <Input type="date" value={editForm.returnToWorkDate} onChange={(e) => setEditForm({ ...editForm, returnToWorkDate: e.target.value })} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-1.5">
                     <Label>Supervisor Notes</Label>

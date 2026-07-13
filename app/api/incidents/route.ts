@@ -12,6 +12,9 @@ const PRIVILEGED_FIELDS = [
   "claimNumber", "claimantLawyer", "statusDetail", "coverageDescription",
   "claimIncurred", "supervisorNotes", "paid", "reserved", "insurancePolicy",
   "insurancePolicyId", "withInsurance", "contactLog",
+  "oshaRecordable", "dotRecordable", "daysMissedFromWork", "returnToWorkStatus",
+  "returnToWorkDate", "thirdPartyInsuranceCarrier", "thirdPartyPolicyNumber",
+  "thirdPartyAdjusterName", "thirdPartyAdjusterPhone", "thirdPartyClaimNumber",
 ];
 
 function redact(row: any) {
@@ -103,6 +106,7 @@ export async function POST(req: NextRequest) {
       medicalTreatmentType: body.medicalTreatmentType || "",
       witnesses: body.witnesses || "",
       thirdPartyInvolvementType: body.thirdPartyInvolvementType || "",
+      bodyPartInjured: body.bodyPartInjured || "",
       claimStatus: "New",
       withInsurance: false,
       paid: 0,

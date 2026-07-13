@@ -40,6 +40,22 @@ export interface ISymxIncident extends Document {
   // ── Contact / follow-up log — HR/Admin only, same tier as supervisorNotes ──
   contactLog?: { date: Date; contactedBy: string; method: string; note: string }[];
 
+  // ── Injury & regulatory tracking — body part is factual/open; recordability
+  // and return-to-work are claims-admin determinations, HR/Admin only ──
+  bodyPartInjured?: string;
+  oshaRecordable?: boolean;
+  dotRecordable?: boolean;
+  daysMissedFromWork?: number;
+  returnToWorkStatus?: string; // N/A / Full Duty / Modified Duty / Not Yet Returned
+  returnToWorkDate?: Date;
+
+  // ── Third-party insurance & adjuster info — HR/Admin only ──
+  thirdPartyInsuranceCarrier?: string;
+  thirdPartyPolicyNumber?: string;
+  thirdPartyAdjusterName?: string;
+  thirdPartyAdjusterPhone?: string;
+  thirdPartyClaimNumber?: string;
+
   createdBy?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -89,6 +105,19 @@ const SymxIncidentSchema = new Schema<ISymxIncident>(
       note: { type: String, default: "" },
       _id: false,
     }],
+
+    bodyPartInjured: { type: String, default: "" },
+    oshaRecordable: { type: Boolean, default: false },
+    dotRecordable: { type: Boolean, default: false },
+    daysMissedFromWork: { type: Number, default: 0 },
+    returnToWorkStatus: { type: String, default: "" },
+    returnToWorkDate: { type: Date },
+
+    thirdPartyInsuranceCarrier: { type: String, default: "" },
+    thirdPartyPolicyNumber: { type: String, default: "" },
+    thirdPartyAdjusterName: { type: String, default: "" },
+    thirdPartyAdjusterPhone: { type: String, default: "" },
+    thirdPartyClaimNumber: { type: String, default: "" },
 
     createdBy: { type: String },
   },
