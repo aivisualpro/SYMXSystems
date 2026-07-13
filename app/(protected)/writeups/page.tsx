@@ -13,6 +13,18 @@ import SignaturePad from "@/components/ui/signature-pad";
 import { notify } from "@/lib/notify";
 import { Loader2, Plus, ClipboardList, FileText, Printer, Upload, AlertTriangle, Download, ThumbsDown } from "lucide-react";
 
+// Presets keep the range picker fast for the most common lookups (matches
+// the Callouts page pattern).
+const DATE_PRESETS: { label: string; days: number }[] = [
+  { label: "7 days", days: 7 },
+  { label: "30 days", days: 30 },
+  { label: "90 days", days: 90 },
+];
+
+function toISODate(d: Date) {
+  return d.toISOString().split("T")[0];
+}
+
 interface PriorSnapshot { writeupId: string; incidentDate: string; warningLevel: string }
 interface SignatureInfo { name: string; signatureImage: string; signedAt: string }
 interface Refusal { refused: boolean; note?: string; witnessName?: string; witnessSignatureImage?: string; refusedAt?: string }
@@ -88,6 +100,11 @@ export default function WriteupsPage() {
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  // Date range is optional — empty means "all time". Presets (7/30/90 days)
+  // set both at once; the inputs also accept a fully custom range.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [activePreset, setActivePreset] = useState<number | null>(null);
 
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -116,6 +133,8 @@ export default function WriteupsPage() {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
+      if (dateFrom) params.set("from", dateFrom);
+      if (dateTo) params.set("to", dateTo);
       const res = await fetch(`/api/writeups?${params}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load write-ups");
@@ -130,7 +149,21 @@ export default function WriteupsPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
+  }, [statusFilter, dateFrom, dateTo]);
+
+  const applyDatePreset = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    setDateFrom(toISODate(d));
+    setDateTo(toISODate(new Date()));
+    setActivePreset(days);
+  };
+
+  const clearDateRange = () => {
+    setDateFrom("");
+    setDateTo("");
+    setActivePreset(null);
+  };
 
   useEffect(() => {
     fetch("/api/admin/employees?terminated=false&export=true&select=firstName,lastName,transporterId,status")
@@ -374,6 +407,41 @@ export default function WriteupsPage() {
           <Button size="sm" variant={statusFilter === "all" ? "default" : "outline"} onClick={() => setStatusFilter("all")}>All</Button>
           <Button size="sm" variant={statusFilter === "draft" ? "default" : "outline"} onClick={() => setStatusFilter("draft")}>Awaiting Signature</Button>
           <Button size="sm" variant={statusFilter === "escalated" ? "default" : "outline"} onClick={() => setStatusFilter("escalated")}>Escalated</Button>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="from-date">From</Label>
+          <Input
+            id="from-date"
+            type="date"
+            value={dateFrom}
+            onChange={(e) => { setDateFrom(e.target.value); setActivePreset(null); }}
+            className="w-40"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="to-date">To</Label>
+          <Input
+            id="to-date"
+            type="date"
+            value={dateTo}
+            onChange={(e) => { setDateTo(e.target.value); setActivePreset(null); }}
+            className="w-40"
+          />
+        </div>
+        <div className="flex gap-1">
+          {DATE_PRESETS.map((p) => (
+            <Button
+              key={p.label}
+              size="sm"
+              variant={activePreset === p.days ? "default" : "ghost"}
+              onClick={() => applyDatePreset(p.days)}
+            >
+              {p.label}
+            </Button>
+          ))}
+          {(dateFrom || dateTo) && (
+            <Button size="sm" variant="ghost" onClick={clearDateRange}>All time</Button>
+          )}
         </div>
         <div className="ml-auto flex flex-col gap-1.5">
           <Label htmlFor="search">Search</Label>

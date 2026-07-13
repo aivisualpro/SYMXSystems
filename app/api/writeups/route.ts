@@ -6,7 +6,7 @@ import Writeup from "@/lib/models/Writeup";
 import DropdownOption from "@/lib/models/DropdownOption";
 import { recommendWarningLevel } from "@/lib/writeup-logic";
 
-// GET /api/writeups?status=&employeeId=&search=
+// GET /api/writeups?status=&employeeId=&search=&from=&to=
 // Manager/dispatcher/admin tool — employees don't have their own login in
 // this app, so unlike Incidents there's no "any logged-in user" tier here.
 export async function GET(req: NextRequest) {
@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status");
     const employeeId = searchParams.get("employeeId");
     const search = searchParams.get("search") || "";
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
 
     const query: any = {};
     if (status) query.status = status;
@@ -33,6 +35,13 @@ export async function GET(req: NextRequest) {
         { categoryLabel: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
       ];
+    }
+    // Date-range filter on the incident date (7/30/90-day presets or a
+    // custom range from the Write-Ups dashboard).
+    if (from || to) {
+      query.incidentDate = {};
+      if (from) query.incidentDate.$gte = new Date(`${from}T00:00:00.000Z`);
+      if (to) query.incidentDate.$lte = new Date(`${to}T23:59:59.999Z`);
     }
 
     const writeups = await Writeup.find(query).sort({ incidentDate: -1, createdAt: -1 }).lean();
