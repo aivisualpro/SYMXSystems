@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import SignaturePad from "@/components/ui/signature-pad";
 import { notify } from "@/lib/notify";
-import { Loader2, Plus, ClipboardList, FileText, Printer, Upload, AlertTriangle, Download, ThumbsDown } from "lucide-react";
+import { Loader2, Plus, ClipboardList, FileText, Printer, Upload, AlertTriangle, Download, ThumbsDown, ArrowUp, ArrowDown, ArrowUpDown, FileDown } from "lucide-react";
 
 // Presets keep the range picker fast for the most common lookups (matches
 // the Callouts page pattern).
@@ -23,6 +23,48 @@ const DATE_PRESETS: { label: string; days: number }[] = [
 
 function toISODate(d: Date) {
   return d.toISOString().split("T")[0];
+}
+
+type SortDirection = "asc" | "desc";
+interface SortConfig { key: string; direction: SortDirection }
+
+function sortByKey<T extends Record<string, any>>(items: T[], sort: SortConfig): T[] {
+  const sorted = [...items].sort((a, b) => {
+    const av = a[sort.key];
+    const bv = b[sort.key];
+    if (typeof av === "number" && typeof bv === "number") return av - bv;
+    return String(av ?? "").localeCompare(String(bv ?? ""));
+  });
+  return sort.direction === "asc" ? sorted : sorted.reverse();
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  sort,
+  onSort,
+}: {
+  label: string;
+  sortKey: string;
+  sort: SortConfig;
+  onSort: (key: string) => void;
+}) {
+  const active = sort.key === sortKey;
+  return (
+    <th
+      className="cursor-pointer select-none px-3 py-2 text-left font-medium hover:text-foreground"
+      onClick={() => onSort(sortKey)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active ? (
+          sort.direction === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-30" />
+        )}
+      </span>
+    </th>
+  );
 }
 
 interface PriorSnapshot { writeupId: string; incidentDate: string; warningLevel: string }
@@ -99,12 +141,17 @@ export default function WriteupsPage() {
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   // Date range is optional — empty means "all time". Presets (7/30/90 days)
   // set both at once; the inputs also accept a fully custom range.
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [activePreset, setActivePreset] = useState<number | null>(null);
+  // Newest first by default
+  const [sort, setSort] = useState<SortConfig>({ key: "incidentDate", direction: "desc" });
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -133,12 +180,14 @@ export default function WriteupsPage() {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
+      if (categoryFilter !== "all") params.set("categoryId", categoryFilter);
       if (dateFrom) params.set("from", dateFrom);
       if (dateTo) params.set("to", dateTo);
       const res = await fetch(`/api/writeups?${params}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load write-ups");
       setWriteups(json.writeups || []);
+      setSelectedIds(new Set());
     } catch (err: any) {
       notify.error(err.message || "Failed to load write-ups");
     } finally {
@@ -149,7 +198,11 @@ export default function WriteupsPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, dateFrom, dateTo]);
+  }, [statusFilter, categoryFilter, dateFrom, dateTo]);
+
+  const toggleSort = (key: string) => {
+    setSort((prev) => (prev.key === key ? { key, direction: prev.direction === "asc" ? "desc" : "asc" } : { key, direction: "desc" }));
+  };
 
   const applyDatePreset = (days: number) => {
     const d = new Date();
@@ -182,12 +235,65 @@ export default function WriteupsPage() {
   }, []);
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return writeups;
-    const q = searchQuery.trim().toLowerCase();
-    return writeups.filter(
-      (w) => (w.employeeName || "").toLowerCase().includes(q) || (w.categoryLabel || "").toLowerCase().includes(q)
-    );
-  }, [writeups, searchQuery]);
+    let rows = writeups;
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      rows = rows.filter(
+        (w) => (w.employeeName || "").toLowerCase().includes(q) || (w.categoryLabel || "").toLowerCase().includes(q)
+      );
+    }
+    return sortByKey(rows, sort);
+  }, [writeups, searchQuery, sort]);
+
+  // ── Row selection ──
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every((w) => selectedIds.has(w._id));
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) return new Set();
+      return new Set(filtered.map((w) => w._id));
+    });
+  };
+
+  const downloadCombinedPdf = async () => {
+    if (selectedIds.size === 0) return;
+    setDownloadingPdf(true);
+    try {
+      // Preserve current table order (respects the active sort) rather
+      // than Set insertion order.
+      const ids = filtered.filter((w) => selectedIds.has(w._id)).map((w) => w._id);
+      const res = await fetch("/api/writeups/combined-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Failed to generate combined PDF");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Writeups_Combined_${new Date().toISOString().split("T")[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      notify.error(err.message || "Failed to download combined PDF");
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   const summary = useMemo(() => {
     const pending = writeups.filter((w) => w.status === "draft").length;
@@ -409,6 +515,16 @@ export default function WriteupsPage() {
           <Button size="sm" variant={statusFilter === "escalated" ? "default" : "outline"} onClick={() => setStatusFilter("escalated")}>Escalated</Button>
         </div>
         <div className="flex flex-col gap-1.5">
+          <Label>Category</Label>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {categories.map((c) => <SelectItem key={c._id} value={c._id}>{c.description}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="from-date">From</Label>
           <Input
             id="from-date"
@@ -449,38 +565,67 @@ export default function WriteupsPage() {
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+          <span className="text-sm font-medium">{selectedIds.size} selected</span>
+          <Button size="sm" variant="outline" onClick={downloadCombinedPdf} disabled={downloadingPdf}>
+            {downloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+            Download Combined PDF
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear selection</Button>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="px-3 py-2 text-left font-medium">Date</th>
-              <th className="px-3 py-2 text-left font-medium">Employee</th>
-              <th className="px-3 py-2 text-left font-medium">Category</th>
-              <th className="px-3 py-2 text-left font-medium">Warning Level</th>
-              <th className="px-3 py-2 text-left font-medium">Status</th>
-              <th className="px-3 py-2 text-left font-medium">Manager</th>
+              <th className="w-8 px-3 py-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary rounded cursor-pointer"
+                  checked={allVisibleSelected}
+                  onChange={toggleSelectAll}
+                  aria-label="Select all"
+                />
+              </th>
+              <SortableHeader label="Date" sortKey="incidentDate" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Employee" sortKey="employeeName" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Category" sortKey="categoryLabel" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Warning Level" sortKey="warningLevel" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Manager" sortKey="managerName" sort={sort} onSort={toggleSort} />
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></td></tr>
+              <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></td></tr>
             )}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No write-ups found.</td></tr>
+              <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">No write-ups found.</td></tr>
             )}
             {filtered.map((w) => (
-              <tr key={w._id} className="cursor-pointer border-t hover:bg-muted/30" onClick={() => openDetail(w)}>
-                <td className="px-3 py-2">{fmtDate(w.incidentDate)}</td>
-                <td className="px-3 py-2 font-medium">{w.employeeName}</td>
-                <td className="px-3 py-2"><Badge variant="outline">{w.categoryLabel}</Badge></td>
-                <td className="px-3 py-2">
+              <tr key={w._id} className="border-t hover:bg-muted/30">
+                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-primary rounded cursor-pointer"
+                    checked={selectedIds.has(w._id)}
+                    onChange={() => toggleSelectOne(w._id)}
+                    aria-label={`Select write-up for ${w.employeeName}`}
+                  />
+                </td>
+                <td className="cursor-pointer px-3 py-2" onClick={() => openDetail(w)}>{fmtDate(w.incidentDate)}</td>
+                <td className="cursor-pointer px-3 py-2 font-medium" onClick={() => openDetail(w)}>{w.employeeName}</td>
+                <td className="cursor-pointer px-3 py-2" onClick={() => openDetail(w)}><Badge variant="outline">{w.categoryLabel}</Badge></td>
+                <td className="cursor-pointer px-3 py-2" onClick={() => openDetail(w)}>
                   <Badge className={WARNING_LEVEL_COLORS[w.warningLevel] || ""}>{WARNING_LEVEL_LABELS[w.warningLevel] || w.warningLevel}</Badge>
                 </td>
-                <td className="px-3 py-2 text-xs">
+                <td className="cursor-pointer px-3 py-2 text-xs" onClick={() => openDetail(w)}>
                   {w.status === "escalated" && <AlertTriangle className="mr-1 inline h-3.5 w-3.5 text-red-600" />}
                   {STATUS_LABELS[w.status] || w.status}
                 </td>
-                <td className="px-3 py-2 text-muted-foreground">{w.managerName}</td>
+                <td className="cursor-pointer px-3 py-2 text-muted-foreground" onClick={() => openDetail(w)}>{w.managerName}</td>
               </tr>
             ))}
           </tbody>

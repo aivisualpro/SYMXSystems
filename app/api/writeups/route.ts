@@ -6,7 +6,7 @@ import Writeup from "@/lib/models/Writeup";
 import DropdownOption from "@/lib/models/DropdownOption";
 import { recommendWarningLevel } from "@/lib/writeup-logic";
 
-// GET /api/writeups?status=&employeeId=&search=&from=&to=
+// GET /api/writeups?status=&employeeId=&categoryId=&search=&from=&to=
 // Manager/dispatcher/admin tool — employees don't have their own login in
 // this app, so unlike Incidents there's no "any logged-in user" tier here.
 export async function GET(req: NextRequest) {
@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const employeeId = searchParams.get("employeeId");
+    const categoryId = searchParams.get("categoryId");
     const search = searchParams.get("search") || "";
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -29,6 +30,7 @@ export async function GET(req: NextRequest) {
     const query: any = {};
     if (status) query.status = status;
     if (employeeId) query.employeeId = employeeId;
+    if (categoryId) query.categoryId = categoryId;
     if (search) {
       query.$or = [
         { employeeName: { $regex: search, $options: "i" } },

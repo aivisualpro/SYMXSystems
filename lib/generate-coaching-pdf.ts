@@ -68,6 +68,14 @@ function checkbox(doc: jsPDF, x: number, y: number, checked: boolean) {
 
 export function generateCoachingPdfBuffer(input: CoachingPdfInput): Buffer {
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
+  renderCoachingPage(doc, input);
+  return Buffer.from(doc.output("arraybuffer"));
+}
+
+// Renders one Employee Coaching form onto the current page of an existing
+// jsPDF document. Used both for the single-writeup PDF and for combining
+// several write-ups into one downloadable file (one form per page).
+function renderCoachingPage(doc: jsPDF, input: CoachingPdfInput): void {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const contentW = pageW - MARGIN * 2;
@@ -264,6 +272,15 @@ export function generateCoachingPdfBuffer(input: CoachingPdfInput): Buffer {
     input.refusal?.witnessSignatureImage,
     input.refusal?.refused ? fmtDate(input.refusal.refusedAt) : ""
   );
+}
 
+// Combines several write-ups into a single downloadable PDF — one
+// Employee Coaching form per page, in the order given.
+export function generateCombinedCoachingPdfBuffer(inputs: CoachingPdfInput[]): Buffer {
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
+  inputs.forEach((input, i) => {
+    if (i > 0) doc.addPage();
+    renderCoachingPage(doc, input);
+  });
   return Buffer.from(doc.output("arraybuffer"));
 }
