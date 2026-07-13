@@ -58,8 +58,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         signedAt: new Date(),
       };
       // Both sides have now signed in person — the write-up is complete.
-      setFields.status = existing.warningLevel === "suspension_review" ? "escalated" : "signed";
+      const isEscalation = existing.warningLevel === "suspension_review";
+      setFields.status = isEscalation ? "escalated" : "signed";
       setFields.closedAt = new Date();
+      if (isEscalation) setFields.escalatedAt = setFields.closedAt;
     }
 
     if (Object.keys(setFields).length === 0) {

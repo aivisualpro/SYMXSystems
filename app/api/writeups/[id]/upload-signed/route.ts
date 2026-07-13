@@ -40,16 +40,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       uploadedBy: session?.email || "",
     };
 
-    const status = existing.warningLevel === "suspension_review" ? "escalated" : "uploaded_signed_copy";
+    const isEscalation = existing.warningLevel === "suspension_review";
+    const status = isEscalation ? "escalated" : "uploaded_signed_copy";
+    const now = new Date();
+
+    const setFields: any = { status, closedAt: existing.closedAt || now };
+    if (isEscalation && !existing.escalatedAt) setFields.escalatedAt = now;
 
     const writeup = await Writeup.findByIdAndUpdate(
       id,
       {
         $push: {
           attachments: attachment,
-          events: { type: "uploaded_signed_copy", actorEmail: session?.email || "", occurredAt: new Date() },
+          events: { type: "uploaded_signed_copy", actorEmail: session?.email || "", occurredAt: now },
         },
-        $set: { status, closedAt: existing.closedAt || new Date() },
+        $set: setFields,
       },
       { new: true }
     );

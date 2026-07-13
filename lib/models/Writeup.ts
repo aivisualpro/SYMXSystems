@@ -41,6 +41,17 @@ export interface IWriteupPriorSnapshot {
   warningLevel: string;
 }
 
+// Captures the HR decision once a Suspension Review write-up is escalated.
+// Resolving an escalation moves status -> "closed" so it drops out of the
+// active review queue while keeping a permanent audit record here.
+export interface IWriteupEscalationResolution {
+  outcome: string; // suspended | terminated | downgraded | no_action
+  suspensionDays?: number;
+  notes: string;
+  resolvedBy: string;
+  resolvedAt: Date;
+}
+
 export interface IWriteup extends Document {
   transporterId: string;
   employeeId?: mongoose.Types.ObjectId;
@@ -61,7 +72,13 @@ export interface IWriteup extends Document {
 
   priorWriteups: IWriteupPriorSnapshot[]; // immutable snapshot taken at creation time
 
-  status: string; // draft | signed | refused_to_sign | printed | uploaded_signed_copy | escalated | closed
+  // status: draft | signed | refused_to_sign | uploaded_signed_copy | escalated | closed
+  // "escalated" = Suspension Review reached and both/refusal signatures are in —
+  // pending HR review. "closed" = either a normal sign-off, OR an escalation
+  // that HR has resolved (see `escalation` below for the outcome).
+  status: string;
+  escalatedAt?: Date; // when status first became "escalated" — drives the HR review queue's age/urgency display
+  escalation?: IWriteupEscalationResolution; // set once HR resolves the escalation
 
   managerName: string;
   managerSignature?: IWriteupSignature;
@@ -129,6 +146,17 @@ const WriteupPriorSnapshotSchema = new Schema(
   { _id: false }
 );
 
+const WriteupEscalationResolutionSchema = new Schema(
+  {
+    outcome: { type: String, required: true },
+    suspensionDays: { type: Number },
+    notes: { type: String, default: "" },
+    resolvedBy: { type: String, default: "" },
+    resolvedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const WriteupSchema = new Schema<IWriteup>(
   {
     transporterId: { type: String, index: true },
@@ -151,6 +179,8 @@ const WriteupSchema = new Schema<IWriteup>(
     priorWriteups: { type: [WriteupPriorSnapshotSchema], default: [] },
 
     status: { type: String, default: "draft" },
+    escalatedAt: { type: Date },
+    escalation: { type: WriteupEscalationResolutionSchema },
 
     managerName: { type: String, default: "" },
     managerSignature: { type: WriteupSignatureSchema },

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import SignaturePad from "@/components/ui/signature-pad";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import { Loader2, Plus, ClipboardList, FileText, Printer, Upload, AlertTriangle, Download, ThumbsDown, ArrowUp, ArrowDown, ArrowUpDown, FileDown } from "lucide-react";
 
 // Presets keep the range picker fast for the most common lookups (matches
@@ -71,6 +72,7 @@ interface PriorSnapshot { writeupId: string; incidentDate: string; warningLevel:
 interface SignatureInfo { name: string; signatureImage: string; signedAt: string }
 interface Refusal { refused: boolean; note?: string; witnessName?: string; witnessSignatureImage?: string; refusedAt?: string }
 interface Attachment { name: string; url: string; category: string }
+interface EscalationResolution { outcome: string; suspensionDays?: number; notes: string; resolvedBy: string; resolvedAt: string }
 
 interface Writeup {
   _id: string;
@@ -88,6 +90,8 @@ interface Writeup {
   consequences?: string;
   priorWriteups: PriorSnapshot[];
   status: string;
+  escalatedAt?: string;
+  escalation?: EscalationResolution;
   managerName: string;
   managerSignature?: SignatureInfo;
   employeeSignature?: SignatureInfo;
@@ -120,9 +124,31 @@ const STATUS_LABELS: Record<string, string> = {
   signed: "Signed",
   refused_to_sign: "Refused to Sign",
   uploaded_signed_copy: "Signed (Uploaded Copy)",
-  escalated: "Escalated to Admin/HR",
+  escalated: "Pending HR Review",
   closed: "Closed",
 };
+
+const ESCALATION_OUTCOMES = [
+  { value: "suspended", label: "Suspended" },
+  { value: "terminated", label: "Terminated" },
+  { value: "downgraded", label: "Downgraded (warning stands, no suspension)" },
+  { value: "no_action", label: "No Further Action" },
+];
+const ESCALATION_OUTCOME_LABELS: Record<string, string> = Object.fromEntries(ESCALATION_OUTCOMES.map((o) => [o.value, o.label]));
+
+function daysSince(d?: string): number {
+  if (!d) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000));
+}
+
+// "closed" covers both a normal sign-off and a resolved escalation —
+// distinguish them for display.
+function statusLabel(w: Writeup): string {
+  if (w.status === "closed" && w.escalation) {
+    return `Escalation Resolved — ${ESCALATION_OUTCOME_LABELS[w.escalation.outcome] || w.escalation.outcome}`;
+  }
+  return STATUS_LABELS[w.status] || w.status;
+}
 
 const EMPTY_FORM = {
   employeeId: "", transporterId: "", employeeName: "",
@@ -152,6 +178,9 @@ export default function WriteupsPage() {
   const [sort, setSort] = useState<SortConfig>({ key: "incidentDate", direction: "desc" });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  // Gates the "Resolve Escalation" form — the server enforces this too
+  // (Write-Ups: approve), this just avoids showing a button that will 403.
+  const [canApprove, setCanApprove] = useState(true);
 
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -174,6 +203,10 @@ export default function WriteupsPage() {
   const [witnessName, setWitnessName] = useState("");
   const [witnessSig, setWitnessSig] = useState("");
   const [uploadingSigned, setUploadingSigned] = useState(false);
+  const [resolveOutcome, setResolveOutcome] = useState("");
+  const [resolveSuspensionDays, setResolveSuspensionDays] = useState("");
+  const [resolveNotes, setResolveNotes] = useState("");
+  const [resolvingEscalation, setResolvingEscalation] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -231,6 +264,14 @@ export default function WriteupsPage() {
     fetch("/api/admin/settings/dropdowns?type=metric")
       .then((res) => res.json())
       .then((d) => setCategories(Array.isArray(d) ? d.filter((c: any) => c.isActive !== false) : []))
+      .catch(() => {});
+    fetch("/api/user/permissions")
+      .then((res) => res.json())
+      .then((d) => {
+        if (d.role === "Super Admin") { setCanApprove(true); return; }
+        const perm = (d.permissions || []).find((p: any) => p.module === "Write-Ups");
+        setCanApprove(perm ? perm.actions?.approve !== false : true);
+      })
       .catch(() => {});
   }, []);
 
@@ -298,7 +339,10 @@ export default function WriteupsPage() {
   const summary = useMemo(() => {
     const pending = writeups.filter((w) => w.status === "draft").length;
     const escalated = writeups.filter((w) => w.status === "escalated").length;
-    return { total: writeups.length, pending, escalated };
+    const oldestEscalatedDays = writeups
+      .filter((w) => w.status === "escalated")
+      .reduce((max, w) => Math.max(max, daysSince(w.escalatedAt)), 0);
+    return { total: writeups.length, pending, escalated, oldestEscalatedDays };
   }, [writeups]);
 
   // ── Live recommendation preview ──
@@ -375,6 +419,9 @@ export default function WriteupsPage() {
     setRefuseNote("");
     setWitnessName("");
     setWitnessSig("");
+    setResolveOutcome("");
+    setResolveSuspensionDays("");
+    setResolveNotes("");
   };
 
   const refreshSelected = async (id: string) => {
@@ -489,6 +536,43 @@ export default function WriteupsPage() {
     }
   };
 
+  const handleResolveEscalation = async () => {
+    if (!selected) return;
+    if (!resolveOutcome) {
+      notify.error("Select an outcome");
+      return;
+    }
+    if (resolveNotes.trim().length < 10) {
+      notify.error("Resolution notes must be at least 10 characters");
+      return;
+    }
+    if (resolveOutcome === "suspended" && (!resolveSuspensionDays || Number(resolveSuspensionDays) <= 0)) {
+      notify.error("Enter the number of suspension days");
+      return;
+    }
+    setResolvingEscalation(true);
+    try {
+      const res = await fetch(`/api/writeups/${selected._id}/resolve-escalation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outcome: resolveOutcome,
+          notes: resolveNotes.trim(),
+          suspensionDays: resolveOutcome === "suspended" ? Number(resolveSuspensionDays) : undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to resolve escalation");
+      notify.success("Escalation resolved");
+      await refreshSelected(selected._id);
+      await load();
+    } catch (err: any) {
+      notify.error(err.message || "Failed to resolve escalation");
+    } finally {
+      setResolvingEscalation(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4 p-4 md:p-6">
       <div className="flex items-center justify-between">
@@ -505,14 +589,35 @@ export default function WriteupsPage() {
       <div className="grid grid-cols-3 gap-3">
         <Card><CardContent className="pt-0"><div className="text-2xl font-bold">{summary.total}</div><div className="text-xs text-muted-foreground">Total write-ups</div></CardContent></Card>
         <Card><CardContent className="pt-0"><div className="text-2xl font-bold text-amber-600">{summary.pending}</div><div className="text-xs text-muted-foreground">Awaiting signature</div></CardContent></Card>
-        <Card><CardContent className="pt-0"><div className="text-2xl font-bold text-red-600">{summary.escalated}</div><div className="text-xs text-muted-foreground">Escalated to Admin/HR</div></CardContent></Card>
+        <Card
+          className={cn("cursor-pointer transition-colors", summary.escalated > 0 && "border-red-300 bg-red-50/60 dark:bg-red-950/20")}
+          onClick={() => setStatusFilter("escalated")}
+        >
+          <CardContent className="pt-0">
+            <div className="flex items-center gap-1.5">
+              {summary.escalated > 0 && <AlertTriangle className="h-4 w-4 text-red-600" />}
+              <div className="text-2xl font-bold text-red-600">{summary.escalated}</div>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Pending HR review{summary.escalated > 0 ? ` — oldest ${summary.oldestEscalatedDays}d` : ""}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex gap-1">
           <Button size="sm" variant={statusFilter === "all" ? "default" : "outline"} onClick={() => setStatusFilter("all")}>All</Button>
           <Button size="sm" variant={statusFilter === "draft" ? "default" : "outline"} onClick={() => setStatusFilter("draft")}>Awaiting Signature</Button>
-          <Button size="sm" variant={statusFilter === "escalated" ? "default" : "outline"} onClick={() => setStatusFilter("escalated")}>Escalated</Button>
+          <Button
+            size="sm"
+            variant={statusFilter === "escalated" ? "default" : "outline"}
+            className={statusFilter !== "escalated" && summary.escalated > 0 ? "border-red-300 text-red-700 hover:text-red-700" : ""}
+            onClick={() => setStatusFilter("escalated")}
+          >
+            Pending HR Review{summary.escalated > 0 ? ` (${summary.escalated})` : ""}
+          </Button>
+          <Button size="sm" variant={statusFilter === "closed" ? "default" : "outline"} onClick={() => setStatusFilter("closed")}>Resolved Escalations</Button>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Category</Label>
@@ -605,7 +710,10 @@ export default function WriteupsPage() {
               <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">No write-ups found.</td></tr>
             )}
             {filtered.map((w) => (
-              <tr key={w._id} className="border-t hover:bg-muted/30">
+              <tr
+                key={w._id}
+                className={cn("border-t hover:bg-muted/30", w.status === "escalated" && "border-l-2 border-l-red-500 bg-red-50/40 dark:bg-red-950/10")}
+              >
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
@@ -623,7 +731,8 @@ export default function WriteupsPage() {
                 </td>
                 <td className="cursor-pointer px-3 py-2 text-xs" onClick={() => openDetail(w)}>
                   {w.status === "escalated" && <AlertTriangle className="mr-1 inline h-3.5 w-3.5 text-red-600" />}
-                  {STATUS_LABELS[w.status] || w.status}
+                  <span className={w.status === "escalated" ? "font-medium text-red-700 dark:text-red-400" : ""}>{statusLabel(w)}</span>
+                  {w.status === "escalated" && <span className="ml-1 text-muted-foreground">({daysSince(w.escalatedAt)}d)</span>}
                 </td>
                 <td className="cursor-pointer px-3 py-2 text-muted-foreground" onClick={() => openDetail(w)}>{w.managerName}</td>
               </tr>
@@ -740,12 +849,63 @@ export default function WriteupsPage() {
                 <div><div className="text-muted-foreground">Category</div><div>{selected.categoryLabel}</div></div>
                 <div><div className="text-muted-foreground">Date</div><div>{fmtDate(selected.incidentDate)}</div></div>
                 <div><div className="text-muted-foreground">Warning Level</div><Badge className={WARNING_LEVEL_COLORS[selected.warningLevel] || ""}>{WARNING_LEVEL_LABELS[selected.warningLevel]}</Badge></div>
-                <div><div className="text-muted-foreground">Status</div><div>{STATUS_LABELS[selected.status] || selected.status}</div></div>
+                <div><div className="text-muted-foreground">Status</div><div>{statusLabel(selected)}</div></div>
               </div>
 
               {selected.warningLevelOverrideReason && (
                 <div className="rounded-md border border-amber-300 bg-amber-50/60 p-2 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
                   Level overridden from {WARNING_LEVEL_LABELS[selected.warningLevelAuto]} — reason: {selected.warningLevelOverrideReason}
+                </div>
+              )}
+
+              {selected.status === "escalated" && (
+                <div className="flex flex-col gap-3 rounded-md border border-red-300 bg-red-50/60 p-3 dark:bg-red-950/20">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                    <div className="text-sm font-semibold text-red-700 dark:text-red-400">
+                      HR Review Required — Suspension Review reached ({daysSince(selected.escalatedAt)} day{daysSince(selected.escalatedAt) === 1 ? "" : "s"} pending)
+                    </div>
+                  </div>
+                  <p className="text-xs text-red-700/80 dark:text-red-400/80">
+                    This employee has reached the end of the warning ladder for {selected.categoryLabel}. Record the final decision below to close the case.
+                  </p>
+
+                  {canApprove ? (
+                    <div className="flex flex-col gap-2 rounded-md border border-red-200 bg-background p-2.5 dark:border-red-900">
+                      <Label className="text-xs">Outcome *</Label>
+                      <Select value={resolveOutcome} onValueChange={setResolveOutcome}>
+                        <SelectTrigger><SelectValue placeholder="Select outcome" /></SelectTrigger>
+                        <SelectContent>
+                          {ESCALATION_OUTCOMES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      {resolveOutcome === "suspended" && (
+                        <>
+                          <Label className="text-xs">Suspension Days *</Label>
+                          <Input type="number" min={1} value={resolveSuspensionDays} onChange={(e) => setResolveSuspensionDays(e.target.value)} className="w-24" />
+                        </>
+                      )}
+                      <Label className="text-xs">Resolution Notes * (min 10 characters)</Label>
+                      <Textarea value={resolveNotes} onChange={(e) => setResolveNotes(e.target.value)} rows={2} placeholder="Document the decision and rationale..." />
+                      <Button size="sm" className="self-start bg-red-600 text-white hover:bg-red-700" onClick={handleResolveEscalation} disabled={resolvingEscalation}>
+                        {resolvingEscalation ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Resolve Escalation
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-xs italic text-red-700/80 dark:text-red-400/80">Awaiting review from an HR Manager with Approve access to Write-Ups.</p>
+                  )}
+                </div>
+              )}
+
+              {selected.status === "closed" && selected.escalation && (
+                <div className="flex flex-col gap-1 rounded-md border p-3 text-sm">
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Escalation Resolution</div>
+                  <div className="font-medium">
+                    {ESCALATION_OUTCOME_LABELS[selected.escalation.outcome] || selected.escalation.outcome}
+                    {selected.escalation.outcome === "suspended" && selected.escalation.suspensionDays ? ` — ${selected.escalation.suspensionDays} day${selected.escalation.suspensionDays === 1 ? "" : "s"}` : ""}
+                  </div>
+                  <p className="whitespace-pre-wrap text-muted-foreground">{selected.escalation.notes}</p>
+                  <p className="text-xs text-muted-foreground">Resolved by {selected.escalation.resolvedBy} on {fmtDate(selected.escalation.resolvedAt)}</p>
                 </div>
               )}
 

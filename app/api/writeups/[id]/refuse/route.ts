@@ -43,13 +43,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       refusedAt: new Date(),
     };
 
-    const status = existing.warningLevel === "suspension_review" ? "escalated" : "refused_to_sign";
+    const isEscalation = existing.warningLevel === "suspension_review";
+    const status = isEscalation ? "escalated" : "refused_to_sign";
+    const now = new Date();
+
+    const setFields: any = { refusal, status, closedAt: now };
+    if (isEscalation) setFields.escalatedAt = now;
 
     const writeup = await Writeup.findByIdAndUpdate(
       id,
       {
-        $set: { refusal, status, closedAt: new Date() },
-        $push: { events: { type: "refused", actorEmail: session?.email || "", payload: { note: refusal.note }, occurredAt: new Date() } },
+        $set: setFields,
+        $push: { events: { type: "refused", actorEmail: session?.email || "", payload: { note: refusal.note }, occurredAt: now } },
       },
       { new: true }
     );
