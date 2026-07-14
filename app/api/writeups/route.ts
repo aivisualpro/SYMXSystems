@@ -78,10 +78,11 @@ export async function POST(req: NextRequest) {
 
     const category = await DropdownOption.findById(body.categoryId).lean();
     const categoryLabel = (category as any)?.description || body.categoryLabel || "";
+    const subCategory = body.subCategory || "";
 
     const [rec, correctiveAction, verbalCoachingContext] = await Promise.all([
       recommendWarningLevel(body.employeeId, body.categoryId, categoryLabel),
-      getCorrectiveActionTemplate(categoryLabel),
+      getCorrectiveActionTemplate(categoryLabel, subCategory),
       getVerbalCoachingContext(body.employeeId, categoryLabel),
     ]);
 
@@ -97,6 +98,7 @@ export async function POST(req: NextRequest) {
       employeeName: body.employeeName || "",
       categoryId: body.categoryId,
       categoryLabel,
+      subCategory,
       warningLevel,
       warningLevelAuto: rec.recommended,
       warningLevelOverrideReason: isOverride ? body.warningLevelOverrideReason : "",

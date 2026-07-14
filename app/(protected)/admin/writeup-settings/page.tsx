@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { Loader2, Save, Settings, Plus, X, Layers, FileEdit, Trash2 } from "lucide-react";
 
 interface CategoryOption { _id: string; description: string; isActive?: boolean }
-interface CorrectiveActionTemplate { categoryLabel: string; planForImprovement: string; consequences?: string }
+interface CorrectiveActionTemplate { categoryLabel: string; subCategory?: string; planForImprovement: string; consequences?: string }
 
 const THRESHOLD_KEYS = [
   { key: "second_warning", label: "Second Warning at" },
@@ -100,7 +100,14 @@ export default function WriteupSettingsPage() {
   };
 
   const normalize = (s: string) => (s || "").trim().toLowerCase().replace(/\s+/g, " ");
-  const categoriesWithTemplate = new Set(templates.map((t) => normalize(t.categoryLabel)));
+  // Only count a category as "has a template" for the add-chip list when
+  // it has a blank-subCategory / general template — categories that only
+  // have sub-reason-specific templates (e.g. Safety Infraction split into
+  // Seatbelt / Speeding / etc.) still show up so a general fallback can
+  // be added too.
+  const categoriesWithGeneralTemplate = new Set(
+    templates.filter((t) => !t.subCategory?.trim()).map((t) => normalize(t.categoryLabel))
+  );
   const realCategoryNames = new Set(categories.map((c) => c.description.toLowerCase()));
 
   // Adding a template is immediate — click a category chip and it's added,
@@ -108,8 +115,10 @@ export default function WriteupSettingsPage() {
   // exists) and the current Default Consequences as a starting override,
   // so there's no blank-page problem. Still fully editable before saving.
   const addTemplate = (categoryLabel: string) => {
-    if (categoriesWithTemplate.has(normalize(categoryLabel))) return;
-    const seeded = defaultTemplates.find((t) => normalize(t.categoryLabel) === normalize(categoryLabel));
+    if (categoriesWithGeneralTemplate.has(normalize(categoryLabel))) return;
+    const seeded = defaultTemplates.find(
+      (t) => normalize(t.categoryLabel) === normalize(categoryLabel) && !t.subCategory?.trim()
+    );
     setTemplates([
       ...templates,
       {
@@ -119,7 +128,19 @@ export default function WriteupSettingsPage() {
       },
     ]);
   };
-  const updateTemplate = (idx: number, field: "planForImprovement" | "consequences", value: string) => {
+  // Adds another template under the same category with a blank sub-reason
+  // — for categories that need more than one corrective-action text (e.g.
+  // "Safety Infraction" split into Seatbelt / Speeding / Distraction /
+  // Following Distance / Sign-Signal). The manager fills in the specific
+  // sub-reason and its text. When a category has 2+ sub-reason templates,
+  // the New Write-Up form shows a picker so the right one auto-fills.
+  const addSubReason = (categoryLabel: string) => {
+    setTemplates([
+      ...templates,
+      { categoryLabel, subCategory: "", planForImprovement: "", consequences: defaultConsequences || "" },
+    ]);
+  };
+  const updateTemplate = (idx: number, field: "planForImprovement" | "consequences" | "subCategory", value: string) => {
     setTemplates(templates.map((t, i) => (i === idx ? { ...t, [field]: value } : t)));
   };
   const updateTemplateCategory = (idx: number, categoryLabel: string) => {
@@ -225,7 +246,9 @@ export default function WriteupSettingsPage() {
             <p className="text-xs text-muted-foreground">
               Auto-fills the Plan for Improvement and Consequences fields on the New Write-Up form when a category is selected —
               managers can still edit before saving. Categories without a template here just start blank. The category on each
-              template below must exactly match a real category from your dropdown list, or auto-fill won't trigger for it.
+              template below must exactly match a real category from your dropdown list, or auto-fill won't trigger for it. A
+              category can have more than one template if you give each a distinct sub-reason (e.g. "Safety Infraction" split
+              into Seatbelt / Speeding / etc.) — the New Write-Up form will then ask which specific issue applies.
             </p>
           </div>
 
@@ -236,15 +259,21 @@ export default function WriteupSettingsPage() {
             return (
             <div key={idx} className={cn("flex flex-col gap-2 rounded-md border p-3", isOrphaned && "border-amber-300 bg-amber-50/40 dark:bg-amber-950/10")}>
               <div className="flex items-center justify-between gap-2">
-                <Select value={t.categoryLabel} onValueChange={(v) => updateTemplateCategory(idx, v)}>
-                  <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {isOrphaned && <SelectItem value={t.categoryLabel}>{t.categoryLabel} (not a real category)</SelectItem>}
-                    {categories
-                      .filter((c) => c.description.toLowerCase() === t.categoryLabel.toLowerCase() || !categoriesWithTemplate.has(c.description.toLowerCase()))
-                      .map((c) => <SelectItem key={c._id} value={c.description}>{c.description}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-1 items-center gap-2">
+                  <Select value={t.categoryLabel} onValueChange={(v) => updateTemplateCategory(idx, v)}>
+                    <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {isOrphaned && <SelectItem value={t.categoryLabel}>{t.categoryLabel} (not a real category)</SelectItem>}
+                      {categories.map((c) => <SelectItem key={c._id} value={c.description}>{c.description}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={t.subCategory || ""}
+                    onChange={(e) => updateTemplate(idx, "subCategory", e.target.value)}
+                    placeholder="Sub-reason (optional, e.g. Seatbelt)"
+                    className="flex-1"
+                  />
+                </div>
                 <Button size="sm" variant="ghost" className="h-6 text-destructive" onClick={() => removeTemplate(idx)}>
                   <Trash2 className="h-3.5 w-3.5" /> Remove
                 </Button>
@@ -272,6 +301,14 @@ export default function WriteupSettingsPage() {
                   placeholder="e.g. tiered violation consequences specific to this category..."
                 />
               </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-fit text-xs text-muted-foreground"
+                onClick={() => addSubReason(t.categoryLabel)}
+              >
+                <Plus className="h-3 w-3" /> Add another sub-reason for {t.categoryLabel || "this category"}
+              </Button>
             </div>
             );
           })}
@@ -280,13 +317,18 @@ export default function WriteupSettingsPage() {
             <Label className="text-xs">Add a template for a category</Label>
             <p className="text-xs text-muted-foreground">Click a category to add it — pre-filled with the default plan for improvement and consequences where available, ready to edit.</p>
             <div className="flex flex-wrap gap-1.5">
-              {categories.filter((c) => !categoriesWithTemplate.has(normalize(c.description))).length === 0 && (
+              {categories.filter((c) => !categoriesWithGeneralTemplate.has(normalize(c.description))).length === 0 && (
                 <p className="text-sm text-muted-foreground">Every category already has a template.</p>
               )}
               {categories
-                .filter((c) => !categoriesWithTemplate.has(normalize(c.description)))
+                .filter((c) => !categoriesWithGeneralTemplate.has(normalize(c.description)))
                 .map((c) => {
-                  const hasDefault = defaultTemplates.some((t) => normalize(t.categoryLabel) === normalize(c.description));
+                  const hasDefault = defaultTemplates.some(
+                    (t) => normalize(t.categoryLabel) === normalize(c.description) && !t.subCategory?.trim()
+                  );
+                  const hasSubReasonDefaults = defaultTemplates.some(
+                    (t) => normalize(t.categoryLabel) === normalize(c.description) && !!t.subCategory?.trim()
+                  );
                   return (
                     <button
                       key={c._id}
@@ -296,6 +338,9 @@ export default function WriteupSettingsPage() {
                     >
                       <Plus className="h-3 w-3" /> {c.description}
                       {hasDefault && <span className="text-muted-foreground">(default available)</span>}
+                      {!hasDefault && hasSubReasonDefaults && (
+                        <span className="text-muted-foreground">(has sub-reason defaults — see rows above)</span>
+                      )}
                     </button>
                   );
                 })}

@@ -67,6 +67,7 @@ export interface IWriteup extends Document {
 
   categoryId?: mongoose.Types.ObjectId; // ref DropdownOption (type: "metric")
   categoryLabel: string; // denormalized snapshot — survives category rename/deactivation
+  subCategory?: string; // finer-grained reason within categoryLabel (e.g. "Safety Infraction" / "Speeding") — see WriteupSettings.correctiveActionTemplates
 
   warningLevel: string; // first_warning | second_warning | third_warning | final_warning | suspension_review
   warningLevelAuto: string; // immutable — what the system computed at creation time
@@ -182,6 +183,7 @@ const WriteupSchema = new Schema<IWriteup>(
 
     categoryId: { type: Schema.Types.ObjectId, ref: "DropdownOption" },
     categoryLabel: { type: String, default: "" },
+    subCategory: { type: String, default: "" },
 
     warningLevel: { type: String, default: "first_warning" },
     warningLevelAuto: { type: String, default: "first_warning" },

@@ -2,7 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import DropdownOption from "@/lib/models/DropdownOption";
-import { recommendWarningLevel, getCorrectiveActionTemplate, getVerbalCoachingContext } from "@/lib/writeup-logic";
+import { recommendWarningLevel, getCorrectiveActionTemplate, getVerbalCoachingContext, getAvailableSubCategories } from "@/lib/writeup-logic";
 
 // GET /api/writeups/recommend?employeeId=&categoryId=
 // Live preview of the prior-history panel + recommended warning level,
@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const employeeId = searchParams.get("employeeId");
     const categoryId = searchParams.get("categoryId");
+    const subCategory = searchParams.get("subCategory") || undefined;
     if (!employeeId || !categoryId) {
       return NextResponse.json({ error: "employeeId and categoryId are required" }, { status: 400 });
     }
@@ -29,13 +30,14 @@ export async function GET(req: NextRequest) {
     const category = await DropdownOption.findById(categoryId).lean();
     const categoryLabel = (category as any)?.description || "";
 
-    const [rec, correctiveAction, verbalCoachingContext] = await Promise.all([
+    const [rec, correctiveAction, verbalCoachingContext, availableSubCategories] = await Promise.all([
       recommendWarningLevel(employeeId, categoryId, categoryLabel),
-      getCorrectiveActionTemplate(categoryLabel),
+      getCorrectiveActionTemplate(categoryLabel, subCategory),
       getVerbalCoachingContext(employeeId, categoryLabel),
+      getAvailableSubCategories(categoryLabel),
     ]);
 
-    return NextResponse.json({ ...rec, correctiveAction, verbalCoachingContext });
+    return NextResponse.json({ ...rec, correctiveAction, verbalCoachingContext, availableSubCategories });
   } catch (error: any) {
     console.error("Error computing recommendation:", error);
     return NextResponse.json({ error: error.message || "Failed to compute recommendation" }, { status: 500 });

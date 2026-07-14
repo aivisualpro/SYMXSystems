@@ -155,7 +155,7 @@ function statusLabel(w: Writeup): string {
 
 const EMPTY_FORM = {
   employeeId: "", transporterId: "", employeeName: "",
-  categoryId: "", incidentDate: new Date().toISOString().split("T")[0],
+  categoryId: "", subCategory: "", incidentDate: new Date().toISOString().split("T")[0],
   description: "", planForImprovement: "", consequences: "",
 };
 
@@ -198,6 +198,7 @@ export default function FormalWriteupsTab() {
     recommended: string; priorCount: number; priors: PriorSnapshot[]; rationale: string;
     correctiveAction?: { planForImprovement: string; consequences: string };
     verbalCoachingContext?: { count: number; items: { coachingDate: string; categoryLabels: string[]; status: string; notes: string }[] };
+    availableSubCategories?: string[];
   } | null>(null);
   const [loadingRec, setLoadingRec] = useState(false);
   // Tracks which of planForImprovement/consequences currently hold
@@ -387,7 +388,9 @@ export default function FormalWriteupsTab() {
       return;
     }
     setLoadingRec(true);
-    fetch(`/api/writeups/recommend?employeeId=${form.employeeId}&categoryId=${form.categoryId}`)
+    const params = new URLSearchParams({ employeeId: form.employeeId, categoryId: form.categoryId });
+    if (form.subCategory) params.set("subCategory", form.subCategory);
+    fetch(`/api/writeups/recommend?${params.toString()}`)
       .then((r) => r.json())
       .then((rec) => {
         setRecommendation(rec);
@@ -410,7 +413,7 @@ export default function FormalWriteupsTab() {
       .catch(() => setRecommendation(null))
       .finally(() => setLoadingRec(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.employeeId, form.categoryId]);
+  }, [form.employeeId, form.categoryId, form.subCategory]);
 
   const openCreate = () => {
     setForm(EMPTY_FORM);
@@ -886,7 +889,10 @@ export default function FormalWriteupsTab() {
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <Label>Category *</Label>
-                <Select value={form.categoryId} onValueChange={(v) => setForm({ ...form, categoryId: v })}>
+                <Select
+                  value={form.categoryId}
+                  onValueChange={(v) => setForm({ ...form, categoryId: v, subCategory: "" })}
+                >
                   <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>
                     {categories.map((c) => <SelectItem key={c._id} value={c._id}>{c.description}</SelectItem>)}
@@ -898,6 +904,21 @@ export default function FormalWriteupsTab() {
                 <Input type="date" value={form.incidentDate} onChange={(e) => setForm({ ...form, incidentDate: e.target.value })} />
               </div>
             </div>
+
+            {!!recommendation?.availableSubCategories?.length && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Specific Issue</Label>
+                <Select value={form.subCategory} onValueChange={(v) => setForm({ ...form, subCategory: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select the specific issue" /></SelectTrigger>
+                  <SelectContent>
+                    {recommendation.availableSubCategories.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">This category has more than one corrective-action template — pick the specific issue so the right one auto-fills below.</p>
+              </div>
+            )}
 
             {loadingRec && <div className="text-xs text-muted-foreground"><Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> Checking prior history...</div>}
 
@@ -966,10 +987,15 @@ export default function FormalWriteupsTab() {
                 }}
                 rows={2}
               />
-              {form.categoryId && recommendation && !recommendation.correctiveAction?.planForImprovement && (
+              {form.categoryId && recommendation && !recommendation.correctiveAction?.planForImprovement && !recommendation.availableSubCategories?.length && (
                 <p className="text-xs text-muted-foreground">
                   No template configured for this category, so nothing auto-filled — you can type one here, or{" "}
                   <Link href="/admin/writeup-settings" target="_blank" className="text-primary underline">add a reusable template</Link> for next time.
+                </p>
+              )}
+              {form.categoryId && !!recommendation?.availableSubCategories?.length && !form.subCategory && (
+                <p className="text-xs text-muted-foreground">
+                  Select the specific issue above to auto-fill this field.
                 </p>
               )}
             </div>

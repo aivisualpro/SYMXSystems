@@ -144,19 +144,34 @@ export async function recommendWarningLevel(
   return { recommended, priorCount, priors, rationale };
 }
 
+const normalizeLabel = (s: string) => (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+
 // Category-specific auto-fill for the New Write-Up form's Plan for
 // Improvement / Consequences fields. Managers can still edit the result —
 // this just removes the blank-page problem and keeps language consistent.
+// subCategory narrows within a category that has multiple distinct
+// corrective-action texts under one real DropdownOption category (e.g.
+// "Safety Infraction" / "Seatbelt" vs "Safety Infraction" / "Speeding").
+// When subCategory is omitted, only a blank-subCategory ("general")
+// template for that category matches — if the category only has
+// sub-categorized entries, this intentionally returns blank so the
+// manager is prompted to pick a specific issue instead of getting the
+// wrong sub-reason's text.
 export async function getCorrectiveActionTemplate(
-  categoryLabel: string
+  categoryLabel: string,
+  subCategory?: string
 ): Promise<{ planForImprovement: string; consequences: string }> {
   const settings = await getSettings();
   const templates: any[] =
     settings.correctiveActionTemplates && settings.correctiveActionTemplates.length > 0
       ? settings.correctiveActionTemplates
       : DEFAULT_CORRECTIVE_ACTION_TEMPLATES;
-  const normalize = (s: string) => (s || "").trim().toLowerCase().replace(/\s+/g, " ");
-  const match = templates.find((t: any) => normalize(t.categoryLabel) === normalize(categoryLabel));
+
+  const normSub = normalizeLabel(subCategory || "");
+  const match = templates.find(
+    (t: any) => normalizeLabel(t.categoryLabel) === normalizeLabel(categoryLabel) && normalizeLabel(t.subCategory) === normSub
+  );
+
   const defaultConsequences =
     settings.defaultConsequences ||
     "Failure to demonstrate immediate and sustained improvement may result in further disciplinary action, up to and including suspension, corrective action, or termination of employment, depending on the severity and frequency of future incidents.";
@@ -164,6 +179,31 @@ export async function getCorrectiveActionTemplate(
     planForImprovement: match?.planForImprovement || "",
     consequences: (match?.consequences && match.consequences.trim()) || defaultConsequences,
   };
+}
+
+// The distinct, non-blank subCategory values configured for a category —
+// used by the New Write-Up form to decide whether to show a "specific
+// issue" picker. Empty array means the category has no sub-reasons (or
+// no template at all), so no picker is needed.
+export async function getAvailableSubCategories(categoryLabel: string): Promise<string[]> {
+  const settings = await getSettings();
+  const templates: any[] =
+    settings.correctiveActionTemplates && settings.correctiveActionTemplates.length > 0
+      ? settings.correctiveActionTemplates
+      : DEFAULT_CORRECTIVE_ACTION_TEMPLATES;
+
+  const seen = new Set<string>();
+  const subCategories: string[] = [];
+  for (const t of templates) {
+    if (normalizeLabel(t.categoryLabel) !== normalizeLabel(categoryLabel)) continue;
+    const sub = (t.subCategory || "").trim();
+    if (!sub) continue;
+    const key = normalizeLabel(sub);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    subCategories.push(sub);
+  }
+  return subCategories;
 }
 
 export interface VerbalCoachingContextItem {
