@@ -40,8 +40,23 @@ export async function requirePermission(moduleName: string, action: ActionType =
   }
 
   const modulePerm = roleDoc.permissions.find((p: any) => p.module === moduleName);
-  
-  if (!modulePerm || !modulePerm.actions[action]) {
+
+  if (!modulePerm) {
+    throw new ForbiddenError(`Missing permission: ${action} on ${moduleName}`);
+  }
+
+  // A role with an entry for this module has already been explicitly granted some level
+  // of access to it. If this specific action key was never set at all (as opposed to
+  // being explicitly toggled off), that almost always means the action was added to the
+  // module after this role's permissions were last saved in the UI -- not that anyone
+  // deliberately denied it. Treat a genuinely missing key as allowed so newly-added
+  // actions on an already-trusted module don't silently lock people out until someone
+  // happens to reopen and re-save that role. An explicit `false` still denies.
+  const actions = modulePerm.actions || {};
+  const hasExplicitValue = Object.prototype.hasOwnProperty.call(actions, action);
+  const allowed = hasExplicitValue ? !!actions[action] : true;
+
+  if (!allowed) {
     throw new ForbiddenError(`Missing permission: ${action} on ${moduleName}`);
   }
 

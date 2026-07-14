@@ -234,6 +234,19 @@ export default function RoleDetailsPage() {
     return perm;
   };
 
+  // Whether a given action is enabled for a permission entry. A module the role has no
+  // entry for at all defaults to enabled here (matches getPermission's synthesized
+  // default). But if the entry DOES exist and a specific action key was simply never set
+  // (as opposed to explicitly toggled off), treat it as enabled too -- this mirrors the
+  // backend's requirePermission fallback, so the UI doesn't show a toggle as "off" for
+  // something that's actually already allowed (e.g. an action added to a module after
+  // this role was last saved).
+  const actionEnabled = (perm: any, actionKey: string): boolean => {
+    if (!perm) return true;
+    const actions = perm.actions || {};
+    return Object.prototype.hasOwnProperty.call(actions, actionKey) ? !!actions[actionKey] : true;
+  };
+
   const handleToggleAction = (moduleName: string, actionKey: string, currentValue: boolean) => {
     setRole((prev: any) => {
       const newPermissions = [...prev.permissions];
@@ -407,7 +420,7 @@ export default function RoleDetailsPage() {
                         }
 
                         const perm = getPermission(moduleName);
-                        const isViewEnabled = perm ? perm.actions.view : true;
+                        const isViewEnabled = actionEnabled(perm, 'view');
 
                         return (
                           <React.Fragment key={moduleName}>
@@ -439,7 +452,7 @@ export default function RoleDetailsPage() {
                                   return <TableCell key={action.key} className="text-center">-</TableCell>;
                                 }
 
-                                const isEnabled = perm ? perm.actions[action.key] : true;
+                                const isEnabled = actionEnabled(perm, action.key);
                                 const isDisabled = action.key !== 'view' && !isViewEnabled;
 
                                 return (
@@ -459,7 +472,7 @@ export default function RoleDetailsPage() {
                             {/* Sub Modules Rows */}
                             {hasSubModules && isExpanded && isViewEnabled && subModules.map((sm: string) => {
                               const subPerm = getPermission(sm);
-                              const subIsViewEnabled = subPerm ? subPerm.actions.view : true;
+                              const subIsViewEnabled = actionEnabled(subPerm, 'view');
 
                               return (
                                 <TableRow key={`${moduleName}-${sm}`} className="bg-muted/5 hover:bg-muted/20">
@@ -467,7 +480,7 @@ export default function RoleDetailsPage() {
                                     {sm}
                                   </TableCell>
                                   {PERMISSION_ACTIONS.map((action) => {
-                                    const isEnabled = subPerm ? subPerm.actions[action.key] : true;
+                                    const isEnabled = actionEnabled(subPerm, action.key);
                                     const isDisabled = action.key !== 'view' && !subIsViewEnabled;
 
                                     return (
@@ -513,7 +526,7 @@ export default function RoleDetailsPage() {
                   return [moduleName, ...subModules];
                 }).filter(moduleName => {
                   const p = getPermission(moduleName);
-                  return p ? p.actions.view : true;
+                  return actionEnabled(p, 'view');
                 }).map((moduleName, idx) => {
                   const perm = getPermission(moduleName);
                   const fieldCount = perm && perm.fieldScope ? Object.keys(perm.fieldScope).length : 0;
