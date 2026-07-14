@@ -20,6 +20,7 @@ import {
   CreditCard,
   ClipboardCheck,
   FlaskConical,
+  Utensils,
   Upload,
   Download,
   Eye,
@@ -43,12 +44,13 @@ interface AuditEmployee {
   driversLicenseFile?: string;
   i9File?: string;
   drugTestFile?: string;
+  mealWaiverFile?: string;
   type?: string;
   phoneNumber?: string;
   profileImage?: string;
 }
 
-type DocField = "offerLetterFile" | "handbookFile" | "driversLicenseFile" | "i9File" | "drugTestFile";
+type DocField = "offerLetterFile" | "handbookFile" | "driversLicenseFile" | "i9File" | "drugTestFile" | "mealWaiverFile";
 
 const DOC_FIELDS: { key: DocField; label: string; short: string; icon: any }[] = [
   { key: "offerLetterFile", label: "Offer Letter", short: "Offer Letter", icon: FileText },
@@ -56,6 +58,7 @@ const DOC_FIELDS: { key: DocField; label: string; short: string; icon: any }[] =
   { key: "driversLicenseFile", label: "Driver's License", short: "DL File", icon: CreditCard },
   { key: "i9File", label: "I-9 Form", short: "I-9", icon: ClipboardCheck },
   { key: "drugTestFile", label: "Drug Test Results", short: "Drug Test", icon: FlaskConical },
+  { key: "mealWaiverFile", label: "2nd Meal Period Waiver", short: "Meal Waiver", icon: Utensils },
 ];
 
 type SortField = "name" | "dlExpiration" | "issues";
@@ -98,7 +101,7 @@ export default function EmployeeAuditPage() {
     const fetchAudit = async () => {
       try {
         if (employees.length === 0) setLoading(true);
-        const res = await fetch("/api/admin/employees?filter=audit&export=true&terminated=false&select=firstName,lastName,transporterId,dlExpiration,offerLetterFile,handbookFile,driversLicenseFile,i9File,drugTestFile,type,phoneNumber,profileImage,status");
+        const res = await fetch("/api/admin/employees?filter=audit&export=true&terminated=false&select=firstName,lastName,transporterId,dlExpiration,offerLetterFile,handbookFile,driversLicenseFile,i9File,drugTestFile,mealWaiverFile,type,phoneNumber,profileImage,status");
         if (res.ok) {
           const data = await res.json();
           setEmployees(data.records || data || []);

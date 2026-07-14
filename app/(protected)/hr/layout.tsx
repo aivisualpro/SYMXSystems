@@ -16,6 +16,7 @@ import {
   IconShirt,
   IconUserOff,
   IconPhoneOff,
+  IconClipboardCheck,
 } from "@tabler/icons-react";
 
 // ── Tabs config ───────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ const tabs = [
   { id: "audit", label: "Employee Audit", icon: IconFileSearch, href: "/hr/audit" },
   { id: "tickets", label: "HR Tickets", icon: IconTicket, href: "/hr/tickets" },
   { id: "timesheet", label: "Timesheet", icon: IconClock, href: "/hr/timesheet" },
+  { id: "timecard-audit", label: "Timecard Audit", icon: IconClipboardCheck, href: "/hr/timecard-audit" },
   { id: "interviews", label: "Interviews", icon: IconUserSearch, href: "/hr/interviews" },
   { id: "uniforms", label: "Uniforms", icon: IconShirt, href: "/hr/uniforms" },
   { id: "terminations", label: "Terminations", icon: IconUserOff, href: "/hr/terminations" },

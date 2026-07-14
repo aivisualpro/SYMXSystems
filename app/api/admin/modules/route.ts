@@ -57,6 +57,7 @@ const DEFAULT_MODULES = [
       { name: "Employee Audit", url: "/hr/audit" },
       { name: "HR Tickets", url: "/hr/tickets" },
       { name: "Timesheet", url: "/hr/timesheet" },
+      { name: "Timecard Audit", url: "/hr/timecard-audit" },
       { name: "Interviews", url: "/hr/interviews" },
       { name: "Onboarding", url: "/hr/onboarding" },
       { name: "Hired", url: "/hr/hired" },
