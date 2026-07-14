@@ -361,7 +361,11 @@ export default function VerbalCoachingsTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-3">
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <input type="checkbox" className="h-3.5 w-3.5 accent-primary rounded cursor-pointer" checked={includeTerminated} onChange={(e) => setIncludeTerminated(e.target.checked)} />
+          Include terminated employees
+        </label>
         <Button onClick={openCreate}>
           <Plus className="h-4 w-4" />
           Log Verbal Coaching
@@ -374,40 +378,43 @@ export default function VerbalCoachingsTab() {
         <Card><CardContent className="pt-0"><div className="text-2xl font-bold text-amber-600">{summary.disputed}</div><div className="text-xs text-muted-foreground">Disputed</div></CardContent></Card>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex gap-1">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant={statusFilter === "all" ? "default" : "outline"} onClick={() => setStatusFilter("all")}>All</Button>
           <Button size="sm" variant={statusFilter === "new" ? "default" : "outline"} onClick={() => setStatusFilter("new")}>New</Button>
           <Button size="sm" variant={statusFilter === "completed" ? "default" : "outline"} onClick={() => setStatusFilter("completed")}>Completed</Button>
           <Button size="sm" variant={statusFilter === "unable_to_coach" ? "default" : "outline"} onClick={() => setStatusFilter("unable_to_coach")}>Unable to Coach</Button>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Category</Label>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {categories.map((c) => <SelectItem key={c._id} value={c._id}>{c.description}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="vc-from-date">From</Label>
-          <Input id="vc-from-date" type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setActivePreset(null); }} className="w-40" />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="vc-to-date">To</Label>
-          <Input id="vc-to-date" type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setActivePreset(null); }} className="w-40" />
-        </div>
-        <div className="flex gap-1">
-          {DATE_PRESETS.map((p) => (
-            <Button key={p.label} size="sm" variant={activePreset === p.days ? "default" : "ghost"} onClick={() => applyDatePreset(p.days)}>{p.label}</Button>
-          ))}
-          {(dateFrom || dateTo) && <Button size="sm" variant="ghost" onClick={clearDateRange}>All time</Button>}
-        </div>
-        <div className="ml-auto flex flex-col gap-1.5">
-          <Label htmlFor="vc-search">Search</Label>
-          <Input id="vc-search" placeholder="Employee, category, notes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-64" />
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label>Category</Label>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {categories.map((c) => <SelectItem key={c._id} value={c._id}>{c.description}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="vc-from-date">From</Label>
+            <Input id="vc-from-date" type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setActivePreset(null); }} className="w-40" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="vc-to-date">To</Label>
+            <Input id="vc-to-date" type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setActivePreset(null); }} className="w-40" />
+          </div>
+          <div className="flex gap-1">
+            {DATE_PRESETS.map((p) => (
+              <Button key={p.label} size="sm" variant={activePreset === p.days ? "default" : "ghost"} onClick={() => applyDatePreset(p.days)}>{p.label}</Button>
+            ))}
+            {(dateFrom || dateTo) && <Button size="sm" variant="ghost" onClick={clearDateRange}>All time</Button>}
+          </div>
+          <div className="flex min-w-[220px] flex-1 flex-col gap-1.5">
+            <Label htmlFor="vc-search">Search</Label>
+            <Input id="vc-search" placeholder="Employee, category, notes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          </div>
         </div>
       </div>
 
@@ -456,13 +463,7 @@ export default function VerbalCoachingsTab() {
           <DialogHeader><DialogTitle>Log Verbal Coaching</DialogTitle></DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <Label>Employee *</Label>
-                <label className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-                  <input type="checkbox" className="h-3.5 w-3.5 accent-primary rounded cursor-pointer" checked={includeTerminated} onChange={(e) => setIncludeTerminated(e.target.checked)} />
-                  Include terminated
-                </label>
-              </div>
+              <Label>Employee *</Label>
               <Select
                 value={form.employeeId}
                 onValueChange={(v) => {

@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import SignaturePad from "@/components/ui/signature-pad";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { Loader2, Plus, ClipboardList, FileText, Printer, Upload, AlertTriangle, Download, ThumbsDown, ArrowUp, ArrowDown, ArrowUpDown, FileDown, MessageSquare } from "lucide-react";
+import { Loader2, Plus, ClipboardList, FileText, Printer, Upload, AlertTriangle, Download, ThumbsDown, ArrowUp, ArrowDown, ArrowUpDown, FileDown, MessageSquare, Trash2 } from "lucide-react";
 
 // Presets keep the range picker fast for the most common lookups (matches
 // the Callouts page pattern).
@@ -184,6 +184,10 @@ export default function FormalWriteupsTab() {
   // Gates the "Resolve Escalation" form — the server enforces this too
   // (Write-Ups: approve), this just avoids showing a button that will 403.
   const [canApprove, setCanApprove] = useState(true);
+  // Gates the "Delete" button — server enforces via requirePermission("Admin","delete"),
+  // this just avoids showing a button that will 403.
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -283,6 +287,7 @@ export default function FormalWriteupsTab() {
     fetch("/api/user/permissions")
       .then((res) => res.json())
       .then((d) => {
+        setIsSuperAdmin(d.role === "Super Admin");
         if (d.role === "Super Admin") { setCanApprove(true); return; }
         const perm = (d.permissions || []).find((p: any) => p.module === "Write-Ups");
         setCanApprove(perm ? perm.actions?.approve !== false : true);
@@ -598,9 +603,36 @@ export default function FormalWriteupsTab() {
     }
   };
 
+  // Drafts (or historical bulk-imported records) only — the server
+  // enforces this too; signed/escalated/closed write-ups are locked to
+  // preserve the audit trail.
+  const canDeleteSelected = !!selected && (selected.status === "draft" || selected.isHistorical);
+
+  const handleDeleteWriteup = async () => {
+    if (!selected) return;
+    if (!confirm(`Delete this write-up for ${selected.employeeName}? This can't be undone.`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/writeups/${selected._id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Failed to delete write-up");
+      notify.success("Write-up deleted");
+      setSelected(null);
+      await load();
+    } catch (err: any) {
+      notify.error(err.message || "Failed to delete write-up");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-3">
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <input type="checkbox" className="h-3.5 w-3.5 accent-primary rounded cursor-pointer" checked={includeTerminated} onChange={(e) => setIncludeTerminated(e.target.checked)} />
+          Include terminated employees
+        </label>
         <Button onClick={openCreate}>
           <Plus className="h-4 w-4" />
           New Write-Up
@@ -626,8 +658,8 @@ export default function FormalWriteupsTab() {
         </Card>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex gap-1">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant={statusFilter === "all" ? "default" : "outline"} onClick={() => setStatusFilter("all")}>All</Button>
           <Button size="sm" variant={statusFilter === "draft" ? "default" : "outline"} onClick={() => setStatusFilter("draft")}>Awaiting Signature</Button>
           <Button
@@ -640,54 +672,57 @@ export default function FormalWriteupsTab() {
           </Button>
           <Button size="sm" variant={statusFilter === "closed" ? "default" : "outline"} onClick={() => setStatusFilter("closed")}>Resolved Escalations</Button>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Category</Label>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {categories.map((c) => <SelectItem key={c._id} value={c._id}>{c.description}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="from-date">From</Label>
-          <Input
-            id="from-date"
-            type="date"
-            value={dateFrom}
-            onChange={(e) => { setDateFrom(e.target.value); setActivePreset(null); }}
-            className="w-40"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="to-date">To</Label>
-          <Input
-            id="to-date"
-            type="date"
-            value={dateTo}
-            onChange={(e) => { setDateTo(e.target.value); setActivePreset(null); }}
-            className="w-40"
-          />
-        </div>
-        <div className="flex gap-1">
-          {DATE_PRESETS.map((p) => (
-            <Button
-              key={p.label}
-              size="sm"
-              variant={activePreset === p.days ? "default" : "ghost"}
-              onClick={() => applyDatePreset(p.days)}
-            >
-              {p.label}
-            </Button>
-          ))}
-          {(dateFrom || dateTo) && (
-            <Button size="sm" variant="ghost" onClick={clearDateRange}>All time</Button>
-          )}
-        </div>
-        <div className="ml-auto flex flex-col gap-1.5">
-          <Label htmlFor="search">Search</Label>
-          <Input id="search" placeholder="Employee or category..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-64" />
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label>Category</Label>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {categories.map((c) => <SelectItem key={c._id} value={c._id}>{c.description}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="from-date">From</Label>
+            <Input
+              id="from-date"
+              type="date"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setActivePreset(null); }}
+              className="w-40"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="to-date">To</Label>
+            <Input
+              id="to-date"
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setActivePreset(null); }}
+              className="w-40"
+            />
+          </div>
+          <div className="flex gap-1">
+            {DATE_PRESETS.map((p) => (
+              <Button
+                key={p.label}
+                size="sm"
+                variant={activePreset === p.days ? "default" : "ghost"}
+                onClick={() => applyDatePreset(p.days)}
+              >
+                {p.label}
+              </Button>
+            ))}
+            {(dateFrom || dateTo) && (
+              <Button size="sm" variant="ghost" onClick={clearDateRange}>All time</Button>
+            )}
+          </div>
+          <div className="flex min-w-[220px] flex-1 flex-col gap-1.5">
+            <Label htmlFor="search">Search</Label>
+            <Input id="search" placeholder="Employee or category..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          </div>
         </div>
       </div>
 
@@ -768,13 +803,7 @@ export default function FormalWriteupsTab() {
           <DialogHeader><DialogTitle>New Write-Up</DialogTitle></DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <Label>Employee *</Label>
-                <label className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-                  <input type="checkbox" className="h-3.5 w-3.5 accent-primary rounded cursor-pointer" checked={includeTerminated} onChange={(e) => setIncludeTerminated(e.target.checked)} />
-                  Include terminated
-                </label>
-              </div>
+              <Label>Employee *</Label>
               <Select
                 value={form.employeeId}
                 onValueChange={(v) => {
@@ -1079,7 +1108,14 @@ export default function FormalWriteupsTab() {
                 </div>
               )}
 
-              <div className="flex justify-end pt-2">
+              <div className="flex items-center justify-between pt-2">
+                {isSuperAdmin && canDeleteSelected ? (
+                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={handleDeleteWriteup} disabled={deleting}>
+                    {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Delete
+                  </Button>
+                ) : isSuperAdmin ? (
+                  <span className="text-xs italic text-muted-foreground">Signed/closed write-ups can't be deleted — preserved for the audit trail.</span>
+                ) : <span />}
                 <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
               </div>
             </div>
