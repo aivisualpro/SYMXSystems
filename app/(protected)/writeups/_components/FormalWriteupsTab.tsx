@@ -200,6 +200,11 @@ export default function FormalWriteupsTab() {
     verbalCoachingContext?: { count: number; items: { coachingDate: string; categoryLabels: string[]; status: string; notes: string }[] };
   } | null>(null);
   const [loadingRec, setLoadingRec] = useState(false);
+  // Tracks which of planForImprovement/consequences currently hold
+  // system-generated text (vs. something the manager typed by hand), so
+  // switching categories can safely replace a stale auto-fill without ever
+  // clobbering a manual edit.
+  const [autoFilled, setAutoFilled] = useState({ planForImprovement: false, consequences: false });
   const [levelOverride, setLevelOverride] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
 
@@ -388,13 +393,19 @@ export default function FormalWriteupsTab() {
         setRecommendation(rec);
         setLevelOverride(rec.recommended || "");
         // Auto-fill Plan for Improvement / Consequences from the category's
-        // corrective-action template — only if the manager hasn't already
-        // typed something, so we never clobber an edit.
+        // corrective-action template. A field is only left alone if it's
+        // non-empty AND wasn't itself system-generated — i.e. the manager
+        // actually typed something. Otherwise (blank, or still holding a
+        // stale auto-fill from a category they've since changed away from)
+        // it's safe to replace with the new category's template.
+        const keepPlan = !autoFilled.planForImprovement && !!form.planForImprovement;
+        const keepConsequences = !autoFilled.consequences && !!form.consequences;
         setForm((prev: any) => ({
           ...prev,
-          planForImprovement: prev.planForImprovement || rec.correctiveAction?.planForImprovement || "",
-          consequences: prev.consequences || rec.correctiveAction?.consequences || "",
+          planForImprovement: keepPlan ? prev.planForImprovement : (rec.correctiveAction?.planForImprovement || ""),
+          consequences: keepConsequences ? prev.consequences : (rec.correctiveAction?.consequences || ""),
         }));
+        setAutoFilled({ planForImprovement: !keepPlan, consequences: !keepConsequences });
       })
       .catch(() => setRecommendation(null))
       .finally(() => setLoadingRec(false));
@@ -404,6 +415,7 @@ export default function FormalWriteupsTab() {
   const openCreate = () => {
     setForm(EMPTY_FORM);
     setRecommendation(null);
+    setAutoFilled({ planForImprovement: false, consequences: false });
     setLevelOverride("");
     setOverrideReason("");
     setCreateOpen(true);
@@ -946,7 +958,14 @@ export default function FormalWriteupsTab() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Plan for Improvement</Label>
-              <Textarea value={form.planForImprovement} onChange={(e) => setForm({ ...form, planForImprovement: e.target.value })} rows={2} />
+              <Textarea
+                value={form.planForImprovement}
+                onChange={(e) => {
+                  setForm({ ...form, planForImprovement: e.target.value });
+                  setAutoFilled((prev) => ({ ...prev, planForImprovement: false }));
+                }}
+                rows={2}
+              />
               {form.categoryId && recommendation && !recommendation.correctiveAction?.planForImprovement && (
                 <p className="text-xs text-muted-foreground">
                   No template configured for this category, so nothing auto-filled — you can type one here, or{" "}
@@ -956,7 +975,14 @@ export default function FormalWriteupsTab() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Consequences</Label>
-              <Textarea value={form.consequences} onChange={(e) => setForm({ ...form, consequences: e.target.value })} rows={2} />
+              <Textarea
+                value={form.consequences}
+                onChange={(e) => {
+                  setForm({ ...form, consequences: e.target.value });
+                  setAutoFilled((prev) => ({ ...prev, consequences: false }));
+                }}
+                rows={2}
+              />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
