@@ -40,9 +40,15 @@ export interface WriteupRecommendation {
   rationale: string;
 }
 
+// Single-document collection by convention. Sort deterministically so this
+// always resolves to the same document as the admin settings API route
+// (app/api/admin/writeup-settings/route.ts) — otherwise, if stray
+// duplicate documents exist (see scripts/dedupe-writeup-settings.mjs),
+// this and the settings page could silently read/write different rows,
+// making saved changes appear to vanish.
 async function getSettings() {
   await connectToDatabase();
-  let settings = await WriteupSettings.findOne().lean();
+  let settings = await WriteupSettings.findOne().sort({ _id: 1 }).lean();
   if (!settings) {
     settings = (await WriteupSettings.create({})).toObject();
   }

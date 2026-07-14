@@ -34,7 +34,7 @@ export default function WriteupSettingsPage() {
   const [addToGroup, setAddToGroup] = useState<Record<number, string>>({});
   const [templates, setTemplates] = useState<CorrectiveActionTemplate[]>([]);
   const [defaultConsequences, setDefaultConsequences] = useState("");
-  const [addTemplateCategory, setAddTemplateCategory] = useState("");
+  const [defaultTemplates, setDefaultTemplates] = useState<CorrectiveActionTemplate[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -48,6 +48,7 @@ export default function WriteupSettingsPage() {
       setCategories(json.categories || []);
       setTemplates(json.settings.correctiveActionTemplates || []);
       setDefaultConsequences(json.settings.defaultConsequences || "");
+      setDefaultTemplates(json.defaultTemplates || []);
     } catch (err: any) {
       notify.error(err.message || "Failed to load settings");
     } finally {
@@ -98,13 +99,25 @@ export default function WriteupSettingsPage() {
     setStackGroups(stackGroups.map((g, i) => (i === idx ? g.filter((c) => c !== cat) : g)));
   };
 
-  const categoriesWithTemplate = new Set(templates.map((t) => t.categoryLabel.toLowerCase()));
+  const normalize = (s: string) => (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const categoriesWithTemplate = new Set(templates.map((t) => normalize(t.categoryLabel)));
   const realCategoryNames = new Set(categories.map((c) => c.description.toLowerCase()));
-  const addTemplate = () => {
-    if (!addTemplateCategory) return;
-    if (categoriesWithTemplate.has(addTemplateCategory.toLowerCase())) return;
-    setTemplates([...templates, { categoryLabel: addTemplateCategory, planForImprovement: "", consequences: "" }]);
-    setAddTemplateCategory("");
+
+  // Adding a template is immediate — click a category chip and it's added,
+  // pre-filled with the seeded default plan for this category (if one
+  // exists) and the current Default Consequences as a starting override,
+  // so there's no blank-page problem. Still fully editable before saving.
+  const addTemplate = (categoryLabel: string) => {
+    if (categoriesWithTemplate.has(normalize(categoryLabel))) return;
+    const seeded = defaultTemplates.find((t) => normalize(t.categoryLabel) === normalize(categoryLabel));
+    setTemplates([
+      ...templates,
+      {
+        categoryLabel,
+        planForImprovement: seeded?.planForImprovement || "",
+        consequences: seeded?.consequences || defaultConsequences || "",
+      },
+    ]);
   };
   const updateTemplate = (idx: number, field: "planForImprovement" | "consequences", value: string) => {
     setTemplates(templates.map((t, i) => (i === idx ? { ...t, [field]: value } : t)));
@@ -263,16 +276,30 @@ export default function WriteupSettingsPage() {
             );
           })}
 
-          <div className="flex gap-2">
-            <Select value={addTemplateCategory} onValueChange={setAddTemplateCategory}>
-              <SelectTrigger className="flex-1"><SelectValue placeholder="Add a template for a category" /></SelectTrigger>
-              <SelectContent>
-                {categories
-                  .filter((c) => !categoriesWithTemplate.has(c.description.toLowerCase()))
-                  .map((c) => <SelectItem key={c._id} value={c.description}>{c.description}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Button size="sm" variant="outline" onClick={addTemplate}><Plus className="h-3.5 w-3.5" /> Add</Button>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Add a template for a category</Label>
+            <p className="text-xs text-muted-foreground">Click a category to add it — pre-filled with the default plan for improvement and consequences where available, ready to edit.</p>
+            <div className="flex flex-wrap gap-1.5">
+              {categories.filter((c) => !categoriesWithTemplate.has(normalize(c.description))).length === 0 && (
+                <p className="text-sm text-muted-foreground">Every category already has a template.</p>
+              )}
+              {categories
+                .filter((c) => !categoriesWithTemplate.has(normalize(c.description)))
+                .map((c) => {
+                  const hasDefault = defaultTemplates.some((t) => normalize(t.categoryLabel) === normalize(c.description));
+                  return (
+                    <button
+                      key={c._id}
+                      type="button"
+                      onClick={() => addTemplate(c.description)}
+                      className="inline-flex items-center gap-1 rounded-full border border-input px-2.5 py-1 text-xs transition-colors hover:border-primary hover:bg-primary/5"
+                    >
+                      <Plus className="h-3 w-3" /> {c.description}
+                      {hasDefault && <span className="text-muted-foreground">(default available)</span>}
+                    </button>
+                  );
+                })}
+            </div>
           </div>
 
           <div className="flex flex-col gap-1.5 border-t pt-4">
