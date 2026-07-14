@@ -49,6 +49,10 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body = await req.json();
+    // TEMP DIAGNOSTIC — remove once the corrective-action-templates
+    // not-saving bug is confirmed fixed.
+    console.log("[writeup-settings PUT] incoming body:", JSON.stringify(body, null, 2));
+
     await connectToDatabase();
     const session = await getSession();
 
@@ -59,8 +63,13 @@ export async function PUT(req: NextRequest) {
     if (body.correctiveActionTemplates !== undefined) updates.correctiveActionTemplates = body.correctiveActionTemplates;
     if (body.defaultConsequences !== undefined) updates.defaultConsequences = body.defaultConsequences;
 
+    console.log("[writeup-settings PUT] computed updates:", JSON.stringify(updates, null, 2));
+
     const existing = await getCanonicalSettings();
+    console.log("[writeup-settings PUT] existing doc id:", String(existing._id), "existing templates:", JSON.stringify(existing.correctiveActionTemplates));
+
     const settings = await WriteupSettings.findByIdAndUpdate(existing._id, { $set: updates }, { new: true });
+    console.log("[writeup-settings PUT] saved doc templates:", JSON.stringify(settings?.correctiveActionTemplates));
 
     return NextResponse.json({ settings });
   } catch (error: any) {
