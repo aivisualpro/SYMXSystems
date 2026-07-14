@@ -38,6 +38,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       planForImprovement: w.planForImprovement,
       consequences: w.consequences,
       priorDates: (w.priorWriteups || []).map((p: any) => ({ date: p.incidentDate, warningLevel: p.warningLevel })),
+      priorVerbalCoachingDates: (w.priorVerbalCoachings || []).map((v: any) => v.coachingDate),
       managerSignature: w.managerSignature,
       employeeSignature: w.employeeSignature,
       refusal: w.refusal,

@@ -20,6 +20,7 @@ export interface CoachingPdfInput {
   planForImprovement?: string;
   consequences?: string;
   priorDates?: { date: Date | string; warningLevel: string }[];
+  priorVerbalCoachingDates?: (Date | string)[]; // "prior discussion or warnings ... (oral)" — reference only
   managerSignature?: { name: string; signatureImage: string; signedAt: Date | string };
   employeeSignature?: { name: string; signatureImage: string; signedAt: Date | string };
   refusal?: { refused: boolean; note?: string; witnessName?: string; witnessSignatureImage?: string; refusedAt?: Date | string };
@@ -175,6 +176,10 @@ function renderCoachingPage(doc: jsPDF, input: CoachingPdfInput): void {
       .map((p) => `${fmtDate(p.date)} (${WARNING_LEVEL_LABELS[p.warningLevel] || p.warningLevel})`)
       .join("; ");
     descText += `\n\nPrevious ${input.categoryLabel} write-ups on file: ${dateList}`;
+  }
+  if (input.priorVerbalCoachingDates && input.priorVerbalCoachingDates.length > 0) {
+    const dateList = input.priorVerbalCoachingDates.map((d) => fmtDate(d)).join("; ");
+    descText += `\n\nPrior verbal coaching on this subject: ${dateList}`;
   }
   const descLines = doc.splitTextToSize(descText, contentW - 4);
   doc.text(descLines, MARGIN, y);

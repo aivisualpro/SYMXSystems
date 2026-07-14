@@ -1,7 +1,8 @@
 import connectToDatabase from "@/lib/db";
 import Writeup from "@/lib/models/Writeup";
-import WriteupSettings from "@/lib/models/WriteupSettings";
+import WriteupSettings, { DEFAULT_CORRECTIVE_ACTION_TEMPLATES } from "@/lib/models/WriteupSettings";
 import DropdownOption from "@/lib/models/DropdownOption";
+import VerbalCoaching from "@/lib/models/VerbalCoaching";
 
 export const WARNING_LEVELS = [
   "first_warning",
@@ -135,4 +136,66 @@ export async function recommendWarningLevel(
   }
 
   return { recommended, priorCount, priors, rationale };
+}
+
+// Category-specific auto-fill for the New Write-Up form's Plan for
+// Improvement / Consequences fields. Managers can still edit the result —
+// this just removes the blank-page problem and keeps language consistent.
+export async function getCorrectiveActionTemplate(
+  categoryLabel: string
+): Promise<{ planForImprovement: string; consequences: string }> {
+  const settings = await getSettings();
+  const templates: any[] =
+    settings.correctiveActionTemplates && settings.correctiveActionTemplates.length > 0
+      ? settings.correctiveActionTemplates
+      : DEFAULT_CORRECTIVE_ACTION_TEMPLATES;
+  const match = templates.find((t: any) => t.categoryLabel.toLowerCase() === categoryLabel.toLowerCase());
+  const defaultConsequences =
+    settings.defaultConsequences ||
+    "Failure to demonstrate immediate and sustained improvement may result in further disciplinary action, up to and including suspension, corrective action, or termination of employment, depending on the severity and frequency of future incidents.";
+  return {
+    planForImprovement: match?.planForImprovement || "",
+    consequences: (match?.consequences && match.consequences.trim()) || defaultConsequences,
+  };
+}
+
+export interface VerbalCoachingContextItem {
+  coachingDate: Date;
+  categoryLabels: string[];
+  status: string;
+  notes: string;
+}
+
+// Prior verbal coachings for the same employee + category, shown as
+// reference context on the New Write-Up form and in the generated PDF —
+// informational only, NOT counted toward the warning-level recommendation
+// above (verbal coachings are often unsigned, undelivered, or disputed).
+export async function getVerbalCoachingContext(
+  employeeId: string,
+  categoryLabel: string,
+  lookbackDays?: number
+): Promise<{ count: number; items: VerbalCoachingContextItem[] }> {
+  if (!employeeId || !categoryLabel) return { count: 0, items: [] };
+  await connectToDatabase();
+  const settings = await getSettings();
+  const cutoff = new Date(Date.now() - (lookbackDays ?? settings.lookbackDays ?? 90) * 24 * 60 * 60 * 1000);
+
+  const docs = await VerbalCoaching.find({
+    employeeId,
+    categoryLabels: new RegExp(`^${categoryLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+    coachingDate: { $gte: cutoff },
+  })
+    .sort({ coachingDate: -1 })
+    .limit(10)
+    .select({ coachingDate: 1, categoryLabels: 1, status: 1, notes: 1 })
+    .lean();
+
+  const items: VerbalCoachingContextItem[] = docs.map((d: any) => ({
+    coachingDate: d.coachingDate,
+    categoryLabels: d.categoryLabels || [],
+    status: d.status,
+    notes: d.notes || "",
+  }));
+
+  return { count: items.length, items };
 }

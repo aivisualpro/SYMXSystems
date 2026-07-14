@@ -46,6 +46,8 @@ export async function PUT(req: NextRequest) {
     if (body.lookbackDays !== undefined) updates.lookbackDays = Number(body.lookbackDays);
     if (body.escalationThresholds !== undefined) updates.escalationThresholds = body.escalationThresholds;
     if (body.stackGroups !== undefined) updates.stackGroups = body.stackGroups;
+    if (body.correctiveActionTemplates !== undefined) updates.correctiveActionTemplates = body.correctiveActionTemplates;
+    if (body.defaultConsequences !== undefined) updates.defaultConsequences = body.defaultConsequences;
 
     let settings = await WriteupSettings.findOne();
     if (!settings) {

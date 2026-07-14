@@ -4,13 +4,15 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { notify } from "@/lib/notify";
-import { Loader2, Save, Settings, Plus, X, Layers } from "lucide-react";
+import { Loader2, Save, Settings, Plus, X, Layers, FileEdit, Trash2 } from "lucide-react";
 
 interface CategoryOption { _id: string; description: string; isActive?: boolean }
+interface CorrectiveActionTemplate { categoryLabel: string; planForImprovement: string; consequences?: string }
 
 const THRESHOLD_KEYS = [
   { key: "second_warning", label: "Second Warning at" },
@@ -29,6 +31,9 @@ export default function WriteupSettingsPage() {
   const [stackGroups, setStackGroups] = useState<string[][]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [addToGroup, setAddToGroup] = useState<Record<number, string>>({});
+  const [templates, setTemplates] = useState<CorrectiveActionTemplate[]>([]);
+  const [defaultConsequences, setDefaultConsequences] = useState("");
+  const [addTemplateCategory, setAddTemplateCategory] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -40,6 +45,8 @@ export default function WriteupSettingsPage() {
       setThresholds(json.settings.escalationThresholds || thresholds);
       setStackGroups(json.settings.stackGroups || []);
       setCategories(json.categories || []);
+      setTemplates(json.settings.correctiveActionTemplates || []);
+      setDefaultConsequences(json.settings.defaultConsequences || "");
     } catch (err: any) {
       notify.error(err.message || "Failed to load settings");
     } finally {
@@ -55,12 +62,20 @@ export default function WriteupSettingsPage() {
       const res = await fetch("/api/admin/writeup-settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lookbackDays, escalationThresholds: thresholds, stackGroups: stackGroups.filter((g) => g.length > 1) }),
+        body: JSON.stringify({
+          lookbackDays,
+          escalationThresholds: thresholds,
+          stackGroups: stackGroups.filter((g) => g.length > 1),
+          correctiveActionTemplates: templates,
+          defaultConsequences,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to save settings");
       notify.success("Write-up settings saved");
       setStackGroups(json.settings.stackGroups || []);
+      setTemplates(json.settings.correctiveActionTemplates || []);
+      setDefaultConsequences(json.settings.defaultConsequences || "");
     } catch (err: any) {
       notify.error(err.message || "Failed to save settings");
     } finally {
@@ -81,6 +96,18 @@ export default function WriteupSettingsPage() {
   const removeCategoryFromGroup = (idx: number, cat: string) => {
     setStackGroups(stackGroups.map((g, i) => (i === idx ? g.filter((c) => c !== cat) : g)));
   };
+
+  const categoriesWithTemplate = new Set(templates.map((t) => t.categoryLabel.toLowerCase()));
+  const addTemplate = () => {
+    if (!addTemplateCategory) return;
+    if (categoriesWithTemplate.has(addTemplateCategory.toLowerCase())) return;
+    setTemplates([...templates, { categoryLabel: addTemplateCategory, planForImprovement: "", consequences: "" }]);
+    setAddTemplateCategory("");
+  };
+  const updateTemplate = (idx: number, field: "planForImprovement" | "consequences", value: string) => {
+    setTemplates(templates.map((t, i) => (i === idx ? { ...t, [field]: value } : t)));
+  };
+  const removeTemplate = (idx: number) => setTemplates(templates.filter((_, i) => i !== idx));
 
   if (loading) {
     return <div className="flex items-center justify-center p-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
@@ -170,6 +197,67 @@ export default function WriteupSettingsPage() {
               </div>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-4 pt-4">
+          <div>
+            <div className="flex items-center gap-1.5 text-sm font-medium"><FileEdit className="h-4 w-4" /> Corrective Action Templates</div>
+            <p className="text-xs text-muted-foreground">
+              Auto-fills the Plan for Improvement and Consequences fields on the New Write-Up form when a category is selected —
+              managers can still edit before saving. Categories without a template here just start blank.
+            </p>
+          </div>
+
+          {templates.length === 0 && <p className="text-sm text-muted-foreground">No templates configured yet.</p>}
+
+          {templates.map((t, idx) => (
+            <div key={t.categoryLabel} className="flex flex-col gap-2 rounded-md border p-3">
+              <div className="flex items-center justify-between">
+                <Badge variant="outline">{t.categoryLabel}</Badge>
+                <Button size="sm" variant="ghost" className="h-6 text-destructive" onClick={() => removeTemplate(idx)}>
+                  <Trash2 className="h-3.5 w-3.5" /> Remove
+                </Button>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Plan for Improvement</Label>
+                <Textarea
+                  value={t.planForImprovement}
+                  onChange={(e) => updateTemplate(idx, "planForImprovement", e.target.value)}
+                  rows={3}
+                  placeholder="Expected behavior / corrective steps for this category..."
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Consequences override (optional — otherwise the default below is used)</Label>
+                <Textarea
+                  value={t.consequences || ""}
+                  onChange={(e) => updateTemplate(idx, "consequences", e.target.value)}
+                  rows={2}
+                  placeholder="e.g. tiered violation consequences specific to this category..."
+                />
+              </div>
+            </div>
+          ))}
+
+          <div className="flex gap-2">
+            <Select value={addTemplateCategory} onValueChange={setAddTemplateCategory}>
+              <SelectTrigger className="flex-1"><SelectValue placeholder="Add a template for a category" /></SelectTrigger>
+              <SelectContent>
+                {categories
+                  .filter((c) => !categoriesWithTemplate.has(c.description.toLowerCase()))
+                  .map((c) => <SelectItem key={c._id} value={c.description}>{c.description}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" onClick={addTemplate}><Plus className="h-3.5 w-3.5" /> Add</Button>
+          </div>
+
+          <div className="flex flex-col gap-1.5 border-t pt-4">
+            <Label className="text-xs">Default Consequences</Label>
+            <p className="text-xs text-muted-foreground">Used for any category without a consequences override above.</p>
+            <Textarea value={defaultConsequences} onChange={(e) => setDefaultConsequences(e.target.value)} rows={2} />
+          </div>
         </CardContent>
       </Card>
 

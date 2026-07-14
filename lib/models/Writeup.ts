@@ -41,6 +41,14 @@ export interface IWriteupPriorSnapshot {
   warningLevel: string;
 }
 
+// Immutable snapshot of prior verbal coachings on the same subject, taken
+// at creation time — reference context only (see lib/writeup-logic.ts),
+// never counted toward the warning-level recommendation.
+export interface IWriteupVerbalCoachingSnapshot {
+  coachingDate: Date;
+  categoryLabels: string[];
+}
+
 // Captures the HR decision once a Suspension Review write-up is escalated.
 // Resolving an escalation moves status -> "closed" so it drops out of the
 // active review queue while keeping a permanent audit record here.
@@ -71,6 +79,7 @@ export interface IWriteup extends Document {
   consequences?: string;
 
   priorWriteups: IWriteupPriorSnapshot[]; // immutable snapshot taken at creation time
+  priorVerbalCoachings: IWriteupVerbalCoachingSnapshot[]; // reference-only snapshot, same idea
 
   // status: draft | signed | refused_to_sign | uploaded_signed_copy | escalated | closed
   // "escalated" = Suspension Review reached and both/refusal signatures are in —
@@ -146,6 +155,14 @@ const WriteupPriorSnapshotSchema = new Schema(
   { _id: false }
 );
 
+const WriteupVerbalCoachingSnapshotSchema = new Schema(
+  {
+    coachingDate: { type: Date },
+    categoryLabels: { type: [String], default: [] },
+  },
+  { _id: false }
+);
+
 const WriteupEscalationResolutionSchema = new Schema(
   {
     outcome: { type: String, required: true },
@@ -177,6 +194,7 @@ const WriteupSchema = new Schema<IWriteup>(
     consequences: { type: String, default: "" },
 
     priorWriteups: { type: [WriteupPriorSnapshotSchema], default: [] },
+    priorVerbalCoachings: { type: [WriteupVerbalCoachingSnapshotSchema], default: [] },
 
     status: { type: String, default: "draft" },
     escalatedAt: { type: Date },

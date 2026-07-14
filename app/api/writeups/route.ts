@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import Writeup from "@/lib/models/Writeup";
 import DropdownOption from "@/lib/models/DropdownOption";
-import { recommendWarningLevel } from "@/lib/writeup-logic";
+import { recommendWarningLevel, getCorrectiveActionTemplate, getVerbalCoachingContext } from "@/lib/writeup-logic";
 
 // GET /api/writeups?status=&employeeId=&categoryId=&search=&from=&to=
 // Manager/dispatcher/admin tool — employees don't have their own login in
@@ -79,7 +79,11 @@ export async function POST(req: NextRequest) {
     const category = await DropdownOption.findById(body.categoryId).lean();
     const categoryLabel = (category as any)?.description || body.categoryLabel || "";
 
-    const rec = await recommendWarningLevel(body.employeeId, body.categoryId, categoryLabel);
+    const [rec, correctiveAction, verbalCoachingContext] = await Promise.all([
+      recommendWarningLevel(body.employeeId, body.categoryId, categoryLabel),
+      getCorrectiveActionTemplate(categoryLabel),
+      getVerbalCoachingContext(body.employeeId, categoryLabel),
+    ]);
 
     const warningLevel = body.warningLevelOverride || rec.recommended;
     const isOverride = !!body.warningLevelOverride && body.warningLevelOverride !== rec.recommended;
@@ -99,9 +103,14 @@ export async function POST(req: NextRequest) {
       warningLevelOverriddenBy: isOverride ? session?.email || "" : "",
       incidentDate: body.incidentDate ? new Date(body.incidentDate) : new Date(),
       description: body.description || "",
-      planForImprovement: body.planForImprovement || "",
-      consequences: body.consequences || "",
+      // Fall back to the category's corrective-action template when the
+      // manager left these blank (the form pre-fills them client-side too,
+      // but this covers server-side/API callers like the verbal-coaching
+      // escalation flow).
+      planForImprovement: body.planForImprovement || correctiveAction.planForImprovement,
+      consequences: body.consequences || correctiveAction.consequences,
       priorWriteups: rec.priors.map((p) => ({ writeupId: p.writeupId, incidentDate: p.incidentDate, warningLevel: p.warningLevel })),
+      priorVerbalCoachings: verbalCoachingContext.items.map((v) => ({ coachingDate: v.coachingDate, categoryLabels: v.categoryLabels })),
       status: "draft",
       managerName: session?.name || session?.email || "",
       isHistorical: false,

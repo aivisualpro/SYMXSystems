@@ -15,6 +15,7 @@ import {
   MapPin,
   Shield,
   Ticket,
+  MessageSquare,
 } from "lucide-react";
 import { notify } from "@/lib/notify";
 import Papa from "papaparse";
@@ -230,6 +231,20 @@ const importTypes = [
       "driversUpdatedForLunch", "totalHours", "regHrs", "otHrs",
       "totalCost", "regPay", "otPay", "punchStatus", "whc",
       "createdAt", "createdBy", "bags", "ov",
+    ],
+  },
+  {
+    id: "verbal-coachings",
+    name: "Verbal Coachings (Historical)",
+    description: "Import historical verbal coaching log entries from CSV. Employee can be matched by Transporter ID or full name. Coaching Type supports multiple comma-separated categories per row (auto-created if new). Rows with no employee identifier are skipped and reported.",
+    icon: MessageSquare,
+    color: "from-cyan-500 to-sky-500",
+    bgColor: "bg-cyan-500/10",
+    borderColor: "border-cyan-500/20",
+    iconColor: "text-cyan-500",
+    fields: [
+      "Coaching Date", "Coached By", "Employee Name", "Coaching Type",
+      "Coaching Status", "Notes/Details", "Disputable?", "Dispute Notes",
     ],
   },
   {

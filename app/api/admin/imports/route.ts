@@ -12,6 +12,7 @@ import { processFleet } from "@/lib/imports/fleet";
 import { processInterviews } from "@/lib/imports/interviews";
 import { processMisc } from "@/lib/imports/misc";
 import { processWriteups } from "@/lib/imports/writeups";
+import { processVerbalCoachings } from "@/lib/imports/verbal-coachings";
 
 const ImportPayloadSchema = z.object({
   type: z.string().min(1),
@@ -61,6 +62,9 @@ export async function POST(req: NextRequest) {
     if (response) return response;
 
     response = await processWriteups(type, data, week);
+    if (response) return response;
+
+    response = await processVerbalCoachings(type, data, week);
     if (response) return response;
 
     return NextResponse.json({ error: `Invalid import type: ${type}` }, { status: 400 });

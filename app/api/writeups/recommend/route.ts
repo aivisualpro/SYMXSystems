@@ -2,10 +2,11 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import DropdownOption from "@/lib/models/DropdownOption";
-import { recommendWarningLevel } from "@/lib/writeup-logic";
+import { recommendWarningLevel, getCorrectiveActionTemplate, getVerbalCoachingContext } from "@/lib/writeup-logic";
 
 // GET /api/writeups/recommend?employeeId=&categoryId=
 // Live preview of the prior-history panel + recommended warning level,
+// auto-fill corrective-action text, and prior verbal-coaching context —
 // used while the manager is still filling out the New Write-Up form
 // (before a draft is created).
 export async function GET(req: NextRequest) {
@@ -28,8 +29,13 @@ export async function GET(req: NextRequest) {
     const category = await DropdownOption.findById(categoryId).lean();
     const categoryLabel = (category as any)?.description || "";
 
-    const rec = await recommendWarningLevel(employeeId, categoryId, categoryLabel);
-    return NextResponse.json(rec);
+    const [rec, correctiveAction, verbalCoachingContext] = await Promise.all([
+      recommendWarningLevel(employeeId, categoryId, categoryLabel),
+      getCorrectiveActionTemplate(categoryLabel),
+      getVerbalCoachingContext(employeeId, categoryLabel),
+    ]);
+
+    return NextResponse.json({ ...rec, correctiveAction, verbalCoachingContext });
   } catch (error: any) {
     console.error("Error computing recommendation:", error);
     return NextResponse.json({ error: error.message || "Failed to compute recommendation" }, { status: 500 });
