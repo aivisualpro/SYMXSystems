@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import SignaturePad from "@/components/ui/signature-pad";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { Loader2, Plus, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, CheckCircle2, XCircle, Trash2 } from "lucide-react";
+import { Loader2, Plus, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, CheckCircle2, XCircle, Trash2, FileEdit } from "lucide-react";
 
 const DATE_PRESETS: { label: string; days: number }[] = [
   { label: "7 days", days: 7 },
@@ -91,7 +91,7 @@ interface VerbalCoaching {
   createdAt?: string;
 }
 
-interface EmployeeOption { transporterId: string; firstName: string; lastName: string; _id: string }
+interface EmployeeOption { transporterId: string; firstName: string; lastName: string; _id: string; status: string }
 interface CategoryOption { _id: string; description: string }
 
 function fmtDate(d?: string) {
@@ -141,6 +141,9 @@ export default function VerbalCoachingsTab() {
   const [resolveSigImage, setResolveSigImage] = useState("");
   const [resolving, setResolving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -168,20 +171,24 @@ export default function VerbalCoachingsTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, categoryFilter, dateFrom, dateTo, searchQuery]);
 
-  const loadEmployees = (withTerminated: boolean) => {
-    fetch(`/api/admin/employees?terminated=${withTerminated}&export=true&select=firstName,lastName,transporterId,status`)
+  // Pull the full roster once (terminated=true bypasses the server's
+  // status filter entirely) — the "only active" default is enforced
+  // client-side via visibleEmployees, since the server's terminated param
+  // only excludes the literal "Terminated" status, not Resigned/Inactive.
+  useEffect(() => {
+    fetch("/api/admin/employees?terminated=true&export=true&select=firstName,lastName,transporterId,status")
       .then((res) => res.json())
       .then((json) => {
-        const list = (json.employees || json || []).map((e: any) => ({ _id: e._id, transporterId: e.transporterId || "", firstName: e.firstName || "", lastName: e.lastName || "" }));
+        const list = (json.employees || json || []).map((e: any) => ({ _id: e._id, transporterId: e.transporterId || "", firstName: e.firstName || "", lastName: e.lastName || "", status: e.status || "" }));
         setEmployees(list.sort((a: EmployeeOption, b: EmployeeOption) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
       })
       .catch(() => {});
-  };
+  }, []);
 
-  useEffect(() => {
-    loadEmployees(includeTerminated);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [includeTerminated]);
+  const visibleEmployees = useMemo(
+    () => (includeTerminated ? employees : employees.filter((e) => e.status === "Active")),
+    [employees, includeTerminated]
+  );
 
   useEffect(() => {
     fetch("/api/admin/settings/dropdowns?type=metric")
@@ -264,6 +271,46 @@ export default function VerbalCoachingsTab() {
     setResolveSigName("");
     setResolveSigImage("");
     setEscalateCategoryId(c.categoryIds[0] || "");
+    setEditMode(false);
+    setEditForm({
+      categoryIds: c.categoryIds,
+      coachingDate: c.coachingDate ? new Date(c.coachingDate).toISOString().split("T")[0] : "",
+      coachedBy: c.coachedBy || "",
+      notes: c.notes || "",
+      disputed: c.disputed,
+      disputeNotes: c.disputeNotes || "",
+    });
+  };
+
+  const toggleCategoryInEditForm = (id: string) => {
+    setEditForm((prev: any) => {
+      const has = prev.categoryIds.includes(id);
+      return { ...prev, categoryIds: has ? prev.categoryIds.filter((c: string) => c !== id) : [...prev.categoryIds, id] };
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selected) return;
+    if (editForm.categoryIds.length === 0) { notify.error("At least one category is required"); return; }
+    if (editForm.disputed && !editForm.disputeNotes.trim()) { notify.error("Dispute notes are required when marked disputed"); return; }
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/verbal-coachings/${selected._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to save changes");
+      notify.success("Verbal coaching updated");
+      setEditMode(false);
+      await refreshSelected(selected._id);
+      await load();
+    } catch (err: any) {
+      notify.error(err.message || "Failed to save changes");
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const refreshSelected = async (id: string) => {
@@ -467,13 +514,13 @@ export default function VerbalCoachingsTab() {
               <Select
                 value={form.employeeId}
                 onValueChange={(v) => {
-                  const emp = employees.find((e) => e._id === v);
+                  const emp = visibleEmployees.find((e) => e._id === v);
                   setForm({ ...form, employeeId: v, transporterId: emp?.transporterId || "", employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "" });
                 }}
               >
                 <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                 <SelectContent>
-                  {employees.map((e) => <SelectItem key={e._id} value={e._id}>{e.firstName} {e.lastName}</SelectItem>)}
+                  {visibleEmployees.map((e) => <SelectItem key={e._id} value={e._id}>{e.firstName} {e.lastName}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -567,8 +614,15 @@ export default function VerbalCoachingsTab() {
       {/* ── Detail dialog ── */}
       <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
-          <DialogHeader><DialogTitle>Verbal Coaching — {selected?.employeeName}</DialogTitle></DialogHeader>
-          {selected && (
+          <DialogHeader className="flex flex-row items-center justify-between gap-2 pr-8">
+            <DialogTitle>Verbal Coaching — {selected?.employeeName}</DialogTitle>
+            {selected && !TERMINAL_STATUSES.includes(selected.status) && !editMode && (
+              <Button size="sm" variant="outline" onClick={() => setEditMode(true)}>
+                <FileEdit className="h-3.5 w-3.5" /> Edit
+              </Button>
+            )}
+          </DialogHeader>
+          {selected && !editMode && (
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div><div className="text-muted-foreground">Date</div><div>{fmtDate(selected.coachingDate)}</div></div>
@@ -668,6 +722,72 @@ export default function VerbalCoachingsTab() {
                   </Button>
                 ) : <span />}
                 <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
+              </div>
+            </div>
+          )}
+
+          {selected && editMode && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Categories * (select all that apply)</Label>
+                <div className="flex flex-wrap gap-1.5 rounded-md border p-2">
+                  {categories.map((c) => {
+                    const active = editForm.categoryIds?.includes(c._id);
+                    return (
+                      <button
+                        key={c._id}
+                        type="button"
+                        onClick={() => toggleCategoryInEditForm(c._id)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                          active ? "border-primary bg-primary text-primary-foreground" : "border-input hover:bg-muted"
+                        )}
+                      >
+                        {c.description}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">Coaching Date</Label>
+                  <Input type="date" value={editForm.coachingDate} onChange={(e) => setEditForm({ ...editForm, coachingDate: e.target.value })} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">Coached By</Label>
+                  <Input value={editForm.coachedBy} onChange={(e) => setEditForm({ ...editForm, coachedBy: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Notes</Label>
+                <Textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} rows={3} />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id="edit-disputed"
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary rounded cursor-pointer"
+                  checked={editForm.disputed}
+                  onChange={(e) => setEditForm({ ...editForm, disputed: e.target.checked })}
+                />
+                <Label htmlFor="edit-disputed" className="text-sm font-normal">Employee disputes the underlying metric</Label>
+              </div>
+              {editForm.disputed && (
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">Dispute Notes *</Label>
+                  <Textarea value={editForm.disputeNotes} onChange={(e) => setEditForm({ ...editForm, disputeNotes: e.target.value })} rows={2} />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setEditMode(false)} disabled={savingEdit}>Cancel</Button>
+                <Button onClick={handleSaveEdit} disabled={savingEdit}>
+                  {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save Changes
+                </Button>
               </div>
             </div>
           )}

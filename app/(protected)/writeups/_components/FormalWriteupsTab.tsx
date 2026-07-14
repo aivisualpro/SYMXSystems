@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import SignaturePad from "@/components/ui/signature-pad";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { Loader2, Plus, ClipboardList, FileText, Printer, Upload, AlertTriangle, Download, ThumbsDown, ArrowUp, ArrowDown, ArrowUpDown, FileDown, MessageSquare, Trash2 } from "lucide-react";
+import { Loader2, Plus, ClipboardList, FileText, Printer, Upload, AlertTriangle, Download, ThumbsDown, ArrowUp, ArrowDown, ArrowUpDown, FileDown, MessageSquare, Trash2, FileEdit } from "lucide-react";
 
 // Presets keep the range picker fast for the most common lookups (matches
 // the Callouts page pattern).
@@ -103,7 +103,7 @@ interface Writeup {
   createdBy?: string;
 }
 
-interface EmployeeOption { transporterId: string; firstName: string; lastName: string; _id: string }
+interface EmployeeOption { transporterId: string; firstName: string; lastName: string; _id: string; status: string }
 interface CategoryOption { _id: string; description: string }
 
 const WARNING_LEVELS = ["first_warning", "second_warning", "third_warning", "final_warning", "suspension_review"];
@@ -218,6 +218,9 @@ export default function FormalWriteupsTab() {
   const [resolveSuspensionDays, setResolveSuspensionDays] = useState("");
   const [resolveNotes, setResolveNotes] = useState("");
   const [resolvingEscalation, setResolvingEscalation] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -262,22 +265,27 @@ export default function FormalWriteupsTab() {
     setActivePreset(null);
   };
 
-  const loadEmployees = (withTerminated: boolean) => {
-    fetch(`/api/admin/employees?terminated=${withTerminated}&export=true&select=firstName,lastName,transporterId,status`)
+  // Pull the full roster once (terminated=true bypasses the server's
+  // status filter entirely, so this includes Active/Resigned/Inactive/
+  // Terminated alike) — the "only active" default is enforced client-side
+  // below via visibleEmployees, since the server's terminated param only
+  // excludes the literal "Terminated" status, not Resigned/Inactive.
+  useEffect(() => {
+    fetch("/api/admin/employees?terminated=true&export=true&select=firstName,lastName,transporterId,status")
       .then((res) => res.json())
       .then((json) => {
         const list = (json.employees || json || []).map((e: any) => ({
-          _id: e._id, transporterId: e.transporterId || "", firstName: e.firstName || "", lastName: e.lastName || "",
+          _id: e._id, transporterId: e.transporterId || "", firstName: e.firstName || "", lastName: e.lastName || "", status: e.status || "",
         }));
         setEmployees(list.sort((a: EmployeeOption, b: EmployeeOption) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
       })
       .catch(() => {});
-  };
+  }, []);
 
-  useEffect(() => {
-    loadEmployees(includeTerminated);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [includeTerminated]);
+  const visibleEmployees = useMemo(
+    () => (includeTerminated ? employees : employees.filter((e) => e.status === "Active")),
+    [employees, includeTerminated]
+  );
 
   useEffect(() => {
     fetch("/api/admin/settings/dropdowns?type=metric")
@@ -452,6 +460,49 @@ export default function FormalWriteupsTab() {
     setResolveOutcome("");
     setResolveSuspensionDays("");
     setResolveNotes("");
+    setEditMode(false);
+    setEditForm({
+      incidentDate: w.incidentDate ? new Date(w.incidentDate).toISOString().split("T")[0] : "",
+      description: w.description || "",
+      planForImprovement: w.planForImprovement || "",
+      consequences: w.consequences || "",
+      warningLevel: w.warningLevel,
+      warningLevelOverrideReason: "",
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selected) return;
+    const isOverride = editForm.warningLevel !== selected.warningLevelAuto;
+    if (isOverride && (!editForm.warningLevelOverrideReason || editForm.warningLevelOverrideReason.trim().length < 10)) {
+      notify.error("Override reason must be at least 10 characters");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/writeups/${selected._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          incidentDate: editForm.incidentDate,
+          description: editForm.description,
+          planForImprovement: editForm.planForImprovement,
+          consequences: editForm.consequences,
+          warningLevel: editForm.warningLevel,
+          warningLevelOverrideReason: isOverride ? editForm.warningLevelOverrideReason : undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to save changes");
+      notify.success("Write-up updated");
+      setEditMode(false);
+      await refreshSelected(selected._id);
+      await load();
+    } catch (err: any) {
+      notify.error(err.message || "Failed to save changes");
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const refreshSelected = async (id: string) => {
@@ -807,13 +858,13 @@ export default function FormalWriteupsTab() {
               <Select
                 value={form.employeeId}
                 onValueChange={(v) => {
-                  const emp = employees.find((e) => e._id === v);
+                  const emp = visibleEmployees.find((e) => e._id === v);
                   setForm({ ...form, employeeId: v, transporterId: emp?.transporterId || "", employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "" });
                 }}
               >
                 <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
                 <SelectContent>
-                  {employees.map((e) => (
+                  {visibleEmployees.map((e) => (
                     <SelectItem key={e._id} value={e._id}>{e.firstName} {e.lastName}</SelectItem>
                   ))}
                 </SelectContent>
@@ -915,8 +966,15 @@ export default function FormalWriteupsTab() {
       {/* ── Detail / Sign dialog ── */}
       <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
         <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
-          <DialogHeader><DialogTitle>Write-Up — {selected?.employeeName}</DialogTitle></DialogHeader>
-          {selected && (
+          <DialogHeader className="flex flex-row items-center justify-between gap-2 pr-8">
+            <DialogTitle>Write-Up — {selected?.employeeName}</DialogTitle>
+            {selected && selected.status === "draft" && !editMode && (
+              <Button size="sm" variant="outline" onClick={() => setEditMode(true)}>
+                <FileEdit className="h-3.5 w-3.5" /> Edit
+              </Button>
+            )}
+          </DialogHeader>
+          {selected && !editMode && (
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div><div className="text-muted-foreground">Category</div><div>{selected.categoryLabel}</div></div>
@@ -1117,6 +1175,54 @@ export default function FormalWriteupsTab() {
                   <span className="text-xs italic text-muted-foreground">Signed/closed write-ups can't be deleted — preserved for the audit trail.</span>
                 ) : <span />}
                 <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
+              </div>
+            </div>
+          )}
+
+          {selected && editMode && (
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div><div className="text-muted-foreground">Category</div><div>{selected.categoryLabel} <span className="text-xs text-muted-foreground">(not editable)</span></div></div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">Incident Date</Label>
+                  <Input type="date" value={editForm.incidentDate} onChange={(e) => setEditForm({ ...editForm, incidentDate: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Warning Level</Label>
+                <Select value={editForm.warningLevel} onValueChange={(v) => setEditForm({ ...editForm, warningLevel: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {WARNING_LEVELS.map((l) => <SelectItem key={l} value={l}>{WARNING_LEVEL_LABELS[l]}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {editForm.warningLevel !== selected.warningLevelAuto && (
+                  <>
+                    <Label className="text-xs">Reason for override (required)</Label>
+                    <Textarea value={editForm.warningLevelOverrideReason} onChange={(e) => setEditForm({ ...editForm, warningLevelOverrideReason: e.target.value })} rows={2} placeholder="Explain why you're changing the recommended level..." />
+                  </>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Description</Label>
+                <Textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={3} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Plan for Improvement</Label>
+                <Textarea value={editForm.planForImprovement} onChange={(e) => setEditForm({ ...editForm, planForImprovement: e.target.value })} rows={2} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Consequences</Label>
+                <Textarea value={editForm.consequences} onChange={(e) => setEditForm({ ...editForm, consequences: e.target.value })} rows={2} />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setEditMode(false)} disabled={savingEdit}>Cancel</Button>
+                <Button onClick={handleSaveEdit} disabled={savingEdit}>
+                  {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save Changes
+                </Button>
               </div>
             </div>
           )}
