@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     const filename = `Writeups_Combined_${new Date().toISOString().split("T")[0]}_${ordered.length}.pdf`;
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${filename}"`,

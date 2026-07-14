@@ -46,7 +46,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     const filename = `Writeup_${(w.employeeName || "employee").replace(/[^a-zA-Z0-9]/g, "_")}_${new Date(w.incidentDate).toISOString().split("T")[0]}.pdf`;
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="${filename}"`,
