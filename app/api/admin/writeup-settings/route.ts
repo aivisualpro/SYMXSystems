@@ -67,6 +67,9 @@ export async function PUT(req: NextRequest) {
 
     const existing = await getCanonicalSettings();
     console.log("[writeup-settings PUT] existing doc id:", String(existing._id), "existing templates:", JSON.stringify(existing.correctiveActionTemplates));
+    console.log("[writeup-settings PUT] schema has correctiveActionTemplates path:", !!existing.schema.paths["correctiveActionTemplates"]);
+    console.log("[writeup-settings PUT] existing.toObject():", JSON.stringify(existing.toObject()));
+    console.log("[writeup-settings PUT] collection name:", existing.collection.collectionName, "db name:", existing.db?.name);
 
     const settings = await WriteupSettings.findByIdAndUpdate(existing._id, { $set: updates }, { new: true });
     console.log("[writeup-settings PUT] saved doc templates:", JSON.stringify(settings?.correctiveActionTemplates));
