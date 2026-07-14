@@ -214,14 +214,29 @@ export default function VerbalCoachingsTab() {
   };
   const clearDateRange = () => { setDateFrom(""); setDateTo(""); setActivePreset(null); };
 
-  const filtered = useMemo(() => sortByKey(coachings, sort), [coachings, sort]);
+  // "Include terminated employees" hides those coachings everywhere on
+  // this screen, not just from the New Verbal Coaching employee picker —
+  // the summary cards and the table should agree with each other, so
+  // both derive from this same base set. Only excludes rows once the
+  // employee roster has loaded, and only when the coaching's employeeId
+  // actually resolves to a known employee.
+  const visibleCoachings = useMemo(() => {
+    if (includeTerminated || employees.length === 0) return coachings;
+    return coachings.filter((c) => {
+      if (!c.employeeId) return true;
+      const emp = employees.find((e) => e._id === c.employeeId);
+      return !emp || emp.status === "Active";
+    });
+  }, [coachings, includeTerminated, employees]);
+
+  const filtered = useMemo(() => sortByKey(visibleCoachings, sort), [visibleCoachings, sort]);
 
   const summary = useMemo(() => {
     const isNew = (c: VerbalCoaching) => !TERMINAL_STATUSES.includes(c.status);
-    const disputed = coachings.filter((c) => c.disputed).length;
-    const pendingNew = coachings.filter(isNew).length;
-    return { total: coachings.length, disputed, pendingNew };
-  }, [coachings]);
+    const disputed = visibleCoachings.filter((c) => c.disputed).length;
+    const pendingNew = visibleCoachings.filter(isNew).length;
+    return { total: visibleCoachings.length, disputed, pendingNew };
+  }, [visibleCoachings]);
 
   const toggleCategoryInForm = (id: string) => {
     setForm((prev: any) => {

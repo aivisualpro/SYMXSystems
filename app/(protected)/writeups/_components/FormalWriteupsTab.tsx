@@ -310,8 +310,24 @@ export default function FormalWriteupsTab() {
       .catch(() => {});
   }, []);
 
+  // "Include terminated employees" hides those write-ups everywhere on
+  // this screen — the summary cards and the table should agree with each
+  // other, so both derive from this same base set. Only excludes rows
+  // once the employee roster has loaded, and only when the write-up's
+  // employeeId actually resolves to a known employee — an unresolvable
+  // employeeId (e.g. a deleted employee record) stays visible rather
+  // than silently vanishing.
+  const visibleWriteups = useMemo(() => {
+    if (includeTerminated || employees.length === 0) return writeups;
+    return writeups.filter((w) => {
+      if (!w.employeeId) return true;
+      const emp = employees.find((e) => e._id === w.employeeId);
+      return !emp || emp.status === "Active";
+    });
+  }, [writeups, includeTerminated, employees]);
+
   const filtered = useMemo(() => {
-    let rows = writeups;
+    let rows = visibleWriteups;
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       rows = rows.filter(
@@ -319,7 +335,7 @@ export default function FormalWriteupsTab() {
       );
     }
     return sortByKey(rows, sort);
-  }, [writeups, searchQuery, sort]);
+  }, [visibleWriteups, searchQuery, sort]);
 
   // ── Row selection ──
   const toggleSelectOne = (id: string) => {
@@ -372,13 +388,13 @@ export default function FormalWriteupsTab() {
   };
 
   const summary = useMemo(() => {
-    const pending = writeups.filter((w) => w.status === "draft").length;
-    const escalated = writeups.filter((w) => w.status === "escalated").length;
-    const oldestEscalatedDays = writeups
+    const pending = visibleWriteups.filter((w) => w.status === "draft").length;
+    const escalated = visibleWriteups.filter((w) => w.status === "escalated").length;
+    const oldestEscalatedDays = visibleWriteups
       .filter((w) => w.status === "escalated")
       .reduce((max, w) => Math.max(max, daysSince(w.escalatedAt)), 0);
-    return { total: writeups.length, pending, escalated, oldestEscalatedDays };
-  }, [writeups]);
+    return { total: visibleWriteups.length, pending, escalated, oldestEscalatedDays };
+  }, [visibleWriteups]);
 
   // ── Live recommendation preview (also carries corrective-action auto-fill
   // and prior verbal-coaching context) ──
