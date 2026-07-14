@@ -33,6 +33,7 @@ import {
     Clock,
     AlertCircle,
     Flag,
+    Upload,
     type LucideIcon,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
@@ -60,6 +61,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
+import PunchImportModal from "../_components/PunchImportModal";
 
 // ── Type Options (colored pills) ──
 import { getTypeStyle, TYPE_OPTIONS, TYPE_MAP, getContrastText } from "@/lib/route-types";
@@ -432,6 +434,9 @@ export default function TimePage() {
     const [quickEditRow, setQuickEditRow] = useState<RouteRow | null>(null);
     const [quickEditForm, setQuickEditForm] = useState<Partial<RouteRow>>({});
     const [punchStatusOptions, setPunchStatusOptions] = useState<any[]>([]);
+
+    // ── Punch Audit Report Import Modal State ──
+    const [punchImportOpen, setPunchImportOpen] = useState(false);
 
     const [highlightSearch, setHighlightSearch] = useState<string | null>(null);
 
@@ -835,7 +840,18 @@ export default function TimePage() {
     // ── Table ──
     return (
         <TooltipProvider delayDuration={200}>
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full gap-2">
+                <div className="flex items-center justify-end shrink-0">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs gap-1.5"
+                        onClick={() => setPunchImportOpen(true)}
+                    >
+                        <Upload className="h-3.5 w-3.5" />
+                        Import Punch Audit Report
+                    </Button>
+                </div>
                 <div className="flex-1 min-h-0 rounded-xl border border-border/50 bg-card overflow-hidden flex flex-col">
                     {/* Scrollable wrapper */}
                     <div className="flex-1 overflow-auto">
@@ -1124,6 +1140,12 @@ export default function TimePage() {
                         </div>
                     </SheetContent>
                 </Sheet>
+
+                <PunchImportModal
+                    open={punchImportOpen}
+                    onClose={() => setPunchImportOpen(false)}
+                    onImportComplete={() => queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" })}
+                />
             </div>
         </TooltipProvider>
     );
