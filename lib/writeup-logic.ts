@@ -149,7 +149,8 @@ export async function getCorrectiveActionTemplate(
     settings.correctiveActionTemplates && settings.correctiveActionTemplates.length > 0
       ? settings.correctiveActionTemplates
       : DEFAULT_CORRECTIVE_ACTION_TEMPLATES;
-  const match = templates.find((t: any) => t.categoryLabel.toLowerCase() === categoryLabel.toLowerCase());
+  const normalize = (s: string) => (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const match = templates.find((t: any) => normalize(t.categoryLabel) === normalize(categoryLabel));
   const defaultConsequences =
     settings.defaultConsequences ||
     "Failure to demonstrate immediate and sustained improvement may result in further disciplinary action, up to and including suspension, corrective action, or termination of employment, depending on the severity and frequency of future incidents.";

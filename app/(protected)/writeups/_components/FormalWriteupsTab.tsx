@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -946,6 +947,12 @@ export default function FormalWriteupsTab() {
             <div className="flex flex-col gap-1.5">
               <Label>Plan for Improvement</Label>
               <Textarea value={form.planForImprovement} onChange={(e) => setForm({ ...form, planForImprovement: e.target.value })} rows={2} />
+              {form.categoryId && recommendation && !recommendation.correctiveAction?.planForImprovement && (
+                <p className="text-xs text-muted-foreground">
+                  No template configured for this category, so nothing auto-filled — you can type one here, or{" "}
+                  <Link href="/admin/writeup-settings" target="_blank" className="text-primary underline">add a reusable template</Link> for next time.
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Consequences</Label>

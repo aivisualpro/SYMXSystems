@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import { Loader2, Save, Settings, Plus, X, Layers, FileEdit, Trash2 } from "lucide-react";
 
 interface CategoryOption { _id: string; description: string; isActive?: boolean }
@@ -98,6 +99,7 @@ export default function WriteupSettingsPage() {
   };
 
   const categoriesWithTemplate = new Set(templates.map((t) => t.categoryLabel.toLowerCase()));
+  const realCategoryNames = new Set(categories.map((c) => c.description.toLowerCase()));
   const addTemplate = () => {
     if (!addTemplateCategory) return;
     if (categoriesWithTemplate.has(addTemplateCategory.toLowerCase())) return;
@@ -106,6 +108,9 @@ export default function WriteupSettingsPage() {
   };
   const updateTemplate = (idx: number, field: "planForImprovement" | "consequences", value: string) => {
     setTemplates(templates.map((t, i) => (i === idx ? { ...t, [field]: value } : t)));
+  };
+  const updateTemplateCategory = (idx: number, categoryLabel: string) => {
+    setTemplates(templates.map((t, i) => (i === idx ? { ...t, categoryLabel } : t)));
   };
   const removeTemplate = (idx: number) => setTemplates(templates.filter((_, i) => i !== idx));
 
@@ -206,20 +211,36 @@ export default function WriteupSettingsPage() {
             <div className="flex items-center gap-1.5 text-sm font-medium"><FileEdit className="h-4 w-4" /> Corrective Action Templates</div>
             <p className="text-xs text-muted-foreground">
               Auto-fills the Plan for Improvement and Consequences fields on the New Write-Up form when a category is selected —
-              managers can still edit before saving. Categories without a template here just start blank.
+              managers can still edit before saving. Categories without a template here just start blank. The category on each
+              template below must exactly match a real category from your dropdown list, or auto-fill won't trigger for it.
             </p>
           </div>
 
           {templates.length === 0 && <p className="text-sm text-muted-foreground">No templates configured yet.</p>}
 
-          {templates.map((t, idx) => (
-            <div key={t.categoryLabel} className="flex flex-col gap-2 rounded-md border p-3">
-              <div className="flex items-center justify-between">
-                <Badge variant="outline">{t.categoryLabel}</Badge>
+          {templates.map((t, idx) => {
+            const isOrphaned = !realCategoryNames.has(t.categoryLabel.toLowerCase());
+            return (
+            <div key={idx} className={cn("flex flex-col gap-2 rounded-md border p-3", isOrphaned && "border-amber-300 bg-amber-50/40 dark:bg-amber-950/10")}>
+              <div className="flex items-center justify-between gap-2">
+                <Select value={t.categoryLabel} onValueChange={(v) => updateTemplateCategory(idx, v)}>
+                  <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {isOrphaned && <SelectItem value={t.categoryLabel}>{t.categoryLabel} (not a real category)</SelectItem>}
+                    {categories
+                      .filter((c) => c.description.toLowerCase() === t.categoryLabel.toLowerCase() || !categoriesWithTemplate.has(c.description.toLowerCase()))
+                      .map((c) => <SelectItem key={c._id} value={c.description}>{c.description}</SelectItem>)}
+                  </SelectContent>
+                </Select>
                 <Button size="sm" variant="ghost" className="h-6 text-destructive" onClick={() => removeTemplate(idx)}>
                   <Trash2 className="h-3.5 w-3.5" /> Remove
                 </Button>
               </div>
+              {isOrphaned && (
+                <p className="text-xs text-amber-800 dark:text-amber-400">
+                  "{t.categoryLabel}" doesn't match any category in your dropdown list, so this template won't auto-fill for anything. Pick the real category above.
+                </p>
+              )}
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">Plan for Improvement</Label>
                 <Textarea
@@ -239,7 +260,8 @@ export default function WriteupSettingsPage() {
                 />
               </div>
             </div>
-          ))}
+            );
+          })}
 
           <div className="flex gap-2">
             <Select value={addTemplateCategory} onValueChange={setAddTemplateCategory}>
