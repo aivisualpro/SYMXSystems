@@ -26,8 +26,8 @@ function normalizeStatus(raw: string): string {
   const key = (raw || "").trim().toLowerCase();
   if (key === "completed") return "completed";
   if (key === "unable to coach") return "unable_to_coach";
-  if (key === "new" || key === "scheduled") return "scheduled";
-  return "scheduled"; // unrecognized/blank — treat as not-yet-done rather than assume completed
+  if (key === "scheduled") return "scheduled"; // legacy historical value, kept distinct from "new"
+  return "new"; // "New", blank, or unrecognized — treat as not-yet-done rather than assume completed
 }
 
 function truthy(v?: string): boolean {
@@ -112,6 +112,11 @@ export async function processVerbalCoachings(type: string, data: any[], _week: s
     const coachingDate = processed.coachingDate ? new Date(processed.coachingDate) : new Date();
     const disputeNotes = processed.disputeNotes || "";
     const disputed = truthy(processed.disputableFlag) || !!disputeNotes;
+    const status = normalizeStatus(processed.status || "");
+    // For rows already resolved in the source data, back-fill the
+    // completion trail from the same row rather than leaving it blank —
+    // the coach and the coaching date ARE the completion record here.
+    const isTerminal = status === "completed" || status === "unable_to_coach";
 
     documents.push({
       transporterId: emp.transporterId,
@@ -121,11 +126,13 @@ export async function processVerbalCoachings(type: string, data: any[], _week: s
       categoryLabels,
       coachingDate: !isNaN(coachingDate.getTime()) ? coachingDate : new Date(),
       coachedBy: processed.coachedBy || "",
-      status: normalizeStatus(processed.status || ""),
+      status,
       notes: processed.notes || "",
       disputed,
       disputeNotes,
       isHistorical: true,
+      completedBy: isTerminal ? processed.coachedBy || "historical-import" : undefined,
+      completedAt: isTerminal ? (!isNaN(coachingDate.getTime()) ? coachingDate : new Date()) : undefined,
       createdBy: "historical-import",
     });
   }

@@ -25,7 +25,10 @@ export async function GET(req: NextRequest) {
     const to = searchParams.get("to");
 
     const query: any = {};
-    if (status) query.status = status;
+    // "new" as a filter also pulls in the legacy "scheduled" bucket from
+    // historical imports — both mean "not yet actioned."
+    if (status === "new") query.status = { $in: ["new", "scheduled"] };
+    else if (status) query.status = status;
     if (employeeId) query.employeeId = employeeId;
     if (categoryId) query.categoryIds = categoryId;
     if (search) {
@@ -75,6 +78,22 @@ export async function POST(req: NextRequest) {
     const categories = await DropdownOption.find({ _id: { $in: body.categoryIds } }, { description: 1 }).lean();
     const categoryLabels = categories.map((c: any) => c.description);
 
+    // Default is "new" — a dispatcher logging a coaching shouldn't have to
+    // claim it's "completed" just to save the record. If they ARE logging
+    // it after the fact as already completed/unable-to-coach, stamp the
+    // completion trail right away rather than requiring a second edit.
+    const status = ["new", "completed", "unable_to_coach"].includes(body.status) ? body.status : "new";
+    const isTerminal = status === "completed" || status === "unable_to_coach";
+
+    let driverSignature;
+    if (body.driverSignature?.name && body.driverSignature?.signatureImage) {
+      driverSignature = {
+        name: body.driverSignature.name,
+        signatureImage: body.driverSignature.signatureImage,
+        signedAt: new Date(),
+      };
+    }
+
     const coaching = await VerbalCoaching.create({
       transporterId: body.transporterId || "",
       employeeId: body.employeeId,
@@ -83,11 +102,14 @@ export async function POST(req: NextRequest) {
       categoryLabels,
       coachingDate: body.coachingDate ? new Date(body.coachingDate) : new Date(),
       coachedBy: body.coachedBy || session?.name || session?.email || "",
-      status: ["completed", "unable_to_coach", "scheduled"].includes(body.status) ? body.status : "completed",
+      status,
       notes: body.notes || "",
       disputed: !!body.disputed,
       disputeNotes: body.disputed ? body.disputeNotes || "" : "",
+      driverSignature,
       isHistorical: false,
+      completedBy: isTerminal ? session?.email || "" : undefined,
+      completedAt: isTerminal ? new Date() : undefined,
       createdBy: session?.email || "",
     });
 

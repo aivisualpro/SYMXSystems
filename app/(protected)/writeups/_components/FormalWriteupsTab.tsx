@@ -167,6 +167,7 @@ export default function FormalWriteupsTab() {
   const [writeups, setWriteups] = useState<Writeup[]>([]);
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [includeTerminated, setIncludeTerminated] = useState(false);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -257,8 +258,8 @@ export default function FormalWriteupsTab() {
     setActivePreset(null);
   };
 
-  useEffect(() => {
-    fetch("/api/admin/employees?terminated=false&export=true&select=firstName,lastName,transporterId,status")
+  const loadEmployees = (withTerminated: boolean) => {
+    fetch(`/api/admin/employees?terminated=${withTerminated}&export=true&select=firstName,lastName,transporterId,status`)
       .then((res) => res.json())
       .then((json) => {
         const list = (json.employees || json || []).map((e: any) => ({
@@ -267,6 +268,14 @@ export default function FormalWriteupsTab() {
         setEmployees(list.sort((a: EmployeeOption, b: EmployeeOption) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
       })
       .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadEmployees(includeTerminated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeTerminated]);
+
+  useEffect(() => {
     fetch("/api/admin/settings/dropdowns?type=metric")
       .then((res) => res.json())
       .then((d) => setCategories(Array.isArray(d) ? d.filter((c: any) => c.isActive !== false) : []))
@@ -759,7 +768,13 @@ export default function FormalWriteupsTab() {
           <DialogHeader><DialogTitle>New Write-Up</DialogTitle></DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label>Employee *</Label>
+              <div className="flex items-center justify-between">
+                <Label>Employee *</Label>
+                <label className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+                  <input type="checkbox" className="h-3.5 w-3.5 accent-primary rounded cursor-pointer" checked={includeTerminated} onChange={(e) => setIncludeTerminated(e.target.checked)} />
+                  Include terminated
+                </label>
+              </div>
               <Select
                 value={form.employeeId}
                 onValueChange={(v) => {
