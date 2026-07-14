@@ -211,7 +211,10 @@ export default function EmployeeAuditPage() {
       const formData = new FormData();
       formData.append("file", file);
       const uploadRes = await fetch("/api/admin/upload?folder=symx-systems/employees/documents", { method: "POST", body: formData });
-      if (!uploadRes.ok) throw new Error("Upload failed");
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json().catch(() => ({}));
+        throw new Error(errData.error || "Upload failed");
+      }
       const uploadData = await uploadRes.json();
       const fileUrl = uploadData.secure_url || uploadData.url;
 
@@ -220,7 +223,10 @@ export default function EmployeeAuditPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [field]: fileUrl }),
       });
-      if (!updateRes.ok) throw new Error("Failed to save");
+      if (!updateRes.ok) {
+        const errData = await updateRes.text().catch(() => "");
+        throw new Error(errData || "Failed to save");
+      }
 
       setEmployees((prev) =>
         prev.map((emp) => (emp._id === empId ? { ...emp, [field]: fileUrl } : emp))
