@@ -96,6 +96,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       if (body[field] !== undefined) updates[field] = body[field];
     }
 
+    // Fields that unset with $unset rather than $set — an empty string here
+    // means "no policy/employee linked," and Mongoose can't cast "" to an
+    // ObjectId (crashes with a BSONError), so these need to come out of the
+    // update doc entirely rather than being set to "".
+    const OBJECT_ID_FIELDS = ["insurancePolicyId", "employeeId"];
+    const unsets: any = {};
+
     if (canManage) {
       for (const field of PRIVILEGED_EDIT_FIELDS) {
         if (body[field] === undefined) continue;
@@ -105,6 +112,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           updates[field] = body[field] === "" ? 0 : Number(body[field]);
         } else if (field === "oshaRecordable" || field === "dotRecordable") {
           updates[field] = !!body[field];
+        } else if (OBJECT_ID_FIELDS.includes(field)) {
+          if (body[field]) updates[field] = body[field];
+          else unsets[field] = "";
         } else {
           updates[field] = body[field];
         }
@@ -132,13 +142,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       };
     }
 
-    if (Object.keys(updates).length === 0 && !contactPush) {
+    if (Object.keys(updates).length === 0 && Object.keys(unsets).length === 0 && !contactPush) {
       return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
     }
 
     await connectToDatabase();
     const updateDoc: any = {};
     if (Object.keys(updates).length > 0) updateDoc.$set = updates;
+    if (Object.keys(unsets).length > 0) updateDoc.$unset = unsets;
     if (contactPush) updateDoc.$push = { contactLog: contactPush };
 
     const incident = await SymxIncident.findByIdAndUpdate(id, updateDoc, { new: true, lean: true });
