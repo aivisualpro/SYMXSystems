@@ -48,59 +48,47 @@ const WriteupCorrectiveActionTemplateSchema = new Schema(
 // created already has correct, consistent auto-fill text. Matched
 // case-insensitively against categoryLabel — categories without an
 // entry here just fall back to a blank field the manager fills in.
+// Category labels below are matched case-insensitively against the
+// live, freeform DropdownOption categories actually used in this
+// system (Settings > Dropdowns, type "metric") — not generic Amazon
+// DSP scorecard terminology. Keep these in sync with whatever the real
+// category list is, or auto-fill silently won't trigger. The various
+// safety sub-types collapse to a single "Safety Infraction" entry
+// because that's the one real category this system has for safety
+// issues — there's no separate DropdownOption per safety sub-type.
 export const DEFAULT_CORRECTIVE_ACTION_TEMPLATES: IWriteupCorrectiveActionTemplate[] = [
   {
-    categoryLabel: "Quality – Customer Delivery Feedback (CDF)",
+    categoryLabel: "Customer Delivery Feedback",
     planForImprovement:
       "Always follow customer delivery instructions. When no delivery instructions exist, deliver to a secure location — not visible from the street, not in high traffic, and protected from weather. Never leave packages in a common lobby, outside a gate, in a mailroom, or on/inside a USPS mailbox. If unsure of a safe location, contact the customer directly, or SYMX Dispatch if the customer is unreachable. Use the correct scan code and never mark delivered to a household member without confirming receipt.",
   },
   {
-    categoryLabel: "Quality – Delivery Completion Rate (DCR)",
-    planForImprovement:
-      "Review each stop before marking it UTL/UTA/Customer Unavailable/NSL/BC/OODT/PNOV — these should reflect genuine access or time issues, not convenience. Confirm you attempted access and checked for a secure location before returning a package. Escalate access issues to Dispatch rather than returning packages preventable through a second attempt.",
-  },
-  {
-    categoryLabel: "Quality – Delivery Success Behaviors (DSB)",
-    planForImprovement:
-      "Compare the name and address in the app to both the package label and the physical building — always check the Geopin. Mark packages delivered only at the correct location shown in the Delivery App, and never more than 50 meters from the Geopin. Take a Photo on Delivery for every stop.",
-  },
-  {
-    categoryLabel: "Quality – Delivered Not Received (DNR)",
+    categoryLabel: "Customer Delivery Feedback DPMO",
     planForImprovement:
       "Delivered Not Received issues most often trace back to incorrect address confirmation or an insecure drop location. Verify the Geopin and address before every delivery, follow all customer instructions, and take a clear Photo on Delivery so the drop location is documented.",
   },
   {
-    categoryLabel: "Quality – POD acceptance",
+    categoryLabel: "Delivery Completion Rate",
+    planForImprovement:
+      "Review each stop before marking it UTL/UTA/Customer Unavailable/NSL/BC/OODT/PNOV — these should reflect genuine access or time issues, not convenience. Confirm you attempted access and checked for a secure location before returning a package. Escalate access issues to Dispatch rather than returning packages preventable through a second attempt.",
+  },
+  {
+    categoryLabel: "Delivery Success Behaviors",
+    planForImprovement:
+      "Compare the name and address in the app to both the package label and the physical building — always check the Geopin. Mark packages delivered only at the correct location shown in the Delivery App, and never more than 50 meters from the Geopin. Take a Photo on Delivery for every stop.",
+  },
+  {
+    categoryLabel: "Photo on Delivery",
     planForImprovement:
       "Take photos in the final delivery location only — not from the vehicle, sidewalk, or in hand. Ensure the area is well lit, hold the camera steady, and use the sizing frame so the entire package is visible and unobstructed. Retake the photo if it doesn't clearly show the package. Do not include license plates, addresses, faces, or bystanders in the frame.",
   },
   {
-    categoryLabel: "Safety – Seatbelt",
+    categoryLabel: "Safety Infraction",
     planForImprovement:
-      "Seatbelts must be fastened correctly before the vehicle is placed in motion, every trip, no exceptions. The daily goal is zero seatbelt-off instances.",
+      "Seatbelts must be fastened correctly before the vehicle is placed in motion, every trip, no exceptions. Do not exceed the posted speed limit by 10+ mph for any sustained duration, and never exceed 85 mph under any circumstance — adjust speed for road, weather, and traffic conditions at all times. Keep full attention on the road; do not look at or use a phone while the vehicle is in motion. Maintain safe following distance at all times — at least 1+ second of space behind the vehicle ahead, more at higher speeds. Come to a complete stop at every stop sign and red light before proceeding, and never execute an illegal U-turn.",
   },
   {
-    categoryLabel: "Safety – Speeding",
-    planForImprovement:
-      "Do not exceed the posted speed limit by 10+ mph for any sustained duration, and never exceed 85 mph under any circumstance. Adjust speed for road, weather, and traffic conditions at all times.",
-  },
-  {
-    categoryLabel: "Safety – Distraction",
-    planForImprovement:
-      "Keep full attention on the road at all times. Do not look at or use a phone while the vehicle is in motion. If you need to communicate, safely pull over and park before using a device.",
-  },
-  {
-    categoryLabel: "Safety – Following Distance.",
-    planForImprovement:
-      "Maintain safe following distance at all times — at least 1+ second of space behind the vehicle ahead, more at higher speeds. Avoid multiple consecutive lane changes without adequate space.",
-  },
-  {
-    categoryLabel: "Safety – Sign Signal.",
-    planForImprovement:
-      "Come to a complete stop at every stop sign and red light before proceeding, and never execute an illegal U-turn. Treat all posted signs and signals as non-negotiable, not situational.",
-  },
-  {
-    categoryLabel: "Attendance - Lateness/Absences",
+    categoryLabel: "Attendance",
     planForImprovement:
       "Report to every scheduled shift on time. If you cannot attend, notify management with as much advance notice as possible — a no-call/no-show is treated more seriously than a called-out absence.",
     consequences:
