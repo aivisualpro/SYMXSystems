@@ -233,8 +233,12 @@ export async function POST(req: Request) {
     const employee = await SymxEmployee.create(body);
 
     return NextResponse.json(employee);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[EMPLOYEES_POST]', error);
+    if (error?.name === "ValidationError") {
+      const message = Object.values(error.errors || {}).map((e: any) => e.message).join(", ") || "Validation failed";
+      return new NextResponse(message, { status: 400 });
+    }
     return new NextResponse("Internal Error", { status: 500 });
   }
 }

@@ -40,7 +40,7 @@ export function useUpdateEmployee() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error("Failed to update employee");
+      if (!res.ok) throw new Error((await res.text().catch(() => "")) || "Failed to update employee");
       return res.json();
     },
     onSuccess: (updatedEmployee, variables) => {
@@ -62,7 +62,7 @@ export function useCreateEmployee() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error("Failed to create employee");
+      if (!res.ok) throw new Error((await res.text().catch(() => "")) || "Failed to create employee");
       return res.json();
     },
     onSuccess: () => {

@@ -215,8 +215,8 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
           <div className="space-y-5 animate-in fade-in-0 duration-200">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="eeCode">EE Code</Label>
-                <Input id="eeCode" value={formData.eeCode || ""} onChange={(e) => handleChange("eeCode", e.target.value)} />
+                <Label htmlFor="eeCode">EE Code *</Label>
+                <Input id="eeCode" required value={formData.eeCode || ""} onChange={(e) => handleChange("eeCode", e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="transporterId">Transporter ID</Label>
@@ -227,6 +227,10 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
                 <Input id="badgeNumber" value={formData.badgeNumber || ""} onChange={(e) => handleChange("badgeNumber", e.target.value)} />
               </div>
             </div>
+
+            <p className="text-[11px] text-muted-foreground -mt-1">
+              2nd meal period waiver (CA) is now uploaded as a document from HR &gt; Employee Audit, not toggled here.
+            </p>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
@@ -281,8 +285,8 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="rate">Rate ($)</Label>
-                <Input type="number" id="rate" value={formData.rate || ""} onChange={(e) => handleChange("rate", parseFloat(e.target.value))} />
+                <Label htmlFor="rate">Rate ($) *</Label>
+                <Input type="number" id="rate" required min="0" step="0.01" value={formData.rate ?? ""} onChange={(e) => handleChange("rate", e.target.value === "" ? undefined : parseFloat(e.target.value))} />
               </div>
             </div>
           </div>

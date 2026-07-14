@@ -67,8 +67,12 @@ export async function PUT(
     }
 
     return NextResponse.json(updatedEmployee);
-  } catch (error) {
+  } catch (error: any) {
     console.error("PUT /api/admin/employees/[id] error:", error);
+    if (error?.name === "ValidationError") {
+      const message = Object.values(error.errors || {}).map((e: any) => e.message).join(", ") || "Validation failed";
+      return new NextResponse(message, { status: 400 });
+    }
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }

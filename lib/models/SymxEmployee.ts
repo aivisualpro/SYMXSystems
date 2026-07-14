@@ -46,6 +46,11 @@ export interface ISymxEmployee extends Document {
   driversLicenseFile?: string;
   i9File?: string;
   drugTestFile?: string;
+  // CA labor law: a 2nd 30-min meal period is required past 10 hrs worked in a day, but can
+  // be voluntarily waived (signed waiver) if total hours worked that day don't exceed 12.
+  // The timecard audit soft-flags (waiver on file) vs hard-flags (no waiver) shifts over 10
+  // hours with no recorded 2nd meal period, based on whether this file is uploaded.
+  mealWaiverFile?: string;
 
   routesComp?: string;
 
@@ -69,7 +74,10 @@ export interface ISymxEmployee extends Document {
 const SymxEmployeeSchema: Schema = new Schema({
   firstName: { type: String, default: "" },
   lastName: { type: String, default: "" },
-  eeCode: { type: String },
+  // Paycom EE Code — required: the Punch Audit Report importer (and anything else that
+  // needs to cross-reference Paycom data) matches employees by this field. A blank
+  // eeCode means that employee's punches can never be auto-matched.
+  eeCode: { type: String, required: [true, "EE Code is required"] },
   transporterId: { type: String, index: true },
   badgeNumber: { type: String },
   gender: { type: String },
@@ -83,7 +91,7 @@ const SymxEmployeeSchema: Schema = new Schema({
   hiredDate: { type: Date },
   dob: { type: Date },
   hourlyStatus: { type: String },
-  rate: { type: Number },
+  rate: { type: Number, required: [true, "Pay rate is required"] },
   gasCardPin: { type: String },
   dlExpiration: { type: Date },
   motorVehicleReportDate: { type: Date },
@@ -106,6 +114,7 @@ const SymxEmployeeSchema: Schema = new Schema({
 
   offerLetterFile: { type: String },
   handbookFile: { type: String },
+  mealWaiverFile: { type: String },
   driversLicenseFile: { type: String },
   i9File: { type: String },
   drugTestFile: { type: String },
