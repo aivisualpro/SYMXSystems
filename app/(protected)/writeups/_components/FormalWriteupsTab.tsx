@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import SignaturePad from "@/components/ui/signature-pad";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { Loader2, Plus, ClipboardList, FileText, Printer, Upload, AlertTriangle, Download, ThumbsDown, ArrowUp, ArrowDown, ArrowUpDown, FileDown, MessageSquare, Trash2, FileEdit } from "lucide-react";
+import { Loader2, Plus, ClipboardList, FileText, Printer, Upload, AlertTriangle, Download, ThumbsDown, ArrowUp, ArrowDown, ArrowUpDown, FileDown, MessageSquare, Trash2, FileEdit, PenLine } from "lucide-react";
 
 // Presets keep the range picker fast for the most common lookups (matches
 // the Callouts page pattern).
@@ -397,8 +397,22 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
         (w) => (w.employeeName || "").toLowerCase().includes(q) || (w.categoryLabel || "").toLowerCase().includes(q)
       );
     }
-    return sortByKey(rows, sort);
-  }, [visibleWriteups, searchQuery, sort]);
+    rows = sortByKey(rows, sort);
+    // Drafts (nobody's signed yet — including the dispatcher's own issuer
+    // signature) float to the top of the main dashboard regardless of
+    // whatever column is sorted, same instinct as unread mail sitting above
+    // read: this is the dispatcher's own action queue, and a draft buried
+    // on page 3 by incident date is a draft nobody ever finishes. Only
+    // applies to the mixed "all statuses" view — pointless (and would
+    // reorder unexpectedly) once a single-status filter is already active,
+    // and the Workbench view never contains drafts at all.
+    if (!workbenchMode && statusFilter === "all") {
+      const drafts = rows.filter((w) => w.status === "draft");
+      const rest = rows.filter((w) => w.status !== "draft");
+      rows = [...drafts, ...rest];
+    }
+    return rows;
+  }, [visibleWriteups, searchQuery, sort, workbenchMode, statusFilter]);
 
   // ── Row selection ──
   const toggleSelectOne = (id: string) => {
@@ -808,7 +822,18 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
       {!workbenchMode && (
         <div className="grid grid-cols-3 gap-3">
           <Card><CardContent className="pt-0"><div className="text-2xl font-bold">{summary.total}</div><div className="text-xs text-muted-foreground">Total write-ups</div></CardContent></Card>
-          <Card><CardContent className="pt-0"><div className="text-2xl font-bold text-amber-600">{summary.pending}</div><div className="text-xs text-muted-foreground">Awaiting signature</div></CardContent></Card>
+          <Card
+            className={cn("cursor-pointer transition-colors", summary.pending > 0 && "border-amber-300 bg-amber-50/60 dark:bg-amber-950/20")}
+            onClick={() => setStatusFilter("draft")}
+          >
+            <CardContent className="pt-0">
+              <div className="flex items-center gap-1.5">
+                {summary.pending > 0 && <PenLine className="h-4 w-4 text-amber-600" />}
+                <div className="text-2xl font-bold text-amber-600">{summary.pending}</div>
+              </div>
+              <div className="text-xs text-muted-foreground">Awaiting signature</div>
+            </CardContent>
+          </Card>
           <Card
             className={cn("cursor-pointer transition-colors", summary.escalated > 0 && "border-red-300 bg-red-50/60 dark:bg-red-950/20")}
             onClick={() => setStatusFilter("pending_review")}
@@ -938,7 +963,11 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
             {filtered.map((w) => (
               <tr
                 key={w._id}
-                className={cn("border-t hover:bg-muted/30", isPendingReview(w) && "border-l-2 border-l-red-500 bg-red-50/40 dark:bg-red-950/10")}
+                className={cn(
+                  "border-t hover:bg-muted/30",
+                  isPendingReview(w) && "border-l-2 border-l-red-500 bg-red-50/40 dark:bg-red-950/10",
+                  w.status === "draft" && "border-l-2 border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/10"
+                )}
               >
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                   <input
@@ -956,8 +985,16 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
                   <Badge className={WARNING_LEVEL_COLORS[w.warningLevel] || ""}>{WARNING_LEVEL_LABELS[w.warningLevel] || w.warningLevel}</Badge>
                 </td>
                 <td className="cursor-pointer px-3 py-2 text-xs" onClick={() => openDetail(w)}>
+                  {w.status === "draft" && <PenLine className="mr-1 inline h-3.5 w-3.5 text-amber-600" />}
                   {isPendingReview(w) && <AlertTriangle className="mr-1 inline h-3.5 w-3.5 text-red-600" />}
-                  <span className={isPendingReview(w) ? "font-medium text-red-700 dark:text-red-400" : ""}>{statusLabel(w)}</span>
+                  <span
+                    className={cn(
+                      w.status === "draft" && "font-medium text-amber-700 dark:text-amber-400",
+                      isPendingReview(w) && "font-medium text-red-700 dark:text-red-400"
+                    )}
+                  >
+                    {statusLabel(w)}
+                  </span>
                   {isPendingReview(w) && <span className="ml-1 text-muted-foreground">({daysSince(w.reviewQueuedAt || w.escalatedAt)}d)</span>}
                 </td>
                 <td className="cursor-pointer px-3 py-2 text-muted-foreground" onClick={() => openDetail(w)}>{w.managerName}</td>
