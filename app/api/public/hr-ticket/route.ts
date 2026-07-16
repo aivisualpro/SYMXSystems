@@ -3,7 +3,6 @@ import connectToDatabase from "@/lib/db";
 import SymxHrTicket from "@/lib/models/SymxHrTicket";
 import {
   getNextTicketNumber,
-  findEmployeeByLookup,
   sendHrTicketNotificationEmail,
   sendDriverConfirmationEmail,
 } from "@/lib/hr-ticket-utils";
@@ -29,10 +28,14 @@ function getClientIp(req: NextRequest): string {
  * whitelisted (the old version spread the raw body straight into
  * SymxHrTicket.create(), so a crafted POST could set approveDeny,
  * resolution, closedBy, etc. directly), a honeypot field silently no-ops
- * bot submissions, IP-based throttling caps abuse, ticket numbers come from
- * an atomic shared counter (no more read-then-increment race), and an
- * optional Transporter ID / EE Code field links the ticket to a real
- * employee record when it matches.
+ * bot submissions, IP-based throttling caps abuse, and ticket numbers come
+ * from an atomic shared counter (no more read-then-increment race).
+ *
+ * This route intentionally does NOT try to auto-match the submitter to a
+ * SymxEmployee record — that match is made manually by whoever reviews the
+ * ticket in the admin Tickets workbench (via the employee-link picker on
+ * each ticket), since a driver's typed ID is unverified and a wrong
+ * auto-match would silently attach a ticket to the wrong person's record.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -71,11 +74,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Optional employee link ──
-    const lookupValue = body.employeeLookup || body.transporterId || body.eeCode;
-    const matchedEmployee = await findEmployeeByLookup(lookupValue);
-
     // ── Explicit field whitelist (never spread the raw body into create()) ──
+    // No transporterId/employeeId set here on purpose — linking a public
+    // submission to a real employee record is a manual step HR takes from
+    // the admin Tickets workbench, not something inferred from an
+    // unverified value the driver typed in.
     const ticketNumber = await getNextTicketNumber();
     const ticket = await SymxHrTicket.create({
       ticketNumber,
@@ -84,8 +87,6 @@ export async function POST(req: NextRequest) {
       notes: typeof body.notes === "string" ? body.notes.slice(0, 5000) : "",
       submitterName: typeof body.submitterName === "string" ? body.submitterName.slice(0, 200) : "",
       submitterEmail: typeof body.submitterEmail === "string" ? body.submitterEmail.slice(0, 200) : "",
-      eeCode: matchedEmployee?.eeCode || (typeof lookupValue === "string" ? lookupValue.slice(0, 50) : ""),
-      transporterId: matchedEmployee?.transporterId || "",
       submitterIp: ip !== "unknown" ? ip : undefined,
       source: "public",
       approveDeny: "",

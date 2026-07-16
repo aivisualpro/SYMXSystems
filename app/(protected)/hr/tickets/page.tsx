@@ -35,10 +35,13 @@ import {
   Check,
   Globe,
   Bell,
+  UserPlus,
+  UserCog,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { notify } from "@/lib/notify";
 import Papa from "papaparse";
 import QRCode from "qrcode";
@@ -47,6 +50,7 @@ interface HrTicket {
   _id: string;
   ticketNumber?: string;
   transporterId?: string;
+  employeeId?: string;
   category?: string;
   issue?: string;
   attachment?: string;
@@ -65,6 +69,15 @@ interface HrTicket {
   source?: "public" | "admin" | "import";
   submitterName?: string;
   submitterEmail?: string;
+}
+
+interface EmployeeSearchResult {
+  _id: string;
+  firstName?: string;
+  lastName?: string;
+  transporterId?: string;
+  eeCode?: string;
+  profileImage?: string;
 }
 
 type StatusFilter = "all" | "pending" | "approved" | "denied";
@@ -101,6 +114,114 @@ function getStatusConfig(status: string) {
 }
 
 const CHUNK_SIZE = 500;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  EMPLOYEE PICKER
+ *  Lets whoever is reviewing a ticket manually match it to a real
+ *  SymxEmployee record — deliberately manual (not auto-matched from
+ *  anything the driver typed on the public form) since that's unverified
+ *  input and a wrong auto-match would silently misattribute a ticket.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+function EmployeePicker({
+  linked,
+  onSelect,
+  onClear,
+  trigger,
+}: {
+  linked: boolean;
+  onSelect: (emp: EmployeeSearchResult) => void;
+  onClear?: () => void;
+  trigger: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<EmployeeSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setSearching(true);
+    const handle = setTimeout(() => {
+      const params = new URLSearchParams({
+        limit: "8",
+        select: "firstName,lastName,transporterId,eeCode,profileImage",
+      });
+      if (query.trim()) params.set("search", query.trim());
+      fetch(`/api/admin/employees?${params.toString()}`)
+        .then((res) => res.json())
+        .then((data) => setResults(Array.isArray(data) ? data : data.records || []))
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [open, query]);
+
+  useEffect(() => {
+    if (!open) setQuery("");
+  }, [open]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent className="w-72 p-2" align="end" onClick={(e) => e.stopPropagation()}>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-1 pb-1.5">
+          Match to Employee
+        </p>
+        <Input
+          autoFocus
+          placeholder="Search name, EE code, transporter ID..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="h-8 text-xs mb-2"
+        />
+        <div className="max-h-56 overflow-y-auto space-y-0.5">
+          {searching ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : results.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-4">No matches</p>
+          ) : (
+            results.map((e) => (
+              <button
+                key={e._id}
+                onClick={() => {
+                  onSelect(e);
+                  setOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/60 text-left transition-colors"
+              >
+                {e.profileImage ? (
+                  <img src={e.profileImage} className="h-6 w-6 rounded-full object-cover shrink-0" alt="" />
+                ) : (
+                  <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center shrink-0">
+                    <User className="h-3 w-3 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold truncate">{e.firstName} {e.lastName}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{e.transporterId || e.eeCode || ""}</p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+        {linked && onClear && (
+          <button
+            onClick={() => {
+              onClear();
+              setOpen(false);
+            }}
+            className="w-full text-[11px] font-medium text-red-500 hover:text-red-600 text-center mt-2 pt-2 border-t border-border/40"
+          >
+            Unlink employee
+          </button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  SHARE DIALOG
@@ -394,6 +515,10 @@ function TicketDialog({
   const [resolution, setResolution] = useState(ticket?.resolution || "");
   const [holdReason, setHoldReason] = useState(ticket?.holdReason || "");
   const [managersEmail, setManagersEmail] = useState(ticket?.managersEmail || "");
+  const [employeeId, setEmployeeId] = useState(ticket?.employeeId || "");
+  const [employeeName, setEmployeeName] = useState(ticket?.employeeName || "");
+  const [profileImage, setProfileImage] = useState(ticket?.profileImage || "");
+  const [transporterId, setTransporterId] = useState(ticket?.transporterId || "");
   const upsert = useUpsertTicket();
   const saving = upsert.isPending;
 
@@ -405,12 +530,34 @@ function TicketDialog({
       setResolution(ticket?.resolution || "");
       setHoldReason(ticket?.holdReason || "");
       setManagersEmail(ticket?.managersEmail || "");
+      setEmployeeId(ticket?.employeeId || "");
+      setEmployeeName(ticket?.employeeName || "");
+      setProfileImage(ticket?.profileImage || "");
+      setTransporterId(ticket?.transporterId || "");
     }
   }, [open, ticket]);
 
+  const handleSelectEmployee = (emp: EmployeeSearchResult) => {
+    setEmployeeId(emp._id);
+    setEmployeeName(`${emp.firstName || ""} ${emp.lastName || ""}`.trim());
+    setProfileImage(emp.profileImage || "");
+    setTransporterId(emp.transporterId || "");
+  };
+
+  const handleClearEmployee = () => {
+    setEmployeeId("");
+    setEmployeeName("");
+    setProfileImage("");
+    setTransporterId("");
+  };
+
   const handleSave = () => {
     if (!category && !issue) return;
-    const body = { category, issue, notes, resolution, holdReason, managersEmail };
+    const body = {
+      category, issue, notes, resolution, holdReason, managersEmail,
+      employeeId: employeeId || null,
+      transporterId: transporterId || "",
+    };
     upsert.mutate({ id: ticket?._id, data: body });
     onSaved();
     onClose();
@@ -449,6 +596,61 @@ function TicketDialog({
         </div>
 
         <div className="px-6 pb-6 space-y-5">
+          {/* Submitted By (read-only context, public tickets only) */}
+          {(ticket?.submitterName || ticket?.submitterEmail) && (
+            <div className="rounded-xl bg-purple-500/5 border border-purple-500/20 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-purple-500/80 mb-1 flex items-center gap-1.5">
+                <Globe className="h-3 w-3" /> Submitted via public form
+              </p>
+              <p className="text-sm font-semibold text-foreground">{ticket?.submitterName || "Unknown"}</p>
+              {ticket?.submitterEmail && (
+                <p className="text-xs text-muted-foreground">{ticket.submitterEmail}</p>
+              )}
+            </div>
+          )}
+
+          {/* Linked Employee */}
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
+              Linked Employee <span className="text-muted-foreground/60 normal-case font-normal">(who this ticket is about)</span>
+            </label>
+            <EmployeePicker
+              linked={!!employeeId}
+              onSelect={handleSelectEmployee}
+              onClear={handleClearEmployee}
+              trigger={
+                <button
+                  type="button"
+                  className="w-full flex items-center gap-3 rounded-xl border border-border/50 bg-background px-4 py-2.5 text-left hover:border-primary/40 transition-colors"
+                >
+                  {employeeId ? (
+                    <>
+                      {profileImage ? (
+                        <img src={profileImage} className="h-8 w-8 rounded-lg object-cover shrink-0" alt="" />
+                      ) : (
+                        <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold truncate">{employeeName}</p>
+                        {transporterId && <p className="text-[10px] text-muted-foreground truncate">{transporterId}</p>}
+                      </div>
+                      <UserCog className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                        <UserPlus className="h-4 w-4 text-purple-500" />
+                      </div>
+                      <span className="text-sm text-muted-foreground flex-1">Search &amp; link an employee</span>
+                    </>
+                  )}
+                </button>
+              }
+            />
+          </div>
+
           {/* Category */}
           <div>
             <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">Category</label>
@@ -705,6 +907,29 @@ export default function HRTicketsPage() {
     );
   }, [upsertTicket]);
 
+  // ── Link / unlink employee ──
+  const handleLinkEmployee = useCallback((ticketId: string, emp: EmployeeSearchResult | null) => {
+    const employeeName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() : "";
+    setTickets((prev) =>
+      prev.map((t) =>
+        t._id === ticketId
+          ? {
+              ...t,
+              employeeId: emp?._id || undefined,
+              employeeName: emp ? employeeName : (t.submitterName || ""),
+              profileImage: emp?.profileImage || "",
+              transporterId: emp?.transporterId || "",
+            }
+          : t
+      )
+    );
+    upsertTicket.mutate({
+      id: ticketId,
+      data: { employeeId: emp?._id || null, transporterId: emp?.transporterId || "" },
+    });
+    notify.success(emp ? `Linked to ${employeeName}` : "Employee unlinked");
+  }, [upsertTicket]);
+
   // ── Delete ──
   const handleDelete = useCallback((ticketId: string) => {
     if (!confirm("Delete this ticket? This cannot be undone.")) return;
@@ -920,6 +1145,14 @@ export default function HRTicketsPage() {
                               <Globe className="h-2.5 w-2.5" /> Public
                             </span>
                           )}
+                          {t.source === "public" && !t.employeeId && (
+                            <span
+                              className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded"
+                              title="Not yet matched to an employee record — use the link icon to match"
+                            >
+                              <UserPlus className="h-2.5 w-2.5" /> Unlinked
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -930,8 +1163,25 @@ export default function HRTicketsPage() {
                         <config.icon className="h-3 w-3" />
                         {config.label}
                       </div>
-                      {/* Edit + Delete */}
+                      {/* Link Employee + Edit + Delete */}
                       <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
+                        <EmployeePicker
+                          linked={!!t.employeeId}
+                          onSelect={(emp) => handleLinkEmployee(t._id, emp)}
+                          onClear={() => handleLinkEmployee(t._id, null)}
+                          trigger={
+                            <button
+                              className="h-7 w-7 rounded-md flex items-center justify-center hover:bg-muted/50 transition-colors"
+                              title={t.employeeId ? "Change linked employee" : "Link to employee"}
+                            >
+                              {t.employeeId ? (
+                                <UserCog className="h-3 w-3 text-muted-foreground" />
+                              ) : (
+                                <UserPlus className="h-3 w-3 text-purple-500" />
+                              )}
+                            </button>
+                          }
+                        />
                         <button
                           onClick={() => { setEditingTicket(t); setShowTicketDialog(true); }}
                           className="h-7 w-7 rounded-md flex items-center justify-center hover:bg-muted/50 transition-colors"

@@ -50,19 +50,41 @@ export async function GET(req: NextRequest) {
 }
 
 async function enrichTickets(tickets: any[]) {
-  // ── Resolve transporterId → employee name ──
-  const transporterIds = [...new Set(
-    tickets.map((t) => t.transporterId).filter(Boolean)
+  // ── Resolve employeeId → employee name (the primary, manually-set link) ──
+  const employeeIds = [...new Set(
+    tickets.map((t) => t.employeeId).filter(Boolean).map((id: any) => String(id))
   )];
 
-  const empMap = new Map<string, { employeeName: string; profileImage: string }>();
+  const empByIdMap = new Map<string, { employeeName: string; profileImage: string; transporterId: string }>();
+  if (employeeIds.length > 0) {
+    const employees = await SymxEmployee.find(
+      { _id: { $in: employeeIds } },
+      { transporterId: 1, firstName: 1, lastName: 1, profileImage: 1 }
+    ).lean();
+    employees.forEach((emp: any) => {
+      empByIdMap.set(String(emp._id), {
+        employeeName: `${emp.firstName || ""} ${emp.lastName || ""}`.trim(),
+        profileImage: emp.profileImage || "",
+        transporterId: emp.transporterId || "",
+      });
+    });
+  }
+
+  // ── Fallback: resolve bare transporterId → employee name, for legacy/
+  // imported tickets that predate the employeeId link and were never
+  // manually re-linked ──
+  const transporterIds = [...new Set(
+    tickets.filter((t) => !t.employeeId && t.transporterId).map((t) => t.transporterId)
+  )];
+
+  const empByTransporterMap = new Map<string, { employeeName: string; profileImage: string }>();
   if (transporterIds.length > 0) {
     const employees = await SymxEmployee.find(
       { transporterId: { $in: transporterIds } },
       { transporterId: 1, firstName: 1, lastName: 1, profileImage: 1 }
     ).lean();
     employees.forEach((emp: any) => {
-      empMap.set(emp.transporterId, {
+      empByTransporterMap.set(emp.transporterId, {
         employeeName: `${emp.firstName || ""} ${emp.lastName || ""}`.trim(),
         profileImage: emp.profileImage || "",
       });
@@ -87,7 +109,9 @@ async function enrichTickets(tickets: any[]) {
 
   // ── Enrich tickets ──
   return tickets.map((t) => {
-    const emp = t.transporterId ? empMap.get(t.transporterId) : null;
+    const empById = t.employeeId ? empByIdMap.get(String(t.employeeId)) : null;
+    const empByTransporter = !empById && t.transporterId ? empByTransporterMap.get(t.transporterId) : null;
+    const emp = empById || empByTransporter;
     return {
       ...t,
       // Falls back to the driver's typed name (submitterName) when the

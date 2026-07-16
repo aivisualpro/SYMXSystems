@@ -2,7 +2,6 @@ import { Resend } from "resend";
 import connectToDatabase from "@/lib/db";
 import SymxHrTicketSettings from "@/lib/models/SymxHrTicketSettings";
 import SymxHrTicket from "@/lib/models/SymxHrTicket";
-import SymxEmployee from "@/lib/models/SymxEmployee";
 
 const APP_URL = "https://symx-systems-erp.vercel.app";
 const FROM_ADDRESS = "SYMX Systems Support <info@adeelfullstack.com>";
@@ -39,32 +38,6 @@ export async function getNextTicketNumber(): Promise<string> {
     { new: true }
   );
   return String(updated!.lastTicketNumber);
-}
-
-/**
- * Best-effort lookup so a driver typing their Transporter ID or Paycom EE
- * Code on the public form gets linked to a real SymxEmployee record —
- * reuses the exact transporterId field the admin ticket list already knows
- * how to resolve into a name/avatar (see enrichTickets in
- * app/api/admin/hr-tickets/route.ts), no new enrichment logic needed there.
- * Returns null if the value is blank or no employee matches.
- */
-export async function findEmployeeByLookup(
-  lookup: string | undefined | null
-): Promise<{ transporterId: string; eeCode: string } | null> {
-  const value = (lookup || "").trim();
-  if (!value) return null;
-  await connectToDatabase();
-  const employee = await SymxEmployee.findOne({
-    $or: [{ transporterId: value }, { eeCode: value }],
-  })
-    .select({ transporterId: 1, eeCode: 1 })
-    .lean();
-  if (!employee) return null;
-  return {
-    transporterId: (employee as any).transporterId || "",
-    eeCode: (employee as any).eeCode || "",
-  };
 }
 
 /**

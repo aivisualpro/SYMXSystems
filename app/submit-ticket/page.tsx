@@ -23,7 +23,6 @@ export default function SubmitTicketPage() {
   const [issue, setIssue] = useState("");
   const [submitterName, setSubmitterName] = useState("");
   const [submitterEmail, setSubmitterEmail] = useState("");
-  const [employeeLookup, setEmployeeLookup] = useState("");
   const [notes, setNotes] = useState("");
   const [website, setWebsite] = useState(""); // honeypot — real users never see/fill this
   const [errorMsg, setErrorMsg] = useState("");
@@ -59,7 +58,6 @@ export default function SubmitTicketPage() {
           notes: notes.trim(),
           submitterName: submitterName.trim(),
           submitterEmail: submitterEmail.trim(),
-          employeeLookup: employeeLookup.trim(),
           website, // honeypot
         }),
       });
@@ -86,7 +84,6 @@ export default function SubmitTicketPage() {
     setIssue("");
     setSubmitterName("");
     setSubmitterEmail("");
-    setEmployeeLookup("");
     setNotes("");
     setTicketNumber("");
     setErrorMsg("");
@@ -166,21 +163,6 @@ export default function SubmitTicketPage() {
                   className="w-full bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
                 />
                 <p className="text-[11px] text-zinc-600 mt-1.5">We'll email you a confirmation with your ticket number.</p>
-              </div>
-
-              {/* Employee lookup (optional) */}
-              <div>
-                <label className="text-zinc-400 text-xs font-semibold uppercase tracking-wider block mb-2">
-                  Transporter ID or EE Code <span className="text-zinc-600 normal-case font-normal">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={employeeLookup}
-                  onChange={(e) => setEmployeeLookup(e.target.value)}
-                  placeholder="e.g. A1B2C3D4E5F6"
-                  className="w-full bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
-                />
-                <p className="text-[11px] text-zinc-600 mt-1.5">Helps HR find your employee record faster — skip it if you don't have it handy.</p>
               </div>
 
               {/* Category */}

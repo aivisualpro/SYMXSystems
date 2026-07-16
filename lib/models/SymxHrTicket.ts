@@ -3,6 +3,10 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface ISymxHrTicket extends Document {
   ticketNumber?: string;
   transporterId?: string;
+  // Links this ticket to a real SymxEmployee record. Set manually by
+  // whoever reviews the ticket in the admin Tickets workbench (via the
+  // employee-link picker) — never inferred automatically from anything a
+  // driver typed on the public form, since that's unverified input.
   employeeId?: mongoose.Types.ObjectId;
   category?: string;
   issue?: string;
@@ -24,10 +28,6 @@ export interface ISymxHrTicket extends Document {
   // routing/manager contact) so the two don't collide.
   submitterName?: string;
   submitterEmail?: string;
-  // Optional identifier a driver can type on the public form so the ticket
-  // gets linked to their real SymxEmployee record (resolved server-side
-  // into transporterId when a match is found).
-  eeCode?: string;
   // Best-effort submitter IP, recorded only on public submissions for
   // lightweight abuse throttling/auditing — never shown in the UI.
   submitterIp?: string;
@@ -55,7 +55,6 @@ const SymxHrTicketSchema = new Schema<ISymxHrTicket>(
     source: { type: String, enum: ["public", "admin", "import"], default: "admin" },
     submitterName: { type: String },
     submitterEmail: { type: String },
-    eeCode: { type: String },
     submitterIp: { type: String },
   },
   { timestamps: true, collection: "symxhrtickets" }
