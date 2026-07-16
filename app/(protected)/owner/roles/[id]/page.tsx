@@ -366,16 +366,6 @@ export default function RoleDetailsPage() {
         <div>
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">{role.name}</h1>
         </div>
-        <Separator orientation="vertical" className="h-6 mx-1" />
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={!!role.isManager}
-            onCheckedChange={handleToggleIsManager}
-          />
-          <Label className="text-xs text-muted-foreground whitespace-nowrap">
-            Manager <span className="text-muted-foreground/60">(reviews write-ups)</span>
-          </Label>
-        </div>
       </div>
     );
 
@@ -417,6 +407,20 @@ export default function RoleDetailsPage() {
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col">
+
+      {/* Role-level trait, separate from the per-module permission matrix
+          below — lives here in the main content, not the page header,
+          since the header's title area truncates/clips on narrower
+          viewports and this control was getting hidden there. */}
+      <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
+        <div>
+          <div className="text-sm font-medium">Manager</div>
+          <div className="text-xs text-muted-foreground">
+            Reviews write-ups from the Manager Review Workbench. Independent of the module permissions below — toggling this on also grants Approve on Write-Ups.
+          </div>
+        </div>
+        <Switch checked={!!role.isManager} onCheckedChange={handleToggleIsManager} />
+      </div>
 
       <Tabs defaultValue="modules" className="flex-1 flex flex-col overflow-hidden">
         <div className="px-4 py-3">

@@ -230,6 +230,13 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
   // Gates the "Delete" button — server enforces via requirePermission("Admin","delete"),
   // this just avoids showing a button that will 403.
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  // Drives what happens right after the employee signs/refuses/uploads a
+  // signed copy: a manager is likely the one physically holding the device
+  // right then, so keep the dialog open and drop them straight into the
+  // review decision. Anyone else (a dispatcher, most commonly) isn't going
+  // to review it themselves — the manager isn't there — so signing is the
+  // last thing they do; close out and hand it to the queue.
+  const [isManager, setIsManager] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   // Create dialog
@@ -346,6 +353,7 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
       .then((res) => res.json())
       .then((d) => {
         setIsSuperAdmin(d.role === "Super Admin");
+        setIsManager(d.role === "Super Admin" || !!d.isManager);
         if (d.role === "Super Admin") { setCanApprove(true); return; }
         const perm = (d.permissions || []).find((p: any) => p.module === "Write-Ups");
         setCanApprove(perm ? perm.actions?.approve !== false : true);
@@ -643,9 +651,18 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to sign");
-      notify.success("Signed — sent for manager review");
-      await refreshSelected(selected._id);
+      const writeupId = selected._id;
+      await refreshSelected(writeupId);
       await load();
+      if (isManager) {
+        notify.success("Signed — review it below");
+      } else {
+        notify.success("Signed — sent for manager review");
+        // The manager isn't the one holding the device right now — signing
+        // is the last step for whoever is. Close out rather than leave the
+        // dialog sitting on an "awaiting review" state nobody here can act on.
+        setSelected(null);
+      }
     } catch (err: any) {
       notify.error(err.message || "Failed to sign");
     } finally {
@@ -668,10 +685,15 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to record refusal");
-      notify.success("Refusal recorded — sent for manager review");
       setRefuseOpen(false);
       await refreshSelected(selected._id);
       await load();
+      if (isManager) {
+        notify.success("Refusal recorded — review it below");
+      } else {
+        notify.success("Refusal recorded — sent for manager review");
+        setSelected(null);
+      }
     } catch (err: any) {
       notify.error(err.message || "Failed to record refusal");
     } finally {
