@@ -51,6 +51,14 @@ interface MonthlyKPI {
   laborVarPct: number
 }
 
+interface LaborContributor {
+  transporterId: string
+  employeeName: string
+  actualCost: number
+  regHrs: number
+  otHrs: number
+}
+
 interface DailyKPI {
   day: string
   dayLabel: string
@@ -63,6 +71,25 @@ interface DailyKPI {
   laborCostActual: number
   laborVarDol: number
   laborVarPct: number
+  topContributors?: LaborContributor[]
+}
+
+// ── Labor % of Revenue thresholds — flags days where labor ate too much margin.
+// Defaults; adjust here if the healthy range for your operation differs.
+const LABOR_PCT_WARNING = 65
+const LABOR_PCT_DANGER = 75
+
+function laborPctFlagClass(pct: number): string {
+  if (pct <= 0) return ""
+  if (pct >= LABOR_PCT_DANGER) return "bg-rose-500/15 ring-1 ring-inset ring-rose-500/40"
+  if (pct >= LABOR_PCT_WARNING) return "bg-amber-500/10 ring-1 ring-inset ring-amber-500/30"
+  return ""
+}
+
+function laborPctTextClass(pct: number): string {
+  if (pct >= LABOR_PCT_DANGER) return "text-rose-500"
+  if (pct >= LABOR_PCT_WARNING) return "text-amber-500"
+  return ""
 }
 
 interface KPITotals {
@@ -774,8 +801,15 @@ export function ChartMomKpi() {
                           // All other weekly cells open formula popup
                           const isWeeklyClickable = timeframe === "week" && !isRevenueWeekly
 
+                          // Flag days where labor ate too much of revenue — the #1 thing
+                          // to catch at a glance. Only the Actual % (real spend) is flagged;
+                          // Theory % is just the planned baseline for comparison.
+                          const isLaborPctFlagged = metric.key === "laborActualPct"
+                          const flagBgClass = isLaborPctFlagged ? laborPctFlagClass(val) : ""
+                          const flagTextClass = isLaborPctFlagged ? laborPctTextClass(val) : ""
+
                           return (
-                            <td key={item[columnKey]} className="px-2 py-2 text-center">
+                            <td key={item[columnKey]} className={cn("px-2 py-2 text-center", flagBgClass)}>
                               <div className="flex flex-col items-center gap-0.5">
                                 {isRevenueWeekly ? (
                                   <button
@@ -796,9 +830,9 @@ export function ChartMomKpi() {
                                       "text-[12px] font-bold tabular-nums cursor-pointer rounded-md px-2 py-0.5",
                                       "hover:bg-violet-500/10 hover:ring-1 hover:ring-violet-500/30 transition-all",
                                       "focus-visible:ring-1 focus-visible:ring-ring outline-none",
-                                      val === 0 && metric.format !== "signedCurrency" && metric.format !== "signedPercent"
+                                      flagTextClass || (val === 0 && metric.format !== "signedCurrency" && metric.format !== "signedPercent"
                                         ? "text-muted-foreground/40"
-                                        : valColor
+                                        : valColor)
                                     )}
                                   >
                                     {formatValue(val, metric.format, timeframe)}
@@ -806,9 +840,9 @@ export function ChartMomKpi() {
                                 ) : (
                                   <span className={cn(
                                     "text-[12px] font-bold tabular-nums",
-                                    val === 0 && metric.format !== "signedCurrency" && metric.format !== "signedPercent"
+                                    flagTextClass || (val === 0 && metric.format !== "signedCurrency" && metric.format !== "signedPercent"
                                       ? "text-muted-foreground/40"
-                                      : valColor
+                                      : valColor)
                                   )}>
                                     {formatValue(val, metric.format, timeframe)}
                                   </span>
@@ -1163,10 +1197,20 @@ export function ChartMomKpi() {
           finalColor = d.laborVarPct > 0 ? "text-emerald-500" : d.laborVarPct < 0 ? "text-rose-500" : "text-foreground"
         }
 
+        // "Top contributors" — which employees drove this day's labor cost. Only relevant
+        // for the metrics tied to actual spend (not the theoretical/planned ones).
+        const showContributors =
+          ["Labor Actual %", "Labor Cost Actual", "Labor Var $", "Labor Var %"].includes(kpiModal.metricLabel) &&
+          (d.topContributors?.length ?? 0) > 0
+        const dayTotalActual = d.laborCostActual || 1
+
         return (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setKpiModal(prev => ({ ...prev, open: false }))} />
-            <div className="relative w-full max-w-md bg-card border border-border shadow-2xl rounded-xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+            <div className={cn(
+              "relative w-full bg-card border border-border shadow-2xl rounded-xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden max-h-[85vh]",
+              showContributors ? "max-w-lg" : "max-w-md"
+            )}>
               {/* Header */}
               <div className="shrink-0 px-5 py-4 border-b border-border bg-gradient-to-r from-violet-500/10 to-indigo-500/5 items-center justify-between flex">
                 <div className="flex items-center gap-3">
@@ -1191,7 +1235,7 @@ export function ChartMomKpi() {
               </div>
 
               {/* Content */}
-              <div className="p-8 flex flex-col items-center justify-center text-center space-y-6 w-full">
+              <div className="p-8 flex flex-col items-center justify-center text-center space-y-6 w-full overflow-y-auto">
                 <div className="space-y-2 w-full max-w-sm">
                   <h4 className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 drop-shadow-sm">Metric Context</h4>
                   <div className="bg-muted/30 rounded-xl p-4 border border-border/50 text-[13px] font-medium font-mono whitespace-nowrap shadow-sm text-foreground/80">
@@ -1209,6 +1253,34 @@ export function ChartMomKpi() {
                     {finalResult}
                   </div>
                 </div>
+
+                {showContributors && (
+                  <div className="space-y-2 w-full text-left border-t border-border/50 pt-5">
+                    <h4 className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 drop-shadow-sm text-center">
+                      Top Contributors — Who Drove This Day&apos;s Labor Cost
+                    </h4>
+                    <div className="rounded-xl border border-border/50 overflow-hidden divide-y divide-border/30">
+                      {d.topContributors!.map((c) => {
+                        const share = dayTotalActual > 0 ? Math.round((c.actualCost / dayTotalActual) * 100) : 0
+                        return (
+                          <div key={c.transporterId} className="flex items-center justify-between gap-3 px-3 py-2 bg-muted/20">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-bold truncate">{c.employeeName}</div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {c.regHrs.toFixed(1)}h reg
+                                {c.otHrs > 0 && <span className="text-rose-400 font-semibold"> + {c.otHrs.toFixed(1)}h OT</span>}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="text-xs font-black font-mono text-indigo-400">${c.actualCost.toFixed(2)}</div>
+                              <div className="text-[10px] text-muted-foreground">{share}% of day</div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -7,6 +7,7 @@ import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import RouteType from "@/lib/models/RouteType";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
+import { canViewCompensation } from "@/lib/compensation-visibility";
 
 /**
  * GET /api/dashboard/week-kpi?yearWeek=2026-W28
@@ -90,6 +91,9 @@ export async function GET(req: NextRequest) {
     const routeTypeByNameMap = new Map((routeTypes as any[]).map(rt => [(rt.name || "").trim().toLowerCase(), rt]));
     const wstMap = new Map((wstOptions as any[]).map(w => [(w.wst || "").trim().toLowerCase(), w.revenue || 0]));
     const employeeRateMap = new Map((activeEmployees as any[]).map(e => [e.transporterId, Number(e.rate) || 0]));
+    const employeeNameMap = new Map(
+      (activeEmployees as any[]).map(e => [e.transporterId, `${e.firstName || ""} ${e.lastName || ""}`.trim()])
+    );
 
     // ── 2. Faceted aggregation on SYMXRoutes for the week ──
     const routesPipeline = [
@@ -211,12 +215,16 @@ export async function GET(req: NextRequest) {
 
     // Actual cost map: day → { totalActual, driverActual, opsActual, computedRevenue }
     const actualMap = new Map<string, { totalActual: number; driverActual: number; opsActual: number; computedRevenue: number }>();
+    // Per-employee actual cost/hours for the day — powers the "top contributors" drill-down
+    // (which employees drove a bad day's labor cost).
+    const employeeDayMap = new Map<string, Map<string, { actualCost: number; regHrs: number; otHrs: number }>>();
     for (const group of faceted.actualByDay) {
       const day = group._id;
       let totalActual = 0;
       let driverActual = 0;
       let opsActual = 0;
       let computedRevenue = 0;
+      const empMap = new Map<string, { actualCost: number; regHrs: number; otHrs: number }>();
 
       for (const r of group.records) {
         // Compute actual hours from paycom times
@@ -250,6 +258,14 @@ export async function GET(req: NextRequest) {
         if (actualCost > 0) {
           totalActual += actualCost;
 
+          // Accumulate per-employee (an employee can have more than one route/entry in a day)
+          const prevEmp = empMap.get(r.transporterId) || { actualCost: 0, regHrs: 0, otHrs: 0 };
+          empMap.set(r.transporterId, {
+            actualCost: Math.round((prevEmp.actualCost + actualCost) * 100) / 100,
+            regHrs: Math.round((prevEmp.regHrs + regHrs) * 100) / 100,
+            otHrs: Math.round((prevEmp.otHrs + otHrs) * 100) / 100,
+          });
+
           // Resolve group via typeId
           const resolvedRT = r.typeId ? routeTypeByIdMap.get(String(r.typeId)) : null;
           const groupName = resolvedRT
@@ -281,6 +297,7 @@ export async function GET(req: NextRequest) {
         opsActual: Math.round(opsActual * 100) / 100,
         computedRevenue: Math.round(computedRevenue * 100) / 100,
       });
+      employeeDayMap.set(day, empMap);
     }
 
     // Theory cost map: day → totalTheory
@@ -319,6 +336,11 @@ export async function GET(req: NextRequest) {
       dayLabels.push({ day: dayStr, dayLabel: DAY_LABELS[i] });
     }
 
+    // Pay/labor-cost-per-employee is compensation data — only surface the
+    // "top contributors" drill-down to Super Admin / Owner-module-level access,
+    // same gate used everywhere else pay figures are shown (see lib/compensation-visibility.ts).
+    const canViewComp = await canViewCompensation(session);
+
     const dailyData = dayLabels.map(({ day, dayLabel }) => {
       const actual = actualMap.get(day);
       const revenue = actual?.computedRevenue || revenueMap.get(day) || 0;
@@ -334,6 +356,20 @@ export async function GET(req: NextRequest) {
       const laborVarDol = Math.round((laborCostTheory - laborCostActual) * 100) / 100;
       const laborVarPct = laborCostTheory > 0 ? Math.round((laborVarDol / laborCostTheory) * 100) : 0;
 
+      // Top 5 employees by actual labor cost that day — explains WHY a flagged day ran hot.
+      const topContributors = canViewComp
+        ? Array.from(employeeDayMap.get(day)?.entries() || [])
+            .map(([transporterId, v]) => ({
+              transporterId,
+              employeeName: employeeNameMap.get(transporterId) || transporterId,
+              actualCost: v.actualCost,
+              regHrs: v.regHrs,
+              otHrs: v.otHrs,
+            }))
+            .sort((a, b) => b.actualCost - a.actualCost)
+            .slice(0, 5)
+        : [];
+
       return {
         day,
         dayLabel,
@@ -344,6 +380,7 @@ export async function GET(req: NextRequest) {
         laborActualPct,
         laborCostTheory,
         laborCostActual,
+        topContributors,
         laborVarDol,
         laborVarPct,
       };
