@@ -73,24 +73,42 @@ interface DailyKPI {
   laborVarDol: number
   laborVarPct: number
   topContributors?: LaborContributor[]
+  /** False when no employee has punch-derived actual cost yet for this day
+   *  (future day, or timecards not entered/imported yet). */
+  hasActuals?: boolean
+  missingPunchCount?: number
+  missingPunchNames?: string[]
 }
 
-// ── Labor % of Revenue thresholds — flags days where labor ate too much margin.
-// Defaults; adjust here if the healthy range for your operation differs.
-const LABOR_PCT_WARNING = 65
-const LABOR_PCT_DANGER = 75
+// ── Labor % of Revenue flag — anything at/above this starts getting flagged, and the
+// flag gets progressively more red the higher it climbs (capped out at FLAG_MAX).
+// Defaults; tell me your actual healthy range and I'll swap these in.
+const LABOR_PCT_FLAG_START = 71
+const LABOR_PCT_FLAG_MAX = 95
 
-function laborPctFlagClass(pct: number): string {
-  if (pct <= 0) return ""
-  if (pct >= LABOR_PCT_DANGER) return "bg-rose-500/15 ring-1 ring-inset ring-rose-500/40"
-  if (pct >= LABOR_PCT_WARNING) return "bg-amber-500/10 ring-1 ring-inset ring-amber-500/30"
-  return ""
+/** 0 (not flagged) → 1 (fully red) based on how far past the flag start the value is. */
+function laborPctSeverity(pct: number): number {
+  if (pct < LABOR_PCT_FLAG_START) return 0
+  return Math.min(1, (pct - LABOR_PCT_FLAG_START) / (LABOR_PCT_FLAG_MAX - LABOR_PCT_FLAG_START))
 }
 
-function laborPctTextClass(pct: number): string {
-  if (pct >= LABOR_PCT_DANGER) return "text-rose-500"
-  if (pct >= LABOR_PCT_WARNING) return "text-amber-500"
-  return ""
+function laborPctCellStyle(pct: number): React.CSSProperties {
+  const s = laborPctSeverity(pct)
+  if (s <= 0) return {}
+  return {
+    backgroundColor: `rgba(244, 63, 94, ${(0.05 + s * 0.22).toFixed(3)})`,
+    boxShadow: `inset 0 0 0 1px rgba(244, 63, 94, ${(0.15 + s * 0.4).toFixed(3)})`,
+  }
+}
+
+function laborPctValueStyle(pct: number): React.CSSProperties {
+  const s = laborPctSeverity(pct)
+  if (s <= 0) return {}
+  // Interpolate amber (just over the line) → rose (deep into the red) as severity climbs.
+  const from = [217, 119, 6]   // amber-600
+  const to = [190, 18, 60]     // rose-700
+  const mix = from.map((c, i) => Math.round(c + (to[i] - c) * s))
+  return { color: `rgb(${mix.join(",")})`, fontWeight: 800 }
 }
 
 interface KPITotals {
@@ -766,7 +784,16 @@ export function ChartMomKpi() {
                           formatMonthShort(item.month)
                         ) : (
                           <div className="flex flex-col items-center gap-0.5">
-                            <span>{item.dayLabel}</span>
+                            <span className="inline-flex items-center gap-1">
+                              {item.dayLabel}
+                              {(item as DailyKPI).missingPunchCount ? (
+                                <span
+                                  title={`${(item as DailyKPI).missingPunchCount} employee${(item as DailyKPI).missingPunchCount === 1 ? "" : "s"} scheduled but missing time data: ${((item as DailyKPI).missingPunchNames || []).join(", ")}`}
+                                >
+                                  <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />
+                                </span>
+                              ) : null}
+                            </span>
                             <span className="text-[9px] font-medium normal-case tracking-normal text-muted-foreground/60">
                               {formatDayNum(item.day)}
                             </span>
@@ -804,13 +831,32 @@ export function ChartMomKpi() {
 
                           // Flag days where labor ate too much of revenue — the #1 thing
                           // to catch at a glance. Only the Actual % (real spend) is flagged;
-                          // Theory % is just the planned baseline for comparison.
+                          // Theory % is just the planned baseline for comparison. Gets more
+                          // red the further past the flag line it is.
                           const isLaborPctFlagged = metric.key === "laborActualPct"
-                          const flagBgClass = isLaborPctFlagged ? laborPctFlagClass(val) : ""
-                          const flagTextClass = isLaborPctFlagged ? laborPctTextClass(val) : ""
+                          const cellStyle = isLaborPctFlagged ? laborPctCellStyle(val) : undefined
+                          const valueStyle = isLaborPctFlagged ? laborPctValueStyle(val) : undefined
+
+                          // Labor Var $/% compare Actual against Theory — meaningless (and
+                          // misleading) on a day with no real actual data yet (future day,
+                          // or timecards not entered). Show "—" instead of a fake $ "win".
+                          const needsActuals = metric.key === "laborVarDol" || metric.key === "laborVarPct"
+                          const isNoDataDay = timeframe === "week" && needsActuals && item.hasActuals === false
+
+                          if (isNoDataDay) {
+                            return (
+                              <td key={item[columnKey]} className="px-2 py-2 text-center">
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <span className="text-[12px] font-bold tabular-nums text-muted-foreground/40" title="No actual time data recorded for this day yet">
+                                    —
+                                  </span>
+                                </div>
+                              </td>
+                            )
+                          }
 
                           return (
-                            <td key={item[columnKey]} className={cn("px-2 py-2 text-center", flagBgClass)}>
+                            <td key={item[columnKey]} className="px-2 py-2 text-center" style={cellStyle}>
                               <div className="flex flex-col items-center gap-0.5">
                                 {isRevenueWeekly ? (
                                   <button
@@ -827,11 +873,12 @@ export function ChartMomKpi() {
                                 ) : isWeeklyClickable ? (
                                   <button
                                     onClick={() => setKpiModal({ open: true, metricLabel: metric.label, metricColor: metric.color, dayLabel: item.dayLabel, item: item as DailyKPI })}
+                                    style={valueStyle}
                                     className={cn(
                                       "text-[12px] font-bold tabular-nums cursor-pointer rounded-md px-2 py-0.5",
                                       "hover:bg-violet-500/10 hover:ring-1 hover:ring-violet-500/30 transition-all",
                                       "focus-visible:ring-1 focus-visible:ring-ring outline-none",
-                                      flagTextClass || (val === 0 && metric.format !== "signedCurrency" && metric.format !== "signedPercent"
+                                      !valueStyle && (val === 0 && metric.format !== "signedCurrency" && metric.format !== "signedPercent"
                                         ? "text-muted-foreground/40"
                                         : valColor)
                                     )}
@@ -839,12 +886,15 @@ export function ChartMomKpi() {
                                     {formatValue(val, metric.format, timeframe)}
                                   </button>
                                 ) : (
-                                  <span className={cn(
-                                    "text-[12px] font-bold tabular-nums",
-                                    flagTextClass || (val === 0 && metric.format !== "signedCurrency" && metric.format !== "signedPercent"
-                                      ? "text-muted-foreground/40"
-                                      : valColor)
-                                  )}>
+                                  <span
+                                    style={valueStyle}
+                                    className={cn(
+                                      "text-[12px] font-bold tabular-nums",
+                                      !valueStyle && (val === 0 && metric.format !== "signedCurrency" && metric.format !== "signedPercent"
+                                        ? "text-muted-foreground/40"
+                                        : valColor)
+                                    )}
+                                  >
                                     {formatValue(val, metric.format, timeframe)}
                                   </span>
                                 )}
@@ -1202,9 +1252,16 @@ export function ChartMomKpi() {
           finalColor = d.laborVarPct > 0 ? "text-emerald-500" : d.laborVarPct < 0 ? "text-rose-500" : "text-foreground"
         }
 
+        // Var $/% compare Actual to Theory — meaningless on a day with no real actual
+        // data yet (future day, or timecards not entered). Say so instead of showing a
+        // fake $ "win".
+        const noActualDataYet =
+          ["Labor Var $", "Labor Var %"].includes(kpiModal.metricLabel) && d.hasActuals === false
+
         // "Top contributors" — which employees drove this day's labor cost. Only relevant
         // for the metrics tied to actual spend (not the theoretical/planned ones).
         const showContributors =
+          !noActualDataYet &&
           ["Labor Actual %", "Labor Cost Actual", "Labor Var $", "Labor Var %"].includes(kpiModal.metricLabel) &&
           (d.topContributors?.length ?? 0) > 0
         const dayTotalActual = d.laborCostActual || 1
@@ -1241,23 +1298,49 @@ export function ChartMomKpi() {
 
               {/* Content */}
               <div className="p-8 flex flex-col items-center justify-center text-center space-y-6 w-full overflow-y-auto">
-                <div className="space-y-2 w-full max-w-sm">
-                  <h4 className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 drop-shadow-sm">Metric Context</h4>
-                  <div className="bg-muted/30 rounded-xl p-4 border border-border/50 text-[13px] font-medium font-mono whitespace-nowrap shadow-sm text-foreground/80">
-                    {equationRaw}
+                {noActualDataYet ? (
+                  <div className="space-y-3 w-full max-w-sm py-4">
+                    <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto" />
+                    <p className="text-sm font-bold">No actual time data recorded yet</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      This day&apos;s planned labor cost is ${d.laborCostTheory.toFixed(2)}, but no employee has
+                      punched in/out for it yet — so there&apos;s nothing real to compare against.
+                      This number will fill in once time is entered, not stay a "win."
+                    </p>
                   </div>
-                </div>
-                <div className="space-y-2 w-full max-w-sm">
-                  <h4 className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 drop-shadow-sm">Live Calculation</h4>
-                  <div className="bg-muted/30 rounded-xl p-4 border border-border/50 text-[13px] font-medium font-mono whitespace-nowrap shadow-sm text-blue-400/90">
-                    {equationValues}
+                ) : (
+                  <>
+                    <div className="space-y-2 w-full max-w-sm">
+                      <h4 className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 drop-shadow-sm">Metric Context</h4>
+                      <div className="bg-muted/30 rounded-xl p-4 border border-border/50 text-[13px] font-medium font-mono whitespace-nowrap shadow-sm text-foreground/80">
+                        {equationRaw}
+                      </div>
+                    </div>
+                    <div className="space-y-2 w-full max-w-sm">
+                      <h4 className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-2 drop-shadow-sm">Live Calculation</h4>
+                      <div className="bg-muted/30 rounded-xl p-4 border border-border/50 text-[13px] font-medium font-mono whitespace-nowrap shadow-sm text-blue-400/90">
+                        {equationValues}
+                      </div>
+                    </div>
+                    <div className="pt-6 pb-2 relative w-full flex justify-center">
+                      <div className={cn("text-[56px] font-black tracking-tight drop-shadow-xl leading-none scale-110", finalColor)}>
+                        {finalResult}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {d.missingPunchCount ? (
+                  <div className="w-full max-w-sm text-left rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-600">
+                      <AlertTriangle className="h-3 w-3" />
+                      {d.missingPunchCount} employee{d.missingPunchCount === 1 ? "" : "s"} scheduled but missing time data
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      {(d.missingPunchNames || []).join(", ")} — the actual-side numbers above are understated until this is entered.
+                    </div>
                   </div>
-                </div>
-                <div className="pt-6 pb-2 relative w-full flex justify-center">
-                  <div className={cn("text-[56px] font-black tracking-tight drop-shadow-xl leading-none scale-110", finalColor)}>
-                    {finalResult}
-                  </div>
-                </div>
+                ) : null}
 
                 {showContributors && (
                   <div className="space-y-2 w-full text-left border-t border-border/50 pt-5">

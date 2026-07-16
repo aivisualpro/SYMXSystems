@@ -301,10 +301,15 @@ export async function GET(req: NextRequest) {
     }
 
     // Theory cost map: day → totalTheory
+    // Also track WHO was actually scheduled to work each day (theoryHrs > 0) so we can
+    // cross-check against who has punch-derived actual cost — anyone scheduled but missing
+    // from the actual side has incomplete/missing time data for that day.
     const theoryMap = new Map<string, number>();
+    const scheduledWorkingByDay = new Map<string, Set<string>>();
     for (const group of scheduleResult) {
       const day = group._id;
       let totalTheory = 0;
+      const scheduledSet = new Set<string>();
 
       for (const s of group.records) {
         const statusStr = (s.status || "").trim().toLowerCase();
@@ -314,6 +319,7 @@ export async function GET(req: NextRequest) {
         const theoryHrs = resolvedRT ? (resolvedRT.theoryHrs || 0) : 0;
 
         if (theoryHrs > 0) {
+          scheduledSet.add(s.transporterId);
           const rate = employeeRateMap.get(s.transporterId) || 0;
           if (rate > 0) {
             const regHrs = Math.min(theoryHrs, 8);
@@ -325,6 +331,7 @@ export async function GET(req: NextRequest) {
       }
 
       theoryMap.set(day, Math.round(totalTheory * 100) / 100);
+      scheduledWorkingByDay.set(day, scheduledSet);
     }
 
     // ── 5. Assemble daily KPI records for Sun–Sat ──
@@ -356,9 +363,24 @@ export async function GET(req: NextRequest) {
       const laborVarDol = Math.round((laborCostTheory - laborCostActual) * 100) / 100;
       const laborVarPct = laborCostTheory > 0 ? Math.round((laborVarDol / laborCostTheory) * 100) : 0;
 
+      // Whether we have real punch-derived actual data for this day at all. Without this,
+      // a future/not-yet-imported day would show laborCostActual=0 against a real
+      // laborCostTheory, making Labor Var $/% look like a huge "win" when really nothing
+      // has happened yet — that's a false signal, not a performance result.
+      const dayEmpMap = employeeDayMap.get(day);
+      const hasActuals = !!dayEmpMap && dayEmpMap.size > 0;
+
+      // Employees who were scheduled to work (theoryHrs > 0) but have no punch-derived
+      // actual cost recorded for the day — their time hasn't been fully entered, so any
+      // actual-side number for the day is understated until it's fixed.
+      const scheduledSet = scheduledWorkingByDay.get(day) || new Set<string>();
+      const missingPunchNames = Array.from(scheduledSet)
+        .filter(tid => !dayEmpMap?.has(tid))
+        .map(tid => employeeNameMap.get(tid) || tid);
+
       // Top 5 employees by actual labor cost that day — explains WHY a flagged day ran hot.
       const topContributors = canViewComp
-        ? Array.from(employeeDayMap.get(day)?.entries() || [])
+        ? Array.from(dayEmpMap?.entries() || [])
             .map(([transporterId, v]) => ({
               transporterId,
               employeeName: employeeNameMap.get(transporterId) || transporterId,
@@ -383,6 +405,9 @@ export async function GET(req: NextRequest) {
         topContributors,
         laborVarDol,
         laborVarPct,
+        hasActuals,
+        missingPunchCount: missingPunchNames.length,
+        missingPunchNames,
       };
     });
 
