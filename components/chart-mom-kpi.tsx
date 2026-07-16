@@ -147,6 +147,11 @@ function formatDayFull(day: string): string {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })
 }
 
+function formatDayNum(day: string): string {
+  const d = new Date(day + "T00:00:00Z")
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`
+}
+
 function formatWeekLabel(week: string): string {
   const match = week.match(/(\d{4})-W(\d{2})/)
   if (!match) return week
@@ -729,7 +734,16 @@ export function ChartMomKpi() {
                     </th>
                     {activeData.map((item) => (
                       <th key={item[columnKey]} className="px-2 py-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider min-w-[70px]">
-                        {timeframe === "month" ? formatMonthShort(item.month) : item.dayLabel}
+                        {timeframe === "month" ? (
+                          formatMonthShort(item.month)
+                        ) : (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span>{item.dayLabel}</span>
+                            <span className="text-[9px] font-medium normal-case tracking-normal text-muted-foreground/60">
+                              {formatDayNum(item.day)}
+                            </span>
+                          </div>
+                        )}
                       </th>
                     ))}
                   </tr>
