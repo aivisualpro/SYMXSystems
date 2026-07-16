@@ -1,5 +1,25 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+// The real ticket lifecycle used by the admin workbench. approveDeny (below)
+// is kept only for backward compatibility — the HR dashboard's pending/
+// approved/denied counts (app/(protected)/hr/page.tsx) still read that raw
+// string field directly, so every status transition through the workbench
+// API keeps it in sync rather than migrating the dashboard too.
+export type HrTicketStatus = "open" | "on_hold" | "approved" | "denied" | "closed";
+export type HrTicketPriority = "low" | "normal" | "high";
+
+export interface IHrTicketActivityEntry {
+  // "note" = free text an HR person typed. "status_change" = system-
+  // generated line for a lifecycle transition (approve/deny/hold/close/
+  // reopen). "system" = other system-generated lines (link/unlink,
+  // assignment changes). "created" = the opening entry every ticket gets.
+  type: "note" | "status_change" | "system" | "created";
+  text: string;
+  byName?: string;
+  byEmail?: string;
+  createdAt: Date;
+}
+
 export interface ISymxHrTicket extends Document {
   ticketNumber?: string;
   transporterId?: string;
@@ -24,6 +44,8 @@ export interface ISymxHrTicket extends Document {
   attachment?: string;
   managersEmail?: string;
   notes?: string;
+  // Legacy field — see the comment above HrTicketStatus. New code should
+  // read/write `status`, not this.
   approveDeny?: string;
   resolution?: string;
   holdReason?: string;
@@ -31,6 +53,16 @@ export interface ISymxHrTicket extends Document {
   closedBy?: string;
   closedTicketSent?: string;
   createdBy?: string;
+  status?: HrTicketStatus;
+  priority?: HrTicketPriority;
+  // Email of the HR staffer this ticket is assigned to. Free-form (not a
+  // ref) since assignment is meant to be lightweight — anyone with an
+  // email can be assigned, not just users with a full account record.
+  assignedTo?: string;
+  // Chronological case log: every note, status change, assignment change,
+  // and link/unlink shows up here so a reviewer can see the full history
+  // of a ticket in one place, the way an HCM case file would.
+  activity?: IHrTicketActivityEntry[];
   // Which channel this ticket came in through — lets the admin UI
   // distinguish driver-submitted tickets from ones staff created directly.
   source?: "public" | "admin" | "import";
@@ -45,6 +77,17 @@ export interface ISymxHrTicket extends Document {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+const HrTicketActivitySchema = new Schema<IHrTicketActivityEntry>(
+  {
+    type: { type: String, enum: ["note", "status_change", "system", "created"], required: true },
+    text: { type: String, required: true },
+    byName: { type: String },
+    byEmail: { type: String },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
 
 const SymxHrTicketSchema = new Schema<ISymxHrTicket>(
   {
@@ -69,6 +112,10 @@ const SymxHrTicketSchema = new Schema<ISymxHrTicket>(
     submitterName: { type: String },
     submitterEmail: { type: String },
     submitterIp: { type: String },
+    status: { type: String, enum: ["open", "on_hold", "approved", "denied", "closed"], default: "open", index: true },
+    priority: { type: String, enum: ["low", "normal", "high"], default: "normal" },
+    assignedTo: { type: String, index: true },
+    activity: { type: [HrTicketActivitySchema], default: [] },
   },
   { timestamps: true, collection: "symxhrtickets" }
 );

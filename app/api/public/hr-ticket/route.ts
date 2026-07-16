@@ -85,6 +85,23 @@ export async function POST(req: NextRequest) {
     // SymxEmployee — see matchEmployeeForTicket for the matching rules.
     const { exact, suggested } = await matchEmployeeForTicket(submitterName, submitterEmail);
 
+    const activity: any[] = [
+      {
+        type: "created",
+        text: "Submitted via public form",
+        byName: submitterName.trim() || "Public Form",
+        byEmail: submitterEmail,
+        createdAt: new Date(),
+      },
+    ];
+    if (exact) {
+      activity.push({
+        type: "system",
+        text: `Auto-matched to ${exact.firstName} ${exact.lastName}`.trim(),
+        createdAt: new Date(),
+      });
+    }
+
     const ticketNumber = await getNextTicketNumber();
     const ticket = await SymxHrTicket.create({
       ticketNumber,
@@ -95,12 +112,15 @@ export async function POST(req: NextRequest) {
       submitterEmail,
       submitterIp: ip !== "unknown" ? ip : undefined,
       source: "public",
+      status: "open",
+      priority: "normal",
       approveDeny: "",
       createdBy: submitterName.trim() || "Public Form",
       employeeId: exact?._id || undefined,
       transporterId: exact?.transporterId || "",
       employeeMatchType: exact ? "auto" : undefined,
       suggestedEmployeeId: !exact && suggested ? suggested._id : undefined,
+      activity,
     });
 
     // Awaited (not fire-and-forget) because serverless functions can freeze

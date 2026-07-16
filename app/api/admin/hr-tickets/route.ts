@@ -97,15 +97,16 @@ async function enrichTickets(tickets: any[]) {
     });
   }
 
-  // ── Resolve closedBy email → user name ──
-  const closedByEmails = [...new Set(
-    tickets.map((t) => t.closedBy).filter(Boolean)
-  )];
+  // ── Resolve closedBy + assignedTo emails → user names in one batch ──
+  const userEmails = [...new Set([
+    ...tickets.map((t) => t.closedBy).filter(Boolean),
+    ...tickets.map((t) => t.assignedTo).filter(Boolean),
+  ])];
 
   const userMap = new Map<string, string>();
-  if (closedByEmails.length > 0) {
+  if (userEmails.length > 0) {
     const users = await SymxUser.find(
-      { email: { $in: closedByEmails } },
+      { email: { $in: userEmails } },
       { email: 1, name: 1 }
     ).lean();
     users.forEach((u: any) => {
@@ -129,6 +130,7 @@ async function enrichTickets(tickets: any[]) {
       employeeName: emp?.employeeName || t.submitterName || "",
       profileImage: emp?.profileImage || "",
       closedByName: t.closedBy ? (userMap.get(t.closedBy) || t.closedBy) : "",
+      assignedToName: t.assignedTo ? (userMap.get(t.assignedTo) || t.assignedTo) : "",
       // Only present when there's an unconfirmed suggested match to show.
       suggestedEmployeeName: suggested?.employeeName || "",
       suggestedProfileImage: suggested?.profileImage || "",
@@ -159,7 +161,22 @@ export async function POST(req: Request) {
     // numbers stay unique across both entry points instead of the two
     // paths handing out overlapping numbers independently.
     const ticketNumber = body.ticketNumber || (await getNextTicketNumber());
-    const ticket = await SymxHrTicket.create({ ...body, ticketNumber, source: body.source || "admin" });
+    const ticket = await SymxHrTicket.create({
+      ...body,
+      ticketNumber,
+      source: body.source || "admin",
+      status: body.status || "open",
+      priority: body.priority || "normal",
+      activity: [
+        {
+          type: "created",
+          text: "Ticket created",
+          byName: session.name || session.email,
+          byEmail: session.email,
+          createdAt: new Date(),
+        },
+      ],
+    });
     return NextResponse.json(ticket);
   } catch (error) {
     console.error("[HR_TICKETS_POST]", error);
