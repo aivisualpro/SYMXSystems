@@ -16,6 +16,21 @@ export interface ISymxHrTicket extends Document {
   closedBy?: string;
   closedTicketSent?: string;
   createdBy?: string;
+  // Which channel this ticket came in through — lets the admin UI
+  // distinguish driver-submitted tickets from ones staff created directly.
+  source?: "public" | "admin" | "import";
+  // Explicit submitter identity fields, set by the public form. Kept
+  // separate from managersEmail (which admins use for the ticket's
+  // routing/manager contact) so the two don't collide.
+  submitterName?: string;
+  submitterEmail?: string;
+  // Optional identifier a driver can type on the public form so the ticket
+  // gets linked to their real SymxEmployee record (resolved server-side
+  // into transporterId when a match is found).
+  eeCode?: string;
+  // Best-effort submitter IP, recorded only on public submissions for
+  // lightweight abuse throttling/auditing — never shown in the UI.
+  submitterIp?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -37,6 +52,11 @@ const SymxHrTicketSchema = new Schema<ISymxHrTicket>(
     closedBy: { type: String },
     closedTicketSent: { type: String },
     createdBy: { type: String },
+    source: { type: String, enum: ["public", "admin", "import"], default: "admin" },
+    submitterName: { type: String },
+    submitterEmail: { type: String },
+    eeCode: { type: String },
+    submitterIp: { type: String },
   },
   { timestamps: true, collection: "symxhrtickets" }
 );

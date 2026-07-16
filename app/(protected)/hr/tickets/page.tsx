@@ -33,6 +33,8 @@ import {
   Share2,
   Link2,
   Check,
+  Globe,
+  Bell,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +62,9 @@ interface HrTicket {
   employeeName?: string;
   profileImage?: string;
   closedByName?: string;
+  source?: "public" | "admin" | "import";
+  submitterName?: string;
+  submitterEmail?: string;
 }
 
 type StatusFilter = "all" | "pending" | "approved" | "denied";
@@ -214,6 +219,154 @@ function ShareDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
             <QrCode className="h-4 w-4" />
             Download QR
           </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  NOTIFICATION SETTINGS DIALOG
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+function NotificationSettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [emails, setEmails] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    fetch("/api/admin/hr-tickets/settings")
+      .then((res) => res.json())
+      .then((data) => setEmails(Array.isArray(data.notificationEmails) ? data.notificationEmails : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  const addEmail = () => {
+    const value = draft.trim().toLowerCase();
+    if (!value) return;
+    const validFormat = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    if (!validFormat) {
+      notify.error("Enter a valid email address");
+      return;
+    }
+    if (emails.includes(value)) {
+      setDraft("");
+      return;
+    }
+    setEmails((prev) => [...prev, value]);
+    setDraft("");
+  };
+
+  const removeEmail = (email: string) => {
+    setEmails((prev) => prev.filter((e) => e !== email));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/hr-tickets/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notificationEmails: emails }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      notify.success("Notification settings saved");
+      onClose();
+    } catch {
+      notify.error("Failed to save notification settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card border border-border/50 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 fade-in duration-300">
+        {/* Header */}
+        <div className="relative px-6 pt-6 pb-4">
+          <div className="absolute inset-0 bg-gradient-to-b from-amber-500/5 to-transparent" />
+          <div className="relative flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                <Bell className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-foreground">Notification Emails</h2>
+                <p className="text-xs text-muted-foreground">Who gets emailed on new public tickets</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted/50 transition-colors">
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+
+        <div className="px-6 pb-6 space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              {/* Add email */}
+              <div className="flex items-center gap-2">
+                <Input
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addEmail(); } }}
+                  placeholder="hr@symxlogistics.com"
+                  type="email"
+                />
+                <Button variant="outline" size="icon" onClick={addEmail} className="shrink-0">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Email chips */}
+              {emails.length === 0 ? (
+                <p className="text-xs text-muted-foreground/70 text-center py-4">
+                  No notification emails set — HR won&apos;t be emailed when a ticket comes in.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {emails.map((email) => (
+                    <div
+                      key={email}
+                      className="flex items-center gap-1.5 bg-muted/50 border border-border/50 rounded-lg pl-3 pr-1.5 py-1.5"
+                    >
+                      <span className="text-xs font-medium text-foreground">{email}</span>
+                      <button
+                        onClick={() => removeEmail(email)}
+                        className="h-5 w-5 rounded-md flex items-center justify-center hover:bg-red-500/10 transition-colors"
+                      >
+                        <X className="h-3 w-3 text-red-500/70" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 pt-2">
+            <Button
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="flex-1 gap-2 h-10 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white shadow-lg shadow-amber-500/20"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Save
+            </Button>
+            <Button variant="outline" onClick={onClose} className="h-10">Cancel</Button>
+          </div>
         </div>
       </div>
     </div>
@@ -417,6 +570,7 @@ export default function HRTicketsPage() {
 
   // Dialog states
   const [showShare, setShowShare] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showTicketDialog, setShowTicketDialog] = useState(false);
   const [editingTicket, setEditingTicket] = useState<HrTicket | null>(null);
 
@@ -441,6 +595,16 @@ export default function HRTicketsPage() {
         >
           <Share2 className="h-3.5 w-3.5" />
           Share
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5 border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
+          onClick={() => setShowSettings(true)}
+          title="Notification email settings"
+        >
+          <Bell className="h-3.5 w-3.5" />
+          Notify
         </Button>
         <Button
           variant="outline"
@@ -584,6 +748,8 @@ export default function HRTicketsPage() {
         (t.ticketNumber || "").toLowerCase().includes(q) ||
         (t.transporterId || "").toLowerCase().includes(q) ||
         (t.employeeName || "").toLowerCase().includes(q) ||
+        (t.submitterName || "").toLowerCase().includes(q) ||
+        (t.submitterEmail || "").toLowerCase().includes(q) ||
         (t.category || "").toLowerCase().includes(q) ||
         (t.issue || "").toLowerCase().includes(q) ||
         (t.notes || "").toLowerCase().includes(q)
@@ -625,6 +791,9 @@ export default function HRTicketsPage() {
 
       {/* Share Dialog */}
       <ShareDialog open={showShare} onClose={() => setShowShare(false)} />
+
+      {/* Notification Settings Dialog */}
+      <NotificationSettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
 
       {/* CRUD Dialog */}
       <TicketDialog
@@ -732,9 +901,9 @@ export default function HRTicketsPage() {
                       )}
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-foreground truncate">
-                          {t.employeeName || t.transporterId || "Unknown"}
+                          {t.employeeName || t.submitterName || t.transporterId || "Unknown"}
                         </p>
-                        <div className="flex items-center gap-2 mt-0.5">
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                           {t.ticketNumber && (
                             <span className="text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                               #{t.ticketNumber}
@@ -742,6 +911,14 @@ export default function HRTicketsPage() {
                           )}
                           {t.category && (
                             <span className="text-[10px] font-medium text-muted-foreground truncate">{t.category}</span>
+                          )}
+                          {t.source === "public" && (
+                            <span
+                              className="flex items-center gap-1 text-[10px] font-bold text-purple-500 bg-purple-500/10 px-1.5 py-0.5 rounded"
+                              title="Submitted via the public HR ticket form"
+                            >
+                              <Globe className="h-2.5 w-2.5" /> Public
+                            </span>
                           )}
                         </div>
                       </div>
@@ -806,9 +983,9 @@ export default function HRTicketsPage() {
                       <Calendar className="h-3 w-3" /> {date}
                     </div>
                   )}
-                  {t.managersEmail && (
+                  {(t.submitterEmail || t.managersEmail) && (
                     <div className="flex items-center gap-1 text-[10px] text-muted-foreground/70 truncate max-w-[160px]">
-                      <Mail className="h-3 w-3" /> {t.managersEmail}
+                      <Mail className="h-3 w-3" /> {t.submitterEmail || t.managersEmail}
                     </div>
                   )}
                   {t.attachment && (

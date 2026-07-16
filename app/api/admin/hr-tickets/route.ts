@@ -5,6 +5,7 @@ import connectToDatabase from "@/lib/db";
 import SymxHrTicket from "@/lib/models/SymxHrTicket";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxUser from "@/lib/models/SymxUser";
+import { getNextTicketNumber } from "@/lib/hr-ticket-utils";
 
 export async function GET(req: NextRequest) {
   try {
@@ -89,7 +90,12 @@ async function enrichTickets(tickets: any[]) {
     const emp = t.transporterId ? empMap.get(t.transporterId) : null;
     return {
       ...t,
-      employeeName: emp?.employeeName || "",
+      // Falls back to the driver's typed name (submitterName) when the
+      // ticket isn't linked to a known SymxEmployee record — previously
+      // any public-form ticket without a transporterId match displayed
+      // "Unknown" in the card grid even though the submitter's name was
+      // sitting right there in the document.
+      employeeName: emp?.employeeName || t.submitterName || "",
       profileImage: emp?.profileImage || "",
       closedByName: t.closedBy ? (userMap.get(t.closedBy) || t.closedBy) : "",
     };
@@ -114,7 +120,11 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const ticket = await SymxHrTicket.create(body);
+    // Assign from the same atomic counter the public form uses, so ticket
+    // numbers stay unique across both entry points instead of the two
+    // paths handing out overlapping numbers independently.
+    const ticketNumber = body.ticketNumber || (await getNextTicketNumber());
+    const ticket = await SymxHrTicket.create({ ...body, ticketNumber, source: body.source || "admin" });
     return NextResponse.json(ticket);
   } catch (error) {
     console.error("[HR_TICKETS_POST]", error);
