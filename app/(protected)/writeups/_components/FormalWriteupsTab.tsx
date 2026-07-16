@@ -192,13 +192,17 @@ function fmtDate(d?: string) {
 
 interface FormalWriteupsTabProps {
   // True when rendered as the manager Review Workbench tab: locks the
-  // default filter to write-ups awaiting review, sorts oldest-first, and
-  // hides the create/new-write-up affordances (issuing isn't this view's
-  // job — reviewing is).
+  // default filter to write-ups awaiting review and sorts oldest-first.
+  // Creating a write-up is still available here too — a manager shouldn't
+  // have to switch tabs just to issue one while working the queue.
   workbenchMode?: boolean;
+  // Reports the current pending-review count while this instance is
+  // mounted, so the parent page's tab badge stays live as items get
+  // reviewed (only meaningful in workbenchMode).
+  onCountChange?: (count: number) => void;
 }
 
-export default function FormalWriteupsTab({ workbenchMode = false }: FormalWriteupsTabProps) {
+export default function FormalWriteupsTab({ workbenchMode = false, onCountChange }: FormalWriteupsTabProps) {
   const [writeups, setWriteups] = useState<Writeup[]>([]);
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
@@ -368,6 +372,14 @@ export default function FormalWriteupsTab({ workbenchMode = false }: FormalWrite
       return !emp || emp.status === "Active";
     });
   }, [writeups, includeTerminated, employees]);
+
+  // In workbenchMode statusFilter is locked to "pending_review", so
+  // visibleWriteups already IS the review queue — report its size upward
+  // for the parent tab's badge, live, as items get reviewed.
+  useEffect(() => {
+    if (workbenchMode) onCountChange?.(visibleWriteups.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workbenchMode, visibleWriteups]);
 
   const filtered = useMemo(() => {
     let rows = visibleWriteups;
@@ -765,12 +777,10 @@ export default function FormalWriteupsTab({ workbenchMode = false }: FormalWrite
           <input type="checkbox" className="h-3.5 w-3.5 accent-primary rounded cursor-pointer" checked={includeTerminated} onChange={(e) => setIncludeTerminated(e.target.checked)} />
           Include terminated employees
         </label>
-        {!workbenchMode && (
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            New Write-Up
-          </Button>
-        )}
+        <Button onClick={openCreate}>
+          <Plus className="h-4 w-4" />
+          New Write-Up
+        </Button>
       </div>
 
       {!workbenchMode && (
