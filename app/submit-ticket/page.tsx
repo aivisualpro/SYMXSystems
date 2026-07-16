@@ -23,7 +23,9 @@ export default function SubmitTicketPage() {
   const [issue, setIssue] = useState("");
   const [submitterName, setSubmitterName] = useState("");
   const [submitterEmail, setSubmitterEmail] = useState("");
-  const [notes, setNotes] = useState("");
+  const [website, setWebsite] = useState(""); // honeypot — real users never see/fill this
+  const [errorMsg, setErrorMsg] = useState("");
+  const [ticketNumber, setTicketNumber] = useState("");
 
   // Override root layout overflow so this public page can scroll
   useEffect(() => {
@@ -43,6 +45,7 @@ export default function SubmitTicketPage() {
     if (!issue.trim()) return;
 
     setStep("submitting");
+    setErrorMsg("");
 
     try {
       const res = await fetch("/api/public/hr-ticket", {
@@ -51,17 +54,25 @@ export default function SubmitTicketPage() {
         body: JSON.stringify({
           category,
           issue: issue.trim(),
-          notes: notes.trim(),
           submitterName: submitterName.trim(),
-          managersEmail: submitterEmail.trim(),
+          submitterEmail: submitterEmail.trim(),
+          website, // honeypot
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to submit");
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setErrorMsg(data?.error || "Failed to submit ticket. Please try again.");
+        setStep("form");
+        return;
+      }
+
+      setTicketNumber(data?.ticketNumber || "");
       setStep("success");
     } catch {
+      setErrorMsg("Failed to submit ticket. Please check your connection and try again.");
       setStep("form");
-      alert("Failed to submit ticket. Please try again.");
     }
   };
 
@@ -71,7 +82,8 @@ export default function SubmitTicketPage() {
     setIssue("");
     setSubmitterName("");
     setSubmitterEmail("");
-    setNotes("");
+    setTicketNumber("");
+    setErrorMsg("");
   };
 
   return (
@@ -101,6 +113,26 @@ export default function SubmitTicketPage() {
           {/* ── FORM ── */}
           {step === "form" && (
             <div className="px-6 pb-8 space-y-5">
+              {errorMsg && (
+                <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-300">
+                  {errorMsg}
+                </div>
+              )}
+
+              {/* Honeypot — hidden from real users, off the tab order, bots that
+                  autofill every field will populate it and get silently ignored */}
+              <div className="absolute -left-[9999px] w-px h-px overflow-hidden" aria-hidden="true">
+                <label htmlFor="website">Website</label>
+                <input
+                  id="website"
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                />
+              </div>
+
               {/* Name */}
               <div>
                 <label className="text-zinc-400 text-xs font-semibold uppercase tracking-wider block mb-2">
@@ -127,6 +159,7 @@ export default function SubmitTicketPage() {
                   placeholder="john@example.com"
                   className="w-full bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
                 />
+                <p className="text-[11px] text-zinc-600 mt-1.5">We'll email you a confirmation with your ticket number.</p>
               </div>
 
               {/* Category */}
@@ -165,20 +198,6 @@ export default function SubmitTicketPage() {
                 />
               </div>
 
-              {/* Additional Notes */}
-              <div>
-                <label className="text-zinc-400 text-xs font-semibold uppercase tracking-wider block mb-2">
-                  Additional Notes <span className="text-zinc-600">(optional)</span>
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Any additional context..."
-                  rows={2}
-                  className="w-full bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 resize-none transition-all"
-                />
-              </div>
-
               {/* Submit Button */}
               <button
                 onClick={handleSubmit}
@@ -210,9 +229,18 @@ export default function SubmitTicketPage() {
                 </svg>
               </div>
               <h2 className="text-lg font-bold text-white mb-1">Ticket Submitted!</h2>
-              <p className="text-zinc-400 text-sm mb-6">
+              <p className="text-zinc-400 text-sm mb-4">
                 Your HR ticket has been submitted successfully. Our team will review it shortly.
               </p>
+              {ticketNumber && (
+                <div className="inline-block bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-5 py-3 mb-6">
+                  <p className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider">Ticket Number</p>
+                  <p className="text-white text-lg font-bold">#{ticketNumber}</p>
+                </div>
+              )}
+              {submitterEmail && (
+                <p className="text-zinc-500 text-xs mb-6 -mt-2">A confirmation was sent to {submitterEmail}.</p>
+              )}
               <button
                 onClick={handleReset}
                 className="px-6 py-3 rounded-xl bg-zinc-800/80 text-zinc-300 text-sm font-semibold border border-zinc-700/60 hover:border-purple-500/40 hover:text-purple-400 transition-all"
