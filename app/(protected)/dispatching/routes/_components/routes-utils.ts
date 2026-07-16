@@ -94,7 +94,6 @@ export function toPacificDate(d: string | Date): string {
 export type ColumnDef = { key: string; label: string; minW: number; sticky: boolean; align?: "left" | "center" | "right" };
 export const COLUMNS: ColumnDef[] = [
   { key: "employee", label: "Employee", minW: 260, sticky: true },
-  { key: "confirmationStatus", label: "Conf Status", minW: 100, sticky: false },
   { key: "routeNumber", label: "Route #", minW: 60, sticky: false },
   { key: "van", label: "Van", minW: 58, sticky: false, align: "left" },
   { key: "bags", label: "Bags", minW: 40, sticky: false },

@@ -934,9 +934,9 @@ export default function RoutesPage() {
                                                         key={row._id}
                                                         className="border-b border-border/20 hover:bg-muted/30 transition-colors group/row"
                                                     >
-                                                        {/* 1. Employee */}
-                                                        <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card overflow-hidden")} style={{ width: 160, minWidth: 160 }}>
-                                                            <div 
+                                                        {/* 1. Employee (avatar removed; confirmation status moved in here to condense space) */}
+                                                        <td className={cn("px-2 py-1.5", "sticky left-0 z-[5] bg-card overflow-hidden")} style={{ width: 190, minWidth: 190 }}>
+                                                            <div
                                                                 className="flex items-center gap-2 min-w-0 overflow-hidden pr-1 cursor-pointer hover:bg-muted/80 rounded-md p-1 -m-1 transition-colors"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
@@ -958,20 +958,60 @@ export default function RoutesPage() {
                                                                     }
                                                                 }}
                                                             >
-                                                                {/* Avatar */}
-                                                                {row.profileImage ? (
-                                                                    <img
-                                                                        src={row.profileImage}
-                                                                        alt={row.employeeName}
-                                                                        className="w-6 h-6 rounded-full object-cover ring-1 ring-border shrink-0"
-                                                                    />
-                                                                ) : (
-                                                                    <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center ring-1 ring-primary/20 shrink-0">
-                                                                        <span className="text-[8px] font-bold text-primary">
-                                                                            {row.employeeName.split(" ").map(n => n[0]).join("").slice(0, 2)}
-                                                                        </span>
-                                                                    </div>
-                                                                )}
+                                                                {/* Confirmation Status — clickable to update, sits where the avatar used to be */}
+                                                                <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                                                                    <DropdownMenu>
+                                                                        <DropdownMenuTrigger asChild>
+                                                                            <button className="cursor-pointer hover:scale-110 transition-transform focus:outline-none">
+                                                                                {row.confirmationStatus ? (
+                                                                                    <MessageStatusBadge
+                                                                                        status={row.confirmationStatus.status}
+                                                                                        createdAt={row.confirmationStatus.updatedAt}
+                                                                                        changeRemarks={row.confirmationStatus.changeRemarks}
+                                                                                        history={row.confirmationStatus.history}
+                                                                                        iconOnly
+                                                                                    />
+                                                                                ) : (
+                                                                                    <div className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                                                                                        <Plus className="h-2.5 w-2.5 text-muted-foreground/40" />
+                                                                                    </div>
+                                                                                )}
+                                                                            </button>
+                                                                        </DropdownMenuTrigger>
+                                                                        <DropdownMenuContent align="start" className="min-w-[180px]">
+                                                                            <DropdownMenuLabel className="text-[12px] text-muted-foreground uppercase tracking-wider">
+                                                                                Set Confirmation
+                                                                            </DropdownMenuLabel>
+                                                                            <DropdownMenuSeparator />
+                                                                            {[
+                                                                                { value: "confirmed", label: "Confirmed", icon: CheckCircle2, color: "text-emerald-400" },
+                                                                                { value: "change_requested", label: "Change Requested", icon: RefreshCw, color: "text-amber-400" },
+                                                                                { value: "pending", label: "Pending", icon: Clock, color: "text-blue-400" },
+                                                                            ].map((opt) => (
+                                                                                <DropdownMenuItem
+                                                                                    key={opt.value}
+                                                                                    className="gap-2 cursor-pointer"
+                                                                                    disabled={row.confirmationStatus?.status === opt.value}
+                                                                                    onClick={() => {
+                                                                                        if (opt.value === "change_requested") {
+                                                                                            setRemarksTarget({ rowData: row, status: "change_requested" });
+                                                                                            setRemarksInput("");
+                                                                                            setRemarksModalOpen(true);
+                                                                                        } else {
+                                                                                            handleUpdateConfirmation(row, opt.value);
+                                                                                        }
+                                                                                    }}
+                                                                                >
+                                                                                    <opt.icon className={cn("h-3.5 w-3.5", opt.color)} />
+                                                                                    <span className="text-xs font-medium">{opt.label}</span>
+                                                                                    {row.confirmationStatus?.status === opt.value && (
+                                                                                        <Check className="h-3 w-3 ml-auto text-primary" />
+                                                                                    )}
+                                                                                </DropdownMenuItem>
+                                                                            ))}
+                                                                        </DropdownMenuContent>
+                                                                    </DropdownMenu>
+                                                                </div>
                                                                 {(() => {
                                                                     const rt = resolveRT(row);
                                                                     const rtColor = rt?.color || getTypeStyle(row.type).colorHex || "inherit";
@@ -989,61 +1029,6 @@ export default function RoutesPage() {
                                                                     <Baby className="h-4 w-4 text-pink-500 drop-shadow ml-auto flex-shrink-0" />
                                                                 )}
                                                             </div>
-                                                        </td>
-
-                                                        {/* Confirmation Status — clickable to update */}
-                                                        <td className="px-2 py-1.5 align-middle" onClick={(e) => e.stopPropagation()}>
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <button className="cursor-pointer hover:scale-110 transition-transform focus:outline-none">
-                                                                        {row.confirmationStatus ? (
-                                                                            <MessageStatusBadge
-                                                                                status={row.confirmationStatus.status}
-                                                                                createdAt={row.confirmationStatus.updatedAt}
-                                                                                changeRemarks={row.confirmationStatus.changeRemarks}
-                                                                                history={row.confirmationStatus.history}
-                                                                                iconOnly
-                                                                            />
-                                                                        ) : (
-                                                                            <div className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-colors">
-                                                                                <Plus className="h-2.5 w-2.5 text-muted-foreground/40" />
-                                                                            </div>
-                                                                        )}
-                                                                    </button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="start" className="min-w-[180px]">
-                                                                    <DropdownMenuLabel className="text-[12px] text-muted-foreground uppercase tracking-wider">
-                                                                        Set Confirmation
-                                                                    </DropdownMenuLabel>
-                                                                    <DropdownMenuSeparator />
-                                                                    {[
-                                                                        { value: "confirmed", label: "Confirmed", icon: CheckCircle2, color: "text-emerald-400" },
-                                                                        { value: "change_requested", label: "Change Requested", icon: RefreshCw, color: "text-amber-400" },
-                                                                        { value: "pending", label: "Pending", icon: Clock, color: "text-blue-400" },
-                                                                    ].map((opt) => (
-                                                                        <DropdownMenuItem
-                                                                            key={opt.value}
-                                                                            className="gap-2 cursor-pointer"
-                                                                            disabled={row.confirmationStatus?.status === opt.value}
-                                                                            onClick={() => {
-                                                                                if (opt.value === "change_requested") {
-                                                                                    setRemarksTarget({ rowData: row, status: "change_requested" });
-                                                                                    setRemarksInput("");
-                                                                                    setRemarksModalOpen(true);
-                                                                                } else {
-                                                                                    handleUpdateConfirmation(row, opt.value);
-                                                                                }
-                                                                            }}
-                                                                        >
-                                                                            <opt.icon className={cn("h-3.5 w-3.5", opt.color)} />
-                                                                            <span className="text-xs font-medium">{opt.label}</span>
-                                                                            {row.confirmationStatus?.status === opt.value && (
-                                                                                <Check className="h-3 w-3 ml-auto text-primary" />
-                                                                            )}
-                                                                        </DropdownMenuItem>
-                                                                    ))}
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
                                                         </td>
 
                                                         {/* 3. Route # */}
