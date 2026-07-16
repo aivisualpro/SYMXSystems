@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { useHrReimbursements } from "@/lib/query/hooks/useHr";
+import { normalizeReimbursementStatus } from "@/lib/reimbursement-status";
 import {
   Search,
   Receipt,
@@ -164,7 +165,7 @@ const CHUNK_SIZE = 500;
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function getEffectiveStatus(r: Reimbursement): ReimbursementStatus {
-  return r.status || "pending";
+  return normalizeReimbursementStatus(r.status);
 }
 
 function itemsTotal(items?: LineItem[]): number {
@@ -1138,7 +1139,7 @@ export default function ReimbursementPage() {
     return () => setRightContent(null);
   }, [setRightContent, search, canPay]);
 
-  const performAction = useCallback(async (id: string, method: "PUT", url: string, body: Record<string, any>) => {
+  const performAction = useCallback(async (id: string, method: "PUT" | "POST", url: string, body: Record<string, any>) => {
     setBusyId(id);
     try {
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -1165,7 +1166,7 @@ export default function ReimbursementPage() {
     const body: Record<string, any> = { action };
     if (action === "mark_paid_direct") body.paymentReference = value;
     if (action === "queue_payroll") body.payrollBatchLabel = value;
-    performAction(record._id, "PUT", `/api/admin/reimbursements/${record._id}/pay`, body);
+    performAction(record._id, "POST", `/api/admin/reimbursements/${record._id}/pay`, body);
   }, [performAction]);
 
   const handleAddNote = useCallback((record: Reimbursement, text: string) => {

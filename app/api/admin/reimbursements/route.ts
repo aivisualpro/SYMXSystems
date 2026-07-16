@@ -5,6 +5,30 @@ import connectToDatabase from "@/lib/db";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import { v2 as cloudinary } from "cloudinary";
 import { getNextRequestNumber, enrichReimbursements } from "@/lib/reimbursement-utils";
+import { REIMBURSEMENT_STATUSES } from "@/lib/reimbursement-status";
+
+// Maps the pipeline's raw $status into the current enum before grouping —
+// pre-redesign records may still carry the old flat status strings
+// ("Pending"/"Unpaid"/"Approved"/"Rejected"/"Paid") since
+// scripts/migrate-reimbursement-status.mjs is opt-in, dry-run by default.
+// Without this, KPI counts would silently exclude every un-migrated record.
+const STATUS_NORMALIZE_STAGE = {
+  $addFields: {
+    normStatus: {
+      $switch: {
+        branches: [
+          { case: { $in: ["$status", REIMBURSEMENT_STATUSES] }, then: "$status" },
+          { case: { $eq: ["$status", "Pending"] }, then: "pending" },
+          { case: { $eq: ["$status", "Unpaid"] }, then: "approved" },
+          { case: { $eq: ["$status", "Approved"] }, then: "approved" },
+          { case: { $eq: ["$status", "Rejected"] }, then: "denied" },
+          { case: { $eq: ["$status", "Paid"] }, then: "paid" },
+        ],
+        default: "pending",
+      },
+    },
+  },
+};
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -49,21 +73,22 @@ export async function GET(req: NextRequest) {
       SymxReimbursement.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       SymxReimbursement.countDocuments(filter),
       SymxReimbursement.aggregate([
+        STATUS_NORMALIZE_STAGE,
         {
           $group: {
             _id: null,
             totalAmount: { $sum: { $ifNull: ["$amount", 0] } },
             totalRecords: { $sum: 1 },
-            pendingCount: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] } },
-            pendingAmount: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, { $ifNull: ["$amount", 0] }, 0] } },
-            approvedCount: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, 1, 0] } },
-            approvedAmount: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, { $ifNull: ["$amount", 0] }, 0] } },
-            queuedCount: { $sum: { $cond: [{ $eq: ["$status", "queued_for_payroll"] }, 1, 0] } },
-            queuedAmount: { $sum: { $cond: [{ $eq: ["$status", "queued_for_payroll"] }, { $ifNull: ["$amount", 0] }, 0] } },
-            paidCount: { $sum: { $cond: [{ $eq: ["$status", "paid"] }, 1, 0] } },
-            paidAmount: { $sum: { $cond: [{ $eq: ["$status", "paid"] }, { $ifNull: ["$amount", 0] }, 0] } },
-            deniedCount: { $sum: { $cond: [{ $eq: ["$status", "denied"] }, 1, 0] } },
-            deniedAmount: { $sum: { $cond: [{ $eq: ["$status", "denied"] }, { $ifNull: ["$amount", 0] }, 0] } },
+            pendingCount: { $sum: { $cond: [{ $eq: ["$normStatus", "pending"] }, 1, 0] } },
+            pendingAmount: { $sum: { $cond: [{ $eq: ["$normStatus", "pending"] }, { $ifNull: ["$amount", 0] }, 0] } },
+            approvedCount: { $sum: { $cond: [{ $eq: ["$normStatus", "approved"] }, 1, 0] } },
+            approvedAmount: { $sum: { $cond: [{ $eq: ["$normStatus", "approved"] }, { $ifNull: ["$amount", 0] }, 0] } },
+            queuedCount: { $sum: { $cond: [{ $eq: ["$normStatus", "queued_for_payroll"] }, 1, 0] } },
+            queuedAmount: { $sum: { $cond: [{ $eq: ["$normStatus", "queued_for_payroll"] }, { $ifNull: ["$amount", 0] }, 0] } },
+            paidCount: { $sum: { $cond: [{ $eq: ["$normStatus", "paid"] }, 1, 0] } },
+            paidAmount: { $sum: { $cond: [{ $eq: ["$normStatus", "paid"] }, { $ifNull: ["$amount", 0] }, 0] } },
+            deniedCount: { $sum: { $cond: [{ $eq: ["$normStatus", "denied"] }, 1, 0] } },
+            deniedAmount: { $sum: { $cond: [{ $eq: ["$normStatus", "denied"] }, { $ifNull: ["$amount", 0] }, 0] } },
           },
         },
       ]),

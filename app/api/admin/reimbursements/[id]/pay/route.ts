@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import { enrichReimbursements } from "@/lib/reimbursement-utils";
+import { normalizeReimbursementStatus } from "@/lib/reimbursement-status";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -37,11 +38,16 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     const byName = session.name || session.email || "Staff";
     const byEmail = session.email || "";
+    // Normalized rather than raw record.status — pre-redesign records may
+    // still carry the old flat status strings (Pending/Unpaid/Approved/
+    // Rejected/Paid) since the migration script is opt-in (see
+    // lib/reimbursement-status.ts for why).
+    const currentStatus = normalizeReimbursementStatus(record.status);
     const setDoc: Record<string, any> = {};
     let activityText = "";
 
     if (action === "mark_paid_direct") {
-      if (record.status !== "approved") {
+      if (currentStatus !== "approved") {
         return NextResponse.json({ error: "Only an approved request can be marked paid" }, { status: 400 });
       }
       setDoc.status = "paid";
@@ -52,7 +58,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       const amount = typeof record.amount === "number" ? `$${record.amount.toFixed(2)}` : "";
       activityText = `Marked paid directly${amount ? ` — ${amount}` : ""}${setDoc.paymentReference ? ` (ref: ${setDoc.paymentReference})` : ""}`;
     } else if (action === "queue_payroll") {
-      if (record.status !== "approved") {
+      if (currentStatus !== "approved") {
         return NextResponse.json({ error: "Only an approved request can be queued for payroll" }, { status: 400 });
       }
       setDoc.status = "queued_for_payroll";
@@ -62,7 +68,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       setDoc.payrollBatchLabel = body.payrollBatchLabel ? String(body.payrollBatchLabel).slice(0, 200) : "";
       activityText = `Queued for payroll${setDoc.payrollBatchLabel ? ` — ${setDoc.payrollBatchLabel}` : ""}`;
     } else if (action === "confirm_payroll_paid") {
-      if (record.status !== "queued_for_payroll") {
+      if (currentStatus !== "queued_for_payroll") {
         return NextResponse.json({ error: "Only a request queued for payroll can be confirmed paid" }, { status: 400 });
       }
       setDoc.status = "paid";
@@ -71,10 +77,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       setDoc.payrollConfirmedBy = byName;
       activityText = "Confirmed paid via payroll";
     } else if (action === "revert") {
-      if (record.status !== "paid" && record.status !== "queued_for_payroll") {
+      if (currentStatus !== "paid" && currentStatus !== "queued_for_payroll") {
         return NextResponse.json({ error: "Only a paid or payroll-queued request can be reverted" }, { status: 400 });
       }
-      const fromStatus = record.status;
+      const fromStatus = currentStatus;
       setDoc.status = "approved";
       setDoc.paymentMethod = undefined;
       setDoc.paidDate = undefined;
