@@ -852,7 +852,15 @@ export default function TimePage() {
                         Import Punch Audit Report
                     </Button>
                 </div>
-                <div className="flex-1 min-h-0 rounded-xl border border-border/50 bg-card overflow-hidden flex flex-col">
+                <div
+                    className="flex-1 min-h-0 rounded-xl border border-border/50 bg-card overflow-hidden flex flex-col"
+                    // Safari/WebKit doesn't clip `position: sticky` descendants to an
+                    // ancestor's border-radius when the ancestor only uses
+                    // `overflow: hidden` — the sticky header/group rows can visually
+                    // bleed past the rounded corner while scrolling. Forcing a mask
+                    // (even a no-op opaque one) makes Safari establish proper clipping.
+                    style={{ WebkitMaskImage: "-webkit-radial-gradient(white, black)" }}
+                >
                     {/* Scrollable wrapper */}
                     <div className="flex-1 overflow-auto">
                         <div style={{ minWidth: 1200 }}>
