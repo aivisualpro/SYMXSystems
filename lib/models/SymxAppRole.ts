@@ -10,6 +10,15 @@ export interface IPermission {
     delete: boolean;
     approve: boolean;
     download: boolean;
+    // Governs marking a reimbursement paid / queuing it for payroll (see
+    // app/api/admin/reimbursements/[id]/pay/route.ts). Defaults to false
+    // (unlike every other action here) so payroll access has to be
+    // deliberately granted per role rather than inherited for free —
+    // existing roles need scripts/backfill-hr-pay-permission.mjs run once
+    // to get an explicit `pay: false` written into their stored HR
+    // permission entry, since requirePermission() treats a genuinely
+    // missing key as allowed.
+    pay: boolean;
   };
   fieldScope?: Record<string, boolean>;
 }
@@ -38,6 +47,7 @@ const PermissionSchema = new Schema({
     delete: { type: Boolean, default: true },
     approve: { type: Boolean, default: true },
     download: { type: Boolean, default: true },
+    pay: { type: Boolean, default: false },
   },
   fieldScope: { type: Map, of: Boolean }
 }, { _id: false });

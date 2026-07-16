@@ -516,6 +516,22 @@ export async function processMisc(type: string, data: any, week: string | undefi
                         if (schemaKey === 'amount') {
                             const num = parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
                             if (!isNaN(num)) processedData[schemaKey] = num;
+                        } else if (schemaKey === 'status') {
+                            // Normalize legacy capitalized statuses (Pending/Unpaid/
+                            // Approved/Rejected/Paid) into the current lowercase enum
+                            // (see lib/models/SymxReimbursement.ts) — a source sheet
+                            // may still use the old vocabulary.
+                            const raw = value.toString().trim();
+                            const legacyMap: Record<string, string> = {
+                                Pending: "pending", Unpaid: "approved", Approved: "approved",
+                                Rejected: "denied", Paid: "paid",
+                            };
+                            const normalized = raw.toLowerCase().replace(/\s+/g, "_");
+                            if (["pending", "approved", "denied", "queued_for_payroll", "paid"].includes(normalized)) {
+                                processedData.status = normalized;
+                            } else if (legacyMap[raw]) {
+                                processedData.status = legacyMap[raw];
+                            }
                         } else if (schemaKey === 'date' || schemaKey === 'createdAt') {
                             const parsed = new Date(value.toString());
                             if (!isNaN(parsed.getTime())) {
@@ -548,10 +564,21 @@ export async function processMisc(type: string, data: any, week: string | undefi
                 const filter: any = { transporterId: processedData.transporterId };
                 if (processedData.date) filter.date = processedData.date;
 
+                // bulkWrite upserts go straight through the MongoDB driver, bypassing
+                // Mongoose document construction — schema defaults (status: "pending",
+                // source: "admin") never get applied. $setOnInsert fills them in only
+                // for brand-new records, so a CSV re-run that just updates an existing
+                // row's amount/notes never clobbers a status or source it already has.
                 return {
                     updateOne: {
                         filter,
-                        update: { $set: processedData },
+                        update: {
+                            $set: processedData,
+                            $setOnInsert: {
+                                ...(processedData.status ? {} : { status: "pending" }),
+                                source: "import",
+                            },
+                        },
                         upsert: true
                     }
                 };

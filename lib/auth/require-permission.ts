@@ -10,7 +10,7 @@ export class ForbiddenError extends Error {
   }
 }
 
-export type ActionType = "view" | "create" | "edit" | "delete" | "approve" | "download";
+export type ActionType = "view" | "create" | "edit" | "delete" | "approve" | "download" | "pay";
 
 export async function requirePermission(moduleName: string, action: ActionType = "view") {
   const session = await getSession();

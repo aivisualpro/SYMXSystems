@@ -361,7 +361,7 @@ export default function EmployeesDashboardPage() {
                 <DonutChart
                   segments={[
                     { value: reimbursementKpi.paidCount || 0, color: "#10b981", label: "Paid" },
-                    { value: reimbursementKpi.unpaidCount || 0, color: "#f59e0b", label: "Unpaid" },
+                    { value: reimbursementKpi.outstandingCount || 0, color: "#f59e0b", label: "Outstanding" },
                   ]}
                   size={130}
                   strokeWidth={16}
@@ -374,9 +374,9 @@ export default function EmployeesDashboardPage() {
               <div className="flex-1 space-y-2.5">
                 {[
                   { label: "Paid", count: reimbursementKpi.paidCount || 0, dot: "#10b981" },
-                  { label: "Unpaid", count: reimbursementKpi.unpaidCount || 0, dot: "#f59e0b" },
+                  { label: "Outstanding", count: reimbursementKpi.outstandingCount || 0, dot: "#f59e0b" },
                 ].map(s => {
-                  const total = (reimbursementKpi.paidCount || 0) + (reimbursementKpi.unpaidCount || 0);
+                  const total = (reimbursementKpi.paidCount || 0) + (reimbursementKpi.outstandingCount || 0);
                   const pct = total > 0 ? ((s.count / total) * 100).toFixed(0) : "0";
                   return (
                     <div key={s.label} className="flex items-center justify-between p-1.5 -mx-1.5 rounded-lg hover:bg-muted/40 transition-colors">
@@ -409,16 +409,16 @@ export default function EmployeesDashboardPage() {
               <p className="text-[10px] text-muted-foreground font-medium mt-1.5">All requests</p>
             </div>
 
-            {/* Unpaid */}
+            {/* Outstanding (approved or queued for payroll, not yet paid) */}
             <div onClick={() => router.push("/hr/reimbursement")}
               className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-amber-500/30 active:scale-[0.98]">
               <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-amber-400 to-amber-600" />
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Unpaid</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Outstanding</p>
                 <div className="p-1.5 rounded-lg bg-amber-500/10"><AlertTriangle className="h-3.5 w-3.5 text-amber-500" /></div>
               </div>
-              <p className="text-2xl font-black text-foreground"><AnimatedNumber value={reimbursementKpi.unpaidCount || 0} /></p>
-              <p className="text-[10px] text-muted-foreground font-medium mt-1.5">Pending approval</p>
+              <p className="text-2xl font-black text-foreground"><AnimatedNumber value={reimbursementKpi.outstandingCount || 0} /></p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-1.5">Approved or queued, unpaid</p>
             </div>
 
             {/* Total Paid */}
@@ -433,15 +433,15 @@ export default function EmployeesDashboardPage() {
               <p className="text-[10px] text-muted-foreground font-medium mt-1.5">Total paid out</p>
             </div>
 
-            {/* Pending Amount */}
+            {/* Outstanding Amount */}
             <div onClick={() => router.push("/hr/reimbursement")}
               className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-4 cursor-pointer transition-all hover:shadow-lg hover:border-orange-500/30 active:scale-[0.98]">
               <div className="absolute top-0 left-0 w-1 h-full rounded-r-full bg-gradient-to-b from-orange-400 to-orange-600" />
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Pending</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Owed</p>
                 <div className="p-1.5 rounded-lg bg-orange-500/10"><DollarSign className="h-3.5 w-3.5 text-orange-500" /></div>
               </div>
-              <p className="text-lg font-black text-amber-500">${((reimbursementKpi.unpaidAmount || 0) / 1000).toFixed(1)}K</p>
+              <p className="text-lg font-black text-amber-500">${((reimbursementKpi.outstandingAmount || 0) / 1000).toFixed(1)}K</p>
               <p className="text-[10px] text-muted-foreground font-medium mt-1.5">Awaiting payment</p>
             </div>
           </div>

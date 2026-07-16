@@ -80,6 +80,12 @@ const PERMISSION_ACTIONS = [
   { key: "delete", label: "Delete" },
   { key: "approve", label: "Approve" },
   { key: "download", label: "Download" },
+  // Gates marking a reimbursement paid / queuing it for payroll. Only ever
+  // enforced against the top-level "HR" module string server-side (never a
+  // submodule), so the table rendering below only shows a real toggle on
+  // the HR parent row — every other row (including HR's own submodules)
+  // renders a dash, same as the existing hasSubModules dash convention.
+  { key: "pay", label: "Pay" },
 ];
 
 // field definitions based on Mongoose schemas
@@ -204,7 +210,7 @@ export default function RoleDetailsPage() {
       missing.forEach(name => {
         newPermissions.push({
           module: name,
-          actions: { view: true, create: true, edit: true, delete: true, approve: true, download: true },
+          actions: { view: true, create: true, edit: true, delete: true, approve: true, download: true, pay: false },
           fieldScope: {},
         });
       });
@@ -227,6 +233,7 @@ export default function RoleDetailsPage() {
           delete: true,
           approve: true,
           download: true,
+          pay: false,
         },
         fieldScope: {},
       };
@@ -275,7 +282,7 @@ export default function RoleDetailsPage() {
       } else {
         // Initialize new permission
         const newActions = {
-          view: true, create: true, edit: true, delete: true, approve: true, download: true,
+          view: true, create: true, edit: true, delete: true, approve: true, download: true, pay: false,
           [actionKey]: newValue
         };
 
@@ -442,6 +449,7 @@ export default function RoleDetailsPage() {
                   <TableHead className="text-center">Delete</TableHead>
                   <TableHead className="text-center">Approve</TableHead>
                   <TableHead className="text-center">Download</TableHead>
+                  <TableHead className="text-center">Pay</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -489,6 +497,29 @@ export default function RoleDetailsPage() {
 
                               {/* Parent Toggles */}
                               {PERMISSION_ACTIONS.map((action) => {
+                                // "Pay" is only ever checked against the literal "HR" module
+                                // server-side, so it's the one action that gets a real toggle
+                                // on the HR row even though HR has submodules (which otherwise
+                                // dash out every non-view action below) — everywhere else it's
+                                // just a dash, it has no effect anywhere but HR.
+                                if (action.key === 'pay') {
+                                  if (moduleName !== 'HR') {
+                                    return <TableCell key={action.key} className="text-center">-</TableCell>;
+                                  }
+                                  const payEnabled = actionEnabled(perm, 'pay');
+                                  return (
+                                    <TableCell key={action.key} className="text-center">
+                                      <div className="flex justify-center">
+                                        <Switch
+                                          checked={payEnabled}
+                                          disabled={!isViewEnabled}
+                                          onCheckedChange={() => handleToggleAction(moduleName, 'pay', payEnabled)}
+                                        />
+                                      </div>
+                                    </TableCell>
+                                  );
+                                }
+
                                 if (hasSubModules && action.key !== 'view') {
                                   return <TableCell key={action.key} className="text-center">-</TableCell>;
                                 }
@@ -521,6 +552,10 @@ export default function RoleDetailsPage() {
                                     {sm}
                                   </TableCell>
                                   {PERMISSION_ACTIONS.map((action) => {
+                                    if (action.key === 'pay') {
+                                      return <TableCell key={action.key} className="text-center">-</TableCell>;
+                                    }
+
                                     const isEnabled = actionEnabled(subPerm, action.key);
                                     const isDisabled = action.key !== 'view' && !subIsViewEnabled;
 

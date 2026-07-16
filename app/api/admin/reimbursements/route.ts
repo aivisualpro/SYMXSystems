@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
-import SymxEmployee from "@/lib/models/SymxEmployee";
 import { v2 as cloudinary } from "cloudinary";
+import { getNextRequestNumber, enrichReimbursements } from "@/lib/reimbursement-utils";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -23,71 +23,69 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
     await connectToDatabase();
 
     const { searchParams } = new URL(req.url);
     const skip = parseInt(searchParams.get("skip") || "0", 10);
     const limit = parseInt(searchParams.get("limit") || "50", 10);
     const search = searchParams.get("search") || "";
+    const status = searchParams.get("status") || "";
 
-    // Build query filter
     const filter: any = {};
+    if (status) filter.status = status;
     if (search) {
       filter.$or = [
         { employeeName: { $regex: search, $options: "i" } },
         { transporterId: { $regex: search, $options: "i" } },
         { category: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
+        { requestNumber: { $regex: search, $options: "i" } },
+        { submitterName: { $regex: search, $options: "i" } },
+        { "items.description": { $regex: search, $options: "i" } },
       ];
     }
 
-    // Run data fetch, count, KPI aggregation, and employee lookup in parallel
-    const [data, totalCount, kpiAgg, employees] = await Promise.all([
-      SymxReimbursement.find(filter)
-        .sort({ date: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+    const [data, totalCount, kpiAgg] = await Promise.all([
+      SymxReimbursement.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       SymxReimbursement.countDocuments(filter),
-      // KPI aggregation on the full (unfiltered) dataset for dashboard stats
       SymxReimbursement.aggregate([
         {
           $group: {
             _id: null,
             totalAmount: { $sum: { $ifNull: ["$amount", 0] } },
             totalRecords: { $sum: 1 },
-            unpaidCount: { $sum: { $cond: [{ $ne: ["$status", "Paid"] }, 1, 0] } },
-            unpaidAmount: { $sum: { $cond: [{ $ne: ["$status", "Paid"] }, { $ifNull: ["$amount", 0] }, 0] } },
-            paidCount: { $sum: { $cond: [{ $eq: ["$status", "Paid"] }, 1, 0] } },
-            paidAmount: { $sum: { $cond: [{ $eq: ["$status", "Paid"] }, { $ifNull: ["$amount", 0] }, 0] } },
+            pendingCount: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] } },
+            pendingAmount: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, { $ifNull: ["$amount", 0] }, 0] } },
+            approvedCount: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, 1, 0] } },
+            approvedAmount: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, { $ifNull: ["$amount", 0] }, 0] } },
+            queuedCount: { $sum: { $cond: [{ $eq: ["$status", "queued_for_payroll"] }, 1, 0] } },
+            queuedAmount: { $sum: { $cond: [{ $eq: ["$status", "queued_for_payroll"] }, { $ifNull: ["$amount", 0] }, 0] } },
+            paidCount: { $sum: { $cond: [{ $eq: ["$status", "paid"] }, 1, 0] } },
+            paidAmount: { $sum: { $cond: [{ $eq: ["$status", "paid"] }, { $ifNull: ["$amount", 0] }, 0] } },
+            deniedCount: { $sum: { $cond: [{ $eq: ["$status", "denied"] }, 1, 0] } },
+            deniedAmount: { $sum: { $cond: [{ $eq: ["$status", "denied"] }, { $ifNull: ["$amount", 0] }, 0] } },
           },
         },
       ]),
-      SymxEmployee.find({}, { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }).lean(),
     ]);
 
-    // Build lookup maps: transporterId → name, _id → name
-    const nameByTransporter = new Map<string, string>();
-    const nameById = new Map<string, string>();
-    for (const emp of employees) {
-      const fullName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
-      if (emp.transporterId) nameByTransporter.set(emp.transporterId, fullName);
-      nameById.set(emp._id.toString(), fullName);
-    }
+    const enriched = await enrichReimbursements(data);
 
-    // Enrich each record with the resolved employee name
-    const enriched = data.map((r: any) => ({
-      ...r,
-      employeeName: r.employeeName || (r.employeeId && nameById.get(r.employeeId.toString())) || nameByTransporter.get(r.transporterId) || "",
-    }));
-
-    const kpi = kpiAgg[0] || {
+    const kpiRaw = kpiAgg[0] || {
       totalAmount: 0, totalRecords: 0,
-      unpaidCount: 0, unpaidAmount: 0,
+      pendingCount: 0, pendingAmount: 0,
+      approvedCount: 0, approvedAmount: 0,
+      queuedCount: 0, queuedAmount: 0,
       paidCount: 0, paidAmount: 0,
+      deniedCount: 0, deniedAmount: 0,
+    };
+    // Outstanding = reviewed and owed but not yet actually paid out — the
+    // number that answers "how much do I still need to pay/queue into
+    // payroll right now."
+    const kpi = {
+      ...kpiRaw,
+      outstandingAmount: (kpiRaw.approvedAmount || 0) + (kpiRaw.queuedAmount || 0),
+      outstandingCount: (kpiRaw.approvedCount || 0) + (kpiRaw.queuedCount || 0),
     };
 
     return NextResponse.json({
@@ -97,10 +95,14 @@ export async function GET(req: NextRequest) {
       kpi,
     });
   } catch (error: any) {
+    console.error("[REIMBURSEMENTS_GET]", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
+// Admin/manager "on behalf of employee" creation — the driver has no login
+// to submit their own request through (see app/submit-reimbursement for
+// that path), so this is how a manager or HR staffer enters one directly.
 export async function POST(req: NextRequest) {
   try {
     await requirePermission("HR", "edit");
@@ -122,18 +124,14 @@ export async function POST(req: NextRequest) {
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
-      // Extract text fields
       for (const [key, value] of formData.entries()) {
-        if (key !== "file") {
-          body[key] = value as string;
-        }
+        if (key !== "file") body[key] = value as string;
       }
-      // Parse amount
-      if (body.amount) body.amount = parseFloat(body.amount);
-      // Parse date
       if (body.date) body.date = new Date(body.date);
+      if (body.items) {
+        try { body.items = JSON.parse(body.items); } catch { body.items = []; }
+      }
 
-      // Handle file upload(s) — supports multiple files via "file" field
       const files = formData.getAll("file") as File[];
       const uploadedUrls: string[] = [];
       for (const file of files) {
@@ -141,41 +139,67 @@ export async function POST(req: NextRequest) {
           const arrayBuffer = await file.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
           const result: any = await new Promise((resolve, reject) => {
-            cloudinary.uploader.upload_stream(
-              { folder: "symx-systems/reimbursements", resource_type: "auto" },
-              (error, result) => {
+            cloudinary.uploader
+              .upload_stream({ folder: "symx-systems/reimbursements", resource_type: "auto" }, (error, result) => {
                 if (error) reject(error);
                 else resolve(result);
-              }
-            ).end(buffer);
+              })
+              .end(buffer);
           });
           uploadedUrls.push(result.secure_url);
         }
       }
       if (uploadedUrls.length > 0) {
         body.attachments = uploadedUrls;
-        body.attachment = uploadedUrls[0]; // backward compat
+        body.attachment = uploadedUrls[0];
       }
     } else {
       body = await req.json();
     }
 
-    // Build a clean record with only allowed fields
+    const items = Array.isArray(body.items)
+      ? body.items
+          .map((it: any) => ({
+            description: String(it.description || "").slice(0, 500),
+            category: it.category ? String(it.category).slice(0, 100) : undefined,
+            amount: typeof it.amount === "string" ? parseFloat(it.amount) : Number(it.amount) || 0,
+          }))
+          .filter((it: any) => it.description && it.amount > 0)
+      : [];
+
+    if (items.length === 0) {
+      return NextResponse.json({ error: "At least one itemized line with a description and amount is required" }, { status: 400 });
+    }
+
+    const requestNumber = await getNextRequestNumber();
+    const byName = session.name || session.email || "Staff";
+    const byEmail = session.email || "";
+
+    const amount = items.reduce((sum: number, it: any) => sum + it.amount, 0);
+
     const record: any = {
-      status: body.status || "Pending",
-      createdBy: session.id || "",
+      requestNumber,
+      status: "pending",
+      source: "admin",
+      createdBy: byName,
+      items,
+      amount,
+      category: items[0]?.category,
+      attachments: body.attachments || [],
+      attachment: body.attachment || undefined,
+      employeeMatchType: body.employeeId ? "manual" : undefined,
+      activity: [
+        { type: "created", text: "Request created by staff on behalf of employee", byName, byEmail, createdAt: new Date() },
+      ],
     };
     if (body.employeeId) record.employeeId = body.employeeId;
     if (body.date) record.date = typeof body.date === "string" ? new Date(body.date) : body.date;
-    if (body.amount != null) record.amount = typeof body.amount === "string" ? parseFloat(body.amount) : body.amount;
     if (body.notes) record.notes = body.notes;
-    if (body.attachments) record.attachments = body.attachments;
-    if (body.attachment) record.attachment = body.attachment;
 
     const created = await SymxReimbursement.create(record);
     return NextResponse.json(created, { status: 201 });
   } catch (error: any) {
-    console.error("Reimbursement POST error:", error);
+    console.error("[REIMBURSEMENTS_POST]", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
