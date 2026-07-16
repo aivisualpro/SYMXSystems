@@ -297,6 +297,33 @@ export default function RoleDetailsPage() {
     });
   };
 
+  // Toggling isManager on also grants the Write-Ups "approve" action, which is
+  // what actually gates the review endpoint server-side — isManager itself is
+  // just the trait that decides who sees the Review Workbench and shows up as
+  // a reviewer. Turning it off does NOT revoke approve (an org may still want
+  // someone to keep that permission without being in the workbench rotation).
+  const handleToggleIsManager = (nextValue: boolean) => {
+    setRole((prev: any) => {
+      const newPermissions = [...prev.permissions];
+      if (nextValue) {
+        const idx = newPermissions.findIndex((p: any) => p.module === "Write-Ups");
+        if (idx >= 0) {
+          newPermissions[idx] = {
+            ...newPermissions[idx],
+            actions: { ...newPermissions[idx].actions, view: true, approve: true },
+          };
+        } else {
+          newPermissions.push({
+            module: "Write-Ups",
+            actions: { view: true, create: true, edit: true, delete: true, approve: true, download: true },
+            fieldScope: {},
+          });
+        }
+      }
+      return { ...prev, isManager: nextValue, permissions: newPermissions };
+    });
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -338,6 +365,16 @@ export default function RoleDetailsPage() {
         </Button>
         <div>
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">{role.name}</h1>
+        </div>
+        <Separator orientation="vertical" className="h-6 mx-1" />
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={!!role.isManager}
+            onCheckedChange={handleToggleIsManager}
+          />
+          <Label className="text-xs text-muted-foreground whitespace-nowrap">
+            Manager <span className="text-muted-foreground/60">(reviews write-ups)</span>
+          </Label>
         </div>
       </div>
     );

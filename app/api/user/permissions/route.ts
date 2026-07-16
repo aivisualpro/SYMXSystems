@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
     // ── Super Admin Bypass ──────────────────────────────────────────
     if (session.id === "super-admin") {
-      return NextResponse.json({ role: "Super Admin", permissions: [] });
+      return NextResponse.json({ role: "Super Admin", permissions: [], isManager: true });
     }
     // ────────────────────────────────────────────────────────────────
     
@@ -76,9 +76,10 @@ export async function GET(req: NextRequest) {
     //   Else -> All Visible (legacy behavior) or None?
     //   Let's stick to "All Visible" for backward compatibility if no role doc exists yet.
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       role: user.AppRole,
-      permissions: role ? role.permissions : [] 
+      permissions: role ? role.permissions : [],
+      isManager: role?.isManager || false,
     });
 
   } catch (error) {

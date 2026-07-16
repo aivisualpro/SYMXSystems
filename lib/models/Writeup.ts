@@ -49,15 +49,29 @@ export interface IWriteupVerbalCoachingSnapshot {
   categoryLabels: string[];
 }
 
-// Captures the HR decision once a Suspension Review write-up is escalated.
-// Resolving an escalation moves status -> "closed" so it drops out of the
-// active review queue while keeping a permanent audit record here.
+// Legacy: captures the HR decision from the old suspension-only escalation
+// flow. No longer written by new code (see IWriteupManagerReview below) —
+// kept so already-resolved records from before the manager-review redesign
+// still display correctly.
 export interface IWriteupEscalationResolution {
   outcome: string; // suspended | terminated | downgraded | no_action
   suspensionDays?: number;
   notes: string;
   resolvedBy: string;
   resolvedAt: Date;
+}
+
+// Every write-up now waits on a manager decision before it's closed, not
+// just the old suspension-level "escalated" cases. Set once by whoever
+// reviews it from the Manager Review Workbench (any role with the
+// SymxAppRole.isManager flag, gated by the "approve" action on Write-Ups).
+export interface IWriteupManagerReview {
+  decision: string; // confirmed | escalated
+  outcome?: string; // set when decision === "escalated": suspended | terminated | downgraded | no_action
+  suspensionDays?: number;
+  notes: string;
+  reviewedBy: string;
+  reviewedAt: Date;
 }
 
 export interface IWriteup extends Document {
@@ -82,16 +96,29 @@ export interface IWriteup extends Document {
   priorWriteups: IWriteupPriorSnapshot[]; // immutable snapshot taken at creation time
   priorVerbalCoachings: IWriteupVerbalCoachingSnapshot[]; // reference-only snapshot, same idea
 
-  // status: draft | signed | refused_to_sign | uploaded_signed_copy | escalated | closed
-  // "escalated" = Suspension Review reached and both/refusal signatures are in —
-  // pending HR review. "closed" = either a normal sign-off, OR an escalation
-  // that HR has resolved (see `escalation` below for the outcome).
+  // status: draft | pending_review | closed
+  //
+  // "pending_review" = the employee has acknowledged (signed, refused, or a
+  // signed paper copy was uploaded) and the record is now waiting on a
+  // manager's decision from the Review Workbench — every write-up goes
+  // through this, not just suspension-level ones. "closed" = a manager has
+  // recorded a decision (see `managerReview` below).
+  //
+  // Legacy values on records created before this redesign: signed |
+  // refused_to_sign | uploaded_signed_copy (old terminal states, no review
+  // ever happened) and escalated (old suspension-only pending-review state,
+  // resolved via the now-retired resolve-escalation endpoint into `escalation`
+  // below instead of `managerReview`). These are never written by new code
+  // but are left as-is on old documents rather than backfilled.
   status: string;
-  escalatedAt?: Date; // when status first became "escalated" — drives the HR review queue's age/urgency display
-  escalation?: IWriteupEscalationResolution; // set once HR resolves the escalation
+  acknowledgmentType?: string; // signed | refused | uploaded_signed_copy — how the employee acknowledgment happened, now that status no longer encodes it
+  reviewQueuedAt?: Date; // when status first became "pending_review" — drives the workbench's age/urgency display
+  escalatedAt?: Date; // legacy — same idea as reviewQueuedAt, only ever set on pre-redesign records
+  escalation?: IWriteupEscalationResolution; // legacy — set only by the old, retired resolve-escalation endpoint
+  managerReview?: IWriteupManagerReview; // set once a manager resolves the review from the Workbench
 
   managerName: string;
-  managerSignature?: IWriteupSignature;
+  managerSignature?: IWriteupSignature; // the account that facilitated in-person signing (issuer — dispatcher, manager, whoever created it). Label in the UI is "Issued By" / "Issuer Signature"; field name kept as-is to avoid a data migration.
   employeeSignature?: IWriteupSignature;
   refusal?: IWriteupRefusal;
 
@@ -175,6 +202,18 @@ const WriteupEscalationResolutionSchema = new Schema(
   { _id: false }
 );
 
+const WriteupManagerReviewSchema = new Schema(
+  {
+    decision: { type: String, required: true },
+    outcome: { type: String },
+    suspensionDays: { type: Number },
+    notes: { type: String, default: "" },
+    reviewedBy: { type: String, default: "" },
+    reviewedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const WriteupSchema = new Schema<IWriteup>(
   {
     transporterId: { type: String, index: true },
@@ -199,8 +238,11 @@ const WriteupSchema = new Schema<IWriteup>(
     priorVerbalCoachings: { type: [WriteupVerbalCoachingSnapshotSchema], default: [] },
 
     status: { type: String, default: "draft" },
+    acknowledgmentType: { type: String },
+    reviewQueuedAt: { type: Date },
     escalatedAt: { type: Date },
     escalation: { type: WriteupEscalationResolutionSchema },
+    managerReview: { type: WriteupManagerReviewSchema },
 
     managerName: { type: String, default: "" },
     managerSignature: { type: WriteupSignatureSchema },

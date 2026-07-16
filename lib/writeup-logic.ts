@@ -24,8 +24,11 @@ export const WARNING_LEVEL_LABELS: Record<string, string> = {
 
 // Statuses that count as an acknowledged prior for escalation purposes.
 // Drafts don't count — an unsigned in-progress write-up shouldn't push
-// someone's next violation to a higher warning level.
-const COUNTABLE_STATUSES = ["signed", "refused_to_sign", "uploaded_signed_copy", "escalated", "closed"];
+// someone's next violation to a higher warning level. "pending_review" DOES
+// count: the employee has already acknowledged it (signed/refused/uploaded),
+// it's just waiting on a manager's decision — that shouldn't stop it from
+// counting if a second incident happens before the first gets reviewed.
+const COUNTABLE_STATUSES = ["pending_review", "signed", "refused_to_sign", "uploaded_signed_copy", "escalated", "closed"];
 
 export interface WriteupPrior {
   writeupId: string;

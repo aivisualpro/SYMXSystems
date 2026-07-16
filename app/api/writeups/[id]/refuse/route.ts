@@ -4,10 +4,11 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import Writeup from "@/lib/models/Writeup";
 
-// POST /api/writeups/[id]/refuse — manager marks that the employee was
+// POST /api/writeups/[id]/refuse — the issuer marks that the employee was
 // presented the write-up in person and refused to sign. A refusal still
-// counts as "acknowledged" for escalation purposes (the employee was made
-// aware), matching how the paper form's witness line works today.
+// counts as "acknowledged" (the employee was made aware) and routes to
+// manager review the same as a normal signature, matching how the paper
+// form's witness line works today.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requirePermission("Write-Ups", "edit");
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "This write-up is already closed." }, { status: 400 });
     }
     if (!existing.managerSignature?.signatureImage) {
-      return NextResponse.json({ error: "Manager must sign before recording a refusal" }, { status: 400 });
+      return NextResponse.json({ error: "Issuer must sign before recording a refusal" }, { status: 400 });
     }
 
     const refusal = {
@@ -43,12 +44,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       refusedAt: new Date(),
     };
 
-    const isEscalation = existing.warningLevel === "suspension_review";
-    const status = isEscalation ? "escalated" : "refused_to_sign";
     const now = new Date();
-
-    const setFields: any = { refusal, status, closedAt: now };
-    if (isEscalation) setFields.escalatedAt = now;
+    const setFields: any = {
+      refusal,
+      status: "pending_review",
+      acknowledgmentType: "refused",
+      reviewQueuedAt: now,
+    };
 
     const writeup = await Writeup.findByIdAndUpdate(
       id,

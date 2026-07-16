@@ -17,6 +17,13 @@ export interface IPermission {
 export interface ISymxAppRole extends Document {
   name: string;
   description?: string;
+  // Role-level trait, independent of the per-module permissions matrix.
+  // Marks accounts with this role as reviewers: they see the Write-Ups
+  // Manager Review Workbench and are treated as "manager" for review
+  // assignment, not because of the role's name (e.g. "Admin"), but because
+  // this flag was explicitly set. Toggling it on also grants the Write-Ups
+  // "approve" action, which is what actually gates the review endpoint.
+  isManager?: boolean;
   permissions: IPermission[];
   createdAt: Date;
   updatedAt: Date;

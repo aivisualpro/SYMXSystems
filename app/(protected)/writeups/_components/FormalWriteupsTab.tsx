@@ -75,6 +75,7 @@ interface SignatureInfo { name: string; signatureImage: string; signedAt: string
 interface Refusal { refused: boolean; note?: string; witnessName?: string; witnessSignatureImage?: string; refusedAt?: string }
 interface Attachment { name: string; url: string; category: string }
 interface EscalationResolution { outcome: string; suspensionDays?: number; notes: string; resolvedBy: string; resolvedAt: string }
+interface ManagerReview { decision: string; outcome?: string; suspensionDays?: number; notes: string; reviewedBy: string; reviewedAt: string }
 
 interface Writeup {
   _id: string;
@@ -93,10 +94,13 @@ interface Writeup {
   priorWriteups: PriorSnapshot[];
   priorVerbalCoachings: PriorVerbalCoachingSnapshot[];
   status: string;
-  escalatedAt?: string;
-  escalation?: EscalationResolution;
+  acknowledgmentType?: string;
+  reviewQueuedAt?: string;
+  escalatedAt?: string; // legacy — pre-redesign records only
+  escalation?: EscalationResolution; // legacy — pre-redesign records only
+  managerReview?: ManagerReview;
   managerName: string;
-  managerSignature?: SignatureInfo;
+  managerSignature?: SignatureInfo; // the issuer — labeled "Issued By" in the UI
   employeeSignature?: SignatureInfo;
   refusal?: Refusal;
   attachments: Attachment[];
@@ -122,14 +126,28 @@ const WARNING_LEVEL_COLORS: Record<string, string> = {
   final_warning: "bg-red-500 text-white border-red-600",
   suspension_review: "bg-red-800 text-white border-red-900",
 };
+// draft/closed are the only statuses new code writes going forward.
+// pending_review is the universal "waiting on a manager" state — every
+// write-up passes through it once the employee has acknowledged. escalated
+// is a legacy alias (pre-redesign, suspension-only) that's treated exactly
+// like pending_review everywhere below. signed/refused_to_sign/
+// uploaded_signed_copy are legacy terminal states from before this redesign
+// (no review ever happened on those records) — kept only so old rows still
+// display something sensible.
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft — needs signature",
-  signed: "Signed",
-  refused_to_sign: "Refused to Sign",
-  uploaded_signed_copy: "Signed (Uploaded Copy)",
-  escalated: "Pending HR Review",
+  pending_review: "Pending Manager Review",
+  escalated: "Pending Manager Review",
+  signed: "Signed (pre-review)",
+  refused_to_sign: "Refused to Sign (pre-review)",
+  uploaded_signed_copy: "Signed — Uploaded Copy (pre-review)",
   closed: "Closed",
 };
+
+const REVIEW_DECISIONS = [
+  { value: "confirmed", label: "Confirm as issued" },
+  { value: "escalated", label: "Escalate / further action" },
+];
 
 const ESCALATION_OUTCOMES = [
   { value: "suspended", label: "Suspended" },
@@ -144,9 +162,17 @@ function daysSince(d?: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000));
 }
 
-// "closed" covers both a normal sign-off and a resolved escalation —
-// distinguish them for display.
+function isPendingReview(w: Writeup): boolean {
+  return w.status === "pending_review" || w.status === "escalated";
+}
+
+// "closed" covers a manager-reviewed write-up (new flow) or a resolved
+// legacy escalation (old flow) — distinguish them for display.
 function statusLabel(w: Writeup): string {
+  if (w.status === "closed" && w.managerReview) {
+    if (w.managerReview.decision === "confirmed") return "Reviewed — Confirmed as Issued";
+    return `Reviewed — Escalated: ${ESCALATION_OUTCOME_LABELS[w.managerReview.outcome || ""] || w.managerReview.outcome}`;
+  }
   if (w.status === "closed" && w.escalation) {
     return `Escalation Resolved — ${ESCALATION_OUTCOME_LABELS[w.escalation.outcome] || w.escalation.outcome}`;
   }
@@ -164,13 +190,21 @@ function fmtDate(d?: string) {
   return new Date(d).toLocaleDateString();
 }
 
-export default function FormalWriteupsTab() {
+interface FormalWriteupsTabProps {
+  // True when rendered as the manager Review Workbench tab: locks the
+  // default filter to write-ups awaiting review, sorts oldest-first, and
+  // hides the create/new-write-up affordances (issuing isn't this view's
+  // job — reviewing is).
+  workbenchMode?: boolean;
+}
+
+export default function FormalWriteupsTab({ workbenchMode = false }: FormalWriteupsTabProps) {
   const [writeups, setWriteups] = useState<Writeup[]>([]);
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [includeTerminated, setIncludeTerminated] = useState(false);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>(workbenchMode ? "pending_review" : "all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   // Date range is optional — empty means "all time". Presets (7/30/90 days)
@@ -178,11 +212,15 @@ export default function FormalWriteupsTab() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [activePreset, setActivePreset] = useState<number | null>(null);
-  // Newest first by default
-  const [sort, setSort] = useState<SortConfig>({ key: "incidentDate", direction: "desc" });
+  // Newest first by default; the workbench sorts oldest-waiting-first instead,
+  // same instinct as any approvals inbox — the case that's been sitting
+  // longest surfaces at the top.
+  const [sort, setSort] = useState<SortConfig>(
+    workbenchMode ? { key: "reviewQueuedAt", direction: "asc" } : { key: "incidentDate", direction: "desc" }
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [downloadingPdf, setDownloadingPdf] = useState(false);
-  // Gates the "Resolve Escalation" form — the server enforces this too
+  // Gates the review-decision form — the server enforces this too
   // (Write-Ups: approve), this just avoids showing a button that will 403.
   const [canApprove, setCanApprove] = useState(true);
   // Gates the "Delete" button — server enforces via requirePermission("Admin","delete"),
@@ -221,6 +259,7 @@ export default function FormalWriteupsTab() {
   const [witnessName, setWitnessName] = useState("");
   const [witnessSig, setWitnessSig] = useState("");
   const [uploadingSigned, setUploadingSigned] = useState(false);
+  const [reviewDecision, setReviewDecision] = useState<string>("confirmed");
   const [resolveOutcome, setResolveOutcome] = useState("");
   const [resolveSuspensionDays, setResolveSuspensionDays] = useState("");
   const [resolveNotes, setResolveNotes] = useState("");
@@ -310,6 +349,10 @@ export default function FormalWriteupsTab() {
       .catch(() => {});
   }, []);
 
+  const emptyMessage = workbenchMode
+    ? "Nothing waiting on your review right now."
+    : "No write-ups found.";
+
   // "Include terminated employees" hides those write-ups everywhere on
   // this screen — the summary cards and the table should agree with each
   // other, so both derive from this same base set. Only excludes rows
@@ -389,10 +432,12 @@ export default function FormalWriteupsTab() {
 
   const summary = useMemo(() => {
     const pending = visibleWriteups.filter((w) => w.status === "draft").length;
-    const escalated = visibleWriteups.filter((w) => w.status === "escalated").length;
-    const oldestEscalatedDays = visibleWriteups
-      .filter((w) => w.status === "escalated")
-      .reduce((max, w) => Math.max(max, daysSince(w.escalatedAt)), 0);
+    const pendingReviewList = visibleWriteups.filter(isPendingReview);
+    const escalated = pendingReviewList.length;
+    const oldestEscalatedDays = pendingReviewList.reduce(
+      (max, w) => Math.max(max, daysSince(w.reviewQueuedAt || w.escalatedAt)),
+      0
+    );
     return { total: visibleWriteups.length, pending, escalated, oldestEscalatedDays };
   }, [visibleWriteups]);
 
@@ -489,6 +534,7 @@ export default function FormalWriteupsTab() {
     setRefuseNote("");
     setWitnessName("");
     setWitnessSig("");
+    setReviewDecision("confirmed");
     setResolveOutcome("");
     setResolveSuspensionDays("");
     setResolveNotes("");
@@ -549,7 +595,7 @@ export default function FormalWriteupsTab() {
   const handleSaveManagerSignature = async () => {
     if (!selected) return;
     if (!managerName.trim() || !managerSig) {
-      notify.error("Manager name and signature are required");
+      notify.error("Your name and signature are required");
       return;
     }
     setSavingSign(true);
@@ -561,7 +607,7 @@ export default function FormalWriteupsTab() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to sign");
-      notify.success("Manager signature saved — hand the device to the employee to sign");
+      notify.success("Issued — hand the device to the employee to sign");
       await refreshSelected(selected._id);
     } catch (err: any) {
       notify.error(err.message || "Failed to sign");
@@ -585,7 +631,7 @@ export default function FormalWriteupsTab() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to sign");
-      notify.success("Write-up signed and closed");
+      notify.success("Signed — sent for manager review");
       await refreshSelected(selected._id);
       await load();
     } catch (err: any) {
@@ -610,7 +656,7 @@ export default function FormalWriteupsTab() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to record refusal");
-      notify.success("Refusal recorded");
+      notify.success("Refusal recorded — sent for manager review");
       setRefuseOpen(false);
       await refreshSelected(selected._id);
       await load();
@@ -639,7 +685,7 @@ export default function FormalWriteupsTab() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to attach signed copy");
-      notify.success("Signed copy uploaded");
+      notify.success("Signed copy uploaded — sent for manager review");
       await refreshSelected(selected._id);
       await load();
     } catch (err: any) {
@@ -649,38 +695,41 @@ export default function FormalWriteupsTab() {
     }
   };
 
-  const handleResolveEscalation = async () => {
+  const handleSubmitReview = async () => {
     if (!selected) return;
-    if (!resolveOutcome) {
-      notify.error("Select an outcome");
-      return;
-    }
-    if (resolveNotes.trim().length < 10) {
-      notify.error("Resolution notes must be at least 10 characters");
-      return;
-    }
-    if (resolveOutcome === "suspended" && (!resolveSuspensionDays || Number(resolveSuspensionDays) <= 0)) {
-      notify.error("Enter the number of suspension days");
-      return;
+    if (reviewDecision === "escalated") {
+      if (!resolveOutcome) {
+        notify.error("Select an outcome");
+        return;
+      }
+      if (resolveNotes.trim().length < 10) {
+        notify.error("Notes must be at least 10 characters when escalating");
+        return;
+      }
+      if (resolveOutcome === "suspended" && (!resolveSuspensionDays || Number(resolveSuspensionDays) <= 0)) {
+        notify.error("Enter the number of suspension days");
+        return;
+      }
     }
     setResolvingEscalation(true);
     try {
-      const res = await fetch(`/api/writeups/${selected._id}/resolve-escalation`, {
+      const res = await fetch(`/api/writeups/${selected._id}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          outcome: resolveOutcome,
+          decision: reviewDecision,
+          outcome: reviewDecision === "escalated" ? resolveOutcome : undefined,
           notes: resolveNotes.trim(),
-          suspensionDays: resolveOutcome === "suspended" ? Number(resolveSuspensionDays) : undefined,
+          suspensionDays: reviewDecision === "escalated" && resolveOutcome === "suspended" ? Number(resolveSuspensionDays) : undefined,
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to resolve escalation");
-      notify.success("Escalation resolved");
+      if (!res.ok) throw new Error(json.error || "Failed to record review");
+      notify.success(reviewDecision === "confirmed" ? "Confirmed as issued — closed" : "Escalated and closed");
       await refreshSelected(selected._id);
       await load();
     } catch (err: any) {
-      notify.error(err.message || "Failed to resolve escalation");
+      notify.error(err.message || "Failed to record review");
     } finally {
       setResolvingEscalation(false);
     }
@@ -716,45 +765,51 @@ export default function FormalWriteupsTab() {
           <input type="checkbox" className="h-3.5 w-3.5 accent-primary rounded cursor-pointer" checked={includeTerminated} onChange={(e) => setIncludeTerminated(e.target.checked)} />
           Include terminated employees
         </label>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4" />
-          New Write-Up
-        </Button>
+        {!workbenchMode && (
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4" />
+            New Write-Up
+          </Button>
+        )}
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <Card><CardContent className="pt-0"><div className="text-2xl font-bold">{summary.total}</div><div className="text-xs text-muted-foreground">Total write-ups</div></CardContent></Card>
-        <Card><CardContent className="pt-0"><div className="text-2xl font-bold text-amber-600">{summary.pending}</div><div className="text-xs text-muted-foreground">Awaiting signature</div></CardContent></Card>
-        <Card
-          className={cn("cursor-pointer transition-colors", summary.escalated > 0 && "border-red-300 bg-red-50/60 dark:bg-red-950/20")}
-          onClick={() => setStatusFilter("escalated")}
-        >
-          <CardContent className="pt-0">
-            <div className="flex items-center gap-1.5">
-              {summary.escalated > 0 && <AlertTriangle className="h-4 w-4 text-red-600" />}
-              <div className="text-2xl font-bold text-red-600">{summary.escalated}</div>
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Pending HR review{summary.escalated > 0 ? ` — oldest ${summary.oldestEscalatedDays}d` : ""}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {!workbenchMode && (
+        <div className="grid grid-cols-3 gap-3">
+          <Card><CardContent className="pt-0"><div className="text-2xl font-bold">{summary.total}</div><div className="text-xs text-muted-foreground">Total write-ups</div></CardContent></Card>
+          <Card><CardContent className="pt-0"><div className="text-2xl font-bold text-amber-600">{summary.pending}</div><div className="text-xs text-muted-foreground">Awaiting signature</div></CardContent></Card>
+          <Card
+            className={cn("cursor-pointer transition-colors", summary.escalated > 0 && "border-red-300 bg-red-50/60 dark:bg-red-950/20")}
+            onClick={() => setStatusFilter("pending_review")}
+          >
+            <CardContent className="pt-0">
+              <div className="flex items-center gap-1.5">
+                {summary.escalated > 0 && <AlertTriangle className="h-4 w-4 text-red-600" />}
+                <div className="text-2xl font-bold text-red-600">{summary.escalated}</div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Pending manager review{summary.escalated > 0 ? ` — oldest ${summary.oldestEscalatedDays}d` : ""}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant={statusFilter === "all" ? "default" : "outline"} onClick={() => setStatusFilter("all")}>All</Button>
-          <Button size="sm" variant={statusFilter === "draft" ? "default" : "outline"} onClick={() => setStatusFilter("draft")}>Awaiting Signature</Button>
-          <Button
-            size="sm"
-            variant={statusFilter === "escalated" ? "default" : "outline"}
-            className={statusFilter !== "escalated" && summary.escalated > 0 ? "border-red-300 text-red-700 hover:text-red-700" : ""}
-            onClick={() => setStatusFilter("escalated")}
-          >
-            Pending HR Review{summary.escalated > 0 ? ` (${summary.escalated})` : ""}
-          </Button>
-          <Button size="sm" variant={statusFilter === "closed" ? "default" : "outline"} onClick={() => setStatusFilter("closed")}>Resolved Escalations</Button>
-        </div>
+        {!workbenchMode && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant={statusFilter === "all" ? "default" : "outline"} onClick={() => setStatusFilter("all")}>All</Button>
+            <Button size="sm" variant={statusFilter === "draft" ? "default" : "outline"} onClick={() => setStatusFilter("draft")}>Awaiting Signature</Button>
+            <Button
+              size="sm"
+              variant={statusFilter === "pending_review" ? "default" : "outline"}
+              className={statusFilter !== "pending_review" && summary.escalated > 0 ? "border-red-300 text-red-700 hover:text-red-700" : ""}
+              onClick={() => setStatusFilter("pending_review")}
+            >
+              Pending Manager Review{summary.escalated > 0 ? ` (${summary.escalated})` : ""}
+            </Button>
+            <Button size="sm" variant={statusFilter === "closed" ? "default" : "outline"} onClick={() => setStatusFilter("closed")}>Reviewed</Button>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5">
@@ -838,7 +893,7 @@ export default function FormalWriteupsTab() {
               <SortableHeader label="Category" sortKey="categoryLabel" sort={sort} onSort={toggleSort} />
               <SortableHeader label="Warning Level" sortKey="warningLevel" sort={sort} onSort={toggleSort} />
               <SortableHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
-              <SortableHeader label="Manager" sortKey="managerName" sort={sort} onSort={toggleSort} />
+              <SortableHeader label={workbenchMode ? "Issued By" : "Manager"} sortKey="managerName" sort={sort} onSort={toggleSort} />
             </tr>
           </thead>
           <tbody>
@@ -846,12 +901,12 @@ export default function FormalWriteupsTab() {
               <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></td></tr>
             )}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">No write-ups found.</td></tr>
+              <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">{emptyMessage}</td></tr>
             )}
             {filtered.map((w) => (
               <tr
                 key={w._id}
-                className={cn("border-t hover:bg-muted/30", w.status === "escalated" && "border-l-2 border-l-red-500 bg-red-50/40 dark:bg-red-950/10")}
+                className={cn("border-t hover:bg-muted/30", isPendingReview(w) && "border-l-2 border-l-red-500 bg-red-50/40 dark:bg-red-950/10")}
               >
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                   <input
@@ -869,9 +924,9 @@ export default function FormalWriteupsTab() {
                   <Badge className={WARNING_LEVEL_COLORS[w.warningLevel] || ""}>{WARNING_LEVEL_LABELS[w.warningLevel] || w.warningLevel}</Badge>
                 </td>
                 <td className="cursor-pointer px-3 py-2 text-xs" onClick={() => openDetail(w)}>
-                  {w.status === "escalated" && <AlertTriangle className="mr-1 inline h-3.5 w-3.5 text-red-600" />}
-                  <span className={w.status === "escalated" ? "font-medium text-red-700 dark:text-red-400" : ""}>{statusLabel(w)}</span>
-                  {w.status === "escalated" && <span className="ml-1 text-muted-foreground">({daysSince(w.escalatedAt)}d)</span>}
+                  {isPendingReview(w) && <AlertTriangle className="mr-1 inline h-3.5 w-3.5 text-red-600" />}
+                  <span className={isPendingReview(w) ? "font-medium text-red-700 dark:text-red-400" : ""}>{statusLabel(w)}</span>
+                  {isPendingReview(w) && <span className="ml-1 text-muted-foreground">({daysSince(w.reviewQueuedAt || w.escalatedAt)}d)</span>}
                 </td>
                 <td className="cursor-pointer px-3 py-2 text-muted-foreground" onClick={() => openDetail(w)}>{w.managerName}</td>
               </tr>
@@ -1064,48 +1119,75 @@ export default function FormalWriteupsTab() {
                 </div>
               )}
 
-              {selected.status === "escalated" && (
+              {isPendingReview(selected) && (
                 <div className="flex flex-col gap-3 rounded-md border border-red-300 bg-red-50/60 p-3 dark:bg-red-950/20">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-red-600" />
                     <div className="text-sm font-semibold text-red-700 dark:text-red-400">
-                      HR Review Required — Suspension Review reached ({daysSince(selected.escalatedAt)} day{daysSince(selected.escalatedAt) === 1 ? "" : "s"} pending)
+                      Awaiting Manager Review ({daysSince(selected.reviewQueuedAt || selected.escalatedAt)} day{daysSince(selected.reviewQueuedAt || selected.escalatedAt) === 1 ? "" : "s"} pending)
                     </div>
                   </div>
                   <p className="text-xs text-red-700/80 dark:text-red-400/80">
-                    This employee has reached the end of the warning ladder for {selected.categoryLabel}. Record the final decision below to close the case.
+                    The employee has acknowledged this write-up ({selected.acknowledgmentType === "refused" ? "refused to sign" : selected.acknowledgmentType === "uploaded_signed_copy" ? "signed paper copy uploaded" : "signed"}). A manager needs to confirm it was handled correctly, or escalate.
                   </p>
 
                   {canApprove ? (
                     <div className="flex flex-col gap-2 rounded-md border border-red-200 bg-background p-2.5 dark:border-red-900">
-                      <Label className="text-xs">Outcome *</Label>
-                      <Select value={resolveOutcome} onValueChange={setResolveOutcome}>
-                        <SelectTrigger><SelectValue placeholder="Select outcome" /></SelectTrigger>
+                      <Label className="text-xs">Decision *</Label>
+                      <Select value={reviewDecision} onValueChange={setReviewDecision}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {ESCALATION_OUTCOMES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                          {REVIEW_DECISIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
-                      {resolveOutcome === "suspended" && (
+                      {reviewDecision === "escalated" && (
                         <>
-                          <Label className="text-xs">Suspension Days *</Label>
-                          <Input type="number" min={1} value={resolveSuspensionDays} onChange={(e) => setResolveSuspensionDays(e.target.value)} className="w-24" />
+                          <Label className="text-xs">Outcome *</Label>
+                          <Select value={resolveOutcome} onValueChange={setResolveOutcome}>
+                            <SelectTrigger><SelectValue placeholder="Select outcome" /></SelectTrigger>
+                            <SelectContent>
+                              {ESCALATION_OUTCOMES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          {resolveOutcome === "suspended" && (
+                            <>
+                              <Label className="text-xs">Suspension Days *</Label>
+                              <Input type="number" min={1} value={resolveSuspensionDays} onChange={(e) => setResolveSuspensionDays(e.target.value)} className="w-24" />
+                            </>
+                          )}
+                          <Label className="text-xs">Notes * (min 10 characters)</Label>
                         </>
                       )}
-                      <Label className="text-xs">Resolution Notes * (min 10 characters)</Label>
+                      {reviewDecision === "confirmed" && <Label className="text-xs">Notes (optional)</Label>}
                       <Textarea value={resolveNotes} onChange={(e) => setResolveNotes(e.target.value)} rows={2} placeholder="Document the decision and rationale..." />
-                      <Button size="sm" className="self-start bg-red-600 text-white hover:bg-red-700" onClick={handleResolveEscalation} disabled={resolvingEscalation}>
-                        {resolvingEscalation ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Resolve Escalation
+                      <Button size="sm" className="self-start bg-red-600 text-white hover:bg-red-700" onClick={handleSubmitReview} disabled={resolvingEscalation}>
+                        {resolvingEscalation ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        {reviewDecision === "confirmed" ? "Confirm & Close" : "Escalate & Close"}
                       </Button>
                     </div>
                   ) : (
-                    <p className="text-xs italic text-red-700/80 dark:text-red-400/80">Awaiting review from an HR Manager with Approve access to Write-Ups.</p>
+                    <p className="text-xs italic text-red-700/80 dark:text-red-400/80">Awaiting review from a Manager with Approve access to Write-Ups.</p>
                   )}
                 </div>
               )}
 
-              {selected.status === "closed" && selected.escalation && (
+              {selected.status === "closed" && selected.managerReview && (
                 <div className="flex flex-col gap-1 rounded-md border p-3 text-sm">
-                  <div className="text-xs font-medium uppercase text-muted-foreground">Escalation Resolution</div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Manager Review</div>
+                  <div className="font-medium">
+                    {selected.managerReview.decision === "confirmed"
+                      ? "Confirmed as issued"
+                      : `Escalated — ${ESCALATION_OUTCOME_LABELS[selected.managerReview.outcome || ""] || selected.managerReview.outcome}`}
+                    {selected.managerReview.outcome === "suspended" && selected.managerReview.suspensionDays ? ` — ${selected.managerReview.suspensionDays} day${selected.managerReview.suspensionDays === 1 ? "" : "s"}` : ""}
+                  </div>
+                  {selected.managerReview.notes && <p className="whitespace-pre-wrap text-muted-foreground">{selected.managerReview.notes}</p>}
+                  <p className="text-xs text-muted-foreground">Reviewed by {selected.managerReview.reviewedBy} on {fmtDate(selected.managerReview.reviewedAt)}</p>
+                </div>
+              )}
+
+              {selected.status === "closed" && !selected.managerReview && selected.escalation && (
+                <div className="flex flex-col gap-1 rounded-md border p-3 text-sm">
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Escalation Resolution (legacy)</div>
                   <div className="font-medium">
                     {ESCALATION_OUTCOME_LABELS[selected.escalation.outcome] || selected.escalation.outcome}
                     {selected.escalation.outcome === "suspended" && selected.escalation.suspensionDays ? ` — ${selected.escalation.suspensionDays} day${selected.escalation.suspensionDays === 1 ? "" : "s"}` : ""}
@@ -1163,20 +1245,20 @@ export default function FormalWriteupsTab() {
 
               {selected.status === "draft" && (
                 <div className="flex flex-col gap-4 rounded-md border p-3">
-                  <div className="text-xs font-medium uppercase text-muted-foreground">Sign In Person</div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Issue &amp; Sign In Person</div>
 
                   {!selected.managerSignature?.signatureImage ? (
                     <div className="flex flex-col gap-2">
-                      <Label className="text-xs">Manager Name</Label>
+                      <Label className="text-xs">Issued By (Your Name)</Label>
                       <Input value={managerName} onChange={(e) => setManagerName(e.target.value)} />
-                      <SignaturePad value={managerSig} onChange={setManagerSig} label="Manager Signature" height={100} />
+                      <SignaturePad value={managerSig} onChange={setManagerSig} label="Issuer Signature" height={100} />
                       <Button size="sm" onClick={handleSaveManagerSignature} disabled={savingSign}>
-                        {savingSign ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save Manager Signature
+                        {savingSign ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save Issuer Signature
                       </Button>
                     </div>
                   ) : (
                     <>
-                      <div className="text-sm text-emerald-600">Manager signed by {selected.managerSignature.name} on {fmtDate(selected.managerSignature.signedAt)}</div>
+                      <div className="text-sm text-emerald-600">Issued by {selected.managerSignature.name} on {fmtDate(selected.managerSignature.signedAt)}</div>
 
                       {!refuseOpen ? (
                         <div className="flex flex-col gap-2">

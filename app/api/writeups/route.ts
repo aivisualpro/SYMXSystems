@@ -28,7 +28,11 @@ export async function GET(req: NextRequest) {
     const to = searchParams.get("to");
 
     const query: any = {};
-    if (status) query.status = status;
+    // "pending_review" also catches the legacy "escalated" status (same
+    // meaning, pre-redesign records only) so old suspension-only cases that
+    // never got resolved still surface in the Review Workbench.
+    if (status === "pending_review") query.status = { $in: ["pending_review", "escalated"] };
+    else if (status) query.status = status;
     if (employeeId) query.employeeId = employeeId;
     if (categoryId) query.categoryId = categoryId;
     if (search) {

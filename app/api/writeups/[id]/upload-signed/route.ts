@@ -28,7 +28,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const existing = await Writeup.findById(id);
     if (!existing) return NextResponse.json({ error: "Write-up not found" }, { status: 404 });
-    if (existing.status !== "draft" && existing.status !== "uploaded_signed_copy") {
+    // Allow repeat calls while still "draft" (first upload) or already "pending_review"
+    // via a prior upload on this same write-up (front + back pages, etc).
+    if (existing.status !== "draft" && existing.status !== "pending_review") {
       return NextResponse.json({ error: "This write-up is already closed with a different outcome." }, { status: 400 });
     }
 
@@ -40,12 +42,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       uploadedBy: session?.email || "",
     };
 
-    const isEscalation = existing.warningLevel === "suspension_review";
-    const status = isEscalation ? "escalated" : "uploaded_signed_copy";
     const now = new Date();
-
-    const setFields: any = { status, closedAt: existing.closedAt || now };
-    if (isEscalation && !existing.escalatedAt) setFields.escalatedAt = now;
+    const setFields: any = {
+      status: "pending_review",
+      acknowledgmentType: "uploaded_signed_copy",
+      reviewQueuedAt: existing.reviewQueuedAt || now,
+    };
 
     const writeup = await Writeup.findByIdAndUpdate(
       id,

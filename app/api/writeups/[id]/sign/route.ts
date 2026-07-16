@@ -5,12 +5,21 @@ import connectToDatabase from "@/lib/db";
 import Writeup from "@/lib/models/Writeup";
 
 // POST /api/writeups/[id]/sign
-// In-person signing only (no DA login accounts exist in this app) — the
-// manager captures their own signature, then hands the same device to the
-// employee to sign right there. Body may include managerSignature and/or
-// employeeSignature; a single call can carry both if they sign back to
-// back, or two calls if the manager signs first and reviews with the
-// employee before handing the device over.
+// In-person signing only (no DA login accounts exist in this app) — whoever
+// is issuing it (dispatcher, manager, anyone with Write-Ups edit access)
+// captures their own "Issued By" signature, then hands the same device to
+// the employee to sign right there. Body may include managerSignature
+// and/or employeeSignature; a single call can carry both if they sign back
+// to back, or two calls if the issuer signs first and reviews with the
+// employee before handing the device over. Field name managerSignature is
+// kept as-is (no data migration) even though it's really the issuer, who
+// isn't always a manager — UI labels it "Issued By".
+//
+// Once the employee has acknowledged (signed here, refused via the sibling
+// refuse endpoint, or a signed paper copy was uploaded via upload-signed),
+// status always becomes "pending_review" — every write-up now waits on a
+// manager's decision from the Review Workbench, not just suspension-level
+// ones.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requirePermission("Write-Ups", "edit");
@@ -36,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (body.managerSignature?.signatureImage) {
       if (!body.managerSignature.name) {
-        return NextResponse.json({ error: "Manager name is required to sign" }, { status: 400 });
+        return NextResponse.json({ error: "Issuer name is required to sign" }, { status: 400 });
       }
       setFields.managerSignature = {
         name: body.managerSignature.name,
@@ -50,18 +59,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         return NextResponse.json({ error: "Employee name is required to sign" }, { status: 400 });
       }
       if (!existing.managerSignature?.signatureImage && !setFields.managerSignature) {
-        return NextResponse.json({ error: "Manager must sign before the employee signs" }, { status: 400 });
+        return NextResponse.json({ error: "Issuer must sign before the employee signs" }, { status: 400 });
       }
       setFields.employeeSignature = {
         name: body.employeeSignature.name,
         signatureImage: body.employeeSignature.signatureImage,
         signedAt: new Date(),
       };
-      // Both sides have now signed in person — the write-up is complete.
-      const isEscalation = existing.warningLevel === "suspension_review";
-      setFields.status = isEscalation ? "escalated" : "signed";
-      setFields.closedAt = new Date();
-      if (isEscalation) setFields.escalatedAt = setFields.closedAt;
+      // Both sides have now signed in person — hand off to manager review.
+      setFields.status = "pending_review";
+      setFields.acknowledgmentType = "signed";
+      setFields.reviewQueuedAt = new Date();
     }
 
     if (Object.keys(setFields).length === 0) {
