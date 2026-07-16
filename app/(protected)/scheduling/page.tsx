@@ -1733,7 +1733,7 @@ function SchedulingPageContent() {
                                               <TooltipTrigger asChild>
                                                 <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
                                               </TooltipTrigger>
-                                              <TooltipContent>Confirmed next week&apos;s schedule</TooltipContent>
+                                              <TooltipContent>Employee confirmed this schedule</TooltipContent>
                                             </Tooltip>
                                           )}
                                           {emp.weekScheduleConfirmation?.status === "pending" && (
