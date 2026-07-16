@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 import {
   BarChart3, DollarSign, Users, Wrench, AlertTriangle,
   TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight,
@@ -985,7 +986,10 @@ export function ChartMomKpi() {
       </CardContent>
 
       {/* ═══ Revenue Breakdown Modal ═══ */}
-      {revenueModal.open && (
+      {/* Rendered via portal: this Card uses @container (CSS containment), which makes it
+          a containing block for position:fixed descendants — without the portal the modal
+          gets trapped inside the card's bounds instead of covering the full viewport. */}
+      {revenueModal.open && isMounted && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setRevenueModal(prev => ({ ...prev, open: false })); setEditingRow(null) }} />
           <div className="relative w-full max-w-3xl bg-card border border-border shadow-2xl rounded-xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
@@ -1145,10 +1149,11 @@ export function ChartMomKpi() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* ═══ KPI Formula Modal ═══ */}
-      {kpiModal.open && kpiModal.item && (() => {
+      {kpiModal.open && kpiModal.item && isMounted && createPortal((() => {
         const d = kpiModal.item
         let equationRaw = ""
         let equationValues = ""
@@ -1285,7 +1290,7 @@ export function ChartMomKpi() {
             </div>
           </div>
         )
-      })()}
+      })(), document.body)}
     </Card>
   )
 }
