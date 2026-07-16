@@ -23,7 +23,6 @@ export default function SubmitTicketPage() {
   const [issue, setIssue] = useState("");
   const [submitterName, setSubmitterName] = useState("");
   const [submitterEmail, setSubmitterEmail] = useState("");
-  const [notes, setNotes] = useState("");
   const [website, setWebsite] = useState(""); // honeypot — real users never see/fill this
   const [errorMsg, setErrorMsg] = useState("");
   const [ticketNumber, setTicketNumber] = useState("");
@@ -55,7 +54,6 @@ export default function SubmitTicketPage() {
         body: JSON.stringify({
           category,
           issue: issue.trim(),
-          notes: notes.trim(),
           submitterName: submitterName.trim(),
           submitterEmail: submitterEmail.trim(),
           website, // honeypot
@@ -84,7 +82,6 @@ export default function SubmitTicketPage() {
     setIssue("");
     setSubmitterName("");
     setSubmitterEmail("");
-    setNotes("");
     setTicketNumber("");
     setErrorMsg("");
   };
@@ -197,20 +194,6 @@ export default function SubmitTicketPage() {
                   onChange={(e) => setIssue(e.target.value)}
                   placeholder="Please describe your issue in detail..."
                   rows={4}
-                  className="w-full bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 resize-none transition-all"
-                />
-              </div>
-
-              {/* Additional Notes */}
-              <div>
-                <label className="text-zinc-400 text-xs font-semibold uppercase tracking-wider block mb-2">
-                  Additional Notes <span className="text-zinc-600">(optional)</span>
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Any additional context..."
-                  rows={2}
                   className="w-full bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 resize-none transition-all"
                 />
               </div>
