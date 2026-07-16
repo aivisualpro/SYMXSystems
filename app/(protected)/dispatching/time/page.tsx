@@ -921,13 +921,6 @@ export default function TimePage() {
                                             style={{ gridTemplateColumns: GRID_TEMPLATE }}>
                                             {/* Employee (sticky) */}
                                             <div className="flex items-center gap-2 min-w-0 pr-2 sticky left-0 z-10 bg-card group-hover/row:bg-muted/20 transition-colors border-r border-border/50">
-                                                {row.profileImage ? (
-                                                    <img src={row.profileImage} alt={row.employeeName} className="w-6 h-6 rounded-full object-cover shrink-0 ring-1 ring-border" />
-                                                ) : (
-                                                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 ring-1 ring-primary/20">
-                                                        <span className="text-[9px] font-bold text-primary">{row.employeeName.split(" ").map(n => n[0]).join("").slice(0, 2)}</span>
-                                                    </div>
-                                                )}
                                                 {row.type.toLowerCase() === "training otr" && <TruckIcon className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
                                                 {row.type.toLowerCase() === "trainer" && <UserCheck className="h-3 w-3 shrink-0" style={{ color: getTypeStyle(row.type).colorHex || "#FE9EC7" }} />}
                                                 <span
