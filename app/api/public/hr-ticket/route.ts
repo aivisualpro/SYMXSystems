@@ -3,6 +3,7 @@ import connectToDatabase from "@/lib/db";
 import SymxHrTicket from "@/lib/models/SymxHrTicket";
 import {
   getNextTicketNumber,
+  matchEmployeeForTicket,
   sendHrTicketNotificationEmail,
   sendDriverConfirmationEmail,
 } from "@/lib/hr-ticket-utils";
@@ -31,11 +32,13 @@ function getClientIp(req: NextRequest): string {
  * bot submissions, IP-based throttling caps abuse, and ticket numbers come
  * from an atomic shared counter (no more read-then-increment race).
  *
- * This route intentionally does NOT try to auto-match the submitter to a
- * SymxEmployee record — that match is made manually by whoever reviews the
- * ticket in the admin Tickets workbench (via the employee-link picker on
- * each ticket), since a driver's typed ID is unverified and a wrong
- * auto-match would silently attach a ticket to the wrong person's record.
+ * This route never trusts an ID a driver types in directly, but it does
+ * try to identify the submitter from their name/email: an unambiguous
+ * exact match against a SymxEmployee record is auto-linked immediately
+ * (matchEmployeeForTicket), since a single exact match is low-risk. A
+ * same-signal match that isn't unique is stored as a "suggested" candidate
+ * instead and surfaced in the admin UI for a one-click confirm — never
+ * applied automatically.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -75,22 +78,29 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Explicit field whitelist (never spread the raw body into create()) ──
-    // No transporterId/employeeId set here on purpose — linking a public
-    // submission to a real employee record is a manual step HR takes from
-    // the admin Tickets workbench, not something inferred from an
-    // unverified value the driver typed in.
+    const submitterName = typeof body.submitterName === "string" ? body.submitterName.slice(0, 200) : "";
+    const submitterEmail = typeof body.submitterEmail === "string" ? body.submitterEmail.slice(0, 200) : "";
+
+    // Exact-match auto-link (or a suggestion when ambiguous) against
+    // SymxEmployee — see matchEmployeeForTicket for the matching rules.
+    const { exact, suggested } = await matchEmployeeForTicket(submitterName, submitterEmail);
+
     const ticketNumber = await getNextTicketNumber();
     const ticket = await SymxHrTicket.create({
       ticketNumber,
       category: typeof body.category === "string" ? body.category.slice(0, 200) : "",
       issue: typeof body.issue === "string" ? body.issue.slice(0, 5000) : "",
       notes: typeof body.notes === "string" ? body.notes.slice(0, 5000) : "",
-      submitterName: typeof body.submitterName === "string" ? body.submitterName.slice(0, 200) : "",
-      submitterEmail: typeof body.submitterEmail === "string" ? body.submitterEmail.slice(0, 200) : "",
+      submitterName,
+      submitterEmail,
       submitterIp: ip !== "unknown" ? ip : undefined,
       source: "public",
       approveDeny: "",
-      createdBy: (typeof body.submitterName === "string" && body.submitterName.trim()) || "Public Form",
+      createdBy: submitterName.trim() || "Public Form",
+      employeeId: exact?._id || undefined,
+      transporterId: exact?.transporterId || "",
+      employeeMatchType: exact ? "auto" : undefined,
+      suggestedEmployeeId: !exact && suggested ? suggested._id : undefined,
     });
 
     // Awaited (not fire-and-forget) because serverless functions can freeze

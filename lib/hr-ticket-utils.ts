@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import connectToDatabase from "@/lib/db";
 import SymxHrTicketSettings from "@/lib/models/SymxHrTicketSettings";
 import SymxHrTicket from "@/lib/models/SymxHrTicket";
+import SymxEmployee from "@/lib/models/SymxEmployee";
 
 const APP_URL = "https://symx-systems-erp.vercel.app";
 const FROM_ADDRESS = "SYMX Systems Support <info@adeelfullstack.com>";
@@ -38,6 +39,84 @@ export async function getNextTicketNumber(): Promise<string> {
     { new: true }
   );
   return String(updated!.lastTicketNumber);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export interface EmployeeMatchCandidate {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  transporterId: string;
+  profileImage: string;
+}
+
+const EMPLOYEE_MATCH_SELECT = { firstName: 1, lastName: 1, transporterId: 1, profileImage: 1 };
+
+function toCandidate(doc: any): EmployeeMatchCandidate {
+  return {
+    _id: String(doc._id),
+    firstName: doc.firstName || "",
+    lastName: doc.lastName || "",
+    transporterId: doc.transporterId || "",
+    profileImage: doc.profileImage || "",
+  };
+}
+
+/**
+ * Tries to identify which SymxEmployee a public ticket submission is about,
+ * without ever trusting the driver's typed ID directly (that's the manual
+ * link picker's job in the admin UI). Two tiers:
+ *
+ * - `exact`: an unambiguous exact-match on email or full name — safe to
+ *   auto-link immediately, since a single unique exact match is very low
+ *   risk of misattribution.
+ * - `suggested`: a same-signal match that wasn't unique (multiple
+ *   employees share the name/email) or was only a partial signal — surfaced
+ *   in the admin UI as a one-click "confirm" suggestion rather than
+ *   applied automatically.
+ *
+ * Email is checked before name since it's the stronger identity signal;
+ * once an email match is found (exact or ambiguous) name matching is
+ * skipped rather than potentially overriding it with a weaker signal.
+ */
+export async function matchEmployeeForTicket(
+  submitterName?: string,
+  submitterEmail?: string
+): Promise<{ exact: EmployeeMatchCandidate | null; suggested: EmployeeMatchCandidate | null }> {
+  await connectToDatabase();
+
+  const email = (submitterEmail || "").trim().toLowerCase();
+  if (email) {
+    const emailMatches = await SymxEmployee.find(
+      { email: new RegExp(`^${escapeRegex(email)}$`, "i") },
+      EMPLOYEE_MATCH_SELECT
+    ).lean();
+    if (emailMatches.length === 1) return { exact: toCandidate(emailMatches[0]), suggested: null };
+    if (emailMatches.length > 1) return { exact: null, suggested: toCandidate(emailMatches[0]) };
+  }
+
+  const name = (submitterName || "").trim();
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      const first = parts[0];
+      const last = parts.slice(1).join(" ");
+      const nameMatches = await SymxEmployee.find(
+        {
+          firstName: new RegExp(`^${escapeRegex(first)}$`, "i"),
+          lastName: new RegExp(`^${escapeRegex(last)}$`, "i"),
+        },
+        EMPLOYEE_MATCH_SELECT
+      ).lean();
+      if (nameMatches.length === 1) return { exact: toCandidate(nameMatches[0]), suggested: null };
+      if (nameMatches.length > 1) return { exact: null, suggested: toCandidate(nameMatches[0]) };
+    }
+  }
+
+  return { exact: null, suggested: null };
 }
 
 /**

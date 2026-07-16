@@ -50,15 +50,21 @@ export async function GET(req: NextRequest) {
 }
 
 async function enrichTickets(tickets: any[]) {
-  // ── Resolve employeeId → employee name (the primary, manually-set link) ──
+  // ── Resolve employeeId + suggestedEmployeeId → employee name in one
+  // batched lookup (the former is the confirmed/auto link, the latter is
+  // an unconfirmed suggestion the admin UI offers as a one-click match) ──
   const employeeIds = [...new Set(
     tickets.map((t) => t.employeeId).filter(Boolean).map((id: any) => String(id))
   )];
+  const suggestedIds = [...new Set(
+    tickets.map((t) => t.suggestedEmployeeId).filter(Boolean).map((id: any) => String(id))
+  )];
+  const allIds = [...new Set([...employeeIds, ...suggestedIds])];
 
   const empByIdMap = new Map<string, { employeeName: string; profileImage: string; transporterId: string }>();
-  if (employeeIds.length > 0) {
+  if (allIds.length > 0) {
     const employees = await SymxEmployee.find(
-      { _id: { $in: employeeIds } },
+      { _id: { $in: allIds } },
       { transporterId: 1, firstName: 1, lastName: 1, profileImage: 1 }
     ).lean();
     employees.forEach((emp: any) => {
@@ -112,6 +118,7 @@ async function enrichTickets(tickets: any[]) {
     const empById = t.employeeId ? empByIdMap.get(String(t.employeeId)) : null;
     const empByTransporter = !empById && t.transporterId ? empByTransporterMap.get(t.transporterId) : null;
     const emp = empById || empByTransporter;
+    const suggested = !t.employeeId && t.suggestedEmployeeId ? empByIdMap.get(String(t.suggestedEmployeeId)) : null;
     return {
       ...t,
       // Falls back to the driver's typed name (submitterName) when the
@@ -122,6 +129,10 @@ async function enrichTickets(tickets: any[]) {
       employeeName: emp?.employeeName || t.submitterName || "",
       profileImage: emp?.profileImage || "",
       closedByName: t.closedBy ? (userMap.get(t.closedBy) || t.closedBy) : "",
+      // Only present when there's an unconfirmed suggested match to show.
+      suggestedEmployeeName: suggested?.employeeName || "",
+      suggestedProfileImage: suggested?.profileImage || "",
+      suggestedTransporterId: suggested?.transporterId || "",
     };
   });
 }

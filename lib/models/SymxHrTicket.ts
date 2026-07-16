@@ -3,11 +3,22 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface ISymxHrTicket extends Document {
   ticketNumber?: string;
   transporterId?: string;
-  // Links this ticket to a real SymxEmployee record. Set manually by
-  // whoever reviews the ticket in the admin Tickets workbench (via the
-  // employee-link picker) — never inferred automatically from anything a
-  // driver typed on the public form, since that's unverified input.
+  // Links this ticket to a real SymxEmployee record. Either set manually
+  // by whoever reviews the ticket in the admin Tickets workbench (via the
+  // employee-link picker), or set automatically at submission time when
+  // the submitter's name/email is an unambiguous exact match against a
+  // SymxEmployee record (see employeeMatchType).
   employeeId?: mongoose.Types.ObjectId;
+  // "auto" when employeeId was set by the exact-match logic in
+  // matchEmployeeForTicket rather than a human — lets the admin UI show an
+  // "Auto-matched" badge so it's clear the link wasn't manually confirmed.
+  // Cleared (left undefined) once someone manually changes the link.
+  employeeMatchType?: "auto" | "manual";
+  // A same-signal-but-ambiguous or partial candidate found at submission
+  // time (e.g. name/email matched more than one employee) — surfaced in
+  // the admin UI as a one-click "confirm this match" suggestion rather
+  // than applied automatically.
+  suggestedEmployeeId?: mongoose.Types.ObjectId;
   category?: string;
   issue?: string;
   attachment?: string;
@@ -40,6 +51,8 @@ const SymxHrTicketSchema = new Schema<ISymxHrTicket>(
     ticketNumber: { type: String, index: true },
     transporterId: { type: String, index: true },
     employeeId: { type: Schema.Types.ObjectId, ref: "SymxEmployee" },
+    employeeMatchType: { type: String, enum: ["auto", "manual"] },
+    suggestedEmployeeId: { type: Schema.Types.ObjectId, ref: "SymxEmployee" },
     category: { type: String },
     issue: { type: String },
     attachment: { type: String },

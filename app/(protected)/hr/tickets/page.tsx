@@ -69,6 +69,18 @@ interface HrTicket {
   source?: "public" | "admin" | "import";
   submitterName?: string;
   submitterEmail?: string;
+  employeeMatchType?: "auto" | "manual";
+  suggestedEmployeeId?: string;
+  suggestedEmployeeName?: string;
+  suggestedProfileImage?: string;
+  suggestedTransporterId?: string;
+}
+
+interface EmployeeLink {
+  _id: string;
+  employeeName: string;
+  profileImage?: string;
+  transporterId?: string;
 }
 
 interface EmployeeSearchResult {
@@ -553,10 +565,16 @@ function TicketDialog({
 
   const handleSave = () => {
     if (!category && !issue) return;
+    // Whatever the picker ends up holding when Save is clicked reflects a
+    // human decision (whether that's picking fresh or accepting the
+    // suggestion via "Use this"), so it always counts as a manual link and
+    // clears any leftover suggestion.
     const body = {
       category, issue, notes, resolution, holdReason, managersEmail,
       employeeId: employeeId || null,
       transporterId: transporterId || "",
+      employeeMatchType: employeeId ? "manual" : null,
+      suggestedEmployeeId: null,
     };
     upsert.mutate({ id: ticket?._id, data: body });
     onSaved();
@@ -649,6 +667,26 @@ function TicketDialog({
                 </button>
               }
             />
+            {!employeeId && ticket?.suggestedEmployeeName && (
+              <div className="mt-2 flex items-center gap-2 rounded-lg bg-amber-500/5 border border-amber-500/20 px-3 py-2">
+                <UserPlus className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <p className="text-xs text-muted-foreground flex-1">
+                  Suggested match: <span className="font-semibold text-foreground">{ticket.suggestedEmployeeName}</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmployeeId(ticket.suggestedEmployeeId || "");
+                    setEmployeeName(ticket.suggestedEmployeeName || "");
+                    setProfileImage(ticket.suggestedProfileImage || "");
+                    setTransporterId(ticket.suggestedTransporterId || "");
+                  }}
+                  className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700"
+                >
+                  Use this
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Category */}
@@ -908,26 +946,61 @@ export default function HRTicketsPage() {
   }, [upsertTicket]);
 
   // ── Link / unlink employee ──
-  const handleLinkEmployee = useCallback((ticketId: string, emp: EmployeeSearchResult | null) => {
-    const employeeName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() : "";
+  // Once a human picks (or confirms a suggested) employee, the link is
+  // marked "manual" — clears any leftover "auto" badge from an earlier
+  // exact-match and always clears the suggestion, confirmed or not.
+  const handleLinkEmployee = useCallback((ticketId: string, emp: EmployeeLink | null) => {
     setTickets((prev) =>
       prev.map((t) =>
         t._id === ticketId
           ? {
               ...t,
               employeeId: emp?._id || undefined,
-              employeeName: emp ? employeeName : (t.submitterName || ""),
+              employeeName: emp ? emp.employeeName : (t.submitterName || ""),
               profileImage: emp?.profileImage || "",
               transporterId: emp?.transporterId || "",
+              employeeMatchType: emp ? "manual" : undefined,
+              suggestedEmployeeId: undefined,
+              suggestedEmployeeName: "",
+              suggestedProfileImage: "",
+              suggestedTransporterId: "",
             }
           : t
       )
     );
     upsertTicket.mutate({
       id: ticketId,
-      data: { employeeId: emp?._id || null, transporterId: emp?.transporterId || "" },
+      data: {
+        employeeId: emp?._id || null,
+        transporterId: emp?.transporterId || "",
+        employeeMatchType: emp ? "manual" : null,
+        suggestedEmployeeId: null,
+      },
     });
-    notify.success(emp ? `Linked to ${employeeName}` : "Employee unlinked");
+    notify.success(emp ? `Linked to ${emp.employeeName}` : "Employee unlinked");
+  }, [upsertTicket]);
+
+  // ── Confirm a suggested match with one click ──
+  const handleConfirmSuggestion = useCallback((t: HrTicket) => {
+    if (!t.suggestedEmployeeId || !t.suggestedEmployeeName) return;
+    handleLinkEmployee(t._id, {
+      _id: t.suggestedEmployeeId,
+      employeeName: t.suggestedEmployeeName,
+      profileImage: t.suggestedProfileImage,
+      transporterId: t.suggestedTransporterId,
+    });
+  }, [handleLinkEmployee]);
+
+  // ── Dismiss a suggested match without linking it ──
+  const handleDismissSuggestion = useCallback((ticketId: string) => {
+    setTickets((prev) =>
+      prev.map((t) =>
+        t._id === ticketId
+          ? { ...t, suggestedEmployeeId: undefined, suggestedEmployeeName: "", suggestedProfileImage: "", suggestedTransporterId: "" }
+          : t
+      )
+    );
+    upsertTicket.mutate({ id: ticketId, data: { suggestedEmployeeId: null } });
   }, [upsertTicket]);
 
   // ── Delete ──
@@ -1145,7 +1218,35 @@ export default function HRTicketsPage() {
                               <Globe className="h-2.5 w-2.5" /> Public
                             </span>
                           )}
-                          {t.source === "public" && !t.employeeId && (
+                          {t.employeeId && t.employeeMatchType === "auto" && (
+                            <span
+                              className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded"
+                              title="Automatically matched — the submitter's name/email was an exact match against one employee record"
+                            >
+                              <Check className="h-2.5 w-2.5" /> Auto-matched
+                            </span>
+                          )}
+                          {!t.employeeId && t.suggestedEmployeeName && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-500/10 pl-1.5 pr-1 py-0.5 rounded">
+                              <UserPlus className="h-2.5 w-2.5" />
+                              Suggested: {t.suggestedEmployeeName}
+                              <button
+                                onClick={() => handleConfirmSuggestion(t)}
+                                title="Confirm this match"
+                                className="ml-0.5 h-3.5 w-3.5 rounded-sm flex items-center justify-center hover:bg-emerald-500/20 text-emerald-600"
+                              >
+                                <Check className="h-2.5 w-2.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDismissSuggestion(t._id)}
+                                title="Dismiss suggestion"
+                                className="h-3.5 w-3.5 rounded-sm flex items-center justify-center hover:bg-red-500/20 text-red-600"
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </span>
+                          )}
+                          {t.source === "public" && !t.employeeId && !t.suggestedEmployeeName && (
                             <span
                               className="flex items-center gap-1 text-[10px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded"
                               title="Not yet matched to an employee record — use the link icon to match"
@@ -1167,7 +1268,12 @@ export default function HRTicketsPage() {
                       <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
                         <EmployeePicker
                           linked={!!t.employeeId}
-                          onSelect={(emp) => handleLinkEmployee(t._id, emp)}
+                          onSelect={(emp) => handleLinkEmployee(t._id, {
+                            _id: emp._id,
+                            employeeName: `${emp.firstName || ""} ${emp.lastName || ""}`.trim(),
+                            profileImage: emp.profileImage,
+                            transporterId: emp.transporterId,
+                          })}
                           onClear={() => handleLinkEmployee(t._id, null)}
                           trigger={
                             <button
