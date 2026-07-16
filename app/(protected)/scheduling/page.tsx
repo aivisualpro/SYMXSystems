@@ -1714,9 +1714,44 @@ function SchedulingPageContent() {
                                                   </span>
                                               </div>
                                           )}
-                                          <span className="text-[10px] sm:text-xs font-normal truncate flex-1 min-w-0" title={emp.employee?.name || emp.transporterId}>
-                                            {emp.employee?.name || emp.transporterId}
-                                          </span>
+                                          {(() => {
+                                            const confStatus = emp.weekScheduleConfirmation?.status;
+                                            return (
+                                              <span
+                                                className={cn(
+                                                  "text-[10px] sm:text-xs font-normal truncate flex-1 min-w-0",
+                                                  confStatus === "confirmed" && "text-emerald-500 font-semibold"
+                                                )}
+                                                title={emp.employee?.name || emp.transporterId}
+                                              >
+                                                {emp.employee?.name || emp.transporterId}
+                                              </span>
+                                            );
+                                          })()}
+                                          {emp.weekScheduleConfirmation?.status === "confirmed" && (
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                                              </TooltipTrigger>
+                                              <TooltipContent>Confirmed next week&apos;s schedule</TooltipContent>
+                                            </Tooltip>
+                                          )}
+                                          {emp.weekScheduleConfirmation?.status === "pending" && (
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Clock className="h-3 w-3 text-amber-500 shrink-0" />
+                                              </TooltipTrigger>
+                                              <TooltipContent>Schedule sent — awaiting confirmation</TooltipContent>
+                                            </Tooltip>
+                                          )}
+                                          {emp.weekScheduleConfirmation?.status === "change_requested" && (
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <RefreshCw className="h-3 w-3 text-orange-500 shrink-0" />
+                                              </TooltipTrigger>
+                                              <TooltipContent>Employee requested a change</TooltipContent>
+                                            </Tooltip>
+                                          )}
                                           {isNewHire && (
                                             <Baby className="h-4 w-4 text-pink-500 drop-shadow ml-auto flex-shrink-0" />
                                           )}

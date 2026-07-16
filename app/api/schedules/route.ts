@@ -11,6 +11,7 @@ import SYMXRoute from "@/lib/models/SYMXRoute";
 import RouteType from "@/lib/models/RouteType";
 import SymxEveryday from "@/lib/models/SymxEveryday";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
+import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import { authorizeAction } from "@/lib/rbac";
 import { z } from "zod";
 import { validateBody, validateSearchParams } from "@/lib/validations";
@@ -124,7 +125,7 @@ export async function GET(req: NextRequest) {
       prevYearWeek = `${prevYr}-W${String(prevWk).padStart(2, "0")}`;
     }
 
-    const [employees, prevSchedules, auditCountsRaw, routeTypes, wstOptions] = await Promise.all([
+    const [employees, prevSchedules, auditCountsRaw, routeTypes, wstOptions, weekScheduleConfirmationsRaw] = await Promise.all([
       // Employee info
       SymxEmployee.find(
         { transporterId: { $in: transporterIds } },
@@ -146,7 +147,21 @@ export async function GET(req: NextRequest) {
       RouteType.find({ isActive: true }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
       // WST Options
       SYMXWSTOption.find({ isActive: true }).lean(),
+      // Week-schedule confirmation status (employee confirming next week's schedule) —
+      // lives in SYMXScheduleConfirmations, not on the schedule doc itself.
+      ScheduleConfirmation.find(
+        { yearWeek, messageType: "week-schedule", transporterId: { $in: transporterIds } },
+        { transporterId: 1, status: 1, createdAt: 1 }
+      ).sort({ createdAt: -1 }).lean(),
     ]);
+
+    // Keep only the latest confirmation doc per employee (a resend creates a new doc)
+    const weekScheduleConfMap = new Map<string, { status: string; createdAt: any }>();
+    for (const c of weekScheduleConfirmationsRaw as any[]) {
+      if (!weekScheduleConfMap.has(c.transporterId)) {
+        weekScheduleConfMap.set(c.transporterId, { status: c.status, createdAt: c.createdAt });
+      }
+    }
 
     const wstMap = new Map((wstOptions as any[]).map(w => [(w.wst || '').trim().toLowerCase(), w.revenue || 0]));
 
@@ -181,6 +196,7 @@ export async function GET(req: NextRequest) {
             }
             : null,
           weekNote: '',
+          weekScheduleConfirmation: weekScheduleConfMap.get(s.transporterId) || null,
           days: {},
         };
       }

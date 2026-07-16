@@ -44,6 +44,8 @@ export interface EmployeeSchedule {
     profileImage?: string;
   } | null;
   weekNote: string;
+  /** Status of the "confirm next week's schedule" message sent to this employee, if any. */
+  weekScheduleConfirmation?: { status: "pending" | "confirmed" | "change_requested"; createdAt: string } | null;
   days: Record<number, DayData>;
 }
 
