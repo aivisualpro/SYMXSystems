@@ -4,6 +4,7 @@ import connectToDatabase from "@/lib/db";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import { auditDay, computeWeekPay, type DayInput, type WeekPay } from "@/lib/payroll-audit";
+import { canViewCompensation } from "@/lib/compensation-visibility";
 
 // GET /api/hr/timecard-audit?start=YYYY-MM-DD&end=YYYY-MM-DD
 // Returns, for every active employee, a day-by-day audit across the given
@@ -11,8 +12,9 @@ import { auditDay, computeWeekPay, type DayInput, type WeekPay } from "@/lib/pay
 // dispatcher-observed attendance, Amazon Flex app data, and vehicle
 // inspection time against each other and against CA meal-period law.
 export async function GET(req: NextRequest) {
+  let timecardSession;
   try {
-    await requirePermission("HR", "view");
+    timecardSession = await requirePermission("HR", "view");
   } catch (e: any) {
     if (e.name === "ForbiddenError") return NextResponse.json({ error: e.message }, { status: 403 });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -172,7 +174,23 @@ export async function GET(req: NextRequest) {
       employeesMissingRate: results.filter((r) => !r.payPeriodPay.rate).length,
     };
 
-    return NextResponse.json({ success: true, dateKeys, employees: results, summary });
+    // Pay rate / gross pay are only visible to Super Admin / Owner-module-
+    // level access — see lib/compensation-visibility.ts. Everything else
+    // here (violations, meal-premium hours, attendance data) is a labor-law
+    // compliance audit, not payroll, so it stays visible to any HR-view
+    // staffer; only the dollar figures get stripped for everyone else.
+    const canViewComp = await canViewCompensation(timecardSession);
+    const safeResults = canViewComp
+      ? results
+      : results.map(({ payPeriodPay, ...rest }) => rest);
+    const safeSummary = canViewComp
+      ? summary
+      : (() => {
+          const { totalGrossPayroll, employeesMissingRate, ...restSummary } = summary;
+          return restSummary;
+        })();
+
+    return NextResponse.json({ success: true, dateKeys, employees: safeResults, summary: safeSummary });
   } catch (error: any) {
     console.error("[Timecard Audit] Error:", error);
     return NextResponse.json({ error: error.message || "Failed to run timecard audit" }, { status: 500 });

@@ -14,6 +14,7 @@ import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
 import { authorizeAction } from "@/lib/rbac";
 import { z } from "zod";
 import { validateBody, validateSearchParams } from "@/lib/validations";
+import { canViewCompensation } from "@/lib/compensation-visibility";
 
 const schedulesQuerySchema = z.object({
   yearWeek: z.string().optional().nullable(),
@@ -62,8 +63,9 @@ let weeksListCache: { data: string[]; timestamp: number } | null = null;
 const WEEKS_CACHE_TTL = 60 * 1000; // 1 minute
 
 export async function GET(req: NextRequest) {
+  let schedulingSession;
   try {
-    await requirePermission("Scheduling", "view");
+    schedulingSession = await requirePermission("Scheduling", "view");
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });
@@ -480,6 +482,24 @@ export async function GET(req: NextRequest) {
       Object.entries(grouped).filter(([tid]) => activeTransporterIds.has(tid))
     );
 
+    // Pay rate is only visible to Super Admin / Owner-module-level access —
+    // see lib/compensation-visibility.ts. The per-employee cost breakdowns
+    // below embed both `rate` and a derived `cost` (hours × rate) per entry,
+    // so both have to be stripped for non-admins — leaving `cost` in place
+    // while hiding `rate` would just let anyone divide by hours to recover
+    // it. The daily aggregate totals (dailyLaborActualCost, etc.) are left
+    // as-is since those are already summed across every employee that day.
+    const canViewComp = await canViewCompensation(schedulingSession);
+    const maskBreakdown = (breakdown: Record<string, any[]>) =>
+      canViewComp
+        ? breakdown
+        : Object.fromEntries(
+            Object.entries(breakdown).map(([date, entries]) => [
+              date,
+              entries.map(({ rate, cost, ...rest }) => rest),
+            ])
+          );
+
     return NextResponse.json({
       yearWeek,
       dates,
@@ -492,8 +512,8 @@ export async function GET(req: NextRequest) {
       dailyRevenueBreakdown,
       dailyLaborActualCost,
       dailyLaborTheoryCost,
-      dailyLaborTheoryCostBreakdown,
-      dailyLaborActualCostBreakdown,
+      dailyLaborTheoryCostBreakdown: maskBreakdown(dailyLaborTheoryCostBreakdown),
+      dailyLaborActualCostBreakdown: maskBreakdown(dailyLaborActualCostBreakdown),
       dailyDriverActualCost,
       dailyOpsActualCost,
       dailyDriverCostPct,

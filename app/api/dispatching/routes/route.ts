@@ -18,6 +18,7 @@ import RouteType from "@/lib/models/RouteType";
 import { z } from "zod";
 import { validateBody, validateSearchParams } from "@/lib/validations";
 import { authorizeAction } from "@/lib/rbac";
+import { canViewCompensation } from "@/lib/compensation-visibility";
 
 const routesQuerySchema = z.object({
     yearWeek: z.string().min(1),
@@ -58,8 +59,9 @@ async function resolvePerformerName(session: any): Promise<{ email: string; name
 
 // GET: Fetch routes for a yearWeek (with employee name enrichment + audit counts)
 export async function GET(req: NextRequest) {
+  let dispatchingSession;
   try {
-    await requirePermission("Dispatching", "view");
+    dispatchingSession = await requirePermission("Dispatching", "view");
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });
@@ -191,6 +193,13 @@ export async function GET(req: NextRequest) {
             })()
         ]);
 
+        // Pay rate is only visible to Super Admin / Owner-module-level
+        // access — see lib/compensation-visibility.ts. This route embeds
+        // rate into the employees map purely for internal cost display; it
+        // has nothing to do with Dispatching permission, so it needs its
+        // own gate rather than riding along with view access to this route.
+        const canViewComp = await canViewCompensation(dispatchingSession);
+
         // ── Build maps (all O(n), very fast) ──
         const employeeMap: Record<string, any> = {};
         const initialCompMap: Record<string, number> = {};
@@ -204,7 +213,7 @@ export async function GET(req: NextRequest) {
                 phoneNumber: emp.phoneNumber || "",
                 type: emp.type || "",
                 profileImage: emp.profileImage || "",
-                rate: emp.rate || 0,
+                ...(canViewComp ? { rate: emp.rate || 0 } : {}),
                 hiredDate: emp.hiredDate || null,
             };
             initialCompMap[normalizedTid] = parseInt(emp.routesComp) || 0;

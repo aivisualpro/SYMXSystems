@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import SymxEmployee from '@/lib/models/SymxEmployee';
 import { getSession } from '@/lib/auth';
+import { canViewCompensation, maskRateInList } from '@/lib/compensation-visibility';
 
 export async function GET(req: Request) {
   try {
@@ -24,6 +25,11 @@ export async function GET(req: Request) {
     if (!role) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
+    // Pay rate is only visible to Super Admin / Owner-module-level access —
+    // see lib/compensation-visibility.ts. Everyone else gets `rate` stripped
+    // from every employee record this route returns, regardless of any
+    // `select` param the caller sent.
+    const canViewComp = await canViewCompensation(session);
 
     const { searchParams } = new URL(req.url);
     const skip = parseInt(searchParams.get('skip') || '0', 10);
@@ -172,7 +178,7 @@ export async function GET(req: Request) {
       const employees = await queryBuilder.lean();
 
       return NextResponse.json({
-        records: employees,
+        records: maskRateInList(employees, canViewComp),
         totalCount,
         hasMore: skip + actualLimit < totalCount
       });
@@ -181,14 +187,14 @@ export async function GET(req: Request) {
     // Export path: full dataset (only if explicitly requested via export=true)
     const queryBuilder = SymxEmployee.find(query)
       .sort({ firstName: 1, lastName: 1 });
-      
+
     if (selectFields) {
       queryBuilder.select(selectFields.split(',').join(' '));
     }
-    
+
     const employees = await queryBuilder.lean();
 
-    return NextResponse.json(employees);
+    return NextResponse.json(maskRateInList(employees, canViewComp));
   } catch (error) {
     console.error('[EMPLOYEES_GET]', error);
     return new NextResponse("Internal Error", { status: 500 });

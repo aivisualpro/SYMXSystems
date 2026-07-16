@@ -6,6 +6,7 @@ import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
 import RouteType from "@/lib/models/RouteType";
+import { canViewCompensation } from "@/lib/compensation-visibility";
 
 /**
  * GET  /api/dashboard/week-kpi/revenue-breakdown?date=2026-07-06
@@ -48,8 +49,9 @@ function parseTime(timeStr: string): number | null {
 }
 
 export async function GET(req: NextRequest) {
+  let revenueBreakdownSession;
   try {
-    await requirePermission("Dashboard", "view");
+    revenueBreakdownSession = await requirePermission("Dashboard", "view");
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });
@@ -106,11 +108,17 @@ export async function GET(req: NextRequest) {
       (routeTypes as any[]).map(rt => [String(rt._id), rt])
     );
 
+    // Pay rate is only visible to Super Admin / Owner-module-level access —
+    // see lib/compensation-visibility.ts. `revenue`/`wstRate` below are
+    // Amazon route payout figures (company revenue), unrelated to employee
+    // compensation, and stay visible regardless.
+    const canViewComp = await canViewCompensation(revenueBreakdownSession);
+
     // Enrich routes
     const records = (routes as any[]).map(r => {
       const emp = empMap.get(r.transporterId);
       const employeeName = emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() : r.transporterId || "Unknown";
-      const rate = emp ? Number(emp.rate) || 0 : 0;
+      const rate = canViewComp ? (emp ? Number(emp.rate) || 0 : 0) : undefined;
 
       // Use wstDuration first, fallback to totalHours decimal duration
       let totalHrsDecimal = r.wstDuration || durToHrs(r.totalHours || "");

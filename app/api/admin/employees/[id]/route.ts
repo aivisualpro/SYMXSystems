@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import SymxEmployee from "@/lib/models/SymxEmployee";
+import { canViewCompensation, maskRate } from "@/lib/compensation-visibility";
 
 type RouteProps = {
   params: Promise<{ id: string }>;
@@ -30,7 +31,10 @@ export async function GET(
       return new NextResponse("Employee not found", { status: 404 });
     }
 
-    return NextResponse.json(employee);
+    // Pay rate is only visible to Super Admin / Owner-module-level access —
+    // see lib/compensation-visibility.ts.
+    const canViewComp = await canViewCompensation(session);
+    return NextResponse.json(maskRate(employee.toObject(), canViewComp));
   } catch (error) {
     console.error("GET /api/admin/employees/[id] error:", error);
     return new NextResponse("Internal Server Error", { status: 500 });
