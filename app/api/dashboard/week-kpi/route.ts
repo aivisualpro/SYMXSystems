@@ -360,6 +360,11 @@ export async function GET(req: NextRequest) {
     // same gate used everywhere else pay figures are shown (see lib/compensation-visibility.ts).
     const canViewComp = await canViewCompensation(session);
 
+    // "Today" in business time — same Pacific-Time-string-compare pattern used on the
+    // Dispatch > Time screen (app/(protected)/dispatching/time/page.tsx) to tell past
+    // from future days. A day that hasn't happened yet can't have "missing" punches.
+    const todayPacific = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+
     const dailyData = dayLabels.map(({ day, dayLabel }) => {
       const actual = actualMap.get(day);
       const revenue = actual?.computedRevenue || revenueMap.get(day) || 0;
@@ -382,13 +387,16 @@ export async function GET(req: NextRequest) {
       const dayEmpMap = employeeDayMap.get(day);
       const hasActuals = !!dayEmpMap && dayEmpMap.size > 0;
 
-      // Employees who were scheduled to work (theoryHrs > 0) but have no punch-derived
+      // Employees who were scheduled to work a real shift but have no punch-derived
       // actual cost recorded for the day — their time hasn't been fully entered, so any
-      // actual-side number for the day is understated until it's fixed.
+      // actual-side number for the day is understated until it's fixed. Only applies to
+      // days that have actually happened — a future day hasn't had a chance to be punched.
       const scheduledSet = scheduledWorkingByDay.get(day) || new Set<string>();
-      const missingPunchNames = Array.from(scheduledSet)
-        .filter(tid => !dayEmpMap?.has(tid))
-        .map(tid => employeeNameMap.get(tid) || tid);
+      const missingPunchNames = day < todayPacific
+        ? Array.from(scheduledSet)
+            .filter(tid => !dayEmpMap?.has(tid))
+            .map(tid => employeeNameMap.get(tid) || tid)
+        : [];
 
       // Top 5 employees by actual labor cost that day — explains WHY a flagged day ran hot.
       const topContributors = canViewComp

@@ -762,28 +762,25 @@ export function ChartMomKpi() {
                       return (
                       <th
                         key={item[columnKey]}
-                        className={cn(
-                          "px-2 py-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider min-w-[70px]",
-                          missingCount > 0 && "bg-amber-500/10"
-                        )}
+                        className="px-2 py-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider min-w-[80px]"
                       >
                         {timeframe === "month" ? (
                           formatMonthShort(item.month)
                         ) : (
-                          <div className="flex flex-col items-center gap-1">
-                            {missingCount > 0 && (
-                              <span
-                                title={`${missingCount} employee${missingCount === 1 ? "" : "s"} scheduled but missing time data: ${((item as DailyKPI).missingPunchNames || []).join(", ")}`}
-                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-white shadow-sm shadow-amber-500/40 ring-2 ring-amber-500/30 animate-pulse"
-                              >
-                                <AlertTriangle className="h-3 w-3" strokeWidth={2.5} />
-                                <span className="text-[9px] font-black leading-none">{missingCount}</span>
-                              </span>
-                            )}
+                          <div className="flex items-center justify-center gap-1 whitespace-nowrap">
                             <span>{item.dayLabel}</span>
                             <span className="text-[9px] font-medium normal-case tracking-normal text-muted-foreground/60">
                               {formatDayNum(item.day)}
                             </span>
+                            {missingCount > 0 && (
+                              <span
+                                title={`${missingCount} employee${missingCount === 1 ? "" : "s"} scheduled but missing time data: ${((item as DailyKPI).missingPunchNames || []).join(", ")}`}
+                                className="inline-flex items-center gap-0.5 text-amber-500"
+                              >
+                                <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.5} />
+                                <span className="text-[10px] font-black leading-none">{missingCount}</span>
+                              </span>
+                            )}
                           </div>
                         )}
                       </th>
