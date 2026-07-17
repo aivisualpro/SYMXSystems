@@ -77,13 +77,17 @@ export async function GET(req: NextRequest) {
     const { start, end } = range;
 
     // ── 1. Fetch reference data in parallel ──
-    const [routeTypes, wstOptions, activeEmployees] = await Promise.all([
-      RouteType.find({ isActive: true }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
+    const [routeTypes, wstOptions, activeEmployees, allEmployeesForNames] = await Promise.all([
+      RouteType.find({ isActive: true }, { name: 1, theoryHrs: 1, group: 1, partOf: 1 }).lean(),
       SYMXWSTOption.find({ isActive: true }).lean(),
       SymxEmployee.find(
         { status: "Active" },
         { transporterId: 1, rate: 1, firstName: 1, lastName: 1 }
       ).lean(),
+      // Name lookup shouldn't be limited to currently-Active employees — a schedule entry
+      // can reference someone whose status has since changed. Used only for display names,
+      // never for rate/cost math.
+      SymxEmployee.find({}, { transporterId: 1, firstName: 1, lastName: 1 }).lean(),
     ]);
 
     // Build lookup maps
@@ -92,7 +96,7 @@ export async function GET(req: NextRequest) {
     const wstMap = new Map((wstOptions as any[]).map(w => [(w.wst || "").trim().toLowerCase(), w.revenue || 0]));
     const employeeRateMap = new Map((activeEmployees as any[]).map(e => [e.transporterId, Number(e.rate) || 0]));
     const employeeNameMap = new Map(
-      (activeEmployees as any[]).map(e => [e.transporterId, `${e.firstName || ""} ${e.lastName || ""}`.trim()])
+      (allEmployeesForNames as any[]).map(e => [e.transporterId, `${e.firstName || ""} ${e.lastName || ""}`.trim()])
     );
 
     // ── 2. Faceted aggregation on SYMXRoutes for the week ──
@@ -319,7 +323,15 @@ export async function GET(req: NextRequest) {
         const theoryHrs = resolvedRT ? (resolvedRT.theoryHrs || 0) : 0;
 
         if (theoryHrs > 0) {
-          scheduledSet.add(s.transporterId);
+          // Only route types that represent an actual dispatched shift (partOf includes
+          // "Shift" — the same flag that drives the Shift Notification list) count toward
+          // "should have punch data." Stand By, Reduction, and similar non-driving types
+          // have theoryHrs but no one to actually clock in/out, so they'd always show as
+          // "missing" even though nothing is wrong.
+          const isRealShift = !!resolvedRT?.partOf?.includes("Shift");
+          if (isRealShift) {
+            scheduledSet.add(s.transporterId);
+          }
           const rate = employeeRateMap.get(s.transporterId) || 0;
           if (rate > 0) {
             const regHrs = Math.min(theoryHrs, 8);

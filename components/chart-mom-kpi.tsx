@@ -539,9 +539,7 @@ export function ChartMomKpi() {
 
   // Totals bar
   const totalRevenue = totals?.totalRevenue || 0
-  const totalTheory = totals?.totalLaborTheory || 0
   const totalActual = totals?.totalLaborActual || 0
-  const totalVarDol = totals?.totalLaborVarDol || 0
 
   return (
     <Card className="@container/card overflow-hidden py-0">
@@ -571,31 +569,12 @@ export function ChartMomKpi() {
               </span>
             </div>
             <div className="hidden sm:flex items-center gap-1.5">
-              <div className="h-2 w-2 rounded-full bg-cyan-500" />
-              <span className="text-muted-foreground text-xs">Theory:</span>
-              <span className="font-bold text-cyan-500 text-xs">
-                {timeframe === "week" 
-                  ? `$${totalTheory.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : (totalTheory >= 1000 ? `$${(totalTheory / 1000).toFixed(1)}k` : `$${totalTheory.toFixed(0)}`)}
-              </span>
-            </div>
-            <div className="hidden sm:flex items-center gap-1.5">
               <div className="h-2 w-2 rounded-full bg-indigo-500" />
-              <span className="text-muted-foreground text-xs">Actual:</span>
+              <span className="text-muted-foreground text-xs">Labor:</span>
               <span className="font-bold text-indigo-500 text-xs">
-                {timeframe === "week" 
+                {timeframe === "week"
                   ? `$${totalActual.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                   : (totalActual >= 1000 ? `$${(totalActual / 1000).toFixed(1)}k` : `$${totalActual.toFixed(0)}`)}
-              </span>
-            </div>
-            <div className="hidden md:flex items-center gap-1.5">
-              <div className={cn("h-2 w-2 rounded-full", totalVarDol >= 0 ? "bg-emerald-500" : "bg-rose-500")} />
-              <span className="text-muted-foreground text-xs">Var:</span>
-              <span className={cn("font-bold text-xs", totalVarDol >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                {totalVarDol < 0 ? "-" : ""}
-                {timeframe === "week" 
-                  ? `$${Math.abs(totalVarDol).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : (Math.abs(totalVarDol) >= 1000 ? `$${(Math.abs(totalVarDol) / 1000).toFixed(1)}k` : `$${Math.abs(totalVarDol).toFixed(0)}`)}
               </span>
             </div>
 
@@ -778,29 +757,37 @@ export function ChartMomKpi() {
                     <th className="px-3 sm:px-4 py-2 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky left-0 bg-muted/30 z-10 min-w-[120px]">
                       Metric
                     </th>
-                    {activeData.map((item) => (
-                      <th key={item[columnKey]} className="px-2 py-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider min-w-[70px]">
+                    {activeData.map((item) => {
+                      const missingCount = timeframe === "week" ? ((item as DailyKPI).missingPunchCount || 0) : 0
+                      return (
+                      <th
+                        key={item[columnKey]}
+                        className={cn(
+                          "px-2 py-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider min-w-[70px]",
+                          missingCount > 0 && "bg-amber-500/10"
+                        )}
+                      >
                         {timeframe === "month" ? (
                           formatMonthShort(item.month)
                         ) : (
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span className="inline-flex items-center gap-1">
-                              {item.dayLabel}
-                              {(item as DailyKPI).missingPunchCount ? (
-                                <span
-                                  title={`${(item as DailyKPI).missingPunchCount} employee${(item as DailyKPI).missingPunchCount === 1 ? "" : "s"} scheduled but missing time data: ${((item as DailyKPI).missingPunchNames || []).join(", ")}`}
-                                >
-                                  <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />
-                                </span>
-                              ) : null}
-                            </span>
+                          <div className="flex flex-col items-center gap-1">
+                            {missingCount > 0 && (
+                              <span
+                                title={`${missingCount} employee${missingCount === 1 ? "" : "s"} scheduled but missing time data: ${((item as DailyKPI).missingPunchNames || []).join(", ")}`}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-white shadow-sm shadow-amber-500/40 ring-2 ring-amber-500/30 animate-pulse"
+                              >
+                                <AlertTriangle className="h-3 w-3" strokeWidth={2.5} />
+                                <span className="text-[9px] font-black leading-none">{missingCount}</span>
+                              </span>
+                            )}
+                            <span>{item.dayLabel}</span>
                             <span className="text-[9px] font-medium normal-case tracking-normal text-muted-foreground/60">
                               {formatDayNum(item.day)}
                             </span>
                           </div>
                         )}
                       </th>
-                    ))}
+                    )})}
                   </tr>
                 </thead>
                 <tbody>
