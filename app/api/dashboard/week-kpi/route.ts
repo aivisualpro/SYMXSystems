@@ -95,6 +95,9 @@ export async function GET(req: NextRequest) {
     const routeTypeByNameMap = new Map((routeTypes as any[]).map(rt => [(rt.name || "").trim().toLowerCase(), rt]));
     const wstMap = new Map((wstOptions as any[]).map(w => [(w.wst || "").trim().toLowerCase(), w.revenue || 0]));
     const employeeRateMap = new Map((activeEmployees as any[]).map(e => [e.transporterId, Number(e.rate) || 0]));
+    // Only currently-Active employees can plausibly still be punching in — a schedule
+    // record for someone since terminated/inactive shouldn't count as "missing" time.
+    const activeTransporterIdSet = new Set((activeEmployees as any[]).map(e => e.transporterId));
     const employeeNameMap = new Map(
       (allEmployeesForNames as any[]).map(e => [e.transporterId, `${e.firstName || ""} ${e.lastName || ""}`.trim()])
     );
@@ -329,7 +332,7 @@ export async function GET(req: NextRequest) {
           // have theoryHrs but no one to actually clock in/out, so they'd always show as
           // "missing" even though nothing is wrong.
           const isRealShift = !!resolvedRT?.partOf?.includes("Shift");
-          if (isRealShift) {
+          if (isRealShift && activeTransporterIdSet.has(s.transporterId)) {
             scheduledSet.add(s.transporterId);
           }
           const rate = employeeRateMap.get(s.transporterId) || 0;
