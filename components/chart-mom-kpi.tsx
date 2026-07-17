@@ -540,6 +540,7 @@ export function ChartMomKpi() {
   // Totals bar
   const totalRevenue = totals?.totalRevenue || 0
   const totalActual = totals?.totalLaborActual || 0
+  const laborPctOfPeriod = totalRevenue > 0 ? Math.round((totalActual / totalRevenue) * 100) : 0
 
   return (
     <Card className="@container/card overflow-hidden py-0">
@@ -576,6 +577,15 @@ export function ChartMomKpi() {
                   ? `$${totalActual.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                   : (totalActual >= 1000 ? `$${(totalActual / 1000).toFixed(1)}k` : `$${totalActual.toFixed(0)}`)}
               </span>
+              {laborPctOfPeriod > 0 && (
+                <span
+                  className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-indigo-500"
+                  style={laborPctValueStyle(laborPctOfPeriod)}
+                  title="Labor cost as a % of revenue for the whole period shown"
+                >
+                  {laborPctOfPeriod}%
+                </span>
+              )}
             </div>
 
             {/* ── Week Selector (inline in summary row when weekly mode) ── */}
