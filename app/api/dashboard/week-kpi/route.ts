@@ -326,13 +326,15 @@ export async function GET(req: NextRequest) {
         const theoryHrs = resolvedRT ? (resolvedRT.theoryHrs || 0) : 0;
 
         if (theoryHrs > 0) {
-          // Only route types that represent an actual dispatched shift (partOf includes
-          // "Shift" — the same flag that drives the Shift Notification list) count toward
-          // "should have punch data." Stand By, Reduction, and similar non-driving types
-          // have theoryHrs but no one to actually clock in/out, so they'd always show as
-          // "missing" even though nothing is wrong.
-          const isRealShift = !!resolvedRT?.partOf?.includes("Shift");
-          if (isRealShift && activeTransporterIdSet.has(s.transporterId)) {
+          // Count anyone whose route type would actually show up on the Dispatch >
+          // Time/Routes screen — i.e. any type that isn't literally named "Off". That
+          // screen (and route generation) treats every non-"Off" type as dispatchable,
+          // so "should have punch data" needs to match that same population rather than
+          // a narrower "Shift" partOf flag (which excludes real working types like
+          // Open/Close that aren't tagged with it).
+          const typeName = (resolvedRT?.name || "").trim().toLowerCase();
+          const isDispatchable = !!resolvedRT && typeName !== "off";
+          if (isDispatchable && activeTransporterIdSet.has(s.transporterId)) {
             scheduledSet.add(s.transporterId);
           }
           const rate = employeeRateMap.get(s.transporterId) || 0;
