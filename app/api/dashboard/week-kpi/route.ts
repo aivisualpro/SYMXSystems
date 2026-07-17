@@ -392,10 +392,12 @@ export async function GET(req: NextRequest) {
 
       // Employees who were scheduled to work a real shift but have no punch-derived
       // actual cost recorded for the day — their time hasn't been fully entered, so any
-      // actual-side number for the day is understated until it's fixed. Only applies to
-      // days that have actually happened — a future day hasn't had a chance to be punched.
+      // actual-side number for the day is understated until it's fixed. Applies to today
+      // and earlier (today's shift is already underway/done by the time anyone is looking
+      // at the dashboard, so a gap today is worth flagging too) — only a genuinely future
+      // day (tomorrow onward) gets skipped, since it hasn't had a chance to be punched yet.
       const scheduledSet = scheduledWorkingByDay.get(day) || new Set<string>();
-      const missingPunchNames = day < todayPacific
+      const missingPunchNames = day <= todayPacific
         ? Array.from(scheduledSet)
             .filter(tid => !dayEmpMap?.has(tid))
             .map(tid => employeeNameMap.get(tid) || tid)
