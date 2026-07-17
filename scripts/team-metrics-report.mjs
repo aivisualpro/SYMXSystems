@@ -90,6 +90,11 @@ async function main() {
   const byPackages = [...rows].sort((a, b) => b.packages - a.packages).slice(0, TOP_N);
   const byStops = [...rows].sort((a, b) => b.stops - a.stops).slice(0, TOP_N);
 
+  const teamTotals = rows.reduce(
+    (acc, r) => ({ packages: acc.packages + r.packages, stops: acc.stops + r.stops, routes: acc.routes + r.routes }),
+    { packages: 0, stops: 0, routes: 0 }
+  );
+
   // ── Safety infractions ──
   const safetyDocs = await writeups
     .find(
@@ -111,6 +116,13 @@ async function main() {
   lines.push("=".repeat(60));
   lines.push("");
   lines.push(`Based on ${fmtInt(routeDocs.length)} route records across ${fmtInt(rows.length)} employees.`);
+  lines.push("");
+
+  lines.push("TEAM TOTALS");
+  lines.push("-".repeat(60));
+  lines.push(`Packages delivered: ${fmtInt(teamTotals.packages)}`);
+  lines.push(`Stops:              ${fmtInt(teamTotals.stops)}`);
+  lines.push(`Routes run:         ${fmtInt(teamTotals.routes)}`);
   lines.push("");
 
   lines.push(`MOST PACKAGES DELIVERED (top ${TOP_N})`);
