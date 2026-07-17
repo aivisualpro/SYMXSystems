@@ -60,6 +60,16 @@ export async function PUT(
     // Remove _id from body if present to avoid immutable field error (though mongoose handles it usually)
     delete body._id;
 
+    // Pay rate is only visible/editable to Super Admin / Owner-module-level access —
+    // see lib/compensation-visibility.ts. The edit form's Rate field is masked/blank
+    // for anyone without that access, so a submitted `rate` from them isn't a real
+    // intentional edit — drop it rather than let it overwrite the real value with
+    // whatever the (masked) field happened to contain.
+    const canViewComp = await canViewCompensation(session);
+    if (!canViewComp) {
+      delete body.rate;
+    }
+
     const updatedEmployee = await SymxEmployee.findByIdAndUpdate(
       params.id,
       body,
@@ -70,7 +80,7 @@ export async function PUT(
       return new NextResponse("Employee not found", { status: 404 });
     }
 
-    return NextResponse.json(updatedEmployee);
+    return NextResponse.json(maskRate(updatedEmployee.toObject(), canViewComp));
   } catch (error: any) {
     console.error("PUT /api/admin/employees/[id] error:", error);
     if (error?.name === "ValidationError") {

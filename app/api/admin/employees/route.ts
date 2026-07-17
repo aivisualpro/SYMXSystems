@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import SymxEmployee from '@/lib/models/SymxEmployee';
 import { getSession } from '@/lib/auth';
-import { canViewCompensation, maskRateInList } from '@/lib/compensation-visibility';
+import { canViewCompensation, maskRateInList, maskRate } from '@/lib/compensation-visibility';
 
 export async function GET(req: Request) {
   try {
@@ -238,7 +238,10 @@ export async function POST(req: Request) {
 
     const employee = await SymxEmployee.create(body);
 
-    return NextResponse.json(employee);
+    // Pay rate is only visible to Super Admin / Owner-module-level access —
+    // see lib/compensation-visibility.ts.
+    const canViewComp = await canViewCompensation(session);
+    return NextResponse.json(maskRate(employee.toObject(), canViewComp));
   } catch (error: any) {
     console.error('[EMPLOYEES_POST]', error);
     if (error?.name === "ValidationError") {

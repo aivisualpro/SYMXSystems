@@ -13,6 +13,7 @@ import {
   Loader2,
   User,
   Briefcase,
+  Lock,
 } from "lucide-react";
 import { formatPhoneNumber } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -60,6 +61,14 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
   });
 
   const [activeTab, setActiveTab] = useState<TabKey>("personal");
+
+  // Editing an existing employee whose `rate` came back stripped by the API means the
+  // current viewer doesn't have compensation-view permission (see
+  // lib/compensation-visibility.ts) — every real employee record has a rate, so a missing
+  // one here means "hidden," not "unset." Show the field as locked instead of a blank
+  // required input the viewer would be forced to fill in (and could accidentally overwrite
+  // the real rate with) just to save any other edit.
+  const isRateMasked = !!initialData?._id && initialData?.rate === undefined;
 
 
   const handleChange = (field: keyof FormEmployee, value: any) => {
@@ -286,7 +295,13 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
               </div>
               <div className="space-y-2">
                 <Label htmlFor="rate">Rate ($) *</Label>
-                <Input type="number" id="rate" required min="0" step="0.01" value={formData.rate ?? ""} onChange={(e) => handleChange("rate", e.target.value === "" ? undefined : parseFloat(e.target.value))} />
+                {isRateMasked ? (
+                  <div className="flex h-9 items-center gap-1.5 rounded-md border border-input bg-muted/50 px-3 text-sm text-muted-foreground italic">
+                    <Lock className="w-3.5 h-3.5" /> No permission to view or edit
+                  </div>
+                ) : (
+                  <Input type="number" id="rate" required min="0" step="0.01" value={formData.rate ?? ""} onChange={(e) => handleChange("rate", e.target.value === "" ? undefined : parseFloat(e.target.value))} />
+                )}
               </div>
             </div>
           </div>

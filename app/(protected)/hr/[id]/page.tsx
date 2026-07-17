@@ -27,7 +27,8 @@ import {
   Zap,
   Award,
   BarChart3,
-  Target
+  Target,
+  Lock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -392,7 +393,15 @@ export default function EmployeeDetailPage(props: PageProps) {
                   <InfoRow label="Date of Birth" value={employee.dob ? format(new Date(employee.dob), "MMM dd, yyyy") : undefined} icon={Calendar} />
                   <InfoRow
                      label="Rate"
-                     value={<span className="text-blue-600 dark:text-blue-400 font-black">${employee.rate || 0}</span>}
+                     value={
+                        employee.rate === undefined ? (
+                           <span className="text-muted-foreground/50 font-normal italic text-xs inline-flex items-center gap-1">
+                              <Lock className="w-3 h-3" /> No permission to view
+                           </span>
+                        ) : (
+                           <span className="text-blue-600 dark:text-blue-400 font-black">${employee.rate}</span>
+                        )
+                     }
                      icon={DollarSign}
                      className="bg-blue-50/30 dark:bg-blue-900/10 border-blue-100/50 dark:border-blue-800/30"
                   />
