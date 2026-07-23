@@ -520,7 +520,16 @@ export default function RoleDetailsPage() {
                                   );
                                 }
 
-                                if (hasSubModules && action.key !== 'view') {
+                                // Write-Ups > Delete gets a real toggle on the parent row even
+                                // though Write-Ups has a "Settings" submodule (which otherwise
+                                // dashes out every non-view action) — deleting a write-up is
+                                // checked server-side against the literal "Write-Ups" module,
+                                // never against "Settings", so this is the one action from a
+                                // has-submodules row that actually does something. Same carve-out
+                                // pattern as "pay" on HR above.
+                                const isWriteUpsDelete = moduleName === 'Write-Ups' && action.key === 'delete';
+
+                                if (hasSubModules && action.key !== 'view' && !isWriteUpsDelete) {
                                   return <TableCell key={action.key} className="text-center">-</TableCell>;
                                 }
 

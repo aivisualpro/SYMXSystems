@@ -89,14 +89,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 // DELETE /api/writeups/[id] — drafts (or historical bulk-imported records)
 // only; signed/escalated/closed write-ups are locked to preserve the audit
-// trail (see the immutability note on PUT above). Restricted to admins
-// regardless of a role's own Write-Ups permissions — same reasoning as
-// verbal coaching deletion: this is a legally-relevant HR document, not a
-// routine CRUD action. "Admin" is a virtual module no role can be granted
-// through the UI, so this is effectively Super Admin only.
+// trail (see the immutability note on PUT above). Gated on the real
+// Write-Ups "delete" action (Owner > Roles > Write-Ups > Delete) rather
+// than the old hardcoded Super-Admin-only "Admin" virtual module, so an
+// owner can now grant this to specific admin roles — still off by default
+// for any role without an explicit Write-Ups permissions entry (see
+// requirePermission: no entry for a module denies, it isn't an implicit
+// allow), so nothing changes for roles that were never given Write-Ups
+// access at all.
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requirePermission("Admin", "delete");
+    await requirePermission("Write-Ups", "delete");
   } catch (e: any) {
     if (e.name === "ForbiddenError") return NextResponse.json({ error: e.message }, { status: 403 });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

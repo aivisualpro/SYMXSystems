@@ -240,6 +240,7 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
   // Gates the review-decision form — the server enforces this too
   // (Write-Ups: approve), this just avoids showing a button that will 403.
   const [canApprove, setCanApprove] = useState(true);
+  const [canDelete, setCanDelete] = useState(false);
   // Gates the "Delete" button — server enforces via requirePermission("Admin","delete"),
   // this just avoids showing a button that will 403.
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -368,9 +369,15 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
       .then((d) => {
         setIsSuperAdmin(d.role === "Super Admin");
         setIsManager(d.role === "Super Admin" || !!d.isManager);
-        if (d.role === "Super Admin") { setCanApprove(true); return; }
+        if (d.role === "Super Admin") { setCanApprove(true); setCanDelete(true); return; }
         const perm = (d.permissions || []).find((p: any) => p.module === "Write-Ups");
         setCanApprove(perm ? perm.actions?.approve !== false : true);
+        // Deleting a signed/legally-relevant HR record is more sensitive than
+        // the rest of Write-Ups' permissions, so — unlike approve above —
+        // this does NOT fall back to "allowed" when the role has no explicit
+        // Write-Ups permissions entry at all. It only follows the role's
+        // actual Delete toggle (Owner > Roles > Write-Ups) once one exists.
+        setCanDelete(!!perm && perm.actions?.delete !== false);
       })
       .catch(() => {});
   }, []);
@@ -1441,11 +1448,11 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
               )}
 
               <div className="flex items-center justify-between pt-2">
-                {isSuperAdmin && canDeleteSelected ? (
+                {(isSuperAdmin || canDelete) && canDeleteSelected ? (
                   <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={handleDeleteWriteup} disabled={deleting}>
                     {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Delete
                   </Button>
-                ) : isSuperAdmin ? (
+                ) : (isSuperAdmin || canDelete) ? (
                   <span className="text-xs italic text-muted-foreground">Signed/closed write-ups can't be deleted — preserved for the audit trail.</span>
                 ) : <span />}
                 <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
