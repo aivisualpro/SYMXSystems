@@ -96,7 +96,14 @@ interface CategoryOption { _id: string; description: string }
 
 function fmtDate(d?: string) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString();
+  // Coaching dates are saved from a plain <input type="date"> and stored as UTC
+  // midnight for that calendar day — parse the calendar date directly out of the
+  // stored string instead of going through toLocaleDateString(), which converts
+  // to the browser's local timezone and rolls the date back a day in Pacific.
+  const datePart = d.slice(0, 10); // "YYYY-MM-DD"
+  const [y, m, day] = datePart.split("-").map(Number);
+  if (!y || !m || !day) return "—";
+  return `${m}/${day}/${y}`;
 }
 function fmtDateTime(d?: string) {
   if (!d) return "—";

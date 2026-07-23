@@ -187,7 +187,16 @@ const EMPTY_FORM = {
 
 function fmtDate(d?: string) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString();
+  // Incident dates are saved from a plain <input type="date"> (e.g. "2026-07-22"),
+  // which the API stores as UTC midnight for that calendar day. Building a Date
+  // object and calling toLocaleDateString() re-interprets that instant in the
+  // browser's local timezone (e.g. Pacific), which is behind UTC and rolls the
+  // date back a day. Parse the calendar date straight out of the stored string
+  // instead, so it always shows the day that was actually picked.
+  const datePart = d.slice(0, 10); // "YYYY-MM-DD"
+  const [y, m, day] = datePart.split("-").map(Number);
+  if (!y || !m || !day) return "—";
+  return `${m}/${day}/${y}`;
 }
 
 interface FormalWriteupsTabProps {
