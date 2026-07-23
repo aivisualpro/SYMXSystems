@@ -24,6 +24,11 @@ export interface IWriteupCorrectiveActionTemplate {
   consequences?: string; // overrides defaultConsequences when set (e.g. Attendance's tiered violations)
 }
 
+export interface IWriteupCategoryLookbackOverride {
+  categoryLabel: string;
+  lookbackDays: number;
+}
+
 export interface IWriteupSettings extends Document {
   lookbackDays: number;
   escalationThresholds: IWriteupEscalationThresholds;
@@ -31,6 +36,11 @@ export interface IWriteupSettings extends Document {
   // (metric/category labels) that count toward ONE shared escalation
   // count. A category not listed in any group stacks only with itself.
   stackGroups: string[][];
+  // Per-category override of the lookback window above — e.g. Safety
+  // Infraction escalating on a tighter 30-day rolling window while
+  // everything else still uses the global lookbackDays. A category not
+  // listed here just uses the global value.
+  categoryLookbackOverrides: IWriteupCategoryLookbackOverride[];
   // Auto-fill content for the New Write-Up form, keyed by category label
   // (case-insensitive match against categoryLabel). Managers can still
   // edit before saving — this just removes the blank-page problem and
@@ -147,6 +157,18 @@ const WriteupSettingsSchema = new Schema<IWriteupSettings>(
       suspension_review: { type: Number, default: 4 },
     },
     stackGroups: { type: [[String]], default: [] },
+    categoryLookbackOverrides: {
+      type: [
+        new Schema(
+          {
+            categoryLabel: { type: String, required: true },
+            lookbackDays: { type: Number, required: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
     correctiveActionTemplates: { type: [WriteupCorrectiveActionTemplateSchema], default: DEFAULT_CORRECTIVE_ACTION_TEMPLATES },
     defaultConsequences: {
       type: String,

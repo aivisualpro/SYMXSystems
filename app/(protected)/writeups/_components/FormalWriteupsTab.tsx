@@ -69,7 +69,8 @@ function SortableHeader({
   );
 }
 
-interface PriorSnapshot { writeupId: string; incidentDate: string; warningLevel: string }
+interface PriorSnapshot { writeupId: string; incidentDate: string; warningLevel: string; categoryLabel?: string; subCategory?: string }
+interface CategoryBreakdownItem { label: string; count: number }
 interface PriorVerbalCoachingSnapshot { coachingDate: string; categoryLabels: string[] }
 interface SignatureInfo { name: string; signatureImage: string; signedAt: string }
 interface Refusal { refused: boolean; note?: string; witnessName?: string; witnessSignatureImage?: string; refusedAt?: string }
@@ -93,6 +94,9 @@ interface Writeup {
   consequences?: string;
   priorWriteups: PriorSnapshot[];
   priorVerbalCoachings: PriorVerbalCoachingSnapshot[];
+  totalInfractionCount?: number;
+  categoryBreakdown?: CategoryBreakdownItem[];
+  lookbackDaysUsed?: number;
   status: string;
   acknowledgmentType?: string;
   reviewQueuedAt?: string;
@@ -254,6 +258,7 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
   const [creating, setCreating] = useState(false);
   const [recommendation, setRecommendation] = useState<{
     recommended: string; priorCount: number; priors: PriorSnapshot[]; rationale: string;
+    totalCount?: number; categoryBreakdown?: CategoryBreakdownItem[]; lookbackDaysUsed?: number;
     correctiveAction?: { planForImprovement: string; consequences: string };
     verbalCoachingContext?: { count: number; items: { coachingDate: string; categoryLabels: string[]; status: string; notes: string }[] };
     availableSubCategories?: string[];
@@ -1073,18 +1078,38 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
 
             {recommendation && (
               <div className="flex flex-col gap-2 rounded-md border p-3">
-                <div className="text-xs font-medium uppercase text-muted-foreground">Prior Write-Ups ({recommendation.priorCount})</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium uppercase text-muted-foreground">
+                    Prior Write-Ups ({recommendation.priorCount})
+                  </div>
+                  {!!recommendation.lookbackDaysUsed && (
+                    <span className="text-[10px] text-muted-foreground">{recommendation.lookbackDaysUsed}-day window</span>
+                  )}
+                </div>
                 {recommendation.priors.length > 0 ? (
                   <ul className="flex flex-col gap-1 text-sm">
                     {recommendation.priors.map((p, i) => (
                       <li key={i} className="flex items-center justify-between">
-                        <span>{fmtDate(p.incidentDate)}</span>
+                        <span>{fmtDate(p.incidentDate)}{p.subCategory ? ` — ${p.subCategory}` : ""}</span>
                         <Badge variant="outline" className="text-xs">{WARNING_LEVEL_LABELS[p.warningLevel] || p.warningLevel}</Badge>
                       </li>
                     ))}
                   </ul>
                 ) : (
                   <p className="text-sm text-muted-foreground">No prior write-ups for this category.</p>
+                )}
+                {!!recommendation.totalCount && !!recommendation.categoryBreakdown?.length && (
+                  <div className="flex flex-col gap-1 rounded-md bg-muted/50 p-2">
+                    <span className="text-xs font-semibold">
+                      {recommendation.totalCount} total {categories.find((c) => c._id === form.categoryId)?.description || "infraction"}{recommendation.totalCount === 1 ? "" : "s"}
+                      {recommendation.lookbackDaysUsed ? ` in the last ${recommendation.lookbackDaysUsed} days` : ""}
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {recommendation.categoryBreakdown.map((b, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs">{b.label} ×{b.count}</Badge>
+                      ))}
+                    </div>
+                  </div>
                 )}
                 <p className="text-xs text-muted-foreground">{recommendation.rationale}</p>
                 <div className="flex flex-col gap-1.5 pt-1">
@@ -1191,6 +1216,20 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
                 <div><div className="text-muted-foreground">Status</div><div>{statusLabel(selected)}</div></div>
               </div>
 
+              {!!selected.totalInfractionCount && !!selected.categoryBreakdown?.length && (
+                <div className="flex flex-col gap-1 rounded-md bg-muted/50 p-3">
+                  <span className="text-xs font-semibold">
+                    {selected.totalInfractionCount} total {selected.categoryLabel} occurrence{selected.totalInfractionCount === 1 ? "" : "s"}
+                    {selected.lookbackDaysUsed ? ` in the ${selected.lookbackDaysUsed}-day window used at the time` : ""}
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {selected.categoryBreakdown.map((b, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">{b.label} ×{b.count}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {selected.warningLevelOverrideReason && (
                 <div className="rounded-md border border-amber-300 bg-amber-50/60 p-2 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
                   Level overridden from {WARNING_LEVEL_LABELS[selected.warningLevelAuto]} — reason: {selected.warningLevelOverrideReason}
@@ -1291,7 +1330,7 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
                   <ul className="flex flex-col gap-1 text-sm">
                     {selected.priorWriteups.map((p, i) => (
                       <li key={i} className="flex items-center justify-between">
-                        <span>{fmtDate(p.incidentDate)}</span>
+                        <span>{fmtDate(p.incidentDate)}{p.subCategory ? ` — ${p.subCategory}` : ""}</span>
                         <Badge variant="outline" className="text-xs">{WARNING_LEVEL_LABELS[p.warningLevel] || p.warningLevel}</Badge>
                       </li>
                     ))}

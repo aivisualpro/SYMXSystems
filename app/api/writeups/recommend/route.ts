@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     const categoryLabel = (category as any)?.description || "";
 
     const [rec, correctiveAction, verbalCoachingContext, availableSubCategories] = await Promise.all([
-      recommendWarningLevel(employeeId, categoryId, categoryLabel),
+      recommendWarningLevel(employeeId, categoryId, categoryLabel, undefined, subCategory),
       getCorrectiveActionTemplate(categoryLabel, subCategory),
       getVerbalCoachingContext(employeeId, categoryLabel),
       getAvailableSubCategories(categoryLabel),

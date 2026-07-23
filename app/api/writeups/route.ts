@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     const subCategory = body.subCategory || "";
 
     const [rec, correctiveAction, verbalCoachingContext] = await Promise.all([
-      recommendWarningLevel(body.employeeId, body.categoryId, categoryLabel),
+      recommendWarningLevel(body.employeeId, body.categoryId, categoryLabel, undefined, subCategory),
       getCorrectiveActionTemplate(categoryLabel, subCategory),
       getVerbalCoachingContext(body.employeeId, categoryLabel),
     ]);
@@ -115,8 +115,11 @@ export async function POST(req: NextRequest) {
       // escalation flow).
       planForImprovement: body.planForImprovement || correctiveAction.planForImprovement,
       consequences: body.consequences || correctiveAction.consequences,
-      priorWriteups: rec.priors.map((p) => ({ writeupId: p.writeupId, incidentDate: p.incidentDate, warningLevel: p.warningLevel })),
+      priorWriteups: rec.priors.map((p) => ({ writeupId: p.writeupId, incidentDate: p.incidentDate, warningLevel: p.warningLevel, categoryLabel: p.categoryLabel, subCategory: p.subCategory })),
       priorVerbalCoachings: verbalCoachingContext.items.map((v) => ({ coachingDate: v.coachingDate, categoryLabels: v.categoryLabels })),
+      totalInfractionCount: rec.totalCount,
+      categoryBreakdown: rec.categoryBreakdown,
+      lookbackDaysUsed: rec.lookbackDaysUsed,
       status: "draft",
       managerName: session?.name || session?.email || "",
       isHistorical: false,

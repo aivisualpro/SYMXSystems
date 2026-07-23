@@ -14,6 +14,7 @@ import { Loader2, Save, Settings, Plus, X, Layers, FileEdit, Trash2 } from "luci
 
 interface CategoryOption { _id: string; description: string; isActive?: boolean }
 interface CorrectiveActionTemplate { categoryLabel: string; subCategory?: string; planForImprovement: string; consequences?: string }
+interface CategoryLookbackOverride { categoryLabel: string; lookbackDays: number }
 
 const THRESHOLD_KEYS = [
   { key: "second_warning", label: "Second Warning at" },
@@ -30,6 +31,8 @@ export default function WriteupSettingsPage() {
     second_warning: 1, third_warning: 2, final_warning: 3, suspension_review: 4,
   });
   const [stackGroups, setStackGroups] = useState<string[][]>([]);
+  const [categoryLookbackOverrides, setCategoryLookbackOverrides] = useState<CategoryLookbackOverride[]>([]);
+  const [newOverrideCategory, setNewOverrideCategory] = useState("");
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [addToGroup, setAddToGroup] = useState<Record<number, string>>({});
   const [templates, setTemplates] = useState<CorrectiveActionTemplate[]>([]);
@@ -45,6 +48,7 @@ export default function WriteupSettingsPage() {
       setLookbackDays(json.settings.lookbackDays ?? 90);
       setThresholds(json.settings.escalationThresholds || thresholds);
       setStackGroups(json.settings.stackGroups || []);
+      setCategoryLookbackOverrides(json.settings.categoryLookbackOverrides || []);
       setCategories(json.categories || []);
       setTemplates(json.settings.correctiveActionTemplates || []);
       setDefaultConsequences(json.settings.defaultConsequences || "");
@@ -68,6 +72,7 @@ export default function WriteupSettingsPage() {
           lookbackDays,
           escalationThresholds: thresholds,
           stackGroups: stackGroups.filter((g) => g.length > 1),
+          categoryLookbackOverrides,
           correctiveActionTemplates: templates,
           defaultConsequences,
         }),
@@ -76,6 +81,7 @@ export default function WriteupSettingsPage() {
       if (!res.ok) throw new Error(json.error || "Failed to save settings");
       notify.success("Write-up settings saved");
       setStackGroups(json.settings.stackGroups || []);
+      setCategoryLookbackOverrides(json.settings.categoryLookbackOverrides || []);
       setTemplates(json.settings.correctiveActionTemplates || []);
       setDefaultConsequences(json.settings.defaultConsequences || "");
     } catch (err: any) {
@@ -83,6 +89,19 @@ export default function WriteupSettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const overriddenCategories = new Set(categoryLookbackOverrides.map((o) => o.categoryLabel));
+  const addLookbackOverride = () => {
+    if (!newOverrideCategory) return;
+    setCategoryLookbackOverrides([...categoryLookbackOverrides, { categoryLabel: newOverrideCategory, lookbackDays: 30 }]);
+    setNewOverrideCategory("");
+  };
+  const updateLookbackOverride = (idx: number, days: number) => {
+    setCategoryLookbackOverrides(categoryLookbackOverrides.map((o, i) => (i === idx ? { ...o, lookbackDays: days } : o)));
+  };
+  const removeLookbackOverride = (idx: number) => {
+    setCategoryLookbackOverrides(categoryLookbackOverrides.filter((_, i) => i !== idx));
   };
 
   const categoriesInAnyGroup = new Set(stackGroups.flat());
@@ -189,6 +208,51 @@ export default function WriteupSettingsPage() {
           <p className="text-xs text-muted-foreground">
             Example with defaults: 0 priors → First Warning, 1 prior → Second Warning, 2 → Third, 3 → Final, 4+ → Suspension Review.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-4 pt-4">
+          <div>
+            <div className="text-sm font-medium">Category Lookback Overrides</div>
+            <p className="text-xs text-muted-foreground">
+              Give a specific category a tighter (or wider) rolling window than the global Lookback Window above — e.g. Safety
+              Infraction escalating on a 30-day window while everything else still uses 90. Sub-reasons under a category (Seatbelt,
+              Speeding, etc.) always share the same window and count toward the same total, since they're all recorded under one
+              real category.
+            </p>
+          </div>
+
+          {categoryLookbackOverrides.length === 0 && (
+            <p className="text-sm text-muted-foreground">No overrides configured — every category uses the global Lookback Window.</p>
+          )}
+
+          {categoryLookbackOverrides.map((o, idx) => (
+            <div key={idx} className="flex items-center gap-2 rounded-md border p-3">
+              <span className="flex-1 text-sm font-medium">{o.categoryLabel}</span>
+              <Select value={String(o.lookbackDays)} onValueChange={(v) => updateLookbackOverride(idx, Number(v))}>
+                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[7, 14, 30, 60, 90, 180, 365].map((d) => <SelectItem key={d} value={String(d)}>{d} days</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Button size="sm" variant="ghost" className="h-8 text-destructive" onClick={() => removeLookbackOverride(idx)}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+
+          <div className="flex gap-2">
+            <Select value={newOverrideCategory} onValueChange={setNewOverrideCategory}>
+              <SelectTrigger className="flex-1"><SelectValue placeholder="Add an override for a category" /></SelectTrigger>
+              <SelectContent>
+                {categories
+                  .filter((c) => !overriddenCategories.has(c.description))
+                  .map((c) => <SelectItem key={c._id} value={c.description}>{c.description}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" onClick={addLookbackOverride}><Plus className="h-3.5 w-3.5" /> Add</Button>
+          </div>
         </CardContent>
       </Card>
 

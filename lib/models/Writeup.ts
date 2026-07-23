@@ -39,6 +39,13 @@ export interface IWriteupPriorSnapshot {
   writeupId: mongoose.Types.ObjectId;
   incidentDate: Date;
   warningLevel: string;
+  categoryLabel?: string;
+  subCategory?: string;
+}
+
+export interface IWriteupCategoryBreakdownItem {
+  label: string; // subCategory if set, otherwise categoryLabel
+  count: number;
 }
 
 // Immutable snapshot of prior verbal coachings on the same subject, taken
@@ -95,6 +102,18 @@ export interface IWriteup extends Document {
 
   priorWriteups: IWriteupPriorSnapshot[]; // immutable snapshot taken at creation time
   priorVerbalCoachings: IWriteupVerbalCoachingSnapshot[]; // reference-only snapshot, same idea
+
+  // Total stacked occurrences within the lookback window used at creation
+  // time, INCLUDING this write-up itself (priorWriteups.length + 1), plus
+  // the per-sub-category breakdown — e.g. a Safety Infraction write-up for
+  // Speeding, with a prior Seatbelt write-up 5 days earlier and a 30-day
+  // category lookback override, snapshots totalInfractionCount: 2 and
+  // categoryBreakdown: [{label: "Seatbelt", count: 1}, {label: "Speeding",
+  // count: 1}]. Immutable at creation like priorWriteups above — see
+  // lib/writeup-logic.ts recommendWarningLevel.
+  totalInfractionCount?: number;
+  categoryBreakdown?: IWriteupCategoryBreakdownItem[];
+  lookbackDaysUsed?: number;
 
   // status: draft | pending_review | closed
   //
@@ -179,6 +198,16 @@ const WriteupPriorSnapshotSchema = new Schema(
     writeupId: { type: Schema.Types.ObjectId, ref: "Writeup" },
     incidentDate: { type: Date },
     warningLevel: { type: String },
+    categoryLabel: { type: String, default: "" },
+    subCategory: { type: String, default: "" },
+  },
+  { _id: false }
+);
+
+const WriteupCategoryBreakdownItemSchema = new Schema(
+  {
+    label: { type: String, required: true },
+    count: { type: Number, required: true },
   },
   { _id: false }
 );
@@ -236,6 +265,9 @@ const WriteupSchema = new Schema<IWriteup>(
 
     priorWriteups: { type: [WriteupPriorSnapshotSchema], default: [] },
     priorVerbalCoachings: { type: [WriteupVerbalCoachingSnapshotSchema], default: [] },
+    totalInfractionCount: { type: Number },
+    categoryBreakdown: { type: [WriteupCategoryBreakdownItemSchema], default: [] },
+    lookbackDaysUsed: { type: Number },
 
     status: { type: String, default: "draft" },
     acknowledgmentType: { type: String },

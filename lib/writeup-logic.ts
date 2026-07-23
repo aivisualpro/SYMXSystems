@@ -34,6 +34,13 @@ export interface WriteupPrior {
   writeupId: string;
   incidentDate: Date;
   warningLevel: string;
+  categoryLabel: string;
+  subCategory?: string;
+}
+
+export interface WriteupCategoryBreakdownItem {
+  label: string; // subCategory if set, otherwise the categoryLabel itself
+  count: number;
 }
 
 export interface WriteupRecommendation {
@@ -41,6 +48,19 @@ export interface WriteupRecommendation {
   priorCount: number;
   priors: WriteupPrior[];
   rationale: string;
+  // Total occurrences within the lookback window INCLUDING the infraction
+  // currently being filed (priorCount + 1) — what should actually be
+  // stated on the write-up itself ("2 total infractions"), since the one
+  // on the table right now is one of them.
+  totalCount: number;
+  // Per sub-category (or per-category, when no sub-category applies)
+  // breakdown across all stacked occurrences, current one included — e.g.
+  // [{ label: "Seatbelt", count: 1 }, { label: "Speeding", count: 1 }].
+  categoryBreakdown: WriteupCategoryBreakdownItem[];
+  // The lookback window actually used for this recommendation, in days —
+  // may differ from the settings' global lookbackDays if this category has
+  // a configured override (see WriteupSettings.categoryLookbackOverrides).
+  lookbackDaysUsed: number;
 }
 
 // Single-document collection by convention. Sort deterministically so this
@@ -85,14 +105,27 @@ function formatDateList(dates: Date[]): string {
   return `${formatted.slice(0, -1).join(", ")}, and ${formatted[formatted.length - 1]}`;
 }
 
+// Resolve the effective lookback window for a category: a configured
+// per-category override wins, otherwise the global lookbackDays applies.
+function resolveLookbackDays(categoryLabel: string, settings: any): number {
+  const overrides: any[] = settings.categoryLookbackOverrides || [];
+  const match = overrides.find((o) => (o.categoryLabel || "").toLowerCase() === categoryLabel.toLowerCase());
+  return match?.lookbackDays ?? (settings.lookbackDays || 90);
+}
+
 // Given an employee + category, look up prior write-ups (in the lookback
 // window, for stacked categories) and recommend the next warning level.
 // excludeWriteupId lets a PUT/regenerate call exclude the record itself.
+// currentSubCategory is the sub-reason of the infraction being filed RIGHT
+// NOW (if any) — it isn't saved yet, but it's still one of the occurrences
+// that should be reflected in the total count and breakdown shown on the
+// write-up ("2 total infractions: Seatbelt, Speeding").
 export async function recommendWarningLevel(
   employeeId: string,
   categoryId: string | undefined,
   categoryLabelFallback: string,
-  excludeWriteupId?: string
+  excludeWriteupId?: string,
+  currentSubCategory?: string
 ): Promise<WriteupRecommendation> {
   await connectToDatabase();
   const settings = await getSettings();
@@ -104,7 +137,8 @@ export async function recommendWarningLevel(
   }
 
   const stackLabels = resolveStackGroup(categoryLabel, settings.stackGroups || []);
-  const cutoff = new Date(Date.now() - (settings.lookbackDays || 90) * 24 * 60 * 60 * 1000);
+  const lookbackDays = resolveLookbackDays(categoryLabel, settings);
+  const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
 
   const query: any = {
     employeeId,
@@ -116,35 +150,52 @@ export async function recommendWarningLevel(
 
   const priorDocs = await Writeup.find(query)
     .sort({ incidentDate: -1 })
-    .select({ incidentDate: 1, warningLevel: 1 })
+    .select({ incidentDate: 1, warningLevel: 1, categoryLabel: 1, subCategory: 1 })
     .lean();
 
   const priors: WriteupPrior[] = priorDocs.map((p: any) => ({
     writeupId: String(p._id),
     incidentDate: p.incidentDate,
     warningLevel: p.warningLevel,
+    categoryLabel: p.categoryLabel || categoryLabel,
+    subCategory: p.subCategory || "",
   }));
 
   const hasSuspensionReview = priors.some((p) => p.warningLevel === "suspension_review");
   const priorCount = priors.length;
+
+  // Sub-categories (Seatbelt, Speeding, etc.) still count separately from
+  // each other for reporting purposes even though they stack onto the same
+  // ladder — total infractions and the breakdown below include the
+  // infraction being filed right now, not just what came before it.
+  const breakdownMap = new Map<string, number>();
+  for (const p of priors) {
+    const label = (p.subCategory || "").trim() || p.categoryLabel || categoryLabel;
+    breakdownMap.set(label, (breakdownMap.get(label) || 0) + 1);
+  }
+  const currentLabel = (currentSubCategory || "").trim() || categoryLabel;
+  breakdownMap.set(currentLabel, (breakdownMap.get(currentLabel) || 0) + 1);
+  const categoryBreakdown: WriteupCategoryBreakdownItem[] = Array.from(breakdownMap.entries()).map(([label, count]) => ({ label, count }));
+  const totalCount = priorCount + 1;
+  const breakdownText = categoryBreakdown.map((b) => `${b.label} (${b.count})`).join(", ");
 
   let recommended: WarningLevel;
   let rationale: string;
 
   if (hasSuspensionReview) {
     recommended = "suspension_review";
-    rationale = `This employee already has a Suspension Review write-up for ${categoryLabel}. This is a continued occurrence and should go to Admin/HR review before further action.`;
+    rationale = `This employee already has a Suspension Review write-up for ${categoryLabel}. This is a continued occurrence and should go to Admin/HR review before further action. ${totalCount} total ${categoryLabel} occurrence${totalCount === 1 ? "" : "s"} in the last ${lookbackDays} days: ${breakdownText}.`;
   } else {
     recommended = levelFromCount(priorCount, settings.escalationThresholds);
     if (priorCount === 0) {
-      rationale = `No prior ${categoryLabel} write-ups in the last ${settings.lookbackDays} days. Recommending First Warning.`;
+      rationale = `No prior ${categoryLabel} write-ups in the last ${lookbackDays} days. This is occurrence 1 (${currentLabel}). Recommending First Warning.`;
     } else {
       const dates = formatDateList(priors.map((p) => p.incidentDate));
-      rationale = `This employee has ${priorCount} prior ${categoryLabel} write-up${priorCount === 1 ? "" : "s"} in the last ${settings.lookbackDays} days. Previous date${priorCount === 1 ? "" : "s"}: ${dates}. This write-up has been auto-populated as ${WARNING_LEVEL_LABELS[recommended]}.`;
+      rationale = `This employee has ${priorCount} prior ${categoryLabel} write-up${priorCount === 1 ? "" : "s"} in the last ${lookbackDays} days. Previous date${priorCount === 1 ? "" : "s"}: ${dates}. Including this write-up, that's ${totalCount} total ${categoryLabel} occurrences: ${breakdownText}. This write-up has been auto-populated as ${WARNING_LEVEL_LABELS[recommended]}.`;
     }
   }
 
-  return { recommended, priorCount, priors, rationale };
+  return { recommended, priorCount, priors, rationale, totalCount, categoryBreakdown, lookbackDaysUsed: lookbackDays };
 }
 
 const normalizeLabel = (s: string) => (s || "").trim().toLowerCase().replace(/\s+/g, " ");

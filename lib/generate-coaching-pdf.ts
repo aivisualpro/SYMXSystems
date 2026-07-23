@@ -19,8 +19,11 @@ export interface CoachingPdfInput {
   description?: string;
   planForImprovement?: string;
   consequences?: string;
-  priorDates?: { date: Date | string; warningLevel: string }[];
+  priorDates?: { date: Date | string; warningLevel: string; label?: string }[];
   priorVerbalCoachingDates?: (Date | string)[]; // "prior discussion or warnings ... (oral)" — reference only
+  totalInfractionCount?: number; // priors + this one, snapshotted at creation — see lib/writeup-logic.ts
+  categoryBreakdown?: { label: string; count: number }[];
+  lookbackDaysUsed?: number;
   managerSignature?: { name: string; signatureImage: string; signedAt: Date | string };
   employeeSignature?: { name: string; signatureImage: string; signedAt: Date | string };
   refusal?: { refused: boolean; note?: string; witnessName?: string; witnessSignatureImage?: string; refusedAt?: Date | string };
@@ -171,9 +174,14 @@ function renderCoachingPage(doc: jsPDF, input: CoachingPdfInput): void {
   y += 11;
   doc.setFont("helvetica", "normal");
   let descText = input.description || "";
+  if (input.totalInfractionCount && input.categoryBreakdown && input.categoryBreakdown.length > 0) {
+    const breakdownText = input.categoryBreakdown.map((b) => `${b.label} (${b.count})`).join(", ");
+    const windowText = input.lookbackDaysUsed ? ` in the last ${input.lookbackDaysUsed} days` : "";
+    descText += `\n\n${input.totalInfractionCount} total ${input.categoryLabel} occurrence${input.totalInfractionCount === 1 ? "" : "s"}${windowText}: ${breakdownText}`;
+  }
   if (input.priorDates && input.priorDates.length > 0) {
     const dateList = input.priorDates
-      .map((p) => `${fmtDate(p.date)} (${WARNING_LEVEL_LABELS[p.warningLevel] || p.warningLevel})`)
+      .map((p) => `${fmtDate(p.date)}${p.label ? ` [${p.label}]` : ""} (${WARNING_LEVEL_LABELS[p.warningLevel] || p.warningLevel})`)
       .join("; ");
     descText += `\n\nPrevious ${input.categoryLabel} write-ups on file: ${dateList}`;
   }
