@@ -40,6 +40,7 @@ import {
   Sparkles,
   Info,
   Flag,
+  CalendarDays,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { notify } from "@/lib/notify";
 import Papa from "papaparse";
 import QRCode from "qrcode";
+import { HR_TICKET_CATEGORIES, HR_TICKET_TIME_OFF_CATEGORIES } from "@/lib/hr-ticket-categories";
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  TYPES
@@ -70,6 +72,9 @@ interface HrTicket {
   employeeId?: string;
   category?: string;
   issue?: string;
+  timeOffDateType?: "single" | "range";
+  timeOffStartDate?: string;
+  timeOffEndDate?: string;
   attachment?: string;
   managersEmail?: string;
   notes?: string;
@@ -119,11 +124,8 @@ interface EmployeeSearchResult {
  *  CONSTANTS
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-const CATEGORIES = [
-  "Payroll Issue", "Schedule Change", "Benefits Question", "Leave Request",
-  "Equipment Issue", "Safety Concern", "Workplace Complaint", "Policy Question",
-  "Training Request", "Other",
-];
+// HR_TICKET_CATEGORIES imported from lib/hr-ticket-categories.ts — was
+// duplicated here separately from the public submit-ticket form before.
 
 type StatusFilterKey = HrTicketStatus | "all";
 
@@ -183,6 +185,24 @@ function formatRelativeTime(iso?: string): string {
 function formatDateTime(iso?: string): string {
   if (!iso) return "";
   return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+// Time-off dates are stored as UTC midnight for the calendar day picked —
+// format in UTC so it never shifts a day earlier in a timezone behind UTC
+// (same fix as the Write-Ups date-display bug elsewhere in this app).
+function formatDateOnlyUTC(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatTimeOffRange(t: Pick<HrTicket, "timeOffStartDate" | "timeOffEndDate" | "timeOffDateType">): string {
+  if (!t.timeOffStartDate) return "";
+  if (t.timeOffDateType === "range" && t.timeOffEndDate && t.timeOffEndDate !== t.timeOffStartDate) {
+    return `${formatDateOnlyUTC(t.timeOffStartDate)} – ${formatDateOnlyUTC(t.timeOffEndDate)}`;
+  }
+  return formatDateOnlyUTC(t.timeOffStartDate);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -730,16 +750,31 @@ function NewTicketDialog({
   const [profileImage, setProfileImage] = useState("");
   const [transporterId, setTransporterId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [timeOffDateType, setTimeOffDateType] = useState<"single" | "range">("single");
+  const [timeOffStartDate, setTimeOffStartDate] = useState("");
+  const [timeOffEndDate, setTimeOffEndDate] = useState("");
+  const isTimeOffCategory = HR_TICKET_TIME_OFF_CATEGORIES.includes(category);
 
   useEffect(() => {
     if (open) {
       setCategory(""); setIssue(""); setPriority("normal"); setManagersEmail("");
       setEmployeeId(""); setEmployeeName(""); setProfileImage(""); setTransporterId("");
+      setTimeOffDateType("single"); setTimeOffStartDate(""); setTimeOffEndDate("");
     }
   }, [open]);
 
   const handleSave = async () => {
     if (!category && !issue) return;
+    if (isTimeOffCategory) {
+      if (!timeOffStartDate || (timeOffDateType === "range" && !timeOffEndDate)) {
+        notify.error("A date is required for a time-off request.");
+        return;
+      }
+      if (timeOffDateType === "range" && timeOffEndDate < timeOffStartDate) {
+        notify.error("End date must be on or after the start date.");
+        return;
+      }
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/admin/hr-tickets", {
@@ -750,6 +785,13 @@ function NewTicketDialog({
           employeeId: employeeId || undefined,
           transporterId: transporterId || undefined,
           employeeMatchType: employeeId ? "manual" : undefined,
+          ...(isTimeOffCategory
+            ? {
+                timeOffDateType,
+                timeOffStartDate,
+                timeOffEndDate: timeOffDateType === "range" ? timeOffEndDate : timeOffStartDate,
+              }
+            : {}),
         }),
       });
       if (!res.ok) throw new Error();
@@ -825,7 +867,7 @@ function NewTicketDialog({
           <div>
             <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">Category</label>
             <div className="flex flex-wrap gap-1.5">
-              {CATEGORIES.map((c) => (
+              {HR_TICKET_CATEGORIES.map((c) => (
                 <button
                   key={c}
                   onClick={() => setCategory(c)}
@@ -839,6 +881,39 @@ function NewTicketDialog({
               ))}
             </div>
           </div>
+
+          {isTimeOffCategory && (
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
+                Time Off Dates <span className="text-destructive">*</span>
+              </label>
+              <div className="flex gap-1.5 mb-2">
+                {(["single", "range"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTimeOffDateType(t)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                      timeOffDateType === t ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted/50 border border-border/50 text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    {t === "single" ? "Single Day" : "Date Range"}
+                  </button>
+                ))}
+              </div>
+              {timeOffDateType === "single" ? (
+                <Input type="date" value={timeOffStartDate} onChange={(e) => setTimeOffStartDate(e.target.value)} />
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Input type="date" value={timeOffStartDate} onChange={(e) => setTimeOffStartDate(e.target.value)} placeholder="Start" />
+                  <Input type="date" value={timeOffEndDate} onChange={(e) => setTimeOffEndDate(e.target.value)} placeholder="End" />
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                One continuous period per ticket — a separate, non-consecutive stretch needs its own ticket.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">Priority</label>
@@ -1108,6 +1183,15 @@ function TicketDetail({
           )}
         </div>
 
+        {ticket.timeOffStartDate && (
+          <div className="rounded-xl bg-emerald-500/5 border border-emerald-500/20 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/80 mb-1 flex items-center gap-1.5">
+              <CalendarDays className="h-3 w-3" /> Time Off Requested
+            </p>
+            <p className="text-sm font-semibold text-foreground">{formatTimeOffRange(ticket)}</p>
+          </div>
+        )}
+
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Issue</p>
@@ -1137,7 +1221,7 @@ function TicketDetail({
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Category</p>
             <div className="flex flex-wrap gap-1.5">
-              {CATEGORIES.map((c) => (
+              {HR_TICKET_CATEGORIES.map((c) => (
                 <button
                   key={c}
                   onClick={() => onEditMeta({ category: c })}
@@ -1266,6 +1350,11 @@ function TicketRow({ t, selected, onClick }: { t: HrTicket; selected: boolean; o
           <span className="text-[10px] text-muted-foreground shrink-0">{time}</span>
         </div>
         <p className="text-[11px] text-muted-foreground truncate mt-0.5">#{t.ticketNumber || "—"} · {t.category || "General"}</p>
+        {t.timeOffStartDate && (
+          <p className="text-[11px] text-emerald-600/90 flex items-center gap-1 mt-1">
+            <CalendarDays className="h-2.5 w-2.5 shrink-0" /> {formatTimeOffRange(t)}
+          </p>
+        )}
         {t.issue && <p className="text-[11px] text-muted-foreground/70 line-clamp-1 mt-1">{t.issue}</p>}
         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
           <div className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black ring-1", cfg.bg, cfg.color, cfg.ring)}>

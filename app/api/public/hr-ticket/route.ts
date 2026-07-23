@@ -7,6 +7,18 @@ import {
   sendHrTicketNotificationEmail,
   sendDriverConfirmationEmail,
 } from "@/lib/hr-ticket-utils";
+import { HR_TICKET_TIME_OFF_CATEGORIES } from "@/lib/hr-ticket-categories";
+
+// YYYY-MM-DD only — matches what a plain <input type="date"> sends. Parsed
+// as UTC midnight for that calendar day (never local-timezone-shifted),
+// same reasoning as the write-up date-picker bug fixed elsewhere in this
+// app: a date-only string must round-trip to the exact calendar day the
+// employee picked, not get pushed a day earlier by a timezone conversion.
+function parseDateOnly(s: unknown): Date | null {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00.000Z`);
+  return isNaN(d.getTime()) ? null : d;
+}
 
 // How many public submissions the same IP may make in the throttle window
 // before being rejected. Deliberately generous — a driver could plausibly
@@ -62,6 +74,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── Time-off date validation ──
+    // The submit-ticket form only lets a driver pick ONE single day or ONE
+    // continuous range per ticket (never multiple disjoint dates), so a
+    // ticket can always be resolved once its one relevant scheduling week
+    // is made — this is enforced client-side too, but never trust that
+    // alone on a public, unauthenticated endpoint.
+    const category = typeof body.category === "string" ? body.category : "";
+    const isTimeOff = HR_TICKET_TIME_OFF_CATEGORIES.includes(category);
+    let timeOffDateType: "single" | "range" | undefined;
+    let timeOffStartDate: Date | undefined;
+    let timeOffEndDate: Date | undefined;
+    if (isTimeOff) {
+      const dateType = body.timeOffDateType === "range" ? "range" : "single";
+      const startDate = parseDateOnly(body.timeOffStartDate);
+      if (!startDate) {
+        return NextResponse.json({ error: "A date is required for a time-off request." }, { status: 400 });
+      }
+      let endDate = startDate;
+      if (dateType === "range") {
+        const parsedEnd = parseDateOnly(body.timeOffEndDate);
+        if (!parsedEnd || parsedEnd.getTime() < startDate.getTime()) {
+          return NextResponse.json({ error: "End date must be on or after the start date." }, { status: 400 });
+        }
+        endDate = parsedEnd;
+      }
+      timeOffDateType = dateType;
+      timeOffStartDate = startDate;
+      timeOffEndDate = endDate;
+    }
+
     // ── Rate limit by IP ──
     const ip = getClientIp(req);
     if (ip !== "unknown") {
@@ -107,6 +149,9 @@ export async function POST(req: NextRequest) {
       ticketNumber,
       category: typeof body.category === "string" ? body.category.slice(0, 200) : "",
       issue: typeof body.issue === "string" ? body.issue.slice(0, 5000) : "",
+      timeOffDateType,
+      timeOffStartDate,
+      timeOffEndDate,
       notes: typeof body.notes === "string" ? body.notes.slice(0, 5000) : "",
       submitterName,
       submitterEmail,

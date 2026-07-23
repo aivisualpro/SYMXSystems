@@ -41,6 +41,37 @@ export async function getNextTicketNumber(): Promise<string> {
   return String(updated!.lastTicketNumber);
 }
 
+// Business timezone for week-boundary math — same convention used by the
+// Scheduling module (see getCurrentYearWeek in
+// app/(protected)/scheduling/_components/schedule-utils.ts). Duplicated
+// here rather than importing across that route group's private
+// _components folder.
+const BUSINESS_TZ = "America/Los_Angeles";
+
+/** Sunday of the week containing `d`, as a Date at UTC midnight, computed in Pacific Time. */
+function sundayOfWeek(d: Date): Date {
+  const dateStr = new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(d);
+  const date = new Date(dateStr + "T00:00:00.000Z");
+  const dayOfWeek = date.getUTCDay(); // 0=Sun … 6=Sat
+  const sunday = new Date(date);
+  sunday.setUTCDate(date.getUTCDate() - dayOfWeek);
+  return sunday;
+}
+
+/**
+ * How many distinct Sunday-Saturday scheduling weeks a date range touches —
+ * used to warn a driver that a long time-off request spans more scheduling
+ * weeks than we currently plan ahead for, without blocking the submission
+ * (a single continuous range is always allowed, however many weeks it
+ * covers — see app/submit-ticket/page.tsx for the "no gap = one ticket"
+ * rule this supports).
+ */
+export function countWeeksSpanned(start: Date, end: Date): number {
+  const startSunday = sundayOfWeek(start).getTime();
+  const endSunday = sundayOfWeek(end).getTime();
+  return Math.round((endSunday - startSunday) / (7 * 86400000)) + 1;
+}
+
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

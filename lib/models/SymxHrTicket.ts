@@ -41,6 +41,16 @@ export interface ISymxHrTicket extends Document {
   suggestedEmployeeId?: mongoose.Types.ObjectId;
   category?: string;
   issue?: string;
+  // Structured time-off request, captured for categories in
+  // HR_TICKET_TIME_OFF_CATEGORIES (see lib/hr-ticket-categories.ts) instead
+  // of relying on free-text dates buried in `issue`. A ticket holds exactly
+  // ONE single day or ONE continuous range — never multiple disjoint dates —
+  // by construction of the submission form, so scheduling can resolve each
+  // request independently instead of a ticket sitting open waiting on the
+  // furthest-out of several unrelated dates bundled together.
+  timeOffDateType?: "single" | "range";
+  timeOffStartDate?: Date;
+  timeOffEndDate?: Date; // equals timeOffStartDate for "single"
   attachment?: string;
   managersEmail?: string;
   notes?: string;
@@ -98,6 +108,9 @@ const SymxHrTicketSchema = new Schema<ISymxHrTicket>(
     suggestedEmployeeId: { type: Schema.Types.ObjectId, ref: "SymxEmployee" },
     category: { type: String },
     issue: { type: String },
+    timeOffDateType: { type: String, enum: ["single", "range"] },
+    timeOffStartDate: { type: Date },
+    timeOffEndDate: { type: Date },
     attachment: { type: String },
     managersEmail: { type: String },
     notes: { type: String },

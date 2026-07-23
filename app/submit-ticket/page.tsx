@@ -1,21 +1,42 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { HR_TICKET_CATEGORIES, HR_TICKET_TIME_OFF_CATEGORIES } from "@/lib/hr-ticket-categories";
 
 type FormStep = "form" | "submitting" | "success";
+type TimeOffDateType = "single" | "range";
 
-const CATEGORIES = [
-  "Payroll Issue",
-  "Schedule Change",
-  "Benefits Question",
-  "Leave Request",
-  "Equipment Issue",
-  "Safety Concern",
-  "Workplace Complaint",
-  "Policy Question",
-  "Training Request",
-  "Other",
-];
+// Parses a "YYYY-MM-DD" <input type="date"> value as that exact calendar
+// day, never letting the browser's local timezone shift it — same fix
+// applied to the Write-Ups date bug elsewhere in this app.
+function parseDateOnly(s: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00.000Z`);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function formatDateOnly(s: string): string {
+  const d = parseDateOnly(s);
+  if (!d) return "";
+  return d.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" });
+}
+
+// Sunday of the week containing this date string, for the "how many
+// scheduling weeks does this span" info note below the picker.
+function sundayOf(s: string): Date | null {
+  const d = parseDateOnly(s);
+  if (!d) return null;
+  const sunday = new Date(d);
+  sunday.setUTCDate(d.getUTCDate() - d.getUTCDay());
+  return sunday;
+}
+
+function weeksSpanned(startStr: string, endStr: string): number {
+  const start = sundayOf(startStr);
+  const end = sundayOf(endStr);
+  if (!start || !end) return 1;
+  return Math.round((end.getTime() - start.getTime()) / (7 * 86400000)) + 1;
+}
 
 export default function SubmitTicketPage() {
   const [step, setStep] = useState<FormStep>("form");
@@ -26,6 +47,27 @@ export default function SubmitTicketPage() {
   const [website, setWebsite] = useState(""); // honeypot — real users never see/fill this
   const [errorMsg, setErrorMsg] = useState("");
   const [ticketNumber, setTicketNumber] = useState("");
+
+  // Time-off date selection — only relevant for categories in
+  // HR_TICKET_TIME_OFF_CATEGORIES (currently just "Leave Request"). A
+  // ticket can only hold ONE single day or ONE continuous range — there's
+  // deliberately no "add another date" option, so it's structurally
+  // impossible to bundle unrelated dates from a different week into one
+  // ticket; see the guidance copy shown next to the picker.
+  const [timeOffDateType, setTimeOffDateType] = useState<TimeOffDateType>("single");
+  const [timeOffStartDate, setTimeOffStartDate] = useState("");
+  const [timeOffEndDate, setTimeOffEndDate] = useState("");
+
+  const isTimeOffCategory = HR_TICKET_TIME_OFF_CATEGORIES.includes(category);
+  const timeOffRangeInvalid =
+    isTimeOffCategory && timeOffDateType === "range" && !!timeOffStartDate && !!timeOffEndDate &&
+    (parseDateOnly(timeOffEndDate)?.getTime() ?? 0) < (parseDateOnly(timeOffStartDate)?.getTime() ?? 0);
+  const timeOffDatesMissing =
+    isTimeOffCategory && (!timeOffStartDate || (timeOffDateType === "range" && !timeOffEndDate));
+  const spannedWeeks = useMemo(() => {
+    if (!isTimeOffCategory || timeOffDateType !== "range" || !timeOffStartDate || !timeOffEndDate || timeOffRangeInvalid) return 1;
+    return weeksSpanned(timeOffStartDate, timeOffEndDate);
+  }, [isTimeOffCategory, timeOffDateType, timeOffStartDate, timeOffEndDate, timeOffRangeInvalid]);
 
   // Override root layout overflow so this public page can scroll
   useEffect(() => {
@@ -43,6 +85,16 @@ export default function SubmitTicketPage() {
   const handleSubmit = async () => {
     if (!category) return;
     if (!issue.trim()) return;
+    if (isTimeOffCategory) {
+      if (timeOffDatesMissing) {
+        setErrorMsg("Please select a date for your time-off request.");
+        return;
+      }
+      if (timeOffRangeInvalid) {
+        setErrorMsg("End date must be on or after the start date.");
+        return;
+      }
+    }
 
     setStep("submitting");
     setErrorMsg("");
@@ -57,6 +109,13 @@ export default function SubmitTicketPage() {
           submitterName: submitterName.trim(),
           submitterEmail: submitterEmail.trim(),
           website, // honeypot
+          ...(isTimeOffCategory
+            ? {
+                timeOffDateType,
+                timeOffStartDate,
+                timeOffEndDate: timeOffDateType === "range" ? timeOffEndDate : timeOffStartDate,
+              }
+            : {}),
         }),
       });
 
@@ -84,6 +143,9 @@ export default function SubmitTicketPage() {
     setSubmitterEmail("");
     setTicketNumber("");
     setErrorMsg("");
+    setTimeOffDateType("single");
+    setTimeOffStartDate("");
+    setTimeOffEndDate("");
   };
 
   return (
@@ -168,7 +230,7 @@ export default function SubmitTicketPage() {
                   Category <span className="text-red-400">*</span>
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {CATEGORIES.map((cat) => (
+                  {HR_TICKET_CATEGORIES.map((cat) => (
                     <button
                       key={cat}
                       onClick={() => setCategory(cat)}
@@ -183,6 +245,82 @@ export default function SubmitTicketPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Time-off dates — only for Leave Request (or other categories
+                  opted into HR_TICKET_TIME_OFF_CATEGORIES) */}
+              {isTimeOffCategory && (
+                <div>
+                  <label className="text-zinc-400 text-xs font-semibold uppercase tracking-wider block mb-2">
+                    When do you need off? <span className="text-red-400">*</span>
+                  </label>
+
+                  <div className="flex gap-2 mb-3">
+                    {(["single", "range"] as TimeOffDateType[]).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTimeOffDateType(t)}
+                        className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                          timeOffDateType === t
+                            ? "bg-purple-500 text-white shadow-lg shadow-purple-500/25"
+                            : "bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600"
+                        }`}
+                      >
+                        {t === "single" ? "Single Day" : "Date Range"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {timeOffDateType === "single" ? (
+                    <input
+                      type="date"
+                      value={timeOffStartDate}
+                      onChange={(e) => setTimeOffStartDate(e.target.value)}
+                      className="w-full bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-4 py-3 text-sm text-zinc-200 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all [color-scheme:dark]"
+                    />
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider block mb-1">Start</label>
+                        <input
+                          type="date"
+                          value={timeOffStartDate}
+                          onChange={(e) => setTimeOffStartDate(e.target.value)}
+                          className="w-full bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-4 py-3 text-sm text-zinc-200 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all [color-scheme:dark]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider block mb-1">End</label>
+                        <input
+                          type="date"
+                          value={timeOffEndDate}
+                          onChange={(e) => setTimeOffEndDate(e.target.value)}
+                          className="w-full bg-zinc-800/60 border border-zinc-700/50 rounded-xl px-4 py-3 text-sm text-zinc-200 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all [color-scheme:dark]"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {timeOffRangeInvalid && (
+                    <p className="text-[11px] text-red-400 mt-1.5">End date must be on or after the start date.</p>
+                  )}
+
+                  {!timeOffRangeInvalid && timeOffStartDate && (timeOffDateType === "single" || timeOffEndDate) && (
+                    <p className="text-[11px] text-zinc-500 mt-1.5">
+                      Requesting: {formatDateOnly(timeOffStartDate)}
+                      {timeOffDateType === "range" && timeOffEndDate ? ` – ${formatDateOnly(timeOffEndDate)}` : ""}
+                      {spannedWeeks > 1 ? ` (${spannedWeeks} weeks)` : ""}
+                    </p>
+                  )}
+
+                  <p className="text-[11px] text-zinc-500 mt-2 bg-zinc-800/40 border border-zinc-700/40 rounded-lg px-3 py-2">
+                    You can only submit one continuous time-off period per ticket. If you need off for a
+                    <span className="text-zinc-300 font-medium"> separate, non-consecutive </span>
+                    stretch of time (a different week with a gap in between), please submit that as its own ticket so each can be
+                    reviewed and scheduled independently. A single date or an unbroken multi-week range (like a month off) is fine.
+                  </p>
+                </div>
+              )}
 
               {/* Issue */}
               <div>
@@ -201,7 +339,7 @@ export default function SubmitTicketPage() {
               {/* Submit Button */}
               <button
                 onClick={handleSubmit}
-                disabled={!category || !issue.trim()}
+                disabled={!category || !issue.trim() || timeOffDatesMissing || timeOffRangeInvalid}
                 className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-violet-600 text-white text-base font-bold shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
