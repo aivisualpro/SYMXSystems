@@ -49,7 +49,7 @@ export default function SubmitTicketPage() {
   const [ticketNumber, setTicketNumber] = useState("");
 
   // Time-off date selection — only relevant for categories in
-  // HR_TICKET_TIME_OFF_CATEGORIES (currently just "Leave Request"). A
+  // HR_TICKET_TIME_OFF_CATEGORIES (currently "Request Time Off"). A
   // ticket can only hold ONE single day or ONE continuous range — there's
   // deliberately no "add another date" option, so it's structurally
   // impossible to bundle unrelated dates from a different week into one
@@ -246,7 +246,7 @@ export default function SubmitTicketPage() {
                 </div>
               </div>
 
-              {/* Time-off dates — only for Leave Request (or other categories
+              {/* Time-off dates — only for Request Time Off (or other categories
                   opted into HR_TICKET_TIME_OFF_CATEGORIES) */}
               {isTimeOffCategory && (
                 <div>
@@ -314,10 +314,9 @@ export default function SubmitTicketPage() {
                   )}
 
                   <p className="text-[11px] text-zinc-500 mt-2 bg-zinc-800/40 border border-zinc-700/40 rounded-lg px-3 py-2">
-                    You can only submit one continuous time-off period per ticket. If you need off for a
-                    <span className="text-zinc-300 font-medium"> separate, non-consecutive </span>
-                    stretch of time (a different week with a gap in between), please submit that as its own ticket so each can be
-                    reviewed and scheduled independently. A single date or an unbroken multi-week range (like a month off) is fine.
+                    One ticket = one time off request. Pick a single day, or several days/weeks in a row (a whole month off is fine).
+                    <span className="text-zinc-300 font-medium"> Need a different date later that's not connected to this one? </span>
+                    Submit a new ticket for that one.
                   </p>
                 </div>
               )}
