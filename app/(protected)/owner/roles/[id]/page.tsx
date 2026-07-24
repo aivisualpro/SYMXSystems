@@ -520,16 +520,18 @@ export default function RoleDetailsPage() {
                                   );
                                 }
 
-                                // Write-Ups > Delete gets a real toggle on the parent row even
-                                // though Write-Ups has a "Settings" submodule (which otherwise
-                                // dashes out every non-view action) — deleting a write-up is
-                                // checked server-side against the literal "Write-Ups" module,
-                                // never against "Settings", so this is the one action from a
-                                // has-submodules row that actually does something. Same carve-out
-                                // pattern as "pay" on HR above.
-                                const isWriteUpsDelete = moduleName === 'Write-Ups' && action.key === 'delete';
+                                // Every Write-Ups server-side check (create/edit/approve/delete,
+                                // not just view) is enforced against the literal "Write-Ups"
+                                // module — its "Settings" submodule is display-only and has no
+                                // permission checks of its own. So unlike every other
+                                // has-submodules row (where a non-view action genuinely does
+                                // nothing and is dashed out), Write-Ups' own actions are all real
+                                // and need real toggles here, or an owner has no way to grant them
+                                // at all. Same carve-out reasoning as "pay" on HR above, just
+                                // covering the whole row instead of one action.
+                                const isWriteUpsRow = moduleName === 'Write-Ups';
 
-                                if (hasSubModules && action.key !== 'view' && !isWriteUpsDelete) {
+                                if (hasSubModules && action.key !== 'view' && !isWriteUpsRow) {
                                   return <TableCell key={action.key} className="text-center">-</TableCell>;
                                 }
 
