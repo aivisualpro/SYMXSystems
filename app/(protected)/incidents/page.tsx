@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { notify } from "@/lib/notify";
 import { Loader2, Plus, AlertTriangle, Trash2, Paperclip, Lock, PhoneCall, FileText, Camera, File as FileIcon } from "lucide-react";
+import { AttachmentUploader, UploadItem, itemsUploading, itemsToAttachments } from "./_components/AttachmentUploader";
 
 interface Attachment { name: string; url: string; category: string }
 interface ContactNote { date: string; contactedBy: string; method: string; note: string }
@@ -98,22 +99,6 @@ function money(n?: number) {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
-async function uploadFiles(files: File[], category: string): Promise<Attachment[]> {
-  if (files.length === 0) return [];
-  const uploads = await Promise.all(
-    files.map(async (file) => {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("module", "Incidents");
-      const r = await fetch("/api/upload/cloudinary", { method: "POST", body: fd });
-      if (!r.ok) return null;
-      const { url } = await r.json();
-      return { name: file.name, url, category };
-    })
-  );
-  return uploads.filter(Boolean) as Attachment[];
-}
-
 export default function IncidentsPage() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [canManage, setCanManage] = useState(false);
@@ -128,9 +113,9 @@ export default function IncidentsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<any>(EMPTY_QUICK_FORM);
   const [creating, setCreating] = useState(false);
-  const [reportFiles, setReportFiles] = useState<File[]>([]);
-  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
-  const [otherFiles, setOtherFiles] = useState<File[]>([]);
+  const [reportItems, setReportItems] = useState<UploadItem[]>([]);
+  const [photoItems, setPhotoItems] = useState<UploadItem[]>([]);
+  const [otherItems, setOtherItems] = useState<UploadItem[]>([]);
 
   // Detail / edit dialog
   const [selected, setSelected] = useState<Incident | null>(null);
@@ -140,10 +125,9 @@ export default function IncidentsPage() {
   const [newContactMethod, setNewContactMethod] = useState(CONTACT_METHODS[0]);
   const [newContactNote, setNewContactNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
-  const [newReportFiles, setNewReportFiles] = useState<File[]>([]);
-  const [newPhotoFiles, setNewPhotoFiles] = useState<File[]>([]);
-  const [newOtherFiles, setNewOtherFiles] = useState<File[]>([]);
-  const [addingAttachments, setAddingAttachments] = useState(false);
+  const [newReportItems, setNewReportItems] = useState<UploadItem[]>([]);
+  const [newPhotoItems, setNewPhotoItems] = useState<UploadItem[]>([]);
+  const [newOtherItems, setNewOtherItems] = useState<UploadItem[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -211,9 +195,9 @@ export default function IncidentsPage() {
   // ── Quick create ──
   const openCreate = () => {
     setCreateForm(EMPTY_QUICK_FORM);
-    setReportFiles([]);
-    setPhotoFiles([]);
-    setOtherFiles([]);
+    setReportItems([]);
+    setPhotoItems([]);
+    setOtherItems([]);
     setCreateOpen(true);
   };
 
@@ -230,12 +214,16 @@ export default function IncidentsPage() {
       notify.error("Van is required for Auto incidents");
       return;
     }
+    if (itemsUploading([...reportItems, ...photoItems, ...otherItems])) {
+      notify.error("Please wait for file uploads to finish");
+      return;
+    }
     setCreating(true);
     try {
       const attachments = [
-        ...(await uploadFiles(reportFiles, "Report Form")),
-        ...(await uploadFiles(photoFiles, "Photo")),
-        ...(await uploadFiles(otherFiles, "Other")),
+        ...itemsToAttachments(reportItems),
+        ...itemsToAttachments(photoItems),
+        ...itemsToAttachments(otherItems),
       ];
 
       const res = await fetch("/api/incidents", {
@@ -260,9 +248,9 @@ export default function IncidentsPage() {
     setSelected(incident);
     setNewContactMethod(CONTACT_METHODS[0]);
     setNewContactNote("");
-    setNewReportFiles([]);
-    setNewPhotoFiles([]);
-    setNewOtherFiles([]);
+    setNewReportItems([]);
+    setNewPhotoItems([]);
+    setNewOtherItems([]);
     setEditForm({
       claimStatus: incident.claimStatus || "New",
       shortDescription: incident.shortDescription || "",
@@ -331,37 +319,36 @@ export default function IncidentsPage() {
     }
   };
 
-  const handleAddAttachments = async () => {
-    if (!selected) return;
-    if (newReportFiles.length === 0 && newPhotoFiles.length === 0 && newOtherFiles.length === 0) {
-      notify.error("Choose at least one file to attach");
-      return;
-    }
-    setAddingAttachments(true);
-    try {
-      const uploaded = [
-        ...(await uploadFiles(newReportFiles, "Report Form")),
-        ...(await uploadFiles(newPhotoFiles, "Photo")),
-        ...(await uploadFiles(newOtherFiles, "Other")),
-      ];
-      const merged = [...(selected.attachments || []), ...uploaded];
-      const res = await fetch(`/api/incidents/${selected._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ attachments: merged }),
+  // Fires the instant a file finishes uploading in the detail view — saves
+  // it onto the incident right away via an atomic $push (see the API route)
+  // instead of waiting for a separate "Attach Files" click. That manual step
+  // was easy to miss: uploading a file only staged it locally, and if you
+  // didn't notice the button you'd close the dialog thinking it was saved
+  // and lose it. Updates `selected` and the list optimistically so the
+  // thumbnail shows immediately; falls back to a refetch if the save fails.
+  const handleAttachmentUploaded = (item: UploadItem, setLocalItems: React.Dispatch<React.SetStateAction<UploadItem[]>>) => {
+    if (!selected || !item.url) return;
+    const incidentId = selected._id;
+    const attachment: Attachment = { name: item.name, url: item.url, category: item.category };
+
+    setSelected((prev) => (prev && prev._id === incidentId ? { ...prev, attachments: [...(prev.attachments || []), attachment] } : prev));
+    setIncidents((prev) => prev.map((i) => (i._id === incidentId ? { ...i, attachments: [...(i.attachments || []), attachment] } : i)));
+    // The thumbnail now lives in the Attachments section above; drop it from
+    // the picker's own staging list so it isn't shown twice.
+    setLocalItems((prev) => prev.filter((it) => it.id !== item.id));
+
+    fetch(`/api/incidents/${incidentId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newAttachment: attachment }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error();
+      })
+      .catch(async () => {
+        notify.error(`Failed to save ${item.name} — refreshing`);
+        await refreshSelected(incidentId);
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to attach files");
-      notify.success("Files attached");
-      setNewReportFiles([]);
-      setNewPhotoFiles([]);
-      setNewOtherFiles([]);
-      await refreshSelected(selected._id);
-    } catch (err: any) {
-      notify.error(err.message || "Failed to attach files");
-    } finally {
-      setAddingAttachments(false);
-    }
   };
 
   const handleAddContactNote = async () => {
@@ -601,22 +588,34 @@ export default function IncidentsPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label className="flex items-center gap-1"><FileText className="h-3.5 w-3.5" /> Incident Report Form</Label>
-              <Input type="file" multiple accept="image/*,.pdf" onChange={(e) => setReportFiles(e.target.files ? Array.from(e.target.files) : [])} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label className="flex items-center gap-1"><Camera className="h-3.5 w-3.5" /> Photos</Label>
-              <Input type="file" multiple accept="image/*" onChange={(e) => setPhotoFiles(e.target.files ? Array.from(e.target.files) : [])} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label className="flex items-center gap-1"><FileIcon className="h-3.5 w-3.5" /> Other Files</Label>
-              <Input type="file" multiple onChange={(e) => setOtherFiles(e.target.files ? Array.from(e.target.files) : [])} />
-            </div>
+            <AttachmentUploader
+              label="Incident Report Form"
+              icon={FileText}
+              accept="image/*,.pdf"
+              category="Report Form"
+              items={reportItems}
+              setItems={setReportItems}
+            />
+            <AttachmentUploader
+              label="Photos"
+              icon={Camera}
+              accept="image/*"
+              category="Photo"
+              items={photoItems}
+              setItems={setPhotoItems}
+              hint="Add photos in as many passes as you need — new ones are added to the list, not replaced."
+            />
+            <AttachmentUploader
+              label="Other Files"
+              icon={FileIcon}
+              category="Other"
+              items={otherItems}
+              setItems={setOtherItems}
+            />
 
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={creating}>
+              <Button onClick={handleCreate} disabled={creating || itemsUploading([...reportItems, ...photoItems, ...otherItems])}>
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Submit
               </Button>
@@ -763,37 +762,60 @@ export default function IncidentsPage() {
                         <div key={key} className="flex flex-col gap-1">
                           <span className="text-xs text-muted-foreground">{label}</span>
                           <div className="flex flex-wrap gap-2">
-                            {files.map((a, i) => (
-                              <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-primary hover:underline">
-                                <Icon className="h-3 w-3" /> {a.name}
-                              </a>
-                            ))}
+                            {files.map((a, i) => {
+                              const isImage = key === "Photo" || /\.(png|jpe?g|gif|webp|heic)$/i.test(a.name);
+                              return isImage ? (
+                                <a
+                                  key={i}
+                                  href={a.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={a.name}
+                                  className="group relative h-16 w-16 shrink-0 overflow-hidden rounded-md border"
+                                >
+                                  <img src={a.url} alt={a.name} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                                </a>
+                              ) : (
+                                <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-primary hover:underline">
+                                  <Icon className="h-3 w-3" /> {a.name}
+                                </a>
+                              );
+                            })}
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 )}
-                <div className="grid grid-cols-1 gap-2 rounded-md border border-dashed p-2 sm:grid-cols-3">
-                  <div className="flex flex-col gap-1">
-                    <Label className="flex items-center gap-1 text-xs"><FileText className="h-3 w-3" /> Add Report Form</Label>
-                    <Input type="file" multiple accept="image/*,.pdf" onChange={(e) => setNewReportFiles(e.target.files ? Array.from(e.target.files) : [])} />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label className="flex items-center gap-1 text-xs"><Camera className="h-3 w-3" /> Add Photos</Label>
-                    <Input type="file" multiple accept="image/*" onChange={(e) => setNewPhotoFiles(e.target.files ? Array.from(e.target.files) : [])} />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label className="flex items-center gap-1 text-xs"><FileIcon className="h-3 w-3" /> Add Other</Label>
-                    <Input type="file" multiple onChange={(e) => setNewOtherFiles(e.target.files ? Array.from(e.target.files) : [])} />
-                  </div>
-                  <div className="flex justify-end sm:col-span-3">
-                    <Button size="sm" variant="outline" onClick={handleAddAttachments} disabled={addingAttachments}>
-                      {addingAttachments ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
-                      Attach Files
-                    </Button>
-                  </div>
+                <div className="grid grid-cols-1 gap-3 rounded-md border border-dashed p-2 sm:grid-cols-3">
+                  <AttachmentUploader
+                    label="Add Report Form"
+                    icon={FileText}
+                    accept="image/*,.pdf"
+                    category="Report Form"
+                    items={newReportItems}
+                    setItems={setNewReportItems}
+                    onUploaded={(item) => handleAttachmentUploaded(item, setNewReportItems)}
+                  />
+                  <AttachmentUploader
+                    label="Add Photos"
+                    icon={Camera}
+                    accept="image/*"
+                    category="Photo"
+                    items={newPhotoItems}
+                    setItems={setNewPhotoItems}
+                    onUploaded={(item) => handleAttachmentUploaded(item, setNewPhotoItems)}
+                  />
+                  <AttachmentUploader
+                    label="Add Other"
+                    icon={FileIcon}
+                    category="Other"
+                    items={newOtherItems}
+                    setItems={setNewOtherItems}
+                    onUploaded={(item) => handleAttachmentUploaded(item, setNewOtherItems)}
+                  />
                 </div>
+                <p className="text-[10px] text-muted-foreground">Files save automatically as soon as they finish uploading — no extra step needed.</p>
               </div>
 
               {canManage && (

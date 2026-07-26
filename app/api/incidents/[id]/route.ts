@@ -142,7 +142,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       };
     }
 
-    if (Object.keys(updates).length === 0 && Object.keys(unsets).length === 0 && !contactPush) {
+    // Single-attachment append — atomic $push rather than the client sending
+    // a full replacement array. Photos in the detail view now save the
+    // instant each upload finishes; if several photos finish uploading
+    // within the same second, two overlapping PUTs each computing
+    // "existing attachments + mine" from a stale read would race and the
+    // loser's file would silently vanish. $push sidesteps that entirely —
+    // each request only asserts "add this one item," so concurrent adds
+    // can't stomp each other regardless of ordering.
+    let attachmentPush: any = null;
+    if (body.newAttachment && body.newAttachment.url) {
+      attachmentPush = {
+        name: body.newAttachment.name || "",
+        url: body.newAttachment.url,
+        category: body.newAttachment.category || "Other",
+      };
+    }
+
+    if (Object.keys(updates).length === 0 && Object.keys(unsets).length === 0 && !contactPush && !attachmentPush) {
       return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
     }
 
@@ -150,7 +167,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const updateDoc: any = {};
     if (Object.keys(updates).length > 0) updateDoc.$set = updates;
     if (Object.keys(unsets).length > 0) updateDoc.$unset = unsets;
-    if (contactPush) updateDoc.$push = { contactLog: contactPush };
+    if (contactPush || attachmentPush) {
+      updateDoc.$push = {};
+      if (contactPush) updateDoc.$push.contactLog = contactPush;
+      if (attachmentPush) updateDoc.$push.attachments = attachmentPush;
+    }
 
     const incident = await SymxIncident.findByIdAndUpdate(id, updateDoc, { new: true, lean: true });
     if (!incident) return NextResponse.json({ error: "Incident not found" }, { status: 404 });
