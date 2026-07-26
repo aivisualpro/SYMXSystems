@@ -9,6 +9,10 @@
     {
       "path": "/api/cron/backup",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/generate-next-week-routes",
+      "schedule": "0 7 * * 6"
     }
   ]
 }
