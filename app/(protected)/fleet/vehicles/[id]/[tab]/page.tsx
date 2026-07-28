@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, use, useRef } from "react";
+import React, { useEffect, useState, use, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -11,6 +11,7 @@ import {
     IconCheck, IconX, IconAlertTriangle, IconClock, IconHash,
     IconEngine, IconSteeringWheel, IconLicense, IconCamera,
     IconMessageCircle, IconPlus, IconLoader2, IconArrowUpRight,
+    IconArrowsLeftRight,
 } from "@tabler/icons-react";
 import { StatusBadge, GlassCard } from "../../../components/fleet-ui";
 import { DropdownOptionSelect } from "../../../components/fleet-form-modal";
@@ -18,6 +19,7 @@ import { ImageUpload } from "@/components/admin/image-upload";
 import { FileUpload } from "@/components/admin/file-upload";
 import * as LucideIcons from "lucide-react";
 import { FleetRepairsTable } from "../../../components/fleet-repairs-table";
+import { PhotoCompareTile, CompareModeToggle, CompareMode, anglesFromInspection } from "../../../components/photo-compare";
 
 /* ─── helpers ─────────────────────────────────────── */
 const fmtDate = (d: any) => {
@@ -87,7 +89,7 @@ function NoData({ label }: { label: string }) {
 }
 
 /* ════════════════════════════════════════════════════ */
-const VALID_TABS = ["overview", "repairs", "inspections", "activity", "rentals", "communications"] as const;
+const VALID_TABS = ["overview", "repairs", "inspections", "compare", "activity", "rentals", "communications"] as const;
 type TabId = typeof VALID_TABS[number];
 
 export default function VehicleDetailPage({ params }: { params: Promise<{ id: string; tab: string }> }) {
@@ -144,6 +146,7 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
         { id: "overview",       label: "Overview",           icon: IconCar,            count: 0 },
         { id: "repairs",        label: "Repairs",            icon: IconTool,           count: data.repairs?.length || 0 },
         { id: "inspections",    label: "Inspections",        icon: IconClipboardCheck, count: data.dailyInspections?.length || 0 },
+        { id: "compare",        label: "Compare",            icon: IconArrowsLeftRight, count: 0 },
         { id: "activity",       label: "Activity Logs",      icon: IconActivity,       count: data.activityLogs?.length || 0 },
         { id: "rentals",        label: "Rental Agreements",  icon: IconFileInvoice,    count: data.rentalAgreements?.length || 0 },
         { id: "communications", label: "Communications",     icon: IconMessageCircle,  count: v.fleetCommunications?.length || 0 },
@@ -166,6 +169,7 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
                 </div>
             )}
             {activeTab === "inspections" && <InspectionsTab vehicleId={id} inspections={data.dailyInspections || []} />}
+            {activeTab === "compare" && <CompareTab vin={v.vin} inspections={data.dailyInspections || []} />}
             {activeTab === "activity" && <ActivityTab logs={data.activityLogs} />}
             {activeTab === "rentals" && <RentalsTab vehicleId={id} rentals={data.rentalAgreements} onUpdate={(r) => setData({...data, rentalAgreements: r})} />}
             {activeTab === "communications" && <CommunicationsTab vehicleId={id} communications={v.fleetCommunications || []} onUpdate={(updated) => setData({ ...data, vehicle: { ...v, fleetCommunications: updated } })} />}
@@ -407,6 +411,148 @@ function InspectionsTab({ vehicleId, inspections }: { vehicleId: string; inspect
                     })}
                 </tbody>
             </table>
+        </div>
+    );
+}
+
+/* ────────────────────────────────────────────────────
+   TAB: Compare — master/date-vs-date photo comparison
+   ──────────────────────────────────────────────────── */
+type CompareSpec = { kind: "master" } | { kind: "date"; value: string };
+
+function DateOrMasterPicker({
+    label, spec, onChange, hasMaster, maxDate,
+}: { label: string; spec: CompareSpec; onChange: (s: CompareSpec) => void; hasMaster: boolean; maxDate: string }) {
+    return (
+        <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-1.5">{label}</p>
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={() => hasMaster && onChange({ kind: "master" })}
+                    disabled={!hasMaster}
+                    title={hasMaster ? "Use Master Photo" : "No master photo set for this vehicle"}
+                    className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap ${spec.kind === "master"
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                        : "bg-card border-border text-muted-foreground hover:text-foreground"
+                        } ${!hasMaster ? "opacity-40 cursor-not-allowed" : ""}`}
+                >
+                    <span className="text-sm leading-none">★</span> Master
+                </button>
+                <input
+                    type="date"
+                    value={spec.kind === "date" ? spec.value : ""}
+                    max={maxDate}
+                    onChange={e => onChange({ kind: "date", value: e.target.value })}
+                    className={`flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-muted/50 border text-xs focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 ${spec.kind === "date" ? "border-primary/40" : "border-border"}`}
+                />
+            </div>
+        </div>
+    );
+}
+
+function CompareTab({ vin, inspections }: { vin: string; inspections: any[] }) {
+    const [lightbox, setLightbox] = useState<string | null>(null);
+    const [viewMode, setViewMode] = useState<CompareMode>("slider");
+
+    const hasMaster = inspections.some((i: any) => i.isStandardPhoto);
+    const sortedDates = [...inspections].sort((a: any, b: any) => new Date(b.routeDate).getTime() - new Date(a.routeDate).getTime());
+    const toDateStr = (d: any) => { try { return new Date(d).toISOString().split("T")[0]; } catch { return ""; } };
+    const mostRecentDate = sortedDates[0] ? toDateStr(sortedDates[0].routeDate) : "";
+    const secondDate = sortedDates[1] ? toDateStr(sortedDates[1].routeDate) : "";
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    const [specA, setSpecA] = useState<CompareSpec>(mostRecentDate ? { kind: "date", value: mostRecentDate } : { kind: "master" });
+    const [specB, setSpecB] = useState<CompareSpec>(hasMaster ? { kind: "master" } : { kind: "date", value: secondDate || mostRecentDate });
+
+    const [insA, setInsA] = useState<any>(null);
+    const [insB, setInsB] = useState<any>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchSide = useCallback(async (spec: CompareSpec) => {
+        const dateParam = spec.kind === "master" ? "master" : spec.value;
+        if (!dateParam) return null;
+        try {
+            const res = await fetch(`/api/fleet/inspections?section=inspection-by-date&vin=${encodeURIComponent(vin)}&date=${dateParam}`);
+            const j = await res.json();
+            return j.inspection || null;
+        } catch { return null; }
+    }, [vin]);
+
+    useEffect(() => {
+        if (!vin) return;
+        let cancelled = false;
+        setLoading(true); setError(null);
+        Promise.all([fetchSide(specA), fetchSide(specB)]).then(([a, b]) => {
+            if (cancelled) return;
+            setInsA(a); setInsB(b);
+            if (!a || !b) setError("No inspection found for one or both selections — try a different date.");
+        }).finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, [vin, specA, specB, fetchSide]);
+
+    if (!vin) return <p className="text-center py-12 text-xs text-muted-foreground/50">This vehicle has no VIN on file — comparisons require a VIN.</p>;
+    if (!inspections.length) return <NoData label="inspection" />;
+
+    const anglesA = anglesFromInspection(insA);
+    const anglesB = anglesFromInspection(insB);
+    const rows = anglesA.map((a, idx) => ({ ...a, otherUrl: anglesB[idx]?.url }));
+    const visibleRows = rows.filter(r => r.key !== "additionalPicture" || r.url || r.otherUrl);
+
+    const sideLabel = (spec: CompareSpec, insp: any) => spec.kind === "master" ? "★ Master" : (insp ? fmtDate(insp.routeDate) : "—");
+
+    return (
+        <div className="space-y-4">
+            {lightbox && (
+                <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+                    <button className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors" onClick={() => setLightbox(null)}>
+                        <IconX size={18} />
+                    </button>
+                    <img src={lightbox} alt="full" className="max-w-full max-h-full rounded-xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
+                </div>
+            )}
+
+            <GlassCard className="p-4">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+                        <DateOrMasterPicker label="Compare A" spec={specA} onChange={setSpecA} hasMaster={hasMaster} maxDate={todayStr} />
+                        <DateOrMasterPicker label="Compare B" spec={specB} onChange={setSpecB} hasMaster={hasMaster} maxDate={todayStr} />
+                    </div>
+                    <CompareModeToggle mode={viewMode} onChange={setViewMode} />
+                </div>
+            </GlassCard>
+
+            {loading && <p className="text-xs text-muted-foreground/50 text-center py-8">Loading comparison…</p>}
+
+            {error && !loading && (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                    <IconAlertTriangle size={14} className="flex-shrink-0" /> {error}
+                </div>
+            )}
+
+            {!loading && insA && insB && (
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs font-medium text-muted-foreground/70 px-1">
+                        <span>{sideLabel(specA, insA)}{insA.mileage ? ` · ${insA.mileage.toLocaleString()} mi` : ""}</span>
+                        <span>{sideLabel(specB, insB)}{insB.mileage ? ` · ${insB.mileage.toLocaleString()} mi` : ""}</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {visibleRows.map(row => (
+                            <div key={row.key}>
+                                <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-2">{row.label}</p>
+                                <PhotoCompareTile
+                                    mode={viewMode}
+                                    before={row.url}
+                                    after={row.otherUrl}
+                                    beforeLabel={sideLabel(specA, insA)}
+                                    afterLabel={sideLabel(specB, insB)}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

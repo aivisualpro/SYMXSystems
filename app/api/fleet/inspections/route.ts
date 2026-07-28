@@ -179,6 +179,40 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ master: enrichedMaster });
     }
 
+    // Resolve a single inspection for a VIN, either the Master (isStandardPhoto)
+    // or the nearest inspection on-or-before a given calendar date.
+    // Used by the vehicle-level "Compare" tab and the custom-date option on the
+    // inspection detail page's Compare dropdown.
+    if (section === "inspection-by-date") {
+      const vin = searchParams.get("vin");
+      const dateParam = searchParams.get("date"); // "YYYY-MM-DD" or "master"
+      const excludeId = searchParams.get("excludeId");
+      if (!vin || !dateParam) return NextResponse.json({ error: "vin and date required" }, { status: 400 });
+
+      const baseQuery: any = { vin };
+      if (excludeId) baseQuery._id = { $ne: excludeId };
+
+      let found: any = null;
+      if (dateParam === "master") {
+        found = await DailyInspection.findOne({ ...baseQuery, isStandardPhoto: true }).sort({ routeDate: -1 }).lean();
+      } else {
+        const onOrBefore = new Date(`${dateParam}T23:59:59.999Z`);
+        if (isNaN(onOrBefore.getTime())) return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+        found = await DailyInspection.findOne({ ...baseQuery, routeDate: { $lte: onOrBefore } }).sort({ routeDate: -1 }).lean();
+      }
+
+      if (!found) return NextResponse.json({ inspection: null });
+
+      const enriched = { ...found } as any;
+      const [emp, user] = await Promise.all([
+        found.driver ? SymxEmployee.findOne({ transporterId: found.driver }, { firstName: 1, lastName: 1 }).lean() : null,
+        found.inspectedBy ? SymxUser.findOne({ email: found.inspectedBy }, { name: 1 }).lean() : null,
+      ]);
+      if (emp) enriched.driverName = `${(emp as any).firstName || ""} ${(emp as any).lastName || ""}`.trim();
+      if (user) enriched.inspectedByName = (user as any).name;
+      return NextResponse.json({ inspection: enriched });
+    }
+
     if (section === "inspection-dropdowns" || section === "dropdowns") {
       const [employees, vehiclesList, inspectionTypes] = await Promise.all([
         SymxEmployee.find({}, { transporterId: 1, firstName: 1, lastName: 1 }).sort({ firstName: 1 }).lean(),
