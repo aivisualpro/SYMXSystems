@@ -62,10 +62,10 @@ export function ImageCompareSlider({
             onPointerDown={onDown}
         >
             <div className="absolute inset-0 bg-black/80">
-                {after ? <img src={after} alt={afterLabel} className="w-full h-full object-cover pointer-events-none" draggable={false} /> : <NoImage label={afterLabel} />}
+                {after ? <img src={after} alt={afterLabel} className="w-full h-full object-contain pointer-events-none" draggable={false} /> : <NoImage label={afterLabel} />}
             </div>
             <div ref={clipRef} className="absolute inset-0 bg-black/80" style={{ clipPath: "inset(0 50% 0 0)" }}>
-                {before ? <img src={before} alt={beforeLabel} className="w-full h-full object-cover pointer-events-none" draggable={false} /> : <NoImage label={beforeLabel} />}
+                {before ? <img src={before} alt={beforeLabel} className="w-full h-full object-contain pointer-events-none" draggable={false} /> : <NoImage label={beforeLabel} />}
             </div>
             <div ref={handleRef} className="absolute inset-y-0 pointer-events-none" style={{ left: "50%" }}>
                 <div className="absolute inset-y-0 -translate-x-1/2 w-0.5 bg-white/80 shadow-[0_0_12px_rgba(255,255,255,0.6)]" />
@@ -93,7 +93,7 @@ export function ImageSideBySide({
 }: { before?: string; after?: string; beforeLabel: string; afterLabel: string; aspectClass?: string }) {
     const tile = (url: string | undefined, label: string) => (
         <div className={`relative w-full ${aspectClass || "aspect-video"} overflow-hidden rounded-2xl bg-black/80`}>
-            {url ? <img src={url} alt={label} className="w-full h-full object-cover" /> : <NoImage label={label} />}
+            {url ? <img src={url} alt={label} className="w-full h-full object-contain" /> : <NoImage label={label} />}
             <div className="absolute top-2 left-2">
                 <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-sm text-[10px] font-semibold text-white border border-white/10">{label}</span>
             </div>
