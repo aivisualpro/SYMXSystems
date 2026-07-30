@@ -131,6 +131,13 @@ export default function VerbalCoachingsTab() {
   const [activePreset, setActivePreset] = useState<number | null>(null);
   const [sort, setSort] = useState<SortConfig>({ key: "coachingDate", direction: "desc" });
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  // Deleting a coaching is gated on the Write-Ups module's "delete" action
+  // (same permission that governs formal write-up deletion) — like
+  // canDelete on the Formal Write-Ups tab, this does NOT fall back to
+  // "allowed" when the role has no explicit Write-Ups permissions entry.
+  const [canDelete, setCanDelete] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState<any>(EMPTY_FORM);
@@ -165,6 +172,7 @@ export default function VerbalCoachingsTab() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load verbal coachings");
       setCoachings(json.coachings || []);
+      setSelectedIds(new Set());
     } catch (err: any) {
       notify.error(err.message || "Failed to load verbal coachings");
     } finally {
@@ -204,7 +212,12 @@ export default function VerbalCoachingsTab() {
       .catch(() => {});
     fetch("/api/user/permissions")
       .then((res) => res.json())
-      .then((d) => setIsSuperAdmin(d.role === "Super Admin"))
+      .then((d) => {
+        setIsSuperAdmin(d.role === "Super Admin");
+        if (d.role === "Super Admin") { setCanDelete(true); return; }
+        const perm = (d.permissions || []).find((p: any) => p.module === "Write-Ups");
+        setCanDelete(!!perm && perm.actions?.delete !== false);
+      })
       .catch(() => {});
   }, []);
 
@@ -237,6 +250,20 @@ export default function VerbalCoachingsTab() {
   }, [coachings, includeTerminated, employees]);
 
   const filtered = useMemo(() => sortByKey(visibleCoachings, sort), [visibleCoachings, sort]);
+
+  // ── Row selection ──
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const allVisibleSelected = filtered.length > 0 && filtered.every((c) => selectedIds.has(c._id));
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => (allVisibleSelected ? new Set() : new Set(filtered.map((c) => c._id))));
+  };
 
   const summary = useMemo(() => {
     const isNew = (c: VerbalCoaching) => !TERMINAL_STATUSES.includes(c.status);
@@ -412,7 +439,7 @@ export default function VerbalCoachingsTab() {
 
   const handleDelete = async () => {
     if (!selected) return;
-    if (!confirm(`Delete this verbal coaching for ${selected.employeeName}? This can't be undone.`)) return;
+    if (!confirm(`Permanently delete this verbal coaching for ${selected.employeeName}? This cannot be undone.`)) return;
     setDeleting(true);
     try {
       const res = await fetch(`/api/verbal-coachings/${selected._id}`, { method: "DELETE" });
@@ -425,6 +452,33 @@ export default function VerbalCoachingsTab() {
       notify.error(err.message || "Failed to delete");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = filtered.filter((c) => selectedIds.has(c._id)).map((c) => c._id);
+    if (ids.length === 0) return;
+    const names = filtered.filter((c) => selectedIds.has(c._id)).map((c) => c.employeeName);
+    const preview = names.slice(0, 5).join(", ") + (names.length > 5 ? `, +${names.length - 5} more` : "");
+    if (!confirm(`Permanently delete ${ids.length} verbal coaching${ids.length === 1 ? "" : "s"}?\n\n${preview}\n\nThis cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(
+        ids.map((id) => fetch(`/api/verbal-coachings/${id}`, { method: "DELETE" }).then(async (res) => {
+          if (!res.ok) {
+            const json = await res.json().catch(() => ({}));
+            throw new Error(json.error || "Failed to delete");
+          }
+        }))
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      const succeeded = results.length - failed;
+      if (failed === 0) notify.success(`Deleted ${succeeded} coaching${succeeded === 1 ? "" : "s"}`);
+      else notify.error(`Deleted ${succeeded}, failed to delete ${failed} — try again for the rest`);
+      setSelectedIds(new Set());
+      await load();
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -487,10 +541,32 @@ export default function VerbalCoachingsTab() {
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+          <span className="text-sm font-medium">{selectedIds.size} selected</span>
+          {(isSuperAdmin || canDelete) && (
+            <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Delete Selected
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear selection</Button>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
+              <th className="w-8 px-3 py-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary rounded cursor-pointer"
+                  checked={allVisibleSelected}
+                  onChange={toggleSelectAll}
+                  aria-label="Select all"
+                />
+              </th>
               <SortableHeader label="Date" sortKey="coachingDate" sort={sort} onSort={toggleSort} />
               <SortableHeader label="Employee" sortKey="employeeName" sort={sort} onSort={toggleSort} />
               <th className="px-3 py-2 text-left font-medium">Category</th>
@@ -502,24 +578,33 @@ export default function VerbalCoachingsTab() {
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></td></tr>}
-            {!loading && filtered.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">No verbal coachings found.</td></tr>}
+            {loading && <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></td></tr>}
+            {!loading && filtered.length === 0 && <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">No verbal coachings found.</td></tr>}
             {filtered.map((c) => (
-              <tr key={c._id} className="cursor-pointer border-t hover:bg-muted/30" onClick={() => openDetail(c)}>
-                <td className="px-3 py-2">{fmtDate(c.coachingDate)}</td>
-                <td className="px-3 py-2 font-medium">{c.employeeName}</td>
-                <td className="px-3 py-2">
+              <tr key={c._id} className="border-t hover:bg-muted/30">
+                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-primary rounded cursor-pointer"
+                    checked={selectedIds.has(c._id)}
+                    onChange={() => toggleSelectOne(c._id)}
+                    aria-label={`Select verbal coaching for ${c.employeeName}`}
+                  />
+                </td>
+                <td className="cursor-pointer px-3 py-2" onClick={() => openDetail(c)}>{fmtDate(c.coachingDate)}</td>
+                <td className="cursor-pointer px-3 py-2 font-medium" onClick={() => openDetail(c)}>{c.employeeName}</td>
+                <td className="cursor-pointer px-3 py-2" onClick={() => openDetail(c)}>
                   <div className="flex flex-wrap gap-1">
                     {c.categoryLabels.map((l, i) => <Badge key={i} variant="outline" className="text-xs">{l}</Badge>)}
                   </div>
                 </td>
-                <td className="px-3 py-2"><Badge className={STATUS_COLORS[c.status] || ""}>{STATUS_LABELS[c.status] || c.status}</Badge></td>
-                <td className="px-3 py-2 text-muted-foreground">{c.coachedBy || "—"}</td>
-                <td className="max-w-64 truncate px-3 py-2 text-muted-foreground" title={c.notes}>{c.notes || "—"}</td>
-                <td className="px-3 py-2">
+                <td className="cursor-pointer px-3 py-2" onClick={() => openDetail(c)}><Badge className={STATUS_COLORS[c.status] || ""}>{STATUS_LABELS[c.status] || c.status}</Badge></td>
+                <td className="cursor-pointer px-3 py-2 text-muted-foreground" onClick={() => openDetail(c)}>{c.coachedBy || "—"}</td>
+                <td className="max-w-64 cursor-pointer truncate px-3 py-2 text-muted-foreground" onClick={() => openDetail(c)} title={c.notes}>{c.notes || "—"}</td>
+                <td className="cursor-pointer px-3 py-2" onClick={() => openDetail(c)}>
                   {c.disputed ? <Badge className="bg-amber-500 text-white border-amber-600 text-xs">Disputed</Badge> : <span className="text-muted-foreground">—</span>}
                 </td>
-                <td className="px-3 py-2 text-xs italic text-muted-foreground">{c.linkedWriteupId ? "Escalated" : ""}</td>
+                <td className="cursor-pointer px-3 py-2 text-xs italic text-muted-foreground" onClick={() => openDetail(c)}>{c.linkedWriteupId ? "Escalated" : ""}</td>
               </tr>
             ))}
           </tbody>
@@ -738,7 +823,7 @@ export default function VerbalCoachingsTab() {
               )}
 
               <div className="flex items-center justify-between border-t pt-3">
-                {isSuperAdmin ? (
+                {(isSuperAdmin || canDelete) ? (
                   <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={handleDelete} disabled={deleting}>
                     {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Delete
                   </Button>

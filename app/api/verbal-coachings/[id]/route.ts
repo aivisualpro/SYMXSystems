@@ -74,14 +74,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-// Deletion is restricted to admins regardless of who else has Write-Ups
-// edit/delete access — a logged coaching (and its audit trail) shouldn't
-// be permanently removable by whoever happens to have general module
-// permissions. "Admin" is a virtual module no role can be granted through
-// the UI, so this is effectively Super Admin only.
+// Deletion is gated on the same Write-Ups "delete" action as formal
+// write-ups (Owner > Roles > Write-Ups > Delete), rather than the old
+// hardcoded Super-Admin-only "Admin" virtual module — an owner can now
+// grant coaching deletion to the same roles that can delete write-ups,
+// e.g. to let an HR admin clean up duplicates without full Super Admin
+// access. Still off by default for any role without an explicit Write-Ups
+// permissions entry.
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requirePermission("Admin", "delete");
+    await requirePermission("Write-Ups", "delete");
   } catch (e: any) {
     if (e.name === "ForbiddenError") return NextResponse.json({ error: e.message }, { status: 403 });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

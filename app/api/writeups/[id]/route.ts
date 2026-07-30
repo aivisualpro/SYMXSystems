@@ -87,16 +87,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-// DELETE /api/writeups/[id] — drafts (or historical bulk-imported records)
-// only; signed/escalated/closed write-ups are locked to preserve the audit
-// trail (see the immutability note on PUT above). Gated on the real
-// Write-Ups "delete" action (Owner > Roles > Write-Ups > Delete) rather
-// than the old hardcoded Super-Admin-only "Admin" virtual module, so an
-// owner can now grant this to specific admin roles — still off by default
-// for any role without an explicit Write-Ups permissions entry (see
-// requirePermission: no entry for a module denies, it isn't an implicit
-// allow), so nothing changes for roles that were never given Write-Ups
-// access at all.
+// DELETE /api/writeups/[id] — permanently deletes a write-up regardless of
+// status (draft, signed, or closed). Used to be restricted to drafts and
+// historical bulk-imported records to protect the audit trail, but cleaning
+// up duplicate/erroneous records (including already-signed ones) is a
+// legitimate admin task, so this is now gated purely on the real Write-Ups
+// "delete" action (Owner > Roles > Write-Ups > Delete) rather than a status
+// check — still off by default for any role without an explicit Write-Ups
+// permissions entry (see requirePermission: no entry for a module denies,
+// it isn't an implicit allow), so nothing changes for roles that were never
+// given Write-Ups access at all.
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requirePermission("Write-Ups", "delete");
@@ -110,9 +110,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     await connectToDatabase();
     const existing = await Writeup.findById(id);
     if (!existing) return NextResponse.json({ error: "Write-up not found" }, { status: 404 });
-    if (existing.status !== "draft" && !existing.isHistorical) {
-      return NextResponse.json({ error: "Only draft write-ups can be deleted." }, { status: 400 });
-    }
     await Writeup.findByIdAndDelete(id);
     return NextResponse.json({ success: true });
   } catch (error: any) {

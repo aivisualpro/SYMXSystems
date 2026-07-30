@@ -237,6 +237,7 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   // Gates the review-decision form — the server enforces this too
   // (Write-Ups: approve), this just avoids showing a button that will 403.
   const [canApprove, setCanApprove] = useState(true);
@@ -804,14 +805,16 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
     }
   };
 
-  // Drafts (or historical bulk-imported records) only — the server
-  // enforces this too; signed/escalated/closed write-ups are locked to
-  // preserve the audit trail.
-  const canDeleteSelected = !!selected && (selected.status === "draft" || selected.isHistorical);
+  // Any write-up can be deleted by someone with the Write-Ups "delete"
+  // permission (or Super Admin) — draft, signed, or historical. Used to be
+  // restricted to draft/historical only to protect the audit trail, but
+  // cleaning up duplicate/erroneous signed records is a legitimate admin
+  // task, so the gate is now purely permission-based (matches the server).
+  const canDeleteSelected = !!selected;
 
   const handleDeleteWriteup = async () => {
     if (!selected) return;
-    if (!confirm(`Delete this write-up for ${selected.employeeName}? This can't be undone.`)) return;
+    if (!confirm(`Permanently delete this write-up for ${selected.employeeName}? This cannot be undone.`)) return;
     setDeleting(true);
     try {
       const res = await fetch(`/api/writeups/${selected._id}`, { method: "DELETE" });
@@ -824,6 +827,33 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
       notify.error(err.message || "Failed to delete write-up");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = filtered.filter((w) => selectedIds.has(w._id)).map((w) => w._id);
+    if (ids.length === 0) return;
+    const names = filtered.filter((w) => selectedIds.has(w._id)).map((w) => w.employeeName);
+    const preview = names.slice(0, 5).join(", ") + (names.length > 5 ? `, +${names.length - 5} more` : "");
+    if (!confirm(`Permanently delete ${ids.length} write-up${ids.length === 1 ? "" : "s"}?\n\n${preview}\n\nThis cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(
+        ids.map((id) => fetch(`/api/writeups/${id}`, { method: "DELETE" }).then(async (res) => {
+          if (!res.ok) {
+            const json = await res.json().catch(() => ({}));
+            throw new Error(json.error || "Failed to delete");
+          }
+        }))
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      const succeeded = results.length - failed;
+      if (failed === 0) notify.success(`Deleted ${succeeded} write-up${succeeded === 1 ? "" : "s"}`);
+      else notify.error(`Deleted ${succeeded}, failed to delete ${failed} — try again for the rest`);
+      setSelectedIds(new Set());
+      await load();
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -949,6 +979,12 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
             {downloadingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
             Download Combined PDF
           </Button>
+          {(isSuperAdmin || canDelete) && (
+            <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Delete Selected
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Clear selection</Button>
         </div>
       )}
@@ -1452,8 +1488,6 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
                   <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={handleDeleteWriteup} disabled={deleting}>
                     {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Delete
                   </Button>
-                ) : (isSuperAdmin || canDelete) ? (
-                  <span className="text-xs italic text-muted-foreground">Signed/closed write-ups can't be deleted — preserved for the audit trail.</span>
                 ) : <span />}
                 <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
               </div>
