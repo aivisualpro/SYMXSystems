@@ -150,7 +150,7 @@ export async function recommendWarningLevel(
 
   const priorDocs = await Writeup.find(query)
     .sort({ incidentDate: -1 })
-    .select({ incidentDate: 1, warningLevel: 1, categoryLabel: 1, subCategory: 1 })
+    .select({ incidentDate: 1, warningLevel: 1, categoryLabel: 1, subCategory: 1, managerReview: 1, escalation: 1 })
     .lean();
 
   const priors: WriteupPrior[] = priorDocs.map((p: any) => ({
@@ -161,7 +161,24 @@ export async function recommendWarningLevel(
     subCategory: p.subCategory || "",
   }));
 
-  const hasSuspensionReview = priors.some((p) => p.warningLevel === "suspension_review");
+  // A prior Suspension Review write-up only keeps forcing future infractions
+  // in this category back to Suspension Review if HR's actual decision on it
+  // is still "active" — i.e. they suspended or terminated, or it's still
+  // awaiting review. If HR reviewed it and downgraded it ("warning stands,
+  // no suspension") or took no further action, that write-up shouldn't keep
+  // pinning the ladder at Suspension Review forever; the next infraction
+  // should fall back to the normal count-based recommendation instead.
+  // Checks both `managerReview` (current flow) and the legacy `escalation`
+  // field (pre-redesign records) for the same outcome.
+  const RESET_OUTCOMES = new Set(["downgraded", "no_action"]);
+  const wasResolvedAndReset = (p: any) => {
+    const outcome = p.managerReview?.outcome ?? p.escalation?.outcome;
+    return !!outcome && RESET_OUTCOMES.has(outcome);
+  };
+  const suspensionReviewPriors = priorDocs.filter((p: any) => p.warningLevel === "suspension_review");
+  const activeSuspensionReviewPriors = suspensionReviewPriors.filter((p: any) => !wasResolvedAndReset(p));
+  const hasSuspensionReview = activeSuspensionReviewPriors.length > 0;
+  const hadResetSuspensionReview = suspensionReviewPriors.length > 0 && !hasSuspensionReview;
   const priorCount = priors.length;
 
   // Sub-categories (Seatbelt, Speeding, etc.) still count separately from
@@ -187,11 +204,14 @@ export async function recommendWarningLevel(
     rationale = `This employee already has a Suspension Review write-up for ${categoryLabel}. This is a continued occurrence and should go to Admin/HR review before further action. ${totalCount} total ${categoryLabel} occurrence${totalCount === 1 ? "" : "s"} in the last ${lookbackDays} days: ${breakdownText}.`;
   } else {
     recommended = levelFromCount(priorCount, settings.escalationThresholds);
+    const resetNote = hadResetSuspensionReview
+      ? ` Note: a prior Suspension Review write-up for ${categoryLabel} exists but was downgraded/resolved with no further action by the reviewing manager, so it's no longer forcing this recommendation to Suspension Review.`
+      : "";
     if (priorCount === 0) {
-      rationale = `No prior ${categoryLabel} write-ups in the last ${lookbackDays} days. This is occurrence 1 (${currentLabel}). Recommending First Warning.`;
+      rationale = `No prior ${categoryLabel} write-ups in the last ${lookbackDays} days. This is occurrence 1 (${currentLabel}). Recommending First Warning.${resetNote}`;
     } else {
       const dates = formatDateList(priors.map((p) => p.incidentDate));
-      rationale = `This employee has ${priorCount} prior ${categoryLabel} write-up${priorCount === 1 ? "" : "s"} in the last ${lookbackDays} days. Previous date${priorCount === 1 ? "" : "s"}: ${dates}. Including this write-up, that's ${totalCount} total ${categoryLabel} occurrences: ${breakdownText}. This write-up has been auto-populated as ${WARNING_LEVEL_LABELS[recommended]}.`;
+      rationale = `This employee has ${priorCount} prior ${categoryLabel} write-up${priorCount === 1 ? "" : "s"} in the last ${lookbackDays} days. Previous date${priorCount === 1 ? "" : "s"}: ${dates}. Including this write-up, that's ${totalCount} total ${categoryLabel} occurrences: ${breakdownText}. This write-up has been auto-populated as ${WARNING_LEVEL_LABELS[recommended]}.${resetNote}`;
     }
   }
 
