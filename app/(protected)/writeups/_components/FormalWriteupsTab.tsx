@@ -1147,6 +1147,7 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
                     <span className="text-xs font-semibold">
                       {recommendation.totalCount} total {categories.find((c) => c._id === form.categoryId)?.description || "infraction"}{recommendation.totalCount === 1 ? "" : "s"}
                       {recommendation.lookbackDaysUsed ? ` in the last ${recommendation.lookbackDaysUsed} days` : ""}
+                      <span className="font-normal text-muted-foreground"> (including this write-up)</span>
                     </span>
                     <div className="flex flex-wrap gap-1">
                       {recommendation.categoryBreakdown.map((b, i) => (
