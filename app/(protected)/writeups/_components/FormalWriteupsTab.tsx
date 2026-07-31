@@ -85,6 +85,7 @@ interface Writeup {
   employeeName: string;
   categoryId?: string;
   categoryLabel: string;
+  subCategory?: string;
   warningLevel: string;
   warningLevelAuto: string;
   warningLevelOverrideReason?: string;
@@ -1005,9 +1006,9 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
               <SortableHeader label="Date" sortKey="incidentDate" sort={sort} onSort={toggleSort} />
               <SortableHeader label="Employee" sortKey="employeeName" sort={sort} onSort={toggleSort} />
               <SortableHeader label="Category" sortKey="categoryLabel" sort={sort} onSort={toggleSort} />
+              <SortableHeader label="Sub-Category" sortKey="subCategory" sort={sort} onSort={toggleSort} />
               <SortableHeader label="Warning Level" sortKey="warningLevel" sort={sort} onSort={toggleSort} />
               <SortableHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
-              <SortableHeader label={workbenchMode ? "Issued By" : "Manager"} sortKey="managerName" sort={sort} onSort={toggleSort} />
             </tr>
           </thead>
           <tbody>
@@ -1038,6 +1039,7 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
                 <td className="cursor-pointer px-3 py-2" onClick={() => openDetail(w)}>{fmtDate(w.incidentDate)}</td>
                 <td className="cursor-pointer px-3 py-2 font-medium" onClick={() => openDetail(w)}>{w.employeeName}</td>
                 <td className="cursor-pointer px-3 py-2" onClick={() => openDetail(w)}><Badge variant="outline">{w.categoryLabel}</Badge></td>
+                <td className="cursor-pointer px-3 py-2 text-muted-foreground" onClick={() => openDetail(w)}>{w.subCategory || "—"}</td>
                 <td className="cursor-pointer px-3 py-2" onClick={() => openDetail(w)}>
                   <Badge className={WARNING_LEVEL_COLORS[w.warningLevel] || ""}>{WARNING_LEVEL_LABELS[w.warningLevel] || w.warningLevel}</Badge>
                 </td>
@@ -1054,7 +1056,6 @@ export default function FormalWriteupsTab({ workbenchMode = false, onCountChange
                   </span>
                   {isPendingReview(w) && <span className="ml-1 text-muted-foreground">({daysSince(w.reviewQueuedAt || w.escalatedAt)}d)</span>}
                 </td>
-                <td className="cursor-pointer px-3 py-2 text-muted-foreground" onClick={() => openDetail(w)}>{w.managerName}</td>
               </tr>
             ))}
           </tbody>
