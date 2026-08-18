@@ -694,6 +694,7 @@ function MessagingSubTab({
   setFromNumber,
   setFromNumberDisplay,
   loadingPhones,
+  phoneNumbersError,
   prefetchedEmployees,
   employeesLoading,
   routeTypeMap,
@@ -721,6 +722,7 @@ function MessagingSubTab({
   setFromNumber: (id: string) => void;
   setFromNumberDisplay: (n: string) => void;
   loadingPhones: boolean;
+  phoneNumbersError: string | null;
   prefetchedEmployees?: EmployeeRecipient[];
   employeesLoading: boolean;
   routeTypeMap: Record<string, string>;
@@ -1104,7 +1106,7 @@ function MessagingSubTab({
     }
 
     if (!fromNumber) {
-      notify.error("No phone number configured. Please check your OpenPhone account.");
+      notify.error(phoneNumbersError || "No phone number configured. Please check your OpenPhone account.");
       return;
     }
 
@@ -1610,7 +1612,7 @@ function MessagingSubTab({
                   </Select>
                 ) : (
                   <p className="text-[11px] text-destructive italic">
-                    ⚠ No phone numbers found in OpenPhone account. Messages cannot be sent.
+                    ⚠ {phoneNumbersError || "No phone numbers found in OpenPhone account."} Messages cannot be sent.
                   </p>
                 )}
               </div>
@@ -1953,12 +1955,22 @@ export default function MessagingPanel({
   const [fromNumber, setFromNumber] = useState(""); // phoneNumberId
   const [fromNumberDisplay, setFromNumberDisplay] = useState(""); // readable number
   const [loadingPhones, setLoadingPhones] = useState(true);
+  // Surfaces WHY no number loaded (bad/missing API key, OpenPhone account has
+  // no numbers, network failure, etc.) instead of only the generic "No phone
+  // number configured" message a manager would otherwise see when they try
+  // to send — that message alone gives no clue whether it's our config or
+  // OpenPhone's account/key that needs attention.
+  const [phoneNumbersError, setPhoneNumbersError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPhoneNumbers = async () => {
       try {
         const res = await fetch("/api/messaging/phone-numbers");
         const data = await res.json();
+        if (!res.ok || data.error) {
+          setPhoneNumbersError(data.error || `Failed to load phone numbers (HTTP ${res.status})`);
+          return;
+        }
         if (data.data) {
           setPhoneNumbers(
             data.data.map((pn: any) => ({
@@ -1970,10 +1982,12 @@ export default function MessagingPanel({
           if (data.data.length > 0) {
             setFromNumber(data.data[0].id);
             setFromNumberDisplay(data.data[0].phoneNumber);
+          } else {
+            setPhoneNumbersError("Your OpenPhone account has no phone numbers on it — add one in OpenPhone, then reload this page.");
           }
         }
-      } catch {
-        // silently fail
+      } catch (err: any) {
+        setPhoneNumbersError(err?.message || "Failed to reach the messaging service.");
       } finally {
         setLoadingPhones(false);
       }
@@ -2400,6 +2414,7 @@ export default function MessagingPanel({
                   setFromNumber={setFromNumber}
                   setFromNumberDisplay={setFromNumberDisplay}
                   loadingPhones={loadingPhones}
+                  phoneNumbersError={phoneNumbersError}
                   routeTypeMap={routeTypeMap}
                   routeIconMap={routeIconMap}
                   prefetchedEmployees={employeesByTab[tab.id]}
