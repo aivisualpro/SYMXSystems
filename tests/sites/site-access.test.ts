@@ -147,6 +147,59 @@ describe("site lookups", () => {
   });
 });
 
+describe("seasonal sites", () => {
+  // DFO3 is a real seasonal (peak-season) station. Closing it must not
+  // destroy anything — records keep their ownership and stay queryable —
+  // and reopening it must restore access without re-granting anything.
+  it("closing a seasonal site removes it from org-wide access", async () => {
+    await Site.updateOne({ _id: fx.sites.c._id }, { $set: { status: "inactive" } });
+    const access = await resolveUserSiteAccess(sessionFor(fx.users.orgAdmin));
+    expect(access.allowedSiteIds).not.toContain(String(fx.sites.c._id));
+    expect(access.allowedSiteIds).toHaveLength(2);
+  });
+
+  it("reopening a seasonal site restores access with no re-granting", async () => {
+    await Site.updateOne({ _id: fx.sites.c._id }, { $set: { status: "inactive" } });
+    await Site.updateOne({ _id: fx.sites.c._id }, { $set: { status: "active" } });
+    const access = await resolveUserSiteAccess(sessionFor(fx.users.orgAdmin));
+    expect(access.allowedSiteIds).toContain(String(fx.sites.c._id));
+    expect(access.allowedSiteIds).toHaveLength(3);
+  });
+
+  it("a closed site is deactivated, never deleted — history stays intact", async () => {
+    await Site.updateOne({ _id: fx.sites.c._id }, { $set: { status: "inactive" } });
+    const stillThere = await Site.findById(fx.sites.c._id).lean();
+    expect(stillThere).toBeTruthy();
+    expect((stillThere as any).status).toBe("inactive");
+    expect((stillThere as any).siteType).toBe("seasonal");
+  });
+
+  it("records the site's nature separately from whether it is open", async () => {
+    const seasonal = await Site.findById(fx.sites.c._id).lean();
+    const permanent = await Site.findById(fx.sites.a._id).lean();
+    expect((seasonal as any).siteType).toBe("seasonal");
+    expect((permanent as any).siteType).toBe("permanent");
+    // Both are open right now — siteType and status are independent axes.
+    expect((seasonal as any).status).toBe("active");
+    expect((permanent as any).status).toBe("active");
+  });
+
+  it("a user assigned only to a closed seasonal site keeps the assignment on record", async () => {
+    // Someone who worked peak season at DFO3: the site closes, but their
+    // assignment history must survive for audit purposes.
+    await UserSiteAssignment.create({
+      userId: fx.users.unassigned._id, siteId: fx.sites.c._id,
+      roleName: "Dispatcher", isPrimary: true, startDate: new Date(), endDate: null,
+    });
+    await Site.updateOne({ _id: fx.sites.c._id }, { $set: { status: "inactive" } });
+
+    const stillOnRecord = await UserSiteAssignment.findOne({
+      userId: fx.users.unassigned._id, siteId: fx.sites.c._id,
+    }).lean();
+    expect(stillOnRecord).toBeTruthy();
+  });
+});
+
 describe("data model constraints", () => {
   it("prevents duplicate active assignments to the same site", async () => {
     await expect(

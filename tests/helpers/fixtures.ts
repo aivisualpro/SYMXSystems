@@ -10,8 +10,10 @@
  * B" look identical when there is no C. A third site catches scoping bugs
  * that treat "not mine" as a single bucket.
  *
- * Nothing here hard-codes a site count into application code; the fixtures
- * simply exercise N > 1.
+ * Mirrors the real roster (DFO2 default / DXC8 permanent / DFO3 seasonal)
+ * so tests exercise the same shape as production — in particular a seasonal
+ * site that can be closed mid-life. The site codes appear ONLY in fixtures
+ * and the seed script; no application code branches on them.
  */
 import mongoose from "mongoose";
 import Organization from "@/lib/models/Organization";
@@ -107,9 +109,12 @@ export async function seedMultiSiteOrg(): Promise<MultiSiteFixture> {
   const orgId = org._id as mongoose.Types.ObjectId;
 
   const [siteA, siteB, siteC] = await Promise.all([
-    Site.create({ organizationId: orgId, name: "Site A", slug: "site-a", code: "SA", status: "active", isDefault: true }),
-    Site.create({ organizationId: orgId, name: "Site B", slug: "site-b", code: "SB", status: "active", isDefault: false }),
-    Site.create({ organizationId: orgId, name: "Site C", slug: "site-c", code: "SC", status: "active", isDefault: false }),
+    // a = DFO2: the default/backfill target, mirrors today's single site
+    Site.create({ organizationId: orgId, name: "DFO2", slug: "dfo2", code: "DFO2", siteType: "permanent", status: "active", isDefault: true }),
+    // b = DXC8: second permanent station
+    Site.create({ organizationId: orgId, name: "DXC8", slug: "dxc8", code: "DXC8", siteType: "permanent", status: "active", isDefault: false }),
+    // c = DFO3: seasonal — the site tests close and reopen
+    Site.create({ organizationId: orgId, name: "DFO3", slug: "dfo3", code: "DFO3", siteType: "seasonal", status: "active", isDefault: false }),
   ]);
 
   const dispatcherRole = await makeRole("Dispatcher", FULL_ACTIONS);

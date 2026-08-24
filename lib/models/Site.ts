@@ -18,11 +18,14 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 // Sites are never hard-coded anywhere. Code that needs "the current
 // sites" reads this collection; adding a fourth site is inserting a row.
 
+export type SiteType = "permanent" | "seasonal";
+
 export interface ISite extends Document {
   organizationId: mongoose.Types.ObjectId;
   name: string;
   slug: string;
   code: string;
+  siteType: SiteType;
   address: string;
   status: "active" | "inactive";
   isDefault: boolean;
@@ -37,7 +40,16 @@ const SiteSchema: Schema = new Schema(
     // URL-safe identifier used in deep links and the ?site= query param.
     slug: { type: String, required: true, index: true },
     // Short human-facing code for tables, exports, and printed PDFs.
+    // In practice this is the Amazon station code (DFO2, DXC8, DFO3).
     code: { type: String, default: "" },
+    // Seasonal sites (peak-season stations) open and close. The open/closed
+    // state itself is `status` below — this field records the site's NATURE,
+    // which matters for reporting: a year-over-year comparison that silently
+    // includes a station that only ran for ten weeks is misleading, so
+    // reports can choose to separate or annotate seasonal sites.
+    // Closing a seasonal site sets status:"inactive"; it is never deleted,
+    // so its history stays queryable and its records keep their ownership.
+    siteType: { type: String, enum: ["permanent", "seasonal"], default: "permanent", index: true },
     address: { type: String, default: "" },
     status: { type: String, enum: ["active", "inactive"], default: "active", index: true },
     // Exactly one site carries isDefault. During the migration it is the
