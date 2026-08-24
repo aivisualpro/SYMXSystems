@@ -1,0 +1,60 @@
+import mongoose, { Schema, Document, Model } from "mongoose";
+
+// ── Multi-site: Site ──────────────────────────────────────────────────
+// An operating location. Every piece of operational data (routes,
+// schedules, inspections, write-ups, HR records, scorecards) is owned by
+// exactly one Site, and that ownership is immutable once written — a
+// record belongs forever to the site that produced it, even if the
+// employee or vehicle involved later transfers elsewhere.
+//
+// Deliberately NOT on this model:
+//   • `timezone` — all sites are in California; timezone lives on
+//     Organization. Adding it here would invite per-site drift for no
+//     current benefit.
+//   • `state` — same reason. California labor rules (daily/weekly OT,
+//     meal waivers) apply org-wide, so the timecard audit stays
+//     org-level rather than becoming a per-site rules engine.
+//
+// Sites are never hard-coded anywhere. Code that needs "the current
+// sites" reads this collection; adding a fourth site is inserting a row.
+
+export interface ISite extends Document {
+  organizationId: mongoose.Types.ObjectId;
+  name: string;
+  slug: string;
+  code: string;
+  address: string;
+  status: "active" | "inactive";
+  isDefault: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const SiteSchema: Schema = new Schema(
+  {
+    organizationId: { type: Schema.Types.ObjectId, ref: "Organization", required: true, index: true },
+    name: { type: String, required: true },
+    // URL-safe identifier used in deep links and the ?site= query param.
+    slug: { type: String, required: true, index: true },
+    // Short human-facing code for tables, exports, and printed PDFs.
+    code: { type: String, default: "" },
+    address: { type: String, default: "" },
+    status: { type: String, enum: ["active", "inactive"], default: "active", index: true },
+    // Exactly one site carries isDefault. During the migration it is the
+    // site every pre-existing record is backfilled to, and the fallback
+    // any legacy code path resolves to while the compatibility shim is
+    // still in place. A site is never deleted — closing one sets
+    // status: "inactive" so its history stays queryable.
+    isDefault: { type: Boolean, default: false, index: true },
+  },
+  { timestamps: true, collection: "SYMXSites" }
+);
+
+// Slug is unique per organization, not globally — the org boundary is the
+// real namespace even though there is only one org today.
+SiteSchema.index({ organizationId: 1, slug: 1 }, { unique: true });
+SiteSchema.index({ organizationId: 1, status: 1 });
+
+const Site: Model<ISite> = mongoose.models.Site || mongoose.model<ISite>("Site", SiteSchema);
+
+export default Site;

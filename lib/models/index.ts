@@ -1,4 +1,10 @@
 
+// ── Multi-site hierarchy (Organization → Site → assignments) ──
+export { default as Organization } from './Organization';
+export { default as Site } from './Site';
+export { default as UserSiteAssignment } from './UserSiteAssignment';
+export { default as OrgRoleGrant } from './OrgRoleGrant';
+
 export { default as DailyInspection } from './DailyInspection';
 export { default as DropdownOption } from './DropdownOption';
 export { default as MessageLog } from './MessageLog';
