@@ -19,6 +19,12 @@ export interface IVerbalCoachingSignature {
 }
 
 export interface IVerbalCoaching extends Document {
+  // ── Multi-site ──
+  // The station that owned this coaching when it was logged. Immutable —
+  // a later transfer does not move the record. Optional during the
+  // migration window; required after the Phase 5 contract step.
+  siteId?: mongoose.Types.ObjectId;
+
   transporterId: string;
   employeeId?: mongoose.Types.ObjectId;
   employeeName: string;
@@ -74,6 +80,8 @@ const VerbalCoachingSignatureSchema = new Schema(
 
 const VerbalCoachingSchema = new Schema<IVerbalCoaching>(
   {
+    siteId: { type: Schema.Types.ObjectId, ref: "Site", index: true },
+
     transporterId: { type: String, index: true },
     employeeId: { type: Schema.Types.ObjectId, ref: "SymxEmployee", index: true },
     employeeName: { type: String, default: "" },
@@ -103,6 +111,9 @@ const VerbalCoachingSchema = new Schema<IVerbalCoaching>(
   { timestamps: true, collection: "SYMXVerbalCoachings" }
 );
 
+// Leading siteId on the hot read paths, so scoping stays index-backed.
+VerbalCoachingSchema.index({ siteId: 1, coachingDate: -1 });
+VerbalCoachingSchema.index({ siteId: 1, status: 1, coachingDate: -1 });
 VerbalCoachingSchema.index({ employeeId: 1, coachingDate: -1 });
 VerbalCoachingSchema.index({ status: 1, coachingDate: -1 });
 

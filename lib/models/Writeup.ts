@@ -82,6 +82,13 @@ export interface IWriteupManagerReview {
 }
 
 export interface IWriteup extends Document {
+  // ── Multi-site ──
+  // The station that OWNED this write-up when it was issued. Immutable:
+  // if the employee later transfers, this record stays with the station
+  // where the incident actually happened. Optional during the migration
+  // window; required once the Phase 5 contract step lands.
+  siteId?: mongoose.Types.ObjectId;
+
   transporterId: string;
   employeeId?: mongoose.Types.ObjectId;
   employeeName: string;
@@ -245,6 +252,8 @@ const WriteupManagerReviewSchema = new Schema(
 
 const WriteupSchema = new Schema<IWriteup>(
   {
+    siteId: { type: Schema.Types.ObjectId, ref: "Site", index: true },
+
     transporterId: { type: String, index: true },
     employeeId: { type: Schema.Types.ObjectId, ref: "SymxEmployee", index: true },
     employeeName: { type: String, default: "" },
@@ -292,6 +301,10 @@ const WriteupSchema = new Schema<IWriteup>(
   { timestamps: true, collection: "SYMXWriteups" }
 );
 
+// Leading siteId on the hot read paths — without these, scoping turns a
+// full-collection scan into a filtered full-collection scan.
+WriteupSchema.index({ siteId: 1, incidentDate: -1 });
+WriteupSchema.index({ siteId: 1, status: 1, incidentDate: -1 });
 WriteupSchema.index({ employeeId: 1, categoryId: 1, incidentDate: -1 });
 WriteupSchema.index({ status: 1, incidentDate: -1 });
 WriteupSchema.index({ isHistorical: 1 });

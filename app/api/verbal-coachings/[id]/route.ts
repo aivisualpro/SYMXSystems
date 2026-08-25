@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import VerbalCoaching from "@/lib/models/VerbalCoaching";
+import { getRequestScope, canAccessRecord } from "@/lib/scoped-query";
 import DropdownOption from "@/lib/models/DropdownOption";
 
 const TERMINAL_STATUSES = ["completed", "unable_to_coach"];
@@ -19,6 +20,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     await connectToDatabase();
     const coaching = await VerbalCoaching.findById(id).lean();
     if (!coaching) return NextResponse.json({ error: "Verbal coaching not found" }, { status: 404 });
+
+    // 404 rather than 403 — a 403 would confirm the record exists.
+    const scope = await getRequestScope();
+    if (!canAccessRecord(scope, coaching as any)) {
+      return NextResponse.json({ error: "Verbal coaching not found" }, { status: 404 });
+    }
     return NextResponse.json({ coaching });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Failed to fetch verbal coaching" }, { status: 500 });
@@ -42,6 +49,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const existing = await VerbalCoaching.findById(id);
     if (!existing) return NextResponse.json({ error: "Verbal coaching not found" }, { status: 404 });
+
+    const scope = await getRequestScope();
+    if (!canAccessRecord(scope, existing as any)) {
+      return NextResponse.json({ error: "Verbal coaching not found" }, { status: 404 });
+    }
 
     const update: any = {};
     for (const key of EDITABLE_FIELDS) {
@@ -91,8 +103,22 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   try {
     const { id } = await params;
     await connectToDatabase();
-    const deleted = await VerbalCoaching.findByIdAndDelete(id);
-    if (!deleted) return NextResponse.json({ error: "Verbal coaching not found" }, { status: 404 });
+
+    // Fetch-then-check before deleting. This route previously called
+    // findByIdAndDelete directly, which is a one-step destructive operation
+    // with no opportunity to verify station ownership — someone could have
+    // deleted another station's coaching by ID alone. This is precisely the
+    // class of miss the query-guard plugin in Phase 3 is meant to catch
+    // mechanically rather than by review.
+    const existing = await VerbalCoaching.findById(id);
+    if (!existing) return NextResponse.json({ error: "Verbal coaching not found" }, { status: 404 });
+
+    const scope = await getRequestScope();
+    if (!canAccessRecord(scope, existing as any)) {
+      return NextResponse.json({ error: "Verbal coaching not found" }, { status: 404 });
+    }
+
+    await VerbalCoaching.findByIdAndDelete(id);
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Failed to delete verbal coaching" }, { status: 500 });

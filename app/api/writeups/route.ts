@@ -5,6 +5,7 @@ import connectToDatabase from "@/lib/db";
 import Writeup from "@/lib/models/Writeup";
 import DropdownOption from "@/lib/models/DropdownOption";
 import { recommendWarningLevel, getCorrectiveActionTemplate, getVerbalCoachingContext } from "@/lib/writeup-logic";
+import { getRequestScope, siteFilter, resolveWriteSiteId } from "@/lib/scoped-query";
 
 // GET /api/writeups?status=&employeeId=&categoryId=&search=&from=&to=
 // Manager/dispatcher/admin tool — employees don't have their own login in
@@ -27,7 +28,19 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
 
-    const query: any = {};
+    // ── Site scoping ──
+    // Restricts results to the station(s) currently in view. Applied here
+    // rather than in the UI: a frontend filter is a display convenience,
+    // not a boundary, and would be trivially bypassed by calling the API
+    // directly.
+    //
+    // includeUnassigned covers the migration window — write-ups created
+    // before this field existed have no siteId and would otherwise vanish
+    // from the list mid-migration. Remove once the backfill is complete
+    // and siteId is required (Phase 5).
+    const scope = await getRequestScope();
+    const query: any = { ...siteFilter(scope, { includeUnassigned: true }) };
+
     // "pending_review" also catches the legacy "escalated" status (same
     // meaning, pre-redesign records only) so old suspension-only cases that
     // never got resolved still surface in the Review Workbench.
@@ -96,7 +109,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Override reason must be at least 10 characters" }, { status: 400 });
     }
 
+    // ── Owning station ──
+    // Resolved from the request scope, never taken blindly from the body —
+    // a client-supplied siteId would let anyone plant a write-up at another
+    // station. A body value is accepted only as the user's own form choice,
+    // and is still validated against their real access.
+    //
+    // Null means the target is ambiguous (viewing several stations at once).
+    // Refuse rather than guess: silently filing a disciplinary record
+    // against the wrong station is worse than making someone pick.
+    const scope = await getRequestScope();
+    const siteId = resolveWriteSiteId(scope, body.siteId);
+    if (!siteId) {
+      return NextResponse.json(
+        {
+          error:
+            scope.activeSiteIds.length > 1
+              ? "You're viewing multiple stations. Select a single station before creating a write-up."
+              : "No station selected. Ask an administrator to assign you to a station.",
+        },
+        { status: 400 }
+      );
+    }
+
     const writeup = await Writeup.create({
+      siteId,
       transporterId: body.transporterId || "",
       employeeId: body.employeeId,
       employeeName: body.employeeName || "",

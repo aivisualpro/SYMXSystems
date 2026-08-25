@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import VerbalCoaching from "@/lib/models/VerbalCoaching";
+import { getRequestScope, siteFilter, resolveWriteSiteId } from "@/lib/scoped-query";
 import DropdownOption from "@/lib/models/DropdownOption";
 
 // GET /api/verbal-coachings?status=&employeeId=&categoryId=&search=&from=&to=
@@ -24,7 +25,11 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
 
-    const query: any = {};
+    // Site scoping — enforced server-side. includeUnassigned keeps
+    // pre-migration records visible during the backfill window; drop it
+    // once siteId is required (Phase 5).
+    const scope = await getRequestScope();
+    const query: any = { ...siteFilter(scope, { includeUnassigned: true }) };
     // "new" as a filter also pulls in the legacy "scheduled" bucket from
     // historical imports — both mean "not yet actioned."
     if (status === "new") query.status = { $in: ["new", "scheduled"] };
@@ -94,7 +99,23 @@ export async function POST(req: NextRequest) {
       };
     }
 
+    // Owning station from the scope, never trusted from the body.
+    const writeScope = await getRequestScope();
+    const siteId = resolveWriteSiteId(writeScope, body.siteId);
+    if (!siteId) {
+      return NextResponse.json(
+        {
+          error:
+            writeScope.activeSiteIds.length > 1
+              ? "You're viewing multiple stations. Select a single station before logging a coaching."
+              : "No station selected. Ask an administrator to assign you to a station.",
+        },
+        { status: 400 }
+      );
+    }
+
     const coaching = await VerbalCoaching.create({
+      siteId,
       transporterId: body.transporterId || "",
       employeeId: body.employeeId,
       employeeName: body.employeeName || "",

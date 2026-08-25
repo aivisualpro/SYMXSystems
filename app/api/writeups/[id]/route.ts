@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import Writeup from "@/lib/models/Writeup";
+import { getRequestScope, canAccessRecord } from "@/lib/scoped-query";
 
 const EDITABLE_FIELDS = [
   "incidentDate",
@@ -26,6 +27,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     await connectToDatabase();
     const writeup = await Writeup.findById(id).lean();
     if (!writeup) return NextResponse.json({ error: "Write-up not found" }, { status: 404 });
+
+    // Object-level station check. Returns 404 rather than 403 on purpose:
+    // 403 confirms the record exists, letting someone enumerate another
+    // station's write-up IDs. "Not found" reveals nothing.
+    const scope = await getRequestScope();
+    if (!canAccessRecord(scope, writeup as any)) {
+      return NextResponse.json({ error: "Write-up not found" }, { status: 404 });
+    }
+
     return NextResponse.json({ writeup });
   } catch (error: any) {
     console.error("Error fetching writeup:", error);
@@ -54,6 +64,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const existing = await Writeup.findById(id);
     if (!existing) return NextResponse.json({ error: "Write-up not found" }, { status: 404 });
+
+    // Station ownership — 404 not 403, so another station's record IDs
+    // can't be enumerated by probing for the difference.
+    const scope = await getRequestScope();
+    if (!canAccessRecord(scope, existing as any)) {
+      return NextResponse.json({ error: "Write-up not found" }, { status: 404 });
+    }
     if (existing.status !== "draft") {
       return NextResponse.json({ error: "This write-up has already been signed/closed and can no longer be edited. Create a new write-up instead." }, { status: 400 });
     }
@@ -110,6 +127,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     await connectToDatabase();
     const existing = await Writeup.findById(id);
     if (!existing) return NextResponse.json({ error: "Write-up not found" }, { status: 404 });
+
+    // Station ownership — 404 not 403, so another station's record IDs
+    // can't be enumerated by probing for the difference.
+    const scope = await getRequestScope();
+    if (!canAccessRecord(scope, existing as any)) {
+      return NextResponse.json({ error: "Write-up not found" }, { status: 404 });
+    }
     await Writeup.findByIdAndDelete(id);
     return NextResponse.json({ success: true });
   } catch (error: any) {
