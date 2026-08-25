@@ -10,9 +10,15 @@
  * Staging-only. Reassigning which station owns a disciplinary record is
  * falsifying history; it is a test fixture, not an operation.
  *
+ * Prefer verifying isolation with REAL data where you can: create a
+ * write-up while a station is selected and confirm it appears only there.
+ * That exercises the write path and the read path at once, and doesn't
+ * leave records attributed to a station the employee never worked at.
+ *
  * Usage:
- *   node scripts/staging/move-records-to-station.mjs DXC8 --writeups=20 --coachings=10
  *   node scripts/staging/move-records-to-station.mjs --status
+ *   node scripts/staging/move-records-to-station.mjs DXC8 --writeups=20 --coachings=10
+ *   node scripts/staging/move-records-to-station.mjs --restore   # everything back to the default station
  */
 import { MongoClient } from "mongodb";
 import path from "path";
@@ -25,6 +31,7 @@ const env = loadEnv(rootDir);
 
 const args = process.argv.slice(2);
 const STATUS_ONLY = args.includes("--status");
+const RESTORE = args.includes("--restore");
 const targetCode = (args.find((a) => !a.startsWith("--")) || "").toUpperCase();
 const numArg = (flag, fallback) => {
   const hit = args.find((a) => a.startsWith(`--${flag}=`));
@@ -61,6 +68,31 @@ async function main() {
 
   if (STATUS_ONLY) {
     await report();
+    await mongo.close();
+    return;
+  }
+
+  if (RESTORE) {
+    // Undo any fabricated moves — put every record back on the default
+    // station, which is where it genuinely belongs. Reattributing a
+    // disciplinary record to a station the employee never worked at is
+    // exactly the kind of falsified history this script warns about, so
+    // getting back to the truthful state needs to be one command.
+    const defaultSite = sites.find((s) => s.isDefault);
+    if (!defaultSite) throw new Error("No default station found.");
+
+    console.log(`Restoring every record to ${defaultSite.code}…\n`);
+    for (const name of ["SYMXWriteups", "SYMXVerbalCoachings"]) {
+      const res = await db
+        .collection(name)
+        .updateMany({ siteId: { $ne: defaultSite._id } }, { $set: { siteId: defaultSite._id } });
+      console.log(`  ${name}: restored ${res.modifiedCount}`);
+    }
+    await report();
+    console.log(
+      `\nOther stations are now empty, which is the truth — they have no history in this system yet.\n` +
+        `To verify isolation with real data, create a write-up while another station is selected.`
+    );
     await mongo.close();
     return;
   }
