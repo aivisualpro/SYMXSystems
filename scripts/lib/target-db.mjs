@@ -129,6 +129,53 @@ export function resolveTargetDb(env, { scriptName = "script" } = {}) {
   return { uri, label, isProduction, host, dbName };
 }
 
+/**
+ * Connects, turning MongoDB's two unhelpful failure messages into
+ * actionable ones.
+ *
+ * "Server selection timed out" almost always means the current IP isn't on
+ * the Atlas allow-list — which happens routinely when switching machines,
+ * networks, or VPNs. The raw message says nothing about that, so it reads
+ * like the cluster is down.
+ */
+export async function connectWithDiagnostics(MongoClient, uri, opts = {}) {
+  const client = new MongoClient(uri, { serverSelectionTimeoutMS: 15000, ...opts });
+  try {
+    await client.connect();
+    // connect() can resolve before the topology is usable; a ping proves it.
+    await client.db().command({ ping: 1 });
+    return client;
+  } catch (e) {
+    const msg = String(e?.message || e);
+
+    if (/Server selection timed out|ETIMEDOUT|ENOTFOUND|querySrv/i.test(msg)) {
+      throw new Error(
+        `Could not reach ${hostFromUri(uri)}.\n\n` +
+          `The usual cause is that this machine's IP address isn't on the Atlas\n` +
+          `allow-list — it changes when you switch machines, networks or VPNs.\n\n` +
+          `Fix:\n` +
+          `  1. https://cloud.mongodb.com → Network Access → IP Access List\n` +
+          `  2. "ADD IP ADDRESS" → "ADD CURRENT IP ADDRESS" → Confirm\n` +
+          `  3. Wait for the entry to show "Active" (~30s), then re-run\n\n` +
+          `Also worth checking: a VPN or corporate network blocking port 27017.\n\n` +
+          `Underlying error: ${msg}`
+      );
+    }
+
+    if (/Authentication failed|bad auth/i.test(msg)) {
+      throw new Error(
+        `MongoDB rejected the credentials for ${hostFromUri(uri)}.\n\n` +
+          `Check the username and password in the connection string. Note that\n` +
+          `MongoDB's wording here ("Authentication failed") is identical to the\n` +
+          `app's own generic login error, so this is easy to misread as an app bug.\n\n` +
+          `Underlying error: ${msg}`
+      );
+    }
+
+    throw e;
+  }
+}
+
 /** Interactive y/N confirmation. Auto-yes with --yes for scripted runs. */
 export async function confirm(question) {
   if (process.argv.includes("--yes") || process.argv.includes("-y")) {

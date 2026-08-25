@@ -16,7 +16,7 @@
 import { MongoClient } from "mongodb";
 import path from "path";
 import { fileURLToPath } from "url";
-import { loadEnv, hostFromUri, dbNameFromUri, looksNonProduction } from "../lib/target-db.mjs";
+import { loadEnv, hostFromUri, dbNameFromUri, looksNonProduction, connectWithDiagnostics } from "../lib/target-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "../..");
@@ -34,8 +34,7 @@ async function main() {
     );
   }
 
-  const mongo = new MongoClient(uri);
-  await mongo.connect();
+  const mongo = await connectWithDiagnostics(MongoClient, uri);
   const db = mongo.db();
 
   const users = await db

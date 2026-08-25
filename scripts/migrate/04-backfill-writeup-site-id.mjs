@@ -17,7 +17,7 @@
 import { MongoClient } from "mongodb";
 import path from "path";
 import { fileURLToPath } from "url";
-import { loadEnv, resolveTargetDb } from "../lib/target-db.mjs";
+import { loadEnv, resolveTargetDb, connectWithDiagnostics } from "../lib/target-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "../..");
@@ -29,8 +29,7 @@ const { uri: TARGET_URI } = resolveTargetDb(env, { scriptName: "04-backfill-writ
 const COLLECTIONS = ["SYMXWriteups", "SYMXVerbalCoachings"];
 
 async function main() {
-  const mongo = new MongoClient(TARGET_URI);
-  await mongo.connect();
+  const mongo = await connectWithDiagnostics(MongoClient, TARGET_URI);
   const db = mongo.db();
 
   const defaultSite = await db.collection("SYMXSites").findOne({ isDefault: true });

@@ -27,7 +27,7 @@
 import { MongoClient } from "mongodb";
 import path from "path";
 import { fileURLToPath } from "url";
-import { loadEnv, resolveTargetDb } from "../lib/target-db.mjs";
+import { loadEnv, resolveTargetDb, connectWithDiagnostics } from "../lib/target-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "../..");
@@ -45,8 +45,7 @@ const env = loadEnv(rootDir);
 const { uri: TARGET_URI } = resolveTargetDb(env, { scriptName: "02-backfill-user-site-assignments" });
 
 async function main() {
-  const mongo = new MongoClient(TARGET_URI);
-  await mongo.connect();
+  const mongo = await connectWithDiagnostics(MongoClient, TARGET_URI);
   const db = mongo.db();
   const siteCol = db.collection("SYMXSites");
   const userCol = db.collection("SYMXUsers");

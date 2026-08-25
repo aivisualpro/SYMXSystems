@@ -19,7 +19,7 @@ import bcrypt from "bcrypt";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { loadEnv, hostFromUri, dbNameFromUri } from "../lib/target-db.mjs";
+import { loadEnv, hostFromUri, dbNameFromUri, connectWithDiagnostics } from "../lib/target-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "../..");

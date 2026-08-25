@@ -26,7 +26,7 @@ import { MongoClient } from "mongodb";
 import bcrypt from "bcrypt";
 import path from "path";
 import { fileURLToPath } from "url";
-import { loadEnv, hostFromUri, dbNameFromUri, looksNonProduction, confirm } from "../lib/target-db.mjs";
+import { loadEnv, hostFromUri, dbNameFromUri, looksNonProduction, confirm, connectWithDiagnostics } from "../lib/target-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "../..");
@@ -131,10 +131,8 @@ async function main() {
     }
   }
 
-  const srcClient = new MongoClient(sourceUri);
-  const dstClient = new MongoClient(destUri);
-  await srcClient.connect();
-  await dstClient.connect();
+  const srcClient = await connectWithDiagnostics(MongoClient, sourceUri);
+  const dstClient = await connectWithDiagnostics(MongoClient, destUri);
   const src = srcClient.db();
   const dst = dstClient.db();
 
