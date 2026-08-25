@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 // Single-document collection (station-scoped app, so just one row).
 // Configures the progressive-discipline ladder used by
@@ -179,6 +180,12 @@ const WriteupSettingsSchema = new Schema<IWriteupSettings>(
   },
   { timestamps: { createdAt: false, updatedAt: true }, collection: "SYMXWriteupSettings" }
 );
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+WriteupSettingsSchema.plugin(siteOwned);
 
 const WriteupSettings =
   mongoose.models.WriteupSettings ||

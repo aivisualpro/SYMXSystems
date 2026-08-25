@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxNotification extends Document {
   title: string;
@@ -19,6 +20,12 @@ const SymxNotificationSchema: Schema = new Schema({
   relatedId: { type: String },
   link: { type: String }
 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxNotificationSchema.plugin(siteOwned, { sortField: "createdAt" });
 
 const SymxNotification: Model<ISymxNotification> = mongoose.models.SymxNotification || mongoose.model<ISymxNotification>('SymxNotification', SymxNotificationSchema);
 

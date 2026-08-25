@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 // ── Messaging status entry (one per event in the lifecycle) ──
 export interface IMessageStatusEntry {
@@ -73,6 +74,12 @@ SymxEmployeeScheduleSchema.index({ yearWeek: 1, transporterId: 1, date: 1 });
 // Index for daily filters
 SymxEmployeeScheduleSchema.index({ date: 1 });
 SymxEmployeeScheduleSchema.index({ typeId: 1 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxEmployeeScheduleSchema.plugin(siteOwned, { sortField: "date" });
 
 const SymxEmployeeSchedule: Model<ISymxEmployeeSchedule> =
   mongoose.models.SymxEmployeeSchedule ||

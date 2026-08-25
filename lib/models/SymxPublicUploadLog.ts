@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 // Lightweight abuse-throttling log for unauthenticated upload endpoints
 // (currently just the public reimbursement receipt uploader). Each
@@ -20,6 +21,12 @@ const SymxPublicUploadLogSchema = new Schema<ISymxPublicUploadLog>(
   },
   { collection: "symxpublicuploadlogs" }
 );
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxPublicUploadLogSchema.plugin(siteOwned, { sortField: "createdAt" });
 
 const SymxPublicUploadLog =
   mongoose.models.SymxPublicUploadLog ||

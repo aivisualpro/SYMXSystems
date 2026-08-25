@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IScoreCardRTS extends Document {
   week: string;
@@ -30,6 +31,12 @@ const ScoreCardRTSSchema: Schema = new Schema({
 
 // Unique: transporterId + trackingId to avoid duplicates
 ScoreCardRTSSchema.index({ week: 1, transporterId: 1, trackingId: 1, plannedDeliveryDate: 1 }, { unique: true });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+ScoreCardRTSSchema.plugin(siteOwned, { sortField: "week" });
 
 const ScoreCardRTS: Model<IScoreCardRTS> =
   mongoose.models.ScoreCardRTS ||

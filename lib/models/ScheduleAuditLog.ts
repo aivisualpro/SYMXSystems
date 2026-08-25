@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IScheduleAuditLog extends Document {
     yearWeek: string;           // e.g. "2026-W10"
@@ -32,6 +33,12 @@ const ScheduleAuditLogSchema: Schema = new Schema({
 // Compound index for fast querying
 ScheduleAuditLogSchema.index({ yearWeek: 1, createdAt: -1 });
 ScheduleAuditLogSchema.index({ transporterId: 1, yearWeek: 1 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+ScheduleAuditLogSchema.plugin(siteOwned, { sortField: "date" });
 
 const ScheduleAuditLog: Model<IScheduleAuditLog> =
     mongoose.models.ScheduleAuditLog ||

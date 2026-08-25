@@ -1,5 +1,6 @@
 
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxDeliveryExcellence extends Document {
   week: string;
@@ -151,6 +152,12 @@ const SymxDeliveryExcellenceSchema: Schema = new Schema({
 
 // Add compound index for Week + Transporter ID to ensure uniqueness logic is optimized for lookups
 SymxDeliveryExcellenceSchema.index({ week: 1, transporterId: 1 }, { unique: true });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxDeliveryExcellenceSchema.plugin(siteOwned, { sortField: "week" });
 
 const SymxDeliveryExcellence: Model<ISymxDeliveryExcellence> = mongoose.models.SymxDeliveryExcellence || mongoose.model<ISymxDeliveryExcellence>('SymxDeliveryExcellence', SymxDeliveryExcellenceSchema);
 

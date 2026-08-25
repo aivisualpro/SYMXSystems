@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IScoreCardCDFNegative extends Document {
   week: string;
@@ -37,6 +38,12 @@ const ScoreCardCDFNegativeSchema: Schema = new Schema({
 }, { timestamps: true, collection: 'ScoreCard_CDF_Negative' });
 
 ScoreCardCDFNegativeSchema.index({ week: 1, deliveryAssociate: 1, trackingId: 1 }, { unique: true });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+ScoreCardCDFNegativeSchema.plugin(siteOwned, { sortField: "week" });
 
 const ScoreCardCDFNegative: Model<IScoreCardCDFNegative> =
   mongoose.models.ScoreCardCDFNegative ||

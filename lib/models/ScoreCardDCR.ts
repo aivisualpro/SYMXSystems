@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IScoreCardDCR extends Document {
   week: string;
@@ -51,6 +52,12 @@ const ScoreCardDCRSchema: Schema = new Schema({
 }, { timestamps: true, collection: 'ScoreCard_DCR' });
 
 ScoreCardDCRSchema.index({ week: 1, transporterId: 1 }, { unique: true });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+ScoreCardDCRSchema.plugin(siteOwned, { sortField: "week" });
 
 const ScoreCardDCR: Model<IScoreCardDCR> =
   mongoose.models.ScoreCardDCR ||

@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ICoachingWriteUpFile {
   name: string;
@@ -91,6 +92,12 @@ const SYMXCoachingWriteUpSchema = new Schema<ISYMXCoachingWriteUp>(
 // Compound index for upsert deduplication
 SYMXCoachingWriteUpSchema.index({ employeeId: 1, incidentDate: 1 });
 SYMXCoachingWriteUpSchema.index({ transporterId: 1, incidentDate: 1 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SYMXCoachingWriteUpSchema.plugin(siteOwned, { sortField: "incidentDate" });
 
 const SYMXCoachingWriteUp =
   mongoose.models.SYMXCoachingWriteUp ||

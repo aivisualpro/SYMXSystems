@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISYMXRoutesInfo extends Document {
     date: Date;
@@ -44,6 +45,12 @@ const SYMXRoutesInfoSchema = new Schema<ISYMXRoutesInfo>(
 // Each row is unique per date + rowIndex
 SYMXRoutesInfoSchema.index({ date: 1, rowIndex: 1 }, { unique: true });
 SYMXRoutesInfoSchema.index({ date: 1 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SYMXRoutesInfoSchema.plugin(siteOwned, { sortField: "date" });
 
 const SYMXRoutesInfo: Model<ISYMXRoutesInfo> =
     mongoose.models.SYMXRoutesInfo ||

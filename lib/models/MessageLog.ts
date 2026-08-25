@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IMessageLog extends Document {
     // OpenPhone message ID — set after successful send, updated on webhook events
@@ -70,6 +71,12 @@ MessageLogSchema.index({ fromNumber: 1 });
 MessageLogSchema.index({ messageType: 1, sentAt: -1 });
 // Index for week-based history lookups
 MessageLogSchema.index({ yearWeek: 1, messageType: 1, sentAt: -1 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+MessageLogSchema.plugin(siteOwned, { sortField: "createdAt" });
 
 const MessageLog: Model<IMessageLog> =
     mongoose.models.MessageLog ||

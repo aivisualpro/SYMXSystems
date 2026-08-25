@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxEmployeeNote extends Document {
   employeeId: mongoose.Types.ObjectId;
@@ -21,6 +22,12 @@ const SymxEmployeeNoteSchema: Schema = new Schema(
 
 // Index for per-employee note lookups and aggregate counts
 SymxEmployeeNoteSchema.index({ transporterId: 1, createdAt: -1 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxEmployeeNoteSchema.plugin(siteOwned, { sortField: "createdAt" });
 
 const SymxEmployeeNote =
   mongoose.models.SYMXEmployeeNote ||

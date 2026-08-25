@@ -1,5 +1,6 @@
 
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxPhotoOnDelivery extends Document {
   week: string;
@@ -48,6 +49,12 @@ const SymxPhotoOnDeliverySchema: Schema = new Schema({
 SymxPhotoOnDeliverySchema.index({ week: 1, transporterId: 1 }, { unique: true });
 
 // Prevent overwrite error in dev hot reloading
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxPhotoOnDeliverySchema.plugin(siteOwned, { sortField: "week" });
+
 const SymxPhotoOnDelivery: Model<ISymxPhotoOnDelivery> = mongoose.models.SymxPhotoOnDelivery || mongoose.model<ISymxPhotoOnDelivery>('SymxPhotoOnDelivery', SymxPhotoOnDeliverySchema);
 
 export default SymxPhotoOnDelivery;

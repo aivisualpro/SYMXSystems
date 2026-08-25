@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISYMXRoute extends Document {
     // ── Core identifiers ──
@@ -189,6 +190,12 @@ SYMXRouteSchema.index({ yearWeek: 1, transporterId: 1 });
 SYMXRouteSchema.index({ typeId: 1 });                   // primary type filter
 SYMXRouteSchema.index({ van: 1 });                      // for vehicle name lookups
 SYMXRouteSchema.index({ date: 1, type: 1 });             // for daily filters + type exclusion (fleet dashboard)
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SYMXRouteSchema.plugin(siteOwned, { sortField: "date" });
 
 const SYMXRoute: Model<ISYMXRoute> =
     mongoose.models.SYMXRoute ||

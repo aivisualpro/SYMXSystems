@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IDailyInspection extends Document {
     // Route / schedule
@@ -104,6 +105,12 @@ DailyInspectionSchema.index({ vin: 1, isStandardPhoto: 1 });
 DailyInspectionSchema.index({ routeId: 1, timeStamp: -1 });
 // Text index for full-text search (much faster than $regex)
 DailyInspectionSchema.index({ vin: 'text', driver: 'text', routeId: 'text', inspectedBy: 'text', comments: 'text' }, { name: 'inspection_text_search' });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+DailyInspectionSchema.plugin(siteOwned, { sortField: "routeDate" });
 
 const DailyInspection: Model<IDailyInspection> =
     mongoose.models.DailyInspection ||

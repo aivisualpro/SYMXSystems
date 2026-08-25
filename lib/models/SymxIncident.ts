@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxIncident extends Document {
   transporterId: string;
@@ -128,6 +129,12 @@ SymxIncidentSchema.index({ transporterId: 1, incidentDate: 1 });
 SymxIncidentSchema.index({ claimNumber: 1 }, { sparse: true });
 SymxIncidentSchema.index({ claimStatus: 1, incidentDate: -1 });
 SymxIncidentSchema.index({ insurancePolicyId: 1 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxIncidentSchema.plugin(siteOwned, { sortField: "incidentDate" });
 
 const SymxIncident =
   mongoose.models.SymxIncident ||

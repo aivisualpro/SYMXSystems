@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IVehicleRentalAgreement extends Document {
   vehicleId: mongoose.Types.ObjectId;
@@ -34,6 +35,12 @@ const VehicleRentalAgreementSchema: Schema = new Schema({
 // Compound indexes for dashboard aggregate queries
 VehicleRentalAgreementSchema.index({ registrationEndDate: 1, amount: 1 });
 VehicleRentalAgreementSchema.index({ createdAt: -1 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+VehicleRentalAgreementSchema.plugin(siteOwned);
 
 const VehicleRentalAgreement: Model<IVehicleRentalAgreement> = mongoose.models.VehicleRentalAgreement || mongoose.model<IVehicleRentalAgreement>('VehicleRentalAgreement', VehicleRentalAgreementSchema);
 

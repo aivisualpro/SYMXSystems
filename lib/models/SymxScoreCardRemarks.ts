@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IScoreCardRemarksHistory {
   action: 'created' | 'updated';
@@ -48,6 +49,12 @@ const SymxScoreCardRemarksSchema: Schema = new Schema({
 
 // Compound unique index: one record per driver per week
 SymxScoreCardRemarksSchema.index({ transporterId: 1, week: 1 }, { unique: true });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxScoreCardRemarksSchema.plugin(siteOwned, { sortField: "week" });
 
 const SymxScoreCardRemarks: Model<ISymxScoreCardRemarks> =
   mongoose.models.SymxScoreCardRemarks ||

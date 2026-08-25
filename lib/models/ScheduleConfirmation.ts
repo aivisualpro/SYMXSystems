@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 import crypto from "crypto";
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IScheduleConfirmation extends Document {
     token: string;
@@ -67,6 +68,12 @@ ScheduleConfirmationSchema.index({ yearWeek: 1, messageType: 1, scheduleDate: 1 
 ScheduleConfirmationSchema.index({ messageLogId: 1 });
 // Compound index for transporterId-based lookups (messaging pre-fetch, confirmation portal)
 ScheduleConfirmationSchema.index({ transporterId: 1, yearWeek: 1, messageType: 1 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+ScheduleConfirmationSchema.plugin(siteOwned);
 
 const ScheduleConfirmation: Model<IScheduleConfirmation> =
     mongoose.models.ScheduleConfirmation ||

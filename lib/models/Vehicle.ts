@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteAssigned } from "./plugins/site-owned";
 
 export interface IVehicle extends Document {
   vin: string;
@@ -84,6 +85,13 @@ VehicleSchema.index({ ownership: 1 });
 VehicleSchema.index({ createdAt: -1 });
 VehicleSchema.index({ status: 1, vehicleName: 1 });
 VehicleSchema.index({ vehicleName: 1 });
+
+// ── Multi-site ──
+// ORG-owned but assigned to a station, and transferable. Distinct
+// from site-owned records' `siteId`: `currentSiteId` is a mutable fact
+// about today, not history. Records already produced keep their own
+// siteId when this changes.
+VehicleSchema.plugin(siteAssigned, "currentSiteId");
 
 const Vehicle: Model<IVehicle> = mongoose.models.Vehicle || mongoose.model<IVehicle>('Vehicle', VehicleSchema);
 

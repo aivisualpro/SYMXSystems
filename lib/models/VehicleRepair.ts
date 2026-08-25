@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IVehicleRepair extends Document {
   vehicleId: mongoose.Types.ObjectId;
@@ -55,6 +56,12 @@ VehicleRepairSchema.index({ currentStatus: 1, creationDate: -1 });
 VehicleRepairSchema.index({ unitNumber: 1, creationDate: -1 });
 // Text index for server-side full-text search (much faster than $regex)
 VehicleRepairSchema.index({ vin: 'text', description: 'text', unitNumber: 'text', currentStatus: 'text' }, { name: 'repair_text_search' });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+VehicleRepairSchema.plugin(siteOwned);
 
 const VehicleRepair: Model<IVehicleRepair> = mongoose.models.VehicleRepair || mongoose.model<IVehicleRepair>('VehicleRepair', VehicleRepairSchema);
 

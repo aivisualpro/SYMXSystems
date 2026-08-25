@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 // Single-document collection (station-scoped app, so just one row) — mirrors
 // SymxHrTicketSettings. Configures the public reimbursement intake form: who
@@ -20,6 +21,12 @@ const SymxReimbursementSettingsSchema = new Schema<ISymxReimbursementSettings>(
   },
   { timestamps: true, collection: "symxreimbursementsettings" }
 );
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxReimbursementSettingsSchema.plugin(siteOwned);
 
 const SymxReimbursementSettings =
   mongoose.models.SymxReimbursementSettings ||

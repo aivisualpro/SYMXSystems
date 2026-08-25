@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxInterview extends Document {
   fullName?: string;
@@ -125,6 +126,12 @@ const SymxInterviewSchema = new Schema<ISymxInterview>(
 
 SymxInterviewSchema.index({ fullName: 1 });
 SymxInterviewSchema.index({ status: 1 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxInterviewSchema.plugin(siteOwned, { sortField: "createdAt" });
 
 const SymxInterview =
   mongoose.models.SymxInterview ||

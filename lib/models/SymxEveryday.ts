@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxEveryday extends Document {
   date: string;
@@ -49,6 +50,12 @@ const SymxEverydaySchema: Schema = new Schema(
     collection: 'SYMXEveryday',
   }
 );
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxEverydaySchema.plugin(siteOwned, { sortField: "date" });
 
 const SymxEveryday =
   mongoose.models.SymxEveryday ||

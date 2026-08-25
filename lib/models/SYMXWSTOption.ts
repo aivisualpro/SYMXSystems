@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISYMXWSTOption extends Document {
     wst: string;
@@ -21,6 +22,12 @@ const SYMXWSTOptionSchema = new Schema<ISYMXWSTOption>(
     { timestamps: true, collection: "SYMXWSTOptions" }
 );
 
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SYMXWSTOptionSchema.plugin(siteOwned);
 
 const SYMXWSTOption: Model<ISYMXWSTOption> =
     mongoose.models.SYMXWSTOption ||

@@ -1,5 +1,6 @@
 
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteAssigned } from "./plugins/site-owned";
 
 export interface ISymxEmployee extends Document {
   firstName: string;
@@ -141,6 +142,13 @@ const SymxEmployeeSchema: Schema = new Schema({
 SymxEmployeeSchema.index({ status: 1, phoneNumber: 1 });
 SymxEmployeeSchema.index({ email: 1 });
 SymxEmployeeSchema.index({ phoneNumber: 1 });
+
+// ── Multi-site ──
+// ORG-owned but assigned to a station, and transferable. Distinct
+// from site-owned records' `siteId`: `primarySiteId` is a mutable fact
+// about today, not history. Records already produced keep their own
+// siteId when this changes.
+SymxEmployeeSchema.plugin(siteAssigned, "primarySiteId");
 
 const SymxEmployee: Model<ISymxEmployee> = mongoose.models.SymxEmployee || mongoose.model<ISymxEmployee>('SymxEmployee', SymxEmployeeSchema);
 

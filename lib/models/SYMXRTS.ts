@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISYMXRTS extends Document {
     routeId: mongoose.Types.ObjectId;
@@ -20,5 +21,11 @@ const symxRTSSchema = new Schema<ISYMXRTS>(
     },
     { timestamps: true, collection: "SYMXRTS" }
 );
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+symxRTSSchema.plugin(siteOwned, { sortField: "date" });
 
 export default mongoose.models.SYMXRTS || mongoose.model<ISYMXRTS>("SYMXRTS", symxRTSSchema);

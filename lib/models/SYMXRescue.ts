@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISYMXRescue extends Document {
     routeId: mongoose.Types.ObjectId;
@@ -24,5 +25,11 @@ const symxRescueSchema = new Schema<ISYMXRescue>(
     },
     { timestamps: true, collection: "SYMXRescue" }
 );
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+symxRescueSchema.plugin(siteOwned, { sortField: "date" });
 
 export default mongoose.models.SYMXRescue || mongoose.model<ISYMXRescue>("SYMXRescue", symxRescueSchema);

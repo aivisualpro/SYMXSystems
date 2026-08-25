@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 // Redesigned reimbursement lifecycle (July 2026). Three actors feed this
 // collection: a driver submitting their own itemized request through the
@@ -170,6 +171,12 @@ SymxReimbursementSchema.pre("save", function () {
     if (!this.category) this.category = this.items[0]?.category;
   }
 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxReimbursementSchema.plugin(siteOwned, { sortField: "createdAt", extraIndexes: [["status"]] });
 
 const SymxReimbursement =
   mongoose.models.SymxReimbursement ||

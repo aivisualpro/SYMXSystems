@@ -1,5 +1,6 @@
 
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxDVICVehicleInspection extends Document {
   week: string;                // Auto-calculated from startDate, e.g. "2026-W05"
@@ -48,6 +49,12 @@ SymxDVICVehicleInspectionSchema.index({ week: 1 });
 SymxDVICVehicleInspectionSchema.index({ startDate: 1 });
 
 // Prevent overwrite error in dev hot reloading
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxDVICVehicleInspectionSchema.plugin(siteOwned, { sortField: "week" });
+
 const SymxDVICVehicleInspection: Model<ISymxDVICVehicleInspection> =
   mongoose.models.SymxDVICVehicleInspection ||
   mongoose.model<ISymxDVICVehicleInspection>('SymxDVICVehicleInspection', SymxDVICVehicleInspectionSchema);

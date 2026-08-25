@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IVehicleActivityLog extends Document {
   vehicleId: mongoose.Types.ObjectId;
@@ -26,6 +27,12 @@ const VehicleActivityLogSchema: Schema = new Schema({
   timestamps: true, 
   collection: 'vehiclesActivityLogs' 
 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+VehicleActivityLogSchema.plugin(siteOwned, { sortField: "startDate" });
 
 const VehicleActivityLog: Model<IVehicleActivityLog> = mongoose.models.VehicleActivityLog || mongoose.model<IVehicleActivityLog>('VehicleActivityLog', VehicleActivityLogSchema);
 

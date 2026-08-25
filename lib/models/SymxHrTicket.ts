@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 // The real ticket lifecycle used by the admin workbench. approveDeny (below)
 // is kept only for backward compatibility — the HR dashboard's pending/
@@ -134,6 +135,12 @@ const SymxHrTicketSchema = new Schema<ISymxHrTicket>(
 );
 
 SymxHrTicketSchema.index({ transporterId: 1, ticketNumber: 1 });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxHrTicketSchema.plugin(siteOwned, { sortField: "createdAt", extraIndexes: [["status"]] });
 
 const SymxHrTicket =
   mongoose.models.SymxHrTicket ||

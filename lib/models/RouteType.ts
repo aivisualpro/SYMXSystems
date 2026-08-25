@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface IRouteType extends Document {
     name: string;        // e.g. "Route", "Open", "Close"
@@ -39,6 +40,12 @@ const RouteTypeSchema: Schema = new Schema({
 if (mongoose.models.RouteType) {
     delete mongoose.models.RouteType;
 }
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+RouteTypeSchema.plugin(siteOwned);
 
 const RouteType: Model<IRouteType> = mongoose.model<IRouteType>('RouteType', RouteTypeSchema);
 

@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 // Hot reload trigger: ensure route-itinerary is loaded
 
 export interface IMessagingTemplate extends Document {
@@ -23,6 +24,12 @@ const MessagingTemplateSchema = new Schema<IMessagingTemplate>(
   },
   { timestamps: true }
 );
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+MessagingTemplateSchema.plugin(siteOwned);
 
 delete mongoose.models.MessagingTemplate;
 

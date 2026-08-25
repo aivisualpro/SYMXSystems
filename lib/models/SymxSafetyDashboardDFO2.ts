@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxSafetyDashboardDFO2 extends Document {
   week: string;
@@ -40,6 +41,12 @@ const SymxSafetyDashboardDFO2Schema: Schema = new Schema({
 
 // Compound index for upsert: one record per event per driver per week
 SymxSafetyDashboardDFO2Schema.index({ week: 1, transporterId: 1, eventId: 1 }, { unique: true });
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxSafetyDashboardDFO2Schema.plugin(siteOwned, { sortField: "week" });
 
 const SymxSafetyDashboardDFO2: Model<ISymxSafetyDashboardDFO2> =
   mongoose.models.SymxSafetyDashboardDFO2 ||

@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteOwned } from "./plugins/site-owned";
 
 // Single-document collection (station-scoped app, so just one row) — mirrors
 // the WriteupSettings pattern. Configures the public HR ticket intake form:
@@ -19,6 +20,12 @@ const SymxHrTicketSettingsSchema = new Schema<ISymxHrTicketSettings>(
   },
   { timestamps: true, collection: "symxhrticketsettings" }
 );
+
+// ── Multi-site ──
+// Station that owns these records. Immutable: a later transfer does
+// not move history. Optional during the migration window; required
+// after the Phase 5 contract step.
+SymxHrTicketSettingsSchema.plugin(siteOwned);
 
 const SymxHrTicketSettings =
   mongoose.models.SymxHrTicketSettings ||
