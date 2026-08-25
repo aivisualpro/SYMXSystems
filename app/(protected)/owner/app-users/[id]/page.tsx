@@ -20,6 +20,7 @@ import {
   Lock
 } from "lucide-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { UserStationAccess } from "./_components/UserStationAccess";
 import {
   Dialog,
   DialogContent,
@@ -294,6 +295,9 @@ export default function UserDetailsPage() {
             </div>
          </div>
       </div>
+
+      {/* Which stations this user can see */}
+      {user?._id && <UserStationAccess userId={String(user._id)} />}
 
       {/* Edit User Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

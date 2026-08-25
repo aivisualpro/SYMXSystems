@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { IconUsers, IconSearch, IconPlus, IconShield } from "@tabler/icons-react";
+import { IconUsers, IconSearch, IconPlus, IconShield, IconBuildingWarehouse } from "@tabler/icons-react";
 
 // ── Owner Context ─────────────────────────────────────────────────────
 interface OwnerContextType {
@@ -30,6 +30,7 @@ export function useOwner() {
 const tabs = [
     { id: "app-users", label: "App Users", icon: IconUsers, href: "/owner/app-users" },
     { id: "roles", label: "Roles & Permissions", icon: IconShield, href: "/owner/roles" },
+    { id: "sites", label: "Stations", icon: IconBuildingWarehouse, href: "/owner/sites" },
 ];
 
 // ── Layout ────────────────────────────────────────────────────────────
@@ -87,8 +88,10 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
     // Determine active tab
     const isAppUsersPage = pathname === "/owner/app-users" || pathname === "/owner";
     const isRolesListPage = pathname === "/owner/roles";
+    // Stations manages its own header content (create button lives on the page).
+    const isSitesPage = pathname === "/owner/sites";
     // Detail pages (e.g. /owner/roles/[id]) manage their own header — layout should not interfere
-    const isTopLevelPage = isAppUsersPage || isRolesListPage;
+    const isTopLevelPage = isAppUsersPage || isRolesListPage || isSitesPage;
     const userCount = users.length;
 
     // Stable ref for search
@@ -123,16 +126,20 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
 
         setRightContent(
             <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="relative">
-                    <IconSearch size={14} className="absolute left-2 sm:left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                        ref={searchInputRef}
-                        defaultValue=""
-                        onChange={(e) => setSearchRef.current(e.target.value)}
-                        placeholder="Search..."
-                        className="pl-7 sm:pl-8 pr-2 sm:pr-3 py-1 sm:py-1.5 rounded-lg bg-muted/50 border border-border text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 w-24 sm:w-48"
-                    />
-                </div>
+                {/* Stations has its own toolbar and no search — showing a
+                    non-functional search box there would just be misleading. */}
+                {!isSitesPage && (
+                    <div className="relative">
+                        <IconSearch size={14} className="absolute left-2 sm:left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <input
+                            ref={searchInputRef}
+                            defaultValue=""
+                            onChange={(e) => setSearchRef.current(e.target.value)}
+                            placeholder="Search..."
+                            className="pl-7 sm:pl-8 pr-2 sm:pr-3 py-1 sm:py-1.5 rounded-lg bg-muted/50 border border-border text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 w-24 sm:w-48"
+                        />
+                    </div>
+                )}
                 {isAppUsersPage && (
                     <button
                         onClick={openAddUser}
@@ -148,7 +155,7 @@ export default function OwnerLayout({ children }: { children: ReactNode }) {
             setRightContent(null);
             setLeftContent(null);
         };
-    }, [setRightContent, setLeftContent, isAppUsersPage, isTopLevelPage, userCount, openAddUser, pathname]);
+    }, [setRightContent, setLeftContent, isAppUsersPage, isSitesPage, isTopLevelPage, userCount, openAddUser, pathname]);
 
     // Determine active tab from pathname
     const activeTab = (() => {

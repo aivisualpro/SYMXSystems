@@ -108,6 +108,7 @@ const data = {
       subModules: [
         { name: "App Users", url: "/owner/app-users" },
         { name: "Roles & Permissions", url: "/owner/roles" },
+        { name: "Stations", url: "/owner/sites" },
       ]
     },
     {
