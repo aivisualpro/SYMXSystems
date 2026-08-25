@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, RefreshCw, DownloadCloud } from "lucide-react";
 
 import { ModeSwitcher } from "./mode-switcher";
+import { SiteSwitcher } from "./site-switcher";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 
 export function SiteHeader() {
@@ -131,6 +132,8 @@ export function SiteHeader() {
           )}
 
           {mounted && (headerCtx.rightContent || headerCtx.actions)}
+
+          {mounted && <SiteSwitcher />}
 
           <ModeSwitcher />
         </div>

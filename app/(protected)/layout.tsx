@@ -2,6 +2,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { HeaderActionsProvider } from "@/components/providers/header-actions-provider";
+import { SiteContextProvider } from "@/components/providers/site-context-provider";
 
 import { cookies } from "next/headers";
 import { getSession, logout } from "@/lib/auth";
@@ -34,6 +35,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 
   return (
     <HeaderActionsProvider>
+      <SiteContextProvider>
 
       <SidebarProvider
         defaultOpen={defaultOpen}
@@ -52,6 +54,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
           </div>
         </SidebarInset>
       </SidebarProvider>
+      </SiteContextProvider>
     </HeaderActionsProvider>
   );
 }
