@@ -25,9 +25,9 @@
  *   node scripts/migrate/02-backfill-user-site-assignments.mjs --include-inactive
  */
 import { MongoClient } from "mongodb";
-import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { loadEnv, resolveTargetDb } from "../lib/target-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "../..");
@@ -39,14 +39,13 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const INCLUDE_INACTIVE = process.argv.includes("--include-inactive");
 const BATCH_SIZE = 200;
 
-const envFile = fs.readFileSync(path.join(rootDir, ".env"), "utf-8");
-for (const line of envFile.split("\n")) {
-  const match = line.match(/^([A-Z_]+)=["']?(.+?)["']?\s*$/);
-  if (match) process.env[match[1]] = match[2];
-}
+// Defaults to STAGING when STAGING_MONGODB_URI exists. Hitting production
+// requires --target=production --i-know-this-is-production.
+const env = loadEnv(rootDir);
+const { uri: TARGET_URI } = resolveTargetDb(env, { scriptName: "02-backfill-user-site-assignments" });
 
 async function main() {
-  const mongo = new MongoClient(process.env.MONGODB_URI);
+  const mongo = new MongoClient(TARGET_URI);
   await mongo.connect();
   const db = mongo.db();
   const siteCol = db.collection("SYMXSites");
