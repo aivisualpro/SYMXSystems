@@ -47,6 +47,11 @@ const shouldSkip = (name) =>
 // rates, phone numbers. Scrubbing lets the staging environment be treated
 // as lower-sensitivity. Structure and volume are preserved so the data
 // still exercises the same code paths.
+// Collection names must match EXACTLY (they are case-sensitive in MongoDB,
+// and this codebase uses "SYMX" upper-case in collection names while the
+// Mongoose model is "SymxEmployee"). A mismatched key here fails silently
+// and leaves real PII in staging, so the run aborts if a rule matches
+// nothing — see the guard in main().
 const SCRUB_RULES = {
   SYMXUsers: (d) => ({
     ...d,
@@ -56,7 +61,7 @@ const SCRUB_RULES = {
     password: "$2b$10$M8YQ0/mCPPk3vJmKxjKZ8uZ0VqmqZ1cQ0y5Vv1qk1cLQz1XKX8m2W",
     phone: d.phone ? "555-0100" : d.phone,
   }),
-  SymxEmployees: (d) => ({
+  SYMXEmployees: (d) => ({
     ...d,
     email: d.email ? `emp${String(d._id).slice(-6)}@staging.local` : d.email,
     phoneNumber: d.phoneNumber ? "555-0100" : d.phoneNumber,
@@ -123,6 +128,22 @@ async function main() {
     .sort();
 
   console.log(`Found ${collections.length} collections.\n`);
+
+  // A scrub rule whose collection name is misspelled matches nothing and
+  // silently copies real PII into staging. Fail loudly instead — this is a
+  // privacy control, so "quietly did nothing" is the worst outcome.
+  if (SCRUB) {
+    const unmatched = Object.keys(SCRUB_RULES).filter((name) => !collections.includes(name));
+    if (unmatched.length > 0) {
+      throw new Error(
+        `--scrub was requested, but these scrub rules match no collection in the source database:\n` +
+          unmatched.map((u) => `   • ${u}`).join("\n") +
+          `\n\nCollection names are case-sensitive. Available:\n` +
+          collections.map((c) => `   ${c}`).join("\n") +
+          `\n\nRefusing to continue — fix SCRUB_RULES so PII is actually anonymised.`
+      );
+    }
+  }
 
   let totalDocs = 0;
   let copiedCollections = 0;
