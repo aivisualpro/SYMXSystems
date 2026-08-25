@@ -3,6 +3,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { HeaderActionsProvider } from "@/components/providers/header-actions-provider";
 import { SiteContextProvider } from "@/components/providers/site-context-provider";
+import { StationScopeBanner } from "@/components/station-scope-banner";
 
 import { cookies } from "next/headers";
 import { getSession, logout } from "@/lib/auth";
@@ -50,6 +51,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <SidebarInset className="flex flex-col h-full overflow-hidden shadow-none border-none md:peer-data-[variant=inset]:m-0 md:peer-data-[variant=inset]:rounded-none">
           <SiteHeader />
           <div className="flex-1 overflow-auto p-[16px]">
+            <StationScopeBanner />
             {children}
           </div>
         </SidebarInset>

@@ -158,9 +158,9 @@ export function SiteSwitcher() {
 
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-[10px] leading-relaxed text-muted-foreground">
-          <span className="font-medium text-amber-600 dark:text-amber-400">Preview.</span>{" "}
-          Switching records your selection, but pages don&apos;t filter by station yet —
-          you&apos;ll still see DFO2 data everywhere until scoping ships.
+          <span className="font-medium text-amber-600 dark:text-amber-400">Rolling out.</span>{" "}
+          Write-Ups filters by station. Other modules still show every station and are
+          marked with a banner until they&apos;re converted.
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
