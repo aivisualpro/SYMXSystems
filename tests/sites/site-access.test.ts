@@ -8,18 +8,19 @@ import { connectTestDb, clearTestDb, disconnectTestDb, ensureIndexes } from "../
 import { seedMultiSiteOrg, type MultiSiteFixture } from "../helpers/fixtures";
 import { resolveUserSiteAccess, canAccessSite, getActiveSites, getDefaultSite } from "@/lib/sites";
 import Site from "@/lib/models/Site";
+import Organization from "@/lib/models/Organization";
 import UserSiteAssignment from "@/lib/models/UserSiteAssignment";
 
 let fx: MultiSiteFixture;
 
 beforeAll(async () => {
   await connectTestDb();
-  await ensureIndexes(Site, UserSiteAssignment);
+  await ensureIndexes(Site, Organization, UserSiteAssignment);
 });
 afterAll(async () => { await disconnectTestDb(); });
 beforeEach(async () => {
   await clearTestDb();
-  await ensureIndexes(Site, UserSiteAssignment);
+  await ensureIndexes(Site, Organization, UserSiteAssignment);
   fx = await seedMultiSiteOrg();
 });
 
@@ -226,11 +227,30 @@ describe("data model constraints", () => {
   });
 
   it("enforces unique site slug within an organization", async () => {
+    // Derive the slug from the fixture rather than hard-coding it — an
+    // earlier version of this test hard-coded "site-a", which silently
+    // stopped being a duplicate when the fixtures moved to real station
+    // codes, so the test passed by creating a site that collided with
+    // nothing.
     await expect(
       Site.create({
-        organizationId: fx.org._id, name: "Duplicate", slug: "site-a",
+        organizationId: fx.org._id, name: "Duplicate", slug: fx.sites.a.slug,
         code: "DUP", status: "active",
       })
     ).rejects.toThrow();
+  });
+
+  it("allows the same slug under a different organization", async () => {
+    // Slug uniqueness is scoped to the org, not global — the org boundary is
+    // the real namespace even though there is only one org today.
+    const otherOrg = await Organization.create({
+      name: "Other Org", slug: "other-org", timezone: "America/Los_Angeles",
+    });
+    await expect(
+      Site.create({
+        organizationId: otherOrg._id, name: "DFO2 elsewhere", slug: fx.sites.a.slug,
+        code: "DFO2", status: "active",
+      })
+    ).resolves.toBeTruthy();
   });
 });

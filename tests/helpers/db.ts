@@ -37,13 +37,29 @@ export async function connectTestDb(): Promise<typeof mongoose> {
   }
 
   const uri = mongoServer.getUri();
-
-  // Point lib/db.ts at the in-memory instance too, so any code path that calls
-  // connectToDatabase() during a test reuses this connection rather than
-  // attempting a real one.
   process.env.MONGODB_URI = uri;
 
   await mongoose.connect(uri);
+
+  // ── Prime lib/db.ts's connection cache ──
+  // lib/db.ts reads MONGODB_URI into a module-level const at IMPORT time, and
+  // holds its own reference to global.mongoose. By the time this runs it has
+  // already captured the placeholder URI from tests/setup.ts, so any code path
+  // calling connectToDatabase() would try to dial 127.0.0.1:27017 and fail —
+  // or worse, collide with the connection we just opened.
+  //
+  // Seeding its cache with the live connection makes connectToDatabase()
+  // return early before it ever looks at that stale URI.
+  //
+  // This MUTATES the existing global.mongoose object rather than replacing it.
+  // Replacing it would not work: lib/db.ts did `let cached = global.mongoose`
+  // at module load, so it holds a reference to the original object and would
+  // never see a new one assigned here.
+  const g = globalThis as any;
+  if (!g.mongoose) g.mongoose = { conn: null, promise: null };
+  g.mongoose.conn = mongoose;
+  g.mongoose.promise = Promise.resolve(mongoose);
+
   return mongoose;
 }
 
@@ -62,6 +78,13 @@ export async function clearTestDb(): Promise<void> {
 export async function disconnectTestDb(): Promise<void> {
   await mongoose.connection.dropDatabase().catch(() => {});
   await mongoose.disconnect();
+  // Clear the primed cache too, or a later suite in the same process would
+  // hand out a closed connection.
+  const g = globalThis as any;
+  if (g.mongoose) {
+    g.mongoose.conn = null;
+    g.mongoose.promise = null;
+  }
   if (mongoServer) {
     await mongoServer.stop();
     mongoServer = null;
