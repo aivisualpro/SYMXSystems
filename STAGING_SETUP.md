@@ -60,6 +60,14 @@ email:    user<last6ofid>@staging.local
 password: stagingpassword
 ```
 
+Because emails are anonymised there is no way to guess which account is which. List them, mapped back to name / role / site:
+
+```bash
+node scripts/staging/list-staging-logins.mjs
+```
+
+Your `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` from `.env` also still work — that login path is an env-var bypass in `app/api/auth/login/route.ts` that never reads the database, so scrubbing doesn't affect it.
+
 Skip large collections you don't need:
 
 ```bash
