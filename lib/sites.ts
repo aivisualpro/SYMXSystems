@@ -29,6 +29,13 @@ export interface UserSiteAccess {
   primarySiteId: string | null;
   /** Role name per site — a user may hold different roles at different sites. */
   roleBySite: Record<string, string>;
+  /**
+   * True when access came from the default-station fallback rather than a
+   * real assignment. Surfaced so admins can see and fix the gap instead of
+   * it silently persisting — see the fallback rules in
+   * resolveUserSiteAccess below.
+   */
+  usingDefaultFallback: boolean;
 }
 
 /** All active sites, ordered for display. Never hard-codes a site count. */
@@ -69,7 +76,15 @@ export async function getOrganization() {
  *   1. Super admin (env-var account) — every site, full access.
  *   2. Org-wide grant — every active site. Read-only if the grant says so.
  *   3. Per-site assignments — only the sites explicitly assigned.
- *   4. Nothing — no access. An unassigned user is denied, not defaulted.
+ *   4. Never assigned at all — falls back to the DEFAULT station, flagged
+ *      via usingDefaultFallback so the gap is visible and fixable.
+ *   5. Assigned once but now end-dated — DENIED. Access was deliberately
+ *      revoked and must not be undone by a fallback.
+ *
+ * Steps 4 and 5 look similar and are not: the difference between "nobody
+ * got round to assigning them" and "somebody took their access away" is
+ * the difference between a helpful default and silently reinstating
+ * revoked access.
  *
  * Note that org-wide access EXPANDS to the live site list rather than
  * being stored as a list of ids, so a site added tomorrow is covered
@@ -85,6 +100,7 @@ export async function resolveUserSiteAccess(
     allowedSiteIds: [],
     primarySiteId: null,
     roleBySite: {},
+    usingDefaultFallback: false,
   };
   if (!session?.id) return empty;
 
@@ -101,6 +117,7 @@ export async function resolveUserSiteAccess(
       allowedSiteIds: ids,
       primarySiteId: ids[0] || null,
       roleBySite: Object.fromEntries(ids.map((id) => [id, "Super Admin"])),
+      usingDefaultFallback: false,
     };
   }
 
@@ -123,12 +140,57 @@ export async function resolveUserSiteAccess(
       allowedSiteIds: ids,
       primarySiteId: ids[0] || null,
       roleBySite: Object.fromEntries(ids.map((id) => [id, roleName])),
+      usingDefaultFallback: false,
     };
   }
 
   // 3. Per-site assignments.
   const assignments = await UserSiteAssignment.find({ userId: session.id, ...activeWindow }).lean();
-  if (assignments.length === 0) return empty;
+
+  if (assignments.length === 0) {
+    // ── Default-station fallback ──
+    // A user with no ACTIVE assignment is one of two very different things,
+    // and conflating them would be a security bug:
+    //
+    //   (a) Never assigned at all — a gap. Accounts created before the
+    //       multi-site work, or through a flow that doesn't yet assign a
+    //       station. They should not be locked out of an app that, today,
+    //       only really has one station. Fall back to the default (DFO2).
+    //
+    //   (b) Previously assigned, now end-dated — their access was
+    //       deliberately REVOKED. Falling back here would silently undo an
+    //       intentional administrative action and hand them the default
+    //       station instead. Deny.
+    //
+    // The distinction is whether any assignment history exists at all.
+    const everAssigned = await UserSiteAssignment.exists({ userId: session.id });
+    if (everAssigned) {
+      // Case (b) — revoked. Respect it.
+      return empty;
+    }
+
+    // Case (a) — never assigned. Fall back, and make the gap visible
+    // rather than letting it quietly persist.
+    const fallback = await getDefaultSite();
+    if (!fallback) return empty;
+
+    const fallbackId = String((fallback as any)._id);
+    console.warn(
+      `[sites] User ${session.id} has no station assignment — falling back to ` +
+        `default station ${(fallback as any).code}. Assign them explicitly in ` +
+        `Owner > App Users to remove this fallback.`
+    );
+
+    return {
+      userId: session.id,
+      isOrgAdmin: false,
+      isReadOnly: false,
+      allowedSiteIds: [fallbackId],
+      primarySiteId: fallbackId,
+      roleBySite: { [fallbackId]: session.role || "" },
+      usingDefaultFallback: true,
+    };
+  }
 
   const allowedSiteIds = assignments.map((a: any) => String(a.siteId));
   const roleBySite: Record<string, string> = {};
@@ -144,6 +206,7 @@ export async function resolveUserSiteAccess(
     allowedSiteIds,
     primarySiteId: primary ? String(primary.siteId) : allowedSiteIds[0] || null,
     roleBySite,
+    usingDefaultFallback: false,
   };
 }
 

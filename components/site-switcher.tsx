@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 export function SiteSwitcher() {
   const {
     sites, activeSiteIds, mode, canSwitch, canViewOrgWide,
-    loading, switching, activeLabel, setContext,
+    usingDefaultFallback, loading, switching, activeLabel, setContext,
   } = useSiteContext();
 
   if (loading) {
@@ -51,9 +51,25 @@ export function SiteSwitcher() {
   if (!canSwitch && !canViewOrgWide) {
     const only = sites[0];
     return (
-      <span className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground">
+      <span
+        className={cn(
+          "flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium",
+          usingDefaultFallback
+            // Not a real assignment — the account fell back to the default
+            // station. Shown differently so an admin notices and fixes it
+            // rather than the gap persisting invisibly.
+            ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            : "border-border bg-muted/40 text-muted-foreground"
+        )}
+        title={
+          usingDefaultFallback
+            ? `No station assigned to this account — defaulting to ${only.code}. An administrator should assign a station in Owner > App Users.`
+            : undefined
+        }
+      >
         <Building2 className="h-3 w-3" />
         {only.code}
+        {usingDefaultFallback && <span className="opacity-70">(default)</span>}
       </span>
     );
   }

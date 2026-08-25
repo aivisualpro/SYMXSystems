@@ -31,6 +31,8 @@ interface SiteContextValue {
   isReadOnly: boolean;
   canSwitch: boolean;
   canViewOrgWide: boolean;
+  /** Access came from the default-station fallback, not a real assignment. */
+  usingDefaultFallback: boolean;
   loading: boolean;
   switching: boolean;
   error: string | null;
@@ -48,6 +50,7 @@ export function useSiteContext() {
     return {
       sites: [], activeSiteIds: [], mode: "single" as SiteContextMode,
       isOrgAdmin: false, isReadOnly: false, canSwitch: false, canViewOrgWide: false,
+      usingDefaultFallback: false,
       loading: false, switching: false, error: null, activeLabel: "",
       setContext: async () => {},
     };
@@ -63,6 +66,7 @@ export function SiteContextProvider({ children }: { children: React.ReactNode })
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [canSwitch, setCanSwitch] = useState(false);
   const [canViewOrgWide, setCanViewOrgWide] = useState(false);
+  const [usingDefaultFallback, setUsingDefaultFallback] = useState(false);
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +88,7 @@ export function SiteContextProvider({ children }: { children: React.ReactNode })
         setIsReadOnly(!!d.isReadOnly);
         setCanSwitch(!!d.canSwitch);
         setCanViewOrgWide(!!d.canViewOrgWide);
+        setUsingDefaultFallback(!!d.usingDefaultFallback);
       })
       .catch((e) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -131,7 +136,7 @@ export function SiteContextProvider({ children }: { children: React.ReactNode })
     <Ctx.Provider
       value={{
         sites, activeSiteIds, mode, isOrgAdmin, isReadOnly,
-        canSwitch, canViewOrgWide, loading, switching, error,
+        canSwitch, canViewOrgWide, usingDefaultFallback, loading, switching, error,
         activeLabel, setContext,
       }}
     >

@@ -70,11 +70,58 @@ describe("resolveUserSiteAccess", () => {
     expect(access.allowedSiteIds).toHaveLength(3);
   });
 
-  it("denies a user with no assignments — no implicit default site", async () => {
+  it("falls back to the default station for a never-assigned user", async () => {
+    // A user nobody got round to assigning shouldn't be locked out. They
+    // get the default station (DFO2) — one station, not everything.
     const access = await resolveUserSiteAccess(sessionFor(fx.users.unassigned));
-    expect(access.allowedSiteIds).toEqual([]);
+    expect(access.allowedSiteIds).toEqual([String(fx.sites.a._id)]);
+    expect(access.primarySiteId).toBe(String(fx.sites.a._id));
+    expect(access.usingDefaultFallback).toBe(true);
     expect(access.isOrgAdmin).toBe(false);
+  });
+
+  it("the fallback grants ONE station, never all of them", async () => {
+    // The whole point: a missing assignment must not become company-wide
+    // access by accident.
+    const access = await resolveUserSiteAccess(sessionFor(fx.users.unassigned));
+    expect(access.allowedSiteIds).toHaveLength(1);
+    expect(access.allowedSiteIds).not.toContain(String(fx.sites.b._id));
+    expect(access.allowedSiteIds).not.toContain(String(fx.sites.c._id));
+  });
+
+  it("does NOT fall back for a user whose access was revoked", async () => {
+    // The security-critical half of the fallback rule. This user HAD an
+    // assignment that was deliberately end-dated. Falling back to the
+    // default station would silently reinstate access an administrator
+    // intentionally removed.
+    await UserSiteAssignment.updateMany(
+      { userId: fx.users.siteBOnly._id },
+      { $set: { endDate: new Date(Date.now() - 86400000) } }
+    );
+    const access = await resolveUserSiteAccess(sessionFor(fx.users.siteBOnly));
+    expect(access.allowedSiteIds).toEqual([]);
+    expect(access.usingDefaultFallback).toBe(false);
     expect(access.primarySiteId).toBeNull();
+  });
+
+  it("distinguishes 'never assigned' from 'revoked' by assignment history", async () => {
+    // Same end state (no active assignment), opposite outcomes — driven
+    // purely by whether any assignment row has ever existed.
+    const neverAssigned = await resolveUserSiteAccess(sessionFor(fx.users.unassigned));
+
+    await UserSiteAssignment.updateMany(
+      { userId: fx.users.siteAOnly._id },
+      { $set: { endDate: new Date(Date.now() - 86400000) } }
+    );
+    const revoked = await resolveUserSiteAccess(sessionFor(fx.users.siteAOnly));
+
+    expect(neverAssigned.allowedSiteIds).toHaveLength(1);
+    expect(revoked.allowedSiteIds).toHaveLength(0);
+  });
+
+  it("marks a real assignment as NOT using the fallback", async () => {
+    const access = await resolveUserSiteAccess(sessionFor(fx.users.siteAOnly));
+    expect(access.usingDefaultFallback).toBe(false);
   });
 
   it("denies an absent session", async () => {

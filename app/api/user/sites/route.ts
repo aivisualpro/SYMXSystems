@@ -35,6 +35,9 @@ export async function GET() {
     sites: visibleSites,
     isOrgAdmin: access.isOrgAdmin,
     isReadOnly: access.isReadOnly,
+    // Surfaced so the switcher can flag an unassigned account rather than
+    // presenting the fallback as if it were a real assignment.
+    usingDefaultFallback: access.usingDefaultFallback,
     canSwitch: visibleSites.length > 1,
     // Org-wide ("all stations") is only offered to someone holding an
     // explicit org grant. Consolidated views must be intentional, not a
