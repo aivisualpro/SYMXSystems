@@ -76,13 +76,21 @@ node scripts/staging/clone-to-staging.mjs --scrub --skip=MessageLog,ScoreCard_*
 
 ## Step 4 — Run the app against staging
 
-**Locally:**
+**Locally:** `.env.local` overrides `.env` for `npm run dev`. Copy the value across rather than retyping it — a placeholder pasted verbatim produces MongoDB's own `"Authentication failed."`, which reads exactly like an application error:
 
 ```bash
-# .env.local overrides .env for `npm run dev`
-echo 'MONGODB_URI=<your STAGING_MONGODB_URI value>' > .env.local
+# Derives .env.local from the STAGING_MONGODB_URI already in .env
+grep '^STAGING_MONGODB_URI=' .env | sed 's/^STAGING_MONGODB_URI=/MONGODB_URI=/' > .env.local
 npm run dev
 ```
+
+Verify it before debugging anything else:
+
+```bash
+node scripts/staging/diagnose-login.mjs <some-staging-email>
+```
+
+Env changes need a dev-server **restart** — they are not picked up by hot reload.
 
 **On Vercel (shared URL for others to test):**
 

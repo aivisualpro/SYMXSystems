@@ -66,6 +66,20 @@ async function main() {
   console.log(`   App would connect to: ${hostFromUri(appUri)} / ${dbNameFromUri(appUri)}`);
   console.log(`   Source: ${appSource}`);
 
+  // Copy/paste trap: setup instructions show a URI with a placeholder
+  // password. Pasted verbatim, MongoDB rejects the credentials with its own
+  // "Authentication failed." — the exact same wording the login route uses
+  // for any unhandled error, which makes it look like an app bug.
+  const PLACEHOLDERS = ["YOUR_PASSWORD", "YOUR-PASSWORD", "<PASSWORD>", "PASSWORD", "xxxx", "CHANGEME"];
+  const creds = appUri.match(/\/\/([^:]+):([^@]+)@/);
+  if (creds && PLACEHOLDERS.some((p) => creds[2].toUpperCase() === p.toUpperCase())) {
+    bad(`The connection string still contains the PLACEHOLDER password "${creds[2]}".`);
+    console.log(`     Replace it with the real password in ${hasLocal ? ".env.local" : ".env"}.`);
+    console.log(`     MongoDB rejects this with "Authentication failed." — which reads`);
+    console.log(`     like an app error but is actually a bad connection string.`);
+    process.exit(1);
+  }
+
   const stagingDb = dbNameFromUri(env.STAGING_MONGODB_URI || "");
   const appDb = dbNameFromUri(appUri);
   if (stagingDb && appDb !== stagingDb) {
