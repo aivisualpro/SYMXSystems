@@ -48,15 +48,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!validation.success) {
       return validation.response;
     }
-    const body = validation.data;
-    
+    const body = validation.data as any;
+
     await connectToDatabase();
-    
+
+    // Station access is deliberately NOT editable here. It lives in its own
+    // collection (UserSiteAssignment) and is managed via
+    // /api/admin/users/[id]/sites, where revoking is effective-dated so the
+    // access history survives. Accepting it on this route would both write
+    // a meaningless field onto the user document and offer a second, weaker
+    // path to change who can see which station's records.
+    delete body.siteIds;
+    delete body.primarySiteId;
+
     // Hash password if present
     if (body.password) {
       body.password = await bcrypt.hash(body.password, 12);
     }
-    
+
     const updatedItem = await SymxUser.findByIdAndUpdate(id, body, { new: true });
     if (!updatedItem) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });

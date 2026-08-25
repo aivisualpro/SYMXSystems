@@ -42,6 +42,11 @@ interface User {
   signature?: string;
   isOnWebsite?: boolean;
   location?: string;
+  // Station access. Only used when CREATING — for an existing user, access
+  // is managed in the dedicated Station Access panel on their detail page,
+  // where revocation is effective-dated rather than overwritten.
+  siteIds?: string[];
+  primarySiteId?: string;
 }
 
 interface UserFormProps {
@@ -108,6 +113,36 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
     };
     fetchRoles();
   }, []);
+
+  // ── Station access (create only) ──
+  const isNewUser = !initialData?._id;
+  const [availableSites, setAvailableSites] = useState<
+    { id: string; code: string; name: string; siteType: string; isDefault: boolean }[]
+  >([]);
+  const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!isNewUser) return; // existing users use the Station Access panel
+    fetch("/api/admin/sites")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.sites) return;
+        const active = d.sites.filter((s: any) => s.status === "active");
+        setAvailableSites(active);
+        // Pre-select the default station so the common case is one click.
+        // The server would fall back to it anyway if nothing were chosen —
+        // pre-selecting just makes that visible rather than implicit.
+        const def = active.find((s: any) => s.isDefault);
+        if (def) setSelectedSiteIds([def.id]);
+      })
+      .catch(() => {});
+  }, [isNewUser]);
+
+  const toggleSite = (id: string) => {
+    setSelectedSiteIds((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+    );
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -243,7 +278,11 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    onSubmit(
+      isNewUser
+        ? { ...formData, siteIds: selectedSiteIds, primarySiteId: selectedSiteIds[0] }
+        : formData
+    );
   };
 
   return (
@@ -387,6 +426,45 @@ export function UserForm({ initialData, onSubmit, onCancel, isSubmitting }: User
               </div>
             </div>
           </div>
+
+          {/* ── Station access (create only) ──
+              Set here so a new account never starts life unassigned. For an
+              existing user this is managed in the Station Access panel on
+              their detail page, where revoking is effective-dated rather
+              than silently overwritten. */}
+          {isNewUser && availableSites.length > 0 && (
+            <div className="grid gap-2">
+              <Label>Station Access</Label>
+              <div className="flex flex-wrap gap-1.5 rounded-md border p-2">
+                {availableSites.map((site) => {
+                  const on = selectedSiteIds.includes(site.id);
+                  return (
+                    <button
+                      key={site.id}
+                      type="button"
+                      onClick={() => toggleSite(site.id)}
+                      className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                        on
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-input hover:bg-muted"
+                      }`}
+                    >
+                      {site.code}
+                      {site.siteType === "seasonal" && " ❄"}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {selectedSiteIds.length === 0
+                  ? "No station selected — this account will fall back to the default station."
+                  : selectedSiteIds.length === 1
+                    ? `Sees ${availableSites.find((s) => s.id === selectedSiteIds[0])?.code} only.`
+                    : `Sees ${selectedSiteIds.length} stations. The first is their landing station at login.`}
+                {" "}Company-wide access is granted separately on the user&apos;s page.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
