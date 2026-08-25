@@ -8,7 +8,8 @@
  * looks fine.
  */
 import { describe, it, expect, afterEach } from "vitest";
-// @ts-expect-error — plain .mjs helper shared with the migration scripts
+// Plain .mjs helper, shared verbatim with the migration scripts — the tests
+// exercise the same module the scripts run, not a TypeScript re-implementation.
 import { hostFromUri, dbNameFromUri, looksNonProduction, resolveTargetDb } from "../../scripts/lib/target-db.mjs";
 
 const PROD = "mongodb+srv://user:supersecret@symxproduction.e1h4x4o.mongodb.net/symx?retryWrites=true";
