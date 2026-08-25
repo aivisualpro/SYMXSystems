@@ -1,7 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 
 // ── Client-side site context ──────────────────────────────────────────
 // Mirrors the server's view of which stations the user can reach and which
@@ -70,7 +69,6 @@ export function SiteContextProvider({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const queryClient = useQueryClient();
 
   useEffect(() => {
     let cancelled = false;
@@ -107,22 +105,39 @@ export function SiteContextProvider({ children }: { children: React.ReactNode })
         });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || "Failed to switch site");
+
+        // ── Hard reload, deliberately ──
+        // Switching station must REFETCH everything. Data already on screen
+        // belongs to the previous station, and rendering it under a new
+        // station's label is precisely the cross-site confusion this project
+        // exists to prevent.
+        //
+        // A full reload rather than a targeted cache invalidation because
+        // this app has no single data-fetching layer to invalidate: nothing
+        // uses React Query's useQuery — ~70 components call fetch() directly
+        // in their own useEffect and hold results in local state. An earlier
+        // version called queryClient.invalidateQueries() here, which did
+        // nothing at all: the station label changed while the table below it
+        // kept showing the previous station's records.
+        //
+        // Losing scroll position and filters on a station switch is a fair
+        // price for the guarantee that what's on screen belongs to the
+        // station named in the header. Revisit only if data fetching is ever
+        // unified behind one cache.
+        window.location.reload();
+
+        // Not reached — reload replaces the page. State is set anyway so the
+        // UI is correct in the instant before navigation, and in case a
+        // browser defers the reload.
         setMode(json.context.mode);
         setActiveSiteIds(json.context.siteIds);
-
-        // Switching station must REFETCH, never re-filter what's already in
-        // memory. Cached rows belong to the previous context; showing them
-        // under a new station label is exactly the kind of cross-site
-        // confusion this whole project exists to prevent.
-        await queryClient.invalidateQueries();
       } catch (e: any) {
         setError(e.message);
-        throw e;
-      } finally {
         setSwitching(false);
+        throw e;
       }
     },
-    [queryClient]
+    []
   );
 
   const activeLabel =
