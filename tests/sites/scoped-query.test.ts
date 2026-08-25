@@ -21,6 +21,7 @@ const scope = (over: Partial<RequestScope> = {}): RequestScope => ({
   activeSiteIds: [SITE_A],
   mode: "single",
   isEmpty: false,
+  defaultSiteId: SITE_A, // SITE_A stands in for DFO2 throughout
   ...over,
 });
 
@@ -54,10 +55,36 @@ describe("siteFilter", () => {
   });
 
   describe("includeUnassigned (migration window only)", () => {
-    it("also matches records with no siteId", () => {
+    it("matches records with no siteId when the DEFAULT station is in view", () => {
       const f = siteFilter(scope(), { includeUnassigned: true });
       expect(f.$or).toHaveLength(3);
       expect(f.$or[0]).toEqual({ siteId: { $in: [SITE_A] } });
+    });
+
+    it("does NOT match unassigned records at a non-default station", () => {
+      // Regression: this shipped matching unassigned records at EVERY
+      // station, so selecting DFO3 showed every one of DFO2's write-ups —
+      // presenting one station's data as another's.
+      const f = siteFilter(
+        scope({ activeSiteIds: [SITE_B], allowedSiteIds: [SITE_B] }),
+        { includeUnassigned: true }
+      );
+      expect(f).toEqual({ siteId: { $in: [SITE_B] } });
+      expect(f.$or).toBeUndefined();
+    });
+
+    it("matches unassigned records in multi mode only if the default is included", () => {
+      const withDefault = siteFilter(
+        scope({ activeSiteIds: [SITE_A, SITE_B], allowedSiteIds: [SITE_A, SITE_B], mode: "multi" }),
+        { includeUnassigned: true }
+      );
+      expect(withDefault.$or).toBeDefined();
+
+      const withoutDefault = siteFilter(
+        scope({ activeSiteIds: [SITE_B, SITE_C], allowedSiteIds: [SITE_B, SITE_C], mode: "multi" }),
+        { includeUnassigned: true }
+      );
+      expect(withoutDefault.$or).toBeUndefined();
     });
 
     it("still matches nothing when the user has no station", () => {
@@ -98,10 +125,19 @@ describe("canAccessRecord", () => {
     expect(canAccessRecord(scope(), undefined)).toBe(false);
   });
 
-  it("allows an unassigned record during the migration window", () => {
-    // Documented, deliberate, and temporary — tightened at Phase 5.
+  it("allows an unassigned record to someone who can reach the DEFAULT station", () => {
+    // Pre-migration records belong to DFO2. Documented, deliberate, and
+    // temporary — removed at Phase 5.
     expect(canAccessRecord(scope(), { siteId: null })).toBe(true);
     expect(canAccessRecord(scope(), {})).toBe(true);
+  });
+
+  it("REFUSES an unassigned record to someone without default-station access", () => {
+    // Regression: unassigned records used to be readable by anyone, so a
+    // DXC8-only user could open any of DFO2's write-ups by ID.
+    const dxc8Only = scope({ allowedSiteIds: [SITE_B], activeSiteIds: [SITE_B] });
+    expect(canAccessRecord(dxc8Only, { siteId: null })).toBe(false);
+    expect(canAccessRecord(dxc8Only, {})).toBe(false);
   });
 
   it("compares as strings, so ObjectId vs string can't create a false negative", () => {
