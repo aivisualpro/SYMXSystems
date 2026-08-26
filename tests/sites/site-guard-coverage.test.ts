@@ -1,6 +1,4 @@
-import { describe, it, expect } from "vitest";
-import { readdirSync } from "fs";
-import path from "path";
+import { describe, it, expect, beforeAll } from "vitest";
 import mongoose from "mongoose";
 
 // ── Coverage: is the guard actually attached to everything? ───────────
@@ -15,7 +13,16 @@ import mongoose from "mongoose";
 // works; nothing proved it was installed. This closes that gap: it walks
 // the real model directory and asserts coverage over what actually ships.
 
-const MODELS_DIR = path.resolve(__dirname, "../../lib/models");
+// import.meta.glob is Vite's own directory-import mechanism: the pattern is
+// resolved at transform time, so every model becomes a real static import
+// that Vite fully understands.
+//
+// Reached for after two failures. require() cannot load these TS ESM
+// modules at all, and mixing it with import() corrupted Node's module
+// registry across suites. A computed dynamic import would probably work,
+// but "probably" is not verifiable from here, and this pattern is designed
+// for exactly this job.
+const MODEL_MODULES = import.meta.glob("../../lib/models/*.ts");
 
 /**
  * Models carrying a siteId that must NOT be guarded, with the reason.
@@ -38,12 +45,15 @@ function hasGuardHooks(schema: mongoose.Schema): boolean {
 describe("site guard coverage over real models", () => {
   const loaded: { name: string; schema: mongoose.Schema }[] = [];
 
-  for (const file of readdirSync(MODELS_DIR).filter((f) => f.endsWith(".ts"))) {
-    const mod = require(path.join(MODELS_DIR, file));
-    const model = mod?.default;
-    if (!model?.schema) continue;
-    loaded.push({ name: file.replace(/\.ts$/, ""), schema: model.schema });
-  }
+  beforeAll(async () => {
+    for (const [filePath, load] of Object.entries(MODEL_MODULES)) {
+      const mod: any = await load();
+      const model = mod?.default;
+      if (!model?.schema) continue;
+      const name = filePath.split("/").pop()!.replace(/\.ts$/, "");
+      loaded.push({ name, schema: model.schema });
+    }
+  });
 
   it("finds the model directory", () => {
     // A path typo would make every assertion below vacuously pass — the
