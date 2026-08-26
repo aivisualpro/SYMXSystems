@@ -20,6 +20,7 @@ import { FileUpload } from "@/components/admin/file-upload";
 import * as LucideIcons from "lucide-react";
 import { FleetRepairsTable } from "../../../components/fleet-repairs-table";
 import { PhotoCompareTile, CompareModeToggle, CompareMode, anglesFromInspection } from "../../../components/photo-compare";
+import { VehicleTransfer } from "@/components/fleet/vehicle-transfer";
 
 /* ─── helpers ─────────────────────────────────────── */
 const fmtDate = (d: any) => {
@@ -241,6 +242,20 @@ function OverviewTab({ v, masterPhoto }: { v: any; masterPhoto: any }) {
                     <InfoRow icon={IconCalendar} label="Reg. Exp." value={fmtDate(v.registrationExpiration)} />
                     <InfoRow icon={IconClock} label="Created" value={fmtDateTime(v.createdAt)} />
                     <InfoRow icon={IconClock} label="Updated" value={fmtDateTime(v.updatedAt)} />
+                </GlassCard>
+
+                {/* Station assignment — which station this van currently
+                    belongs to. Separate from "Location" above, which is a
+                    free-text address field, not the operating station. */}
+                <GlassCard className="p-4">
+                    <h3 className="text-xs font-semibold text-foreground mb-3 flex items-center gap-2">
+                        <IconArrowsLeftRight size={14} className="text-violet-500" /> Station
+                    </h3>
+                    <VehicleTransfer
+                        vehicleIds={[String(v._id)]}
+                        currentSiteId={v.currentSiteId ? String(v.currentSiteId) : null}
+                        onDone={() => window.location.reload()}
+                    />
                 </GlassCard>
 
                 {/* Column 3: Photo Gallery */}

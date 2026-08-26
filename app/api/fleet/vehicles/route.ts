@@ -1,7 +1,7 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import { getRequestScope, siteFilter } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, canAccessRecord } from "@/lib/scoped-query";
 import Vehicle from "@/lib/models/Vehicle";
 import DailyInspection from "@/lib/models/DailyInspection";
 import { authorizeAction } from "@/lib/rbac";
@@ -121,6 +121,22 @@ export async function PUT(req: NextRequest) {
         if (data[key] === "") data[key] = null;
       }
     }
+
+    // Ownership check: this route $sets whatever the body contains, so
+    // without it any vehicle id could be edited from any station.
+    const putScope = await getRequestScope();
+    const existing = await Vehicle.findById(id).lean();
+    if (!existing || !canAccessRecord(putScope, { siteId: (existing as any).currentSiteId })) {
+      return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
+    }
+
+    // Station changes do NOT go through here. Moving a van removes it from
+    // one station's fleet and adds it to another's, which needs a record of
+    // who did it and when — see POST /api/fleet/vehicles/[id]/transfer.
+    // Silently dropping the field rather than erroring, because older
+    // clients may still send back the whole vehicle object they were given.
+    delete (data as any).currentSiteId;
+    delete (data as any).siteId;
 
     const vehicle = await Vehicle.findByIdAndUpdate(id, { $set: data }, { new: true });
     return NextResponse.json({ vehicle, message: "Vehicle updated successfully" });
