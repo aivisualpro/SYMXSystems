@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import Writeup from "@/lib/models/Writeup";
+import { getRequestScope, findScopedById } from "@/lib/scoped-query";
 import DropdownOption from "@/lib/models/DropdownOption";
 import { generateCoachingPdfBuffer } from "@/lib/generate-coaching-pdf";
 
@@ -19,7 +20,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     await connectToDatabase();
 
-    const writeup = await Writeup.findById(id).lean();
+    const scope = await getRequestScope();
+    // 404 on a station mismatch, same reasoning as the sign/refuse routes:
+    // distinguishing "not yours" from "does not exist" leaks existence.
+    const writeupDoc = await findScopedById<any>(Writeup, id, scope);
+    const writeup: any = writeupDoc ? (writeupDoc.toObject?.() ?? writeupDoc) : null;
     if (!writeup) return NextResponse.json({ error: "Write-up not found" }, { status: 404 });
 
     const w: any = writeup;

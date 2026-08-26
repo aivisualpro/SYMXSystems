@@ -131,6 +131,37 @@ export function canAccessRecord(
 }
 
 /**
+ * Fetch one record by id and confirm the caller's stations cover it.
+ *
+ * The by-id fetch is the single most common shape in this codebase (~130
+ * call sites) and the easiest to get wrong, because `findById(id)` looks
+ * complete on its own — nothing about it suggests a missing check. Every
+ * cross-station hole found so far has been this exact pattern: the list
+ * endpoint scoped correctly, and the detail/sign/delete endpoint beside it
+ * fetched by id and trusted it.
+ *
+ * Returns null for BOTH "does not exist" and "not yours", so callers
+ * respond 404 either way. A 403 would confirm the record exists, which is
+ * enough to enumerate ids across stations.
+ *
+ *   const wu = await findScopedById(Writeup, id, scope);
+ *   if (!wu) return NextResponse.json({ error: "Not found" }, { status: 404 });
+ */
+export async function findScopedById<T extends { siteId?: any }>(
+  model: { findById: (id: any) => any },
+  id: string,
+  scope: RequestScope
+): Promise<T | null> {
+  // Deliberately NOT a scoped query — we fetch, then check. Filtering by
+  // siteId here would be equivalent, but this way the ownership decision
+  // runs through canAccessRecord, so the pre-migration "no siteId means
+  // it belongs to the default station" rule stays in exactly one place.
+  const doc = await model.findById(id);
+  if (!doc) return null;
+  return canAccessRecord(scope, doc) ? (doc as T) : null;
+}
+
+/**
  * The station a newly created record belongs to.
  *
  * Taken from the scope, NEVER from the request body — a client-supplied

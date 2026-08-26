@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import VerbalCoaching from "@/lib/models/VerbalCoaching";
+import { getRequestScope, findScopedById } from "@/lib/scoped-query";
 import Writeup from "@/lib/models/Writeup";
 import DropdownOption from "@/lib/models/DropdownOption";
 import { recommendWarningLevel, getCorrectiveActionTemplate, getVerbalCoachingContext } from "@/lib/writeup-logic";
@@ -26,7 +27,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await connectToDatabase();
     const session = await getSession();
 
-    const coaching = await VerbalCoaching.findById(id);
+    const scope = await getRequestScope();
+    // Escalating a coaching creates a write-up — a disciplinary record.
+    // Without this check any coaching id could be escalated from any
+    // station. 404 rather than 403 so a mismatch doesn't confirm existence.
+    const coaching = await findScopedById<any>(VerbalCoaching, id, scope);
     if (!coaching) return NextResponse.json({ error: "Verbal coaching not found" }, { status: 404 });
     if (coaching.linkedWriteupId) {
       return NextResponse.json({ error: "This verbal coaching has already been escalated to a write-up." }, { status: 400 });

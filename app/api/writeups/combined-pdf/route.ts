@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import Writeup from "@/lib/models/Writeup";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import DropdownOption from "@/lib/models/DropdownOption";
 import { generateCombinedCoachingPdfBuffer } from "@/lib/generate-coaching-pdf";
 
@@ -24,8 +25,21 @@ export async function POST(req: NextRequest) {
 
     await connectToDatabase();
 
+    // Bulk by-id fetch, so the station filter goes IN the query rather than
+    // being checked afterwards: silently returning only the caller's own
+    // records is the right behaviour for a batch export. Requesting another
+    // station's ids yields nothing rather than an error, which also avoids
+    // confirming those ids exist.
+    const scope = await getRequestScope();
+    if (scope.isEmpty) {
+      return NextResponse.json({ error: "No station selected" }, { status: 403 });
+    }
+
     const [writeups, categories] = await Promise.all([
-      Writeup.find({ _id: { $in: ids } }).lean(),
+      Writeup.find({
+        _id: { $in: ids },
+        ...siteFilter(scope, { includeUnassigned: true }),
+      }).lean(),
       DropdownOption.find({ type: "metric", isActive: { $ne: false } }, { description: 1, sortOrder: 1 })
         .sort({ sortOrder: 1, description: 1 })
         .lean(),

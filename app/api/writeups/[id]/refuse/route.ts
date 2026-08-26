@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import Writeup from "@/lib/models/Writeup";
+import { getRequestScope, findScopedById } from "@/lib/scoped-query";
 
 // POST /api/writeups/[id]/refuse — the issuer marks that the employee was
 // presented the write-up in person and refused to sign. A refusal still
@@ -27,7 +28,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await connectToDatabase();
     const session = await getSession();
 
-    const existing = await Writeup.findById(id);
+    const scope = await getRequestScope();
+    // Fetch-then-check. The list endpoint was scoped, but this one was
+    // not: anyone with a write-up id could sign, refuse or review another
+    // station's disciplinary record.
+    //
+    // 404 rather than 403 on a station mismatch — a 403 confirms the
+    // record exists, which is enough to enumerate ids across stations.
+    const existing = await findScopedById<any>(Writeup, id, scope);
     if (!existing) return NextResponse.json({ error: "Write-up not found" }, { status: 404 });
     if (existing.status !== "draft") {
       return NextResponse.json({ error: "This write-up is already closed." }, { status: 400 });
