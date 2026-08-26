@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxScoreCardRemarks from "@/lib/models/SymxScoreCardRemarks";
 
 // GET — Fetch remarks for a specific driver + week, or all signature statuses for a week
@@ -28,9 +29,13 @@ export async function GET(req: NextRequest) {
 
   await connectToDatabase();
 
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const writeSiteId = resolveWriteSiteId(scope, null);
+
   // If transporterId is specified, return single record (existing behavior)
   if (transporterId) {
-    const remarks = await SymxScoreCardRemarks.findOne({ transporterId, week }).lean();
+    const remarks = await SymxScoreCardRemarks.findOne({ transporterId, week, ...S }).lean();
     return NextResponse.json({ remarks: remarks || null });
   }
 
@@ -75,7 +80,7 @@ export async function PUT(req: NextRequest) {
   await connectToDatabase();
 
   // Fetch existing record to detect changes
-  const existing = await SymxScoreCardRemarks.findOne({ transporterId, week }).lean();
+  const existing = await SymxScoreCardRemarks.findOne({ transporterId, week, ...S }).lean();
   const isNew = !existing;
 
   // Build update — only update fields that are provided
@@ -116,10 +121,17 @@ export async function PUT(req: NextRequest) {
     changedAt: new Date(),
   };
 
+  if (!writeSiteId) {
+    return NextResponse.json({ error: "Select a single station first." }, { status: 400 });
+  }
+
+  // Station in the upsert filter: the same driver can have a remark for
+  // the same week at two stations if they were loaned out, and filtering
+  // on transporterId+week alone would merge those into one record.
   const result = await SymxScoreCardRemarks.findOneAndUpdate(
-    { transporterId, week },
+    { transporterId, week, ...S },
     {
-      $set: update,
+      $set: { ...update, siteId: writeSiteId },
       $push: { history: historyEntry },
     },
     { upsert: true, new: true, lean: true }

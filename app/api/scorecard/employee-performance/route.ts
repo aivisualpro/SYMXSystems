@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import SymxDeliveryExcellence from "@/lib/models/SymxDeliveryExcellence";
 import SymxPhotoOnDelivery from "@/lib/models/SymxPhotoOnDelivery";
 import SymxDVICVehicleInspection from "@/lib/models/SymxDVICVehicleInspection";
@@ -114,7 +115,11 @@ function getDspTier(avg: number, type: "score" | "rate" | "percent" | "fico"): s
 }
 
 // Cache for scorecard weeksList — weeks only change when data is imported
-let scorecardWeeksCache: { data: string[]; timestamp: number } | null = null;
+// Process-wide cache of "which weeks have data". Now keyed by station:
+// which weeks have scorecard data is a per-station fact, so without the
+// key the first station to warm the cache would serve its week list to
+// every other station until the TTL expired.
+let scorecardWeeksCache: { data: string[]; timestamp: number; siteKey: string } | null = null;
 const SCORECARD_WEEKS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export async function GET(req: NextRequest) {
@@ -138,28 +143,38 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
 
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const E = siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" });
+
     // If no week specified, return weeks that actually have data (cached)
     if (!week) {
       const now = Date.now();
-      if (scorecardWeeksCache && (now - scorecardWeeksCache.timestamp) < SCORECARD_WEEKS_CACHE_TTL) {
+      // Cache hit requires the station to match, not just the TTL — which
+      // weeks have data is a per-station fact.
+      if (
+        scorecardWeeksCache &&
+        now - scorecardWeeksCache.timestamp < SCORECARD_WEEKS_CACHE_TTL &&
+        scorecardWeeksCache.siteKey === scope.activeSiteIds.join(",")
+      ) {
         return NextResponse.json({ weeks: scorecardWeeksCache.data });
       }
       // Query distinct weeks from ALL data collections to find weeks with real data
       const [deWeeks, podWeeks, dvicWeeks, safetyWeeks, cdfWeeks, dsbWeeks, dcrWeeks, rtsWeeks] = await Promise.all([
-        SymxDeliveryExcellence.distinct("week"),
-        SymxPhotoOnDelivery.distinct("week"),
-        SymxDVICVehicleInspection.distinct("week"),
-        SymxSafetyDashboardDFO2.distinct("week"),
-        ScoreCardCDFNegative.distinct("week"),
-        ScoreCardQualityDSBDNR.distinct("week"),
-        ScoreCardDCR.distinct("week"),
-        ScoreCardRTS.distinct("week"),
+        SymxDeliveryExcellence.distinct("week", S),
+        SymxPhotoOnDelivery.distinct("week", S),
+        SymxDVICVehicleInspection.distinct("week", S),
+        SymxSafetyDashboardDFO2.distinct("week", S),
+        ScoreCardCDFNegative.distinct("week", S),
+        ScoreCardQualityDSBDNR.distinct("week", S),
+        ScoreCardDCR.distinct("week", S),
+        ScoreCardRTS.distinct("week", S),
       ]);
       const allWeeks = [...new Set([...deWeeks, ...podWeeks, ...dvicWeeks, ...safetyWeeks, ...cdfWeeks, ...dsbWeeks, ...dcrWeeks, ...rtsWeeks])];
       const weeks = allWeeks
         .filter((w: string) => /^\d{4}-W\d{2}$/.test(w))
         .sort((a: string, b: string) => b.localeCompare(a));
-      scorecardWeeksCache = { data: weeks, timestamp: Date.now() };
+      scorecardWeeksCache = { data: weeks, timestamp: Date.now(), siteKey: scope.activeSiteIds.join(",") };
       return NextResponse.json({ weeks });
     }
 
@@ -168,18 +183,18 @@ export async function GET(req: NextRequest) {
 
     // Fetch all applicable data sources for the selected week + employee images
     const [excellence, pod, dvic, safetyDfo2, cdfNegative, qualityDsbDnr, dcrData, rtsData, employees] = await Promise.all([
-      SymxDeliveryExcellence.find({ week }).lean(),
-      SymxPhotoOnDelivery.find({ week }).lean(),
+      SymxDeliveryExcellence.find({ week, ...S }).lean(),
+      SymxPhotoOnDelivery.find({ week, ...S }).lean(),
       // DVIC: filter by startDate range (Sunday–Saturday) instead of week field
       dvicDateRange
-        ? SymxDVICVehicleInspection.find({ startDate: { $gte: dvicDateRange.start, $lte: dvicDateRange.end } }).lean()
-        : SymxDVICVehicleInspection.find({ week }).lean(),
-      SymxSafetyDashboardDFO2.find({ week }).lean(),
-      ScoreCardCDFNegative.find({ week }).lean(),
-      ScoreCardQualityDSBDNR.find({ week }).lean(),
-      ScoreCardDCR.find({ week }).lean(),
-      ScoreCardRTS.find({ week }).lean(),
-      SymxEmployee.find({ transporterId: { $exists: true, $ne: '' } }, { transporterId: 1, profileImage: 1 }).lean(),
+        ? SymxDVICVehicleInspection.find({ startDate: { $gte: dvicDateRange.start, $lte: dvicDateRange.end }, ...S }).lean()
+        : SymxDVICVehicleInspection.find({ week, ...S }).lean(),
+      SymxSafetyDashboardDFO2.find({ week, ...S }).lean(),
+      ScoreCardCDFNegative.find({ week, ...S }).lean(),
+      ScoreCardQualityDSBDNR.find({ week, ...S }).lean(),
+      ScoreCardDCR.find({ week, ...S }).lean(),
+      ScoreCardRTS.find({ week, ...S }).lean(),
+      SymxEmployee.find({ transporterId: { $exists: true, $ne: '' }, ...E }, { transporterId: 1, profileImage: 1 }).lean(),
     ]);
 
     // Employee image map
