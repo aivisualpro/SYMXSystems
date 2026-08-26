@@ -30,6 +30,13 @@ export interface GuardViolation {
   /** Where it came from, best-effort from the stack. */
   origin: string;
   /**
+   * The first few non-plumbing frames, kept only for the first sighting.
+   * Stack resolution through mongoose + a bundler is genuinely unreliable,
+   * so when `origin` comes back "unknown" this is what makes the failure
+   * diagnosable instead of just disappointing.
+   */
+  stackSample?: string[];
+  /**
    * byId  — filtered on _id alone. Common and often FINE (fetch-then-check),
    *         but the guard can't see whether the caller checks ownership
    *         afterwards, so these are reported separately for human review
@@ -128,22 +135,94 @@ function isByIdOnly(filter: any): boolean {
   return keys.length === 1 && keys[0] === "_id";
 }
 
+// Frames belonging to the plumbing rather than to the caller we want.
+const NOISE = [
+  "site-guard",
+  "node_modules",
+  "node:internal",
+  "/mongoose/",
+  "kareem",
+  "next/dist",
+  "webpack-runtime",
+];
+
+/**
+ * Best-effort "which file issued this query".
+ *
+ * Two things make this harder than it looks in a Next.js app:
+ *
+ *  1. V8 captures only 10 stack frames by default. Mongoose reaches the
+ *     pre-hook through Query.exec -> kareem -> hook wrappers, which can
+ *     consume the entire budget before any application frame appears —
+ *     so the honest-looking answer is "unknown" even though the caller is
+ *     right there, a few frames further down.
+ *
+ *  2. Frames point at bundler paths (webpack-internal:///(rsc)/./app/...,
+ *     [project]/app/... under Turbopack, .next/server/...) rather than
+ *     source paths, so naive matching on "/app/" misses them.
+ */
 function callOrigin(): string {
+  const prevLimit = Error.stackTraceLimit;
+  Error.stackTraceLimit = 60;
   const stack = new Error().stack || "";
-  const line = stack
+  Error.stackTraceLimit = prevLimit;
+
+  const frames = stack.split("\n").slice(1);
+  const appFrame =
+    frames.find((l) => !NOISE.some((n) => l.includes(n)) && /\/(app|lib|components)\//.test(l)) ||
+    frames.find((l) => !NOISE.some((n) => l.includes(n)));
+
+  if (!appFrame) return "unknown";
+
+  return cleanFrame(appFrame);
+}
+
+/** The first few meaningful frames, for when callOrigin() gives up. */
+function stackSample(): string[] {
+  const prevLimit = Error.stackTraceLimit;
+  Error.stackTraceLimit = 60;
+  const stack = new Error().stack || "";
+  Error.stackTraceLimit = prevLimit;
+
+  return stack
     .split("\n")
-    .find(
-      (l) =>
-        (l.includes("/app/") || l.includes("/lib/")) &&
-        !l.includes("site-guard") &&
-        !l.includes("node_modules")
-    );
-  return (line || "unknown").trim().replace(/^at\s+/, "").slice(0, 160);
+    .slice(1)
+    .filter((l) => !l.includes("site-guard"))
+    .slice(0, 8)
+    .map((l) => cleanFrame(l));
+}
+
+function cleanFrame(frame: string): string {
+  return frame
+    .trim()
+    .replace(/^at\s+/, "")
+    // Normalise bundler noise down to a path a person can actually open.
+    .replace(/webpack-internal:\/{3}\([^)]*\)\/\.?/, "")
+    .replace(/\[project\]\//, "")
+    .replace(/^.*?\/\.next\/server\//, ".next/server/")
+    .replace(/\?\d+/, "")
+    .slice(0, 160);
+}
+
+/**
+ * A stable signature for a filter: its top-level keys, not its values.
+ *
+ * Values are useless as an identity here — they carry per-call timestamps
+ * ({registrationEndDate: {$gt: "2026-08-26T05:08:02Z"}}), so keying on
+ * them would make every single call a unique entry and turn the report
+ * into an unbounded log. Keys stay constant per call site.
+ */
+function filterShape(filter: any): string {
+  if (!filter || typeof filter !== "object") return "-";
+  const keys = Object.keys(filter).sort();
+  return keys.length ? keys.join(",") : "{}";
 }
 
 function record(modelName: string, operation: string, filter: any, kind: "byId" | "broad") {
   const origin = callOrigin();
-  const key = `${modelName}|${operation}|${kind}|${origin}`;
+  // Shape is in the key so two different call sites querying the same
+  // model don't collapse into one entry when origin can't be resolved.
+  const key = `${modelName}|${operation}|${kind}|${origin}|${filterShape(filter)}`;
   const existing = violations.get(key);
   if (existing) {
     existing.count++;
@@ -156,6 +235,8 @@ function record(modelName: string, operation: string, filter: any, kind: "byId" 
     origin,
     kind,
     count: 1,
+    // Only captured when the heuristic failed — otherwise it is noise.
+    stackSample: origin === "unknown" ? stackSample() : undefined,
   };
   violations.set(key, v);
   return v;

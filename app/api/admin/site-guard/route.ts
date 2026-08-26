@@ -38,6 +38,9 @@ export async function GET(_req: NextRequest) {
       unscopedCalls: broad.reduce((n, v) => n + v.count, 0),
       byIdNeedingReview: byId.length,
       modelsAffected: [...new Set(broad.map((v) => v.model))].sort(),
+      // If this is non-zero, stack resolution is failing and the entries
+      // carry a stackSample instead of a usable file path.
+      originsUnresolved: violations.filter((v) => v.origin === "unknown").length,
     },
     // Worst first: these read across every station.
     unscoped: broad,
