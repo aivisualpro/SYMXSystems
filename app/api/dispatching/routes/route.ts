@@ -173,9 +173,12 @@ export async function GET(req: NextRequest) {
 
         // Use exact match since IDs are normalized, avoiding expensive dynamic map of 150 regexes
         const [employees, routeCountsByDate, auditCountsRaw, vehicleDocs, confirmationDocs] = await Promise.all([
-            SymxEmployee.find(
-                { transporterId: { $in: transporterIds } },
-                { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, status: 1, profileImage: 1, routesComp: 1, rate: 1, hiredDate: 1 }
+            orgWide(
+                SymxEmployee.find(
+                    { transporterId: { $in: transporterIds } },
+                    { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, status: 1, profileImage: 1, routesComp: 1, rate: 1, hiredDate: 1 }
+                ),
+                "resolving driver details for routes already scoped to this station — a driver loaned in from another station must still show a name and phone number, not a blank row"
             ).lean(),
             SYMXRoute.aggregate([
                 { $match: { ...routeCountMatch, ...S } },

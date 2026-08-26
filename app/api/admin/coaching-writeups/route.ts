@@ -59,6 +59,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Also search by employee name — find matching employee IDs first
+      // Name search feeding a filter on records already scoped below.
       const matchingEmps = await SymxEmployee.find(
         {
           $or: [
@@ -84,7 +85,7 @@ export async function GET(req: NextRequest) {
         .lean(),
       SYMXCoachingWriteUp.countDocuments(filter),
       SymxEmployee.find(siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" }), { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }).sort({ firstName: 1, lastName: 1 }).lean(),
-      SymxEmployee.find({ type: "Operations", status: "Active" }, { _id: 1, firstName: 1, lastName: 1 }).sort({ firstName: 1, lastName: 1 }).lean(),
+      SymxEmployee.find({ type: "Operations", status: "Active", ...siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" }) }, { _id: 1, firstName: 1, lastName: 1 }).sort({ firstName: 1, lastName: 1 }).lean(),
       DropdownOption.find({ type: "metric" }, { _id: 1, description: 1, icon: 1, color: 1 }).lean(),
     ]);
 

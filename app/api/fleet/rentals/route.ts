@@ -2,7 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
-import { getRequestScope, siteFilter } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, orgWide} from "@/lib/scoped-query";
 import Vehicle from "@/lib/models/Vehicle";
 import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
 import { authorizeAction } from "@/lib/rbac";
@@ -43,7 +43,10 @@ export async function GET(req: NextRequest) {
         if (uniqueVins.length > 0) query.$or.push({ vin: { $in: uniqueVins } });
         if (uniqueVehicleIds.length > 0) query.$or.push({ _id: { $in: uniqueVehicleIds } });
 
-        const vehicles = await Vehicle.find(query, { vin: 1, vehicleName: 1 }).lean();
+        const vehicles = await orgWide(
+          Vehicle.find(query, { vin: 1, vehicleName: 1 }),
+          "resolving names/vans for records already scoped to this station — someone or something loaned in must still display, not appear blank"
+        ).lean();
         (vehicles as any[]).forEach((v: any) => {
           const entry = { vehicleName: v.vehicleName || "", vin: v.vin || "" };
           if (v.vin) vinToVehicle[v.vin] = entry;

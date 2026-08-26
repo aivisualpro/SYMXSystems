@@ -1,7 +1,7 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import { getRequestScope, siteFilter } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, orgWide} from "@/lib/scoped-query";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 
@@ -34,7 +34,10 @@ export async function GET(req: NextRequest) {
 
     const employeeIds = [...new Set(records.map((r) => r.employeeId).filter(Boolean).map((id: any) => String(id)))];
     const employees = employeeIds.length
-      ? await SymxEmployee.find({ _id: { $in: employeeIds } }, { eeCode: 1, transporterId: 1, firstName: 1, lastName: 1 }).lean()
+      ? await orgWide(
+          SymxEmployee.find({ _id: { $in: employeeIds } }, { eeCode: 1, transporterId: 1, firstName: 1, lastName: 1 }),
+          "resolving names/vans for records already scoped to this station — someone or something loaned in must still display, not appear blank"
+        ).lean()
       : [];
     const empMap = new Map(employees.map((e: any) => [String(e._id), e]));
 

@@ -35,7 +35,8 @@ export async function PUT(req: NextRequest) {
         const record = await SymxEmployeeSchedule.findOneAndUpdate(
             { ...S, 
                 transporterId, 
-                date: { $gte: startOfDay, $lte: endOfDay }
+                date: { $gte: startOfDay, $lte: endOfDay },
+                ...S
             },
             { $set: { dayBeforeConfirmation } },
             { new: true }
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest) {
         const yearWeek = url.searchParams.get("yearWeek");
 
         const schedules = (await SymxEmployeeSchedule.find(
-            { date: { $gte: startOfDay, $lte: endOfDay } },
+            { date: { $gte: startOfDay, $lte: endOfDay }, ...S },
             { transporterId: 1, dayBeforeConfirmation: 1 }
         ).lean()) as any[];
 
