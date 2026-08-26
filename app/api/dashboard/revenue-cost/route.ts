@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 
 // GET: Aggregate daily revenue (wstRevenue) and cost (totalCost) from dispatching routes
@@ -22,6 +23,8 @@ export async function GET(req: NextRequest) {
     }
 
     await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
 
     const { searchParams } = new URL(req.url);
     const months = parseInt(searchParams.get("months") || "12", 10);
@@ -35,6 +38,7 @@ export async function GET(req: NextRequest) {
     const pipeline = [
       {
         $match: {
+          ...S,
           date: { $gte: cutoff },
           $or: [
             { wstRevenue: { $gt: 0 } },

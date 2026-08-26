@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 import mongoose from "mongoose";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
@@ -37,6 +38,8 @@ export async function GET(req: NextRequest) {
     }
 
     await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
 
     const { searchParams } = new URL(req.url);
     const months = Math.min(Math.max(parseInt(searchParams.get("months") || "12", 10), 1), 36);
@@ -49,8 +52,8 @@ export async function GET(req: NextRequest) {
 
     // ── 1. Fetch reference data in parallel ──
     const [routeTypes, wstOptions, activeEmployees] = await Promise.all([
-      RouteType.find({ isActive: true }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
-      SYMXWSTOption.find({ isActive: true }).lean(),
+      RouteType.find({ isActive: true, ...S }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
+      SYMXWSTOption.find({ isActive: true, ...S }).lean(),
       SymxEmployee.find(
         { status: "Active" },
         { transporterId: 1, rate: 1, firstName: 1, lastName: 1 }
@@ -68,6 +71,7 @@ export async function GET(req: NextRequest) {
     const routesPipeline = [
       {
         $match: {
+          ...S,
           date: { $gte: cutoff },
         },
       },
@@ -118,6 +122,7 @@ export async function GET(req: NextRequest) {
     const schedulePipeline = [
       {
         $match: {
+          ...S,
           date: { $gte: cutoff },
           typeId: { $exists: true, $ne: null },
         },

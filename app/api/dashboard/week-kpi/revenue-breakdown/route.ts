@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
@@ -66,6 +67,8 @@ export async function GET(req: NextRequest) {
     }
 
     await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
 
     const { searchParams } = new URL(req.url);
     const dateStr = searchParams.get("date") || "";
@@ -93,8 +96,8 @@ export async function GET(req: NextRequest) {
         { status: "Active" },
         { transporterId: 1, firstName: 1, lastName: 1, rate: 1 }
       ).lean(),
-      SYMXWSTOption.find({ isActive: true }).lean(),
-      RouteType.find({ isActive: true }, { name: 1, group: 1 }).lean(),
+      SYMXWSTOption.find({ isActive: true, ...S }).lean(),
+      RouteType.find({ isActive: true, ...S }, { name: 1, group: 1 }).lean(),
     ]);
 
     // Build lookup maps
@@ -209,12 +212,12 @@ export async function PATCH(req: NextRequest) {
 
     // If wst or wstDuration changed, recompute wstRevenue from WST rate
     if (updates.wst !== undefined || updates.wstDuration !== undefined) {
-      const route = await SYMXRoute.findById(routeId).lean() as any;
+      const route = await findScopedById<any>(SYMXRoute, routeId, scope) as any;
       if (!route) {
         return NextResponse.json({ error: "Route not found" }, { status: 404 });
       }
 
-      const wstOptions = await SYMXWSTOption.find({ isActive: true }).lean();
+      const wstOptions = await SYMXWSTOption.find({ isActive: true, ...S }).lean();
       const wstMap = new Map(
         (wstOptions as any[]).map(w => [(w.wst || "").trim().toLowerCase(), w.revenue || 0])
       );
