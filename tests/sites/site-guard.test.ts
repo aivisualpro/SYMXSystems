@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import mongoose from "mongoose";
 import { siteOwned } from "@/lib/models/plugins/site-owned";
 import {
@@ -7,7 +7,7 @@ import {
   clearGuardViolations,
   setModuleGuardMode,
 } from "@/lib/models/plugins/site-guard";
-import { connectTestDb, disconnectTestDb } from "../helpers/db";
+import { connectTestDb, clearTestDb, disconnectTestDb } from "../helpers/db";
 
 // A throwaway model so the guard is exercised end-to-end through real
 // mongoose middleware rather than by calling the hook directly. Testing the
@@ -21,17 +21,28 @@ const Guarded =
 
 const SITE_A = new mongoose.Types.ObjectId();
 
+// One server for the file, per the harness contract. An earlier version
+// called connectTestDb/disconnectTestDb per test, which span up and tore
+// down a whole mongod each time — 38s of a 43s suite for tests that barely
+// touch the database.
+beforeAll(async () => { await connectTestDb(); });
+afterAll(async () => { await disconnectTestDb(); });
+
 beforeEach(async () => {
-  await connectTestDb();
+  await clearTestDb();
   clearGuardViolations();
   setModuleGuardMode("GuardTestModel", "log");
+  // The guard warns on first sighting of each violation; these tests
+  // deliberately trigger violations, so silence the noise rather than
+  // printing 20 warnings that look like failures.
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
-afterEach(async () => {
+afterEach(() => {
   vi.restoreAllMocks();
+  // Reset the per-model override, or an enforce-mode test leaks into the
+  // next one and fails it for the wrong reason.
   setModuleGuardMode("GuardTestModel", "log");
-  await disconnectTestDb();
 });
 
 describe("hasSiteScope", () => {
