@@ -36,7 +36,7 @@ ScoreCardRTSSchema.index({ week: 1, transporterId: 1, trackingId: 1, plannedDeli
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-ScoreCardRTSSchema.plugin(siteOwned, { sortField: "week" });
+ScoreCardRTSSchema.plugin(siteOwned, { sortField: "week", modelName: "ScoreCardRTS" });
 
 const ScoreCardRTS: Model<IScoreCardRTS> =
   mongoose.models.ScoreCardRTS ||

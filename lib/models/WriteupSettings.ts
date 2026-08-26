@@ -185,7 +185,7 @@ const WriteupSettingsSchema = new Schema<IWriteupSettings>(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-WriteupSettingsSchema.plugin(siteOwned);
+WriteupSettingsSchema.plugin(siteOwned, { modelName: "WriteupSettings" });
 
 const WriteupSettings =
   mongoose.models.WriteupSettings ||

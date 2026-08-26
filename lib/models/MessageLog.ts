@@ -76,7 +76,7 @@ MessageLogSchema.index({ yearWeek: 1, messageType: 1, sentAt: -1 });
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-MessageLogSchema.plugin(siteOwned, { sortField: "createdAt" });
+MessageLogSchema.plugin(siteOwned, { sortField: "createdAt", modelName: "MessageLog" });
 
 const MessageLog: Model<IMessageLog> =
     mongoose.models.MessageLog ||

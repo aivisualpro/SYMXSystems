@@ -27,7 +27,7 @@ const SYMXWSTOptionSchema = new Schema<ISYMXWSTOption>(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SYMXWSTOptionSchema.plugin(siteOwned);
+SYMXWSTOptionSchema.plugin(siteOwned, { modelName: "SYMXWSTOption" });
 
 const SYMXWSTOption: Model<ISYMXWSTOption> =
     mongoose.models.SYMXWSTOption ||

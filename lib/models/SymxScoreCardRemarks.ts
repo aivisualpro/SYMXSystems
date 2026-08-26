@@ -54,7 +54,7 @@ SymxScoreCardRemarksSchema.index({ transporterId: 1, week: 1 }, { unique: true }
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxScoreCardRemarksSchema.plugin(siteOwned, { sortField: "week" });
+SymxScoreCardRemarksSchema.plugin(siteOwned, { sortField: "week", modelName: "SymxScoreCardRemarks" });
 
 const SymxScoreCardRemarks: Model<ISymxScoreCardRemarks> =
   mongoose.models.SymxScoreCardRemarks ||

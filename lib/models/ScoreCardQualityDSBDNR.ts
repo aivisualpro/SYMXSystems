@@ -41,7 +41,7 @@ ScoreCardQualityDSBDNRSchema.index({ week: 1, transporterId: 1 }, { unique: true
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-ScoreCardQualityDSBDNRSchema.plugin(siteOwned, { sortField: "week" });
+ScoreCardQualityDSBDNRSchema.plugin(siteOwned, { sortField: "week", modelName: "ScoreCardQualityDSBDNR" });
 
 const ScoreCardQualityDSBDNR: Model<IScoreCardQualityDSBDNR> =
   mongoose.models.ScoreCardQualityDSBDNR ||

@@ -36,7 +36,7 @@ const SymxCardConfigSchema: Schema = new Schema({
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxCardConfigSchema.plugin(siteOwned);
+SymxCardConfigSchema.plugin(siteOwned, { modelName: "SymxCardConfig" });
 
 const SymxCardConfig: Model<ISymxCardConfig> = mongoose.models.SymxCardConfig || mongoose.model<ISymxCardConfig>('SymxCardConfig', SymxCardConfigSchema);
 

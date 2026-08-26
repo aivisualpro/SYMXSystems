@@ -25,7 +25,7 @@ const SymxHrTicketSettingsSchema = new Schema<ISymxHrTicketSettings>(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxHrTicketSettingsSchema.plugin(siteOwned);
+SymxHrTicketSettingsSchema.plugin(siteOwned, { modelName: "SymxHrTicketSettings" });
 
 const SymxHrTicketSettings =
   mongoose.models.SymxHrTicketSettings ||

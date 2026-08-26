@@ -40,7 +40,7 @@ VehicleRentalAgreementSchema.index({ createdAt: -1 });
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-VehicleRentalAgreementSchema.plugin(siteOwned);
+VehicleRentalAgreementSchema.plugin(siteOwned, { modelName: "VehicleRentalAgreement" });
 
 const VehicleRentalAgreement: Model<IVehicleRentalAgreement> = mongoose.models.VehicleRentalAgreement || mongoose.model<IVehicleRentalAgreement>('VehicleRentalAgreement', VehicleRentalAgreementSchema);
 

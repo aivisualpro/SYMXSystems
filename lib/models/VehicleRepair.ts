@@ -61,7 +61,7 @@ VehicleRepairSchema.index({ vin: 'text', description: 'text', unitNumber: 'text'
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-VehicleRepairSchema.plugin(siteOwned);
+VehicleRepairSchema.plugin(siteOwned, { modelName: "VehicleRepair" });
 
 const VehicleRepair: Model<IVehicleRepair> = mongoose.models.VehicleRepair || mongoose.model<IVehicleRepair>('VehicleRepair', VehicleRepairSchema);
 

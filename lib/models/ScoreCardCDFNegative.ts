@@ -43,7 +43,7 @@ ScoreCardCDFNegativeSchema.index({ week: 1, deliveryAssociate: 1, trackingId: 1 
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-ScoreCardCDFNegativeSchema.plugin(siteOwned, { sortField: "week" });
+ScoreCardCDFNegativeSchema.plugin(siteOwned, { sortField: "week", modelName: "ScoreCardCDFNegative" });
 
 const ScoreCardCDFNegative: Model<IScoreCardCDFNegative> =
   mongoose.models.ScoreCardCDFNegative ||

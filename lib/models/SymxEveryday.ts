@@ -55,7 +55,7 @@ const SymxEverydaySchema: Schema = new Schema(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxEverydaySchema.plugin(siteOwned, { sortField: "date" });
+SymxEverydaySchema.plugin(siteOwned, { sortField: "date", modelName: "SymxEveryday" });
 
 const SymxEveryday =
   mongoose.models.SymxEveryday ||

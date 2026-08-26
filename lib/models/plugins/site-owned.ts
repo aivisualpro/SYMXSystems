@@ -1,4 +1,5 @@
 import { Schema } from "mongoose";
+import { siteGuard } from "./site-guard";
 
 // ── siteOwned plugin ──────────────────────────────────────────────────
 // Marks a collection as belonging to exactly one station, and adds the
@@ -29,6 +30,11 @@ export interface SiteOwnedOptions {
    * e.g. ["status", "createdAt"].
    */
   extraIndexes?: string[][];
+  /**
+   * Model name for guard reporting. Without it the guard still works but
+   * violations are harder to attribute, so every caller should pass it.
+   */
+  modelName?: string;
 }
 
 export function siteOwned(schema: Schema, options: SiteOwnedOptions = {}) {
@@ -49,6 +55,11 @@ export function siteOwned(schema: Schema, options: SiteOwnedOptions = {}) {
     for (const f of fields) spec[f] = 1;
     schema.index(spec as any);
   }
+
+  // Every site-owned model is guarded automatically. Attaching this here
+  // rather than per-model means a model can't gain a siteId field while
+  // quietly skipping the check that the field is actually being used.
+  schema.plugin(siteGuard, { modelName: options.modelName || "UnknownModel" });
 }
 
 /**

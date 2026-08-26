@@ -73,7 +73,7 @@ ScheduleConfirmationSchema.index({ transporterId: 1, yearWeek: 1, messageType: 1
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-ScheduleConfirmationSchema.plugin(siteOwned);
+ScheduleConfirmationSchema.plugin(siteOwned, { modelName: "ScheduleConfirmation" });
 
 const ScheduleConfirmation: Model<IScheduleConfirmation> =
     mongoose.models.ScheduleConfirmation ||

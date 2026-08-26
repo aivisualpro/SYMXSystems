@@ -176,7 +176,7 @@ SymxReimbursementSchema.pre("save", function () {
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxReimbursementSchema.plugin(siteOwned, { sortField: "createdAt", extraIndexes: [["status"]] });
+SymxReimbursementSchema.plugin(siteOwned, { sortField: "createdAt", extraIndexes: [["status"]], modelName: "SymxReimbursement" });
 
 const SymxReimbursement =
   mongoose.models.SymxReimbursement ||

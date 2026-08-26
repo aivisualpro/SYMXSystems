@@ -148,3 +148,33 @@ export function resolveWriteSiteId(scope: RequestScope, requestedSiteId?: string
   if (scope.activeSiteIds.length === 1) return scope.activeSiteIds[0];
   return null; // ambiguous — caller must prompt
 }
+
+/**
+ * Declares a query as deliberately spanning every station, exempting it
+ * from the site guard.
+ *
+ *   const history = await orgWide(
+ *     Writeup.find({ employeeId }),
+ *     "discipline history follows the employee across stations",
+ *   );
+ *
+ * The reason string is mandatory. It isn't read by anything at runtime —
+ * its whole job is to make the exception argue for itself at the call
+ * site, so that a reviewer sees a stated justification rather than an
+ * unexplained bypass. An org-wide query that nobody can justify in a
+ * sentence is usually a missing filter.
+ *
+ * This is for queries that must cross stations by nature (an employee's
+ * full history, a global transporterId uniqueness check). It is NOT the
+ * way to serve company-wide reporting to a user — that goes through
+ * getRequestScope(), so the result still depends on what the user may see.
+ */
+export function orgWide<T>(query: T, reason: string): T {
+  if (!reason || reason.trim().length < 10) {
+    throw new Error(
+      "orgWide() requires a real reason explaining why this query must span stations."
+    );
+  }
+  (query as any).setOptions?.({ orgWide: reason });
+  return query;
+}

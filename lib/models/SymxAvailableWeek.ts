@@ -13,7 +13,7 @@ const SymxAvailableWeekSchema: Schema = new Schema({
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxAvailableWeekSchema.plugin(siteOwned, { sortField: "week" });
+SymxAvailableWeekSchema.plugin(siteOwned, { sortField: "week", modelName: "SymxAvailableWeek" });
 
 const SymxAvailableWeek: Model<ISymxAvailableWeek> =
   mongoose.models.SymxAvailableWeek ||

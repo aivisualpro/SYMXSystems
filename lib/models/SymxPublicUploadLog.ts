@@ -26,7 +26,7 @@ const SymxPublicUploadLogSchema = new Schema<ISymxPublicUploadLog>(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxPublicUploadLogSchema.plugin(siteOwned, { sortField: "createdAt" });
+SymxPublicUploadLogSchema.plugin(siteOwned, { sortField: "createdAt", modelName: "SymxPublicUploadLog" });
 
 const SymxPublicUploadLog =
   mongoose.models.SymxPublicUploadLog ||

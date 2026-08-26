@@ -46,7 +46,7 @@ SymxSafetyDashboardDFO2Schema.index({ week: 1, transporterId: 1, eventId: 1 }, {
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxSafetyDashboardDFO2Schema.plugin(siteOwned, { sortField: "week" });
+SymxSafetyDashboardDFO2Schema.plugin(siteOwned, { sortField: "week", modelName: "SymxSafetyDashboardDFO2" });
 
 const SymxSafetyDashboardDFO2: Model<ISymxSafetyDashboardDFO2> =
   mongoose.models.SymxSafetyDashboardDFO2 ||

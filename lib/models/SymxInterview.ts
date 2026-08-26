@@ -131,7 +131,7 @@ SymxInterviewSchema.index({ status: 1 });
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxInterviewSchema.plugin(siteOwned, { sortField: "createdAt" });
+SymxInterviewSchema.plugin(siteOwned, { sortField: "createdAt", modelName: "SymxInterview" });
 
 const SymxInterview =
   mongoose.models.SymxInterview ||

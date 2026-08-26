@@ -110,7 +110,7 @@ DailyInspectionSchema.index({ vin: 'text', driver: 'text', routeId: 'text', insp
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-DailyInspectionSchema.plugin(siteOwned, { sortField: "routeDate" });
+DailyInspectionSchema.plugin(siteOwned, { sortField: "routeDate", modelName: "DailyInspection" });
 
 const DailyInspection: Model<IDailyInspection> =
     mongoose.models.DailyInspection ||

@@ -25,7 +25,7 @@ const SymxNotificationSchema: Schema = new Schema({
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxNotificationSchema.plugin(siteOwned, { sortField: "createdAt" });
+SymxNotificationSchema.plugin(siteOwned, { sortField: "createdAt", modelName: "SymxNotification" });
 
 const SymxNotification: Model<ISymxNotification> = mongoose.models.SymxNotification || mongoose.model<ISymxNotification>('SymxNotification', SymxNotificationSchema);
 

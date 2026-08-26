@@ -134,7 +134,7 @@ SymxIncidentSchema.index({ insurancePolicyId: 1 });
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxIncidentSchema.plugin(siteOwned, { sortField: "incidentDate" });
+SymxIncidentSchema.plugin(siteOwned, { sortField: "incidentDate", modelName: "SymxIncident" });
 
 const SymxIncident =
   mongoose.models.SymxIncident ||

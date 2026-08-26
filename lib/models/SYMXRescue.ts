@@ -30,6 +30,6 @@ const symxRescueSchema = new Schema<ISYMXRescue>(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-symxRescueSchema.plugin(siteOwned, { sortField: "date" });
+symxRescueSchema.plugin(siteOwned, { sortField: "date", modelName: "SYMXRescue" });
 
 export default mongoose.models.SYMXRescue || mongoose.model<ISYMXRescue>("SYMXRescue", symxRescueSchema);

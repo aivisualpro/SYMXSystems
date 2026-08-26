@@ -50,7 +50,7 @@ SYMXRoutesInfoSchema.index({ date: 1 });
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SYMXRoutesInfoSchema.plugin(siteOwned, { sortField: "date" });
+SYMXRoutesInfoSchema.plugin(siteOwned, { sortField: "date", modelName: "SYMXRoutesInfo" });
 
 const SYMXRoutesInfo: Model<ISYMXRoutesInfo> =
     mongoose.models.SYMXRoutesInfo ||

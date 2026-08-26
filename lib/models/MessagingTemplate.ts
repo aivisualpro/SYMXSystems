@@ -29,7 +29,7 @@ const MessagingTemplateSchema = new Schema<IMessagingTemplate>(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-MessagingTemplateSchema.plugin(siteOwned);
+MessagingTemplateSchema.plugin(siteOwned, { modelName: "MessagingTemplate" });
 
 delete mongoose.models.MessagingTemplate;
 

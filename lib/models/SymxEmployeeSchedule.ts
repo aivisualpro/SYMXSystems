@@ -79,7 +79,7 @@ SymxEmployeeScheduleSchema.index({ typeId: 1 });
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxEmployeeScheduleSchema.plugin(siteOwned, { sortField: "date" });
+SymxEmployeeScheduleSchema.plugin(siteOwned, { sortField: "date", modelName: "SymxEmployeeSchedule" });
 
 const SymxEmployeeSchedule: Model<ISymxEmployeeSchedule> =
   mongoose.models.SymxEmployeeSchedule ||

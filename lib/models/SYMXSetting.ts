@@ -24,7 +24,7 @@ const SYMXSettingSchema = new Schema<ISYMXSetting>(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SYMXSettingSchema.plugin(siteOwned);
+SYMXSettingSchema.plugin(siteOwned, { modelName: "SYMXSetting" });
 
 const SYMXSetting: Model<ISYMXSetting> =
     mongoose.models.SYMXSetting ||

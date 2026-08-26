@@ -57,7 +57,7 @@ ScoreCardDCRSchema.index({ week: 1, transporterId: 1 }, { unique: true });
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-ScoreCardDCRSchema.plugin(siteOwned, { sortField: "week" });
+ScoreCardDCRSchema.plugin(siteOwned, { sortField: "week", modelName: "ScoreCardDCR" });
 
 const ScoreCardDCR: Model<IScoreCardDCR> =
   mongoose.models.ScoreCardDCR ||

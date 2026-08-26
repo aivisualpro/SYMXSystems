@@ -1,0 +1,55 @@
+TEAM METRICS — 2026-06-24 to 2026-07-30
+============================================================
+
+Based on 1,150 route records across 81 employees.
+
+TEAM TOTALS
+------------------------------------------------------------
+Packages delivered: 232,009
+Stops:              117,795
+Routes run:         1,150
+
+MOST PACKAGES DELIVERED (top 15)
+------------------------------------------------------------
+ 1. OSCAR NAVARRETE                 5,862 pkgs   (19 routes)
+ 2. Raquel Silva                    5,610 pkgs   (20 routes)
+ 3. RENE SANCHEZ                    5,405 pkgs   (19 routes)
+ 4. ANGEL VILLACANA                 5,226 pkgs   (18 routes)
+ 5. Mashhor Shaaibi                 5,148 pkgs   (18 routes)
+ 6. DAVID PERDOMO                   5,009 pkgs   (19 routes)
+ 7. RICK VILLONES                   5,008 pkgs   (18 routes)
+ 8. GUILLERMO JIMENEZ               4,859 pkgs   (18 routes)
+ 9. JENNIFER EROSTICO               4,812 pkgs   (18 routes)
+10. JOSE RUIZ                       4,725 pkgs   (18 routes)
+11. JOSE CAMPOS                     4,668 pkgs   (16 routes)
+12. Jesus Godoy                     4,589 pkgs   (16 routes)
+13. RINA FLORES                     4,423 pkgs   (15 routes)
+14. ANTWAN COMBS                    4,421 pkgs   (15 routes)
+15. NICHOLAS SANTOS                 4,409 pkgs   (14 routes)
+
+MOST STOPS (top 15)
+------------------------------------------------------------
+ 1. OSCAR NAVARRETE                 2,929 stops  (19 routes)
+ 2. Raquel Silva                    2,793 stops  (20 routes)
+ 3. RENE SANCHEZ                    2,694 stops  (19 routes)
+ 4. ANGEL VILLACANA                 2,642 stops  (18 routes)
+ 5. RICK VILLONES                   2,608 stops  (18 routes)
+ 6. Mashhor Shaaibi                 2,592 stops  (18 routes)
+ 7. DAVID PERDOMO                   2,580 stops  (19 routes)
+ 8. GUILLERMO JIMENEZ               2,475 stops  (18 routes)
+ 9. JOSE RUIZ                       2,474 stops  (18 routes)
+10. JOSE CAMPOS                     2,413 stops  (16 routes)
+11. JENNIFER EROSTICO               2,398 stops  (18 routes)
+12. RINA FLORES                     2,387 stops  (15 routes)
+13. AMAURY CEDILO                   2,361 stops  (16 routes)
+14. Jesus Godoy                     2,350 stops  (16 routes)
+15. ANTHONY TOWNES                  2,285 stops  (14 routes)
+
+SAFETY INFRACTIONS (3 found — matched on "safety" in category/sub-category)
+------------------------------------------------------------
+2026-07-03  Hector Rodriguez             Safety Infraction    Sign/Signal  [second_warning/uploaded_signed_copy]
+2026-07-15  Hector Rodriguez             Safety Infraction    Speeding  [third_warning/signed]
+2026-07-16  ANTWAN COMBS                 Safety Infraction    Sign/Signal  [first_warning/uploaded_signed_copy]
+
+============================================================
+Generated 2026-07-17T03:13:55.570Z

@@ -53,7 +53,7 @@ SymxPhotoOnDeliverySchema.index({ week: 1, transporterId: 1 }, { unique: true })
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxPhotoOnDeliverySchema.plugin(siteOwned, { sortField: "week" });
+SymxPhotoOnDeliverySchema.plugin(siteOwned, { sortField: "week", modelName: "SymxPhotoOnDelivery" });
 
 const SymxPhotoOnDelivery: Model<ISymxPhotoOnDelivery> = mongoose.models.SymxPhotoOnDelivery || mongoose.model<ISymxPhotoOnDelivery>('SymxPhotoOnDelivery', SymxPhotoOnDeliverySchema);
 

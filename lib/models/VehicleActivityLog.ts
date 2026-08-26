@@ -32,7 +32,7 @@ const VehicleActivityLogSchema: Schema = new Schema({
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-VehicleActivityLogSchema.plugin(siteOwned, { sortField: "startDate" });
+VehicleActivityLogSchema.plugin(siteOwned, { sortField: "startDate", modelName: "VehicleActivityLog" });
 
 const VehicleActivityLog: Model<IVehicleActivityLog> = mongoose.models.VehicleActivityLog || mongoose.model<IVehicleActivityLog>('VehicleActivityLog', VehicleActivityLogSchema);
 

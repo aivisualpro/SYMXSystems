@@ -97,7 +97,7 @@ SYMXCoachingWriteUpSchema.index({ transporterId: 1, incidentDate: 1 });
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SYMXCoachingWriteUpSchema.plugin(siteOwned, { sortField: "incidentDate" });
+SYMXCoachingWriteUpSchema.plugin(siteOwned, { sortField: "incidentDate", modelName: "SYMXCoachingWriteUp" });
 
 const SYMXCoachingWriteUp =
   mongoose.models.SYMXCoachingWriteUp ||

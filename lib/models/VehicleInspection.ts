@@ -61,7 +61,7 @@ const VehicleInspectionSchema: Schema = new Schema({
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-VehicleInspectionSchema.plugin(siteOwned);
+VehicleInspectionSchema.plugin(siteOwned, { modelName: "VehicleInspection" });
 
 const VehicleInspection: Model<IVehicleInspection> = mongoose.models.VehicleInspection || mongoose.model<IVehicleInspection>('VehicleInspection', VehicleInspectionSchema);
 

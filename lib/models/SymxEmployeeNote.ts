@@ -27,7 +27,7 @@ SymxEmployeeNoteSchema.index({ transporterId: 1, createdAt: -1 });
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxEmployeeNoteSchema.plugin(siteOwned, { sortField: "createdAt" });
+SymxEmployeeNoteSchema.plugin(siteOwned, { sortField: "createdAt", modelName: "SYMXEmployeeNote" });
 
 const SymxEmployeeNote =
   mongoose.models.SYMXEmployeeNote ||

@@ -53,7 +53,7 @@ SymxDVICVehicleInspectionSchema.index({ startDate: 1 });
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxDVICVehicleInspectionSchema.plugin(siteOwned, { sortField: "week" });
+SymxDVICVehicleInspectionSchema.plugin(siteOwned, { sortField: "week", modelName: "SymxDVICVehicleInspection" });
 
 const SymxDVICVehicleInspection: Model<ISymxDVICVehicleInspection> =
   mongoose.models.SymxDVICVehicleInspection ||

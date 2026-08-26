@@ -26,7 +26,7 @@ const SymxReimbursementSettingsSchema = new Schema<ISymxReimbursementSettings>(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-SymxReimbursementSettingsSchema.plugin(siteOwned);
+SymxReimbursementSettingsSchema.plugin(siteOwned, { modelName: "SymxReimbursementSettings" });
 
 const SymxReimbursementSettings =
   mongoose.models.SymxReimbursementSettings ||

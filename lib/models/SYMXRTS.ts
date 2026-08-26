@@ -26,6 +26,6 @@ const symxRTSSchema = new Schema<ISYMXRTS>(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-symxRTSSchema.plugin(siteOwned, { sortField: "date" });
+symxRTSSchema.plugin(siteOwned, { sortField: "date", modelName: "SYMXRTS" });
 
 export default mongoose.models.SYMXRTS || mongoose.model<ISYMXRTS>("SYMXRTS", symxRTSSchema);

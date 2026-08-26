@@ -45,7 +45,7 @@ if (mongoose.models.RouteType) {
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-RouteTypeSchema.plugin(siteOwned);
+RouteTypeSchema.plugin(siteOwned, { modelName: "RouteType" });
 
 const RouteType: Model<IRouteType> = mongoose.model<IRouteType>('RouteType', RouteTypeSchema);
 
