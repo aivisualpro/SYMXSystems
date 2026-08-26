@@ -73,7 +73,16 @@ export function siteOwned(schema: Schema, options: SiteOwnedOptions = {}) {
  * one field name would invite code that treats them the same and quietly
  * rewrites history on transfer.
  */
-export function siteAssigned(schema: Schema, fieldName: "primarySiteId" | "currentSiteId") {
+export interface SiteAssignedOptions {
+  field: "primarySiteId" | "currentSiteId";
+  modelName?: string;
+}
+
+// Takes an options OBJECT rather than positional arguments because
+// mongoose invokes plugins as fn(schema, options) — it forwards exactly
+// one options value, so a third parameter can never be passed.
+export function siteAssigned(schema: Schema, options: SiteAssignedOptions) {
+  const fieldName = options.field;
   schema.add({
     [fieldName]: {
       type: Schema.Types.ObjectId,
@@ -81,4 +90,13 @@ export function siteAssigned(schema: Schema, fieldName: "primarySiteId" | "curre
       index: true,
     },
   } as any);
+
+  // Guarded too. An unscoped Vehicle.find() lists every station's fleet
+  // and an unscoped employee query every station's roster — the fact that
+  // these records TRANSFER rather than being owned forever changes which
+  // field holds the station, not whether the query needs scoping.
+  schema.plugin(siteGuard, {
+    modelName: options.modelName || "UnknownAssignedModel",
+    field: fieldName,
+  });
 }

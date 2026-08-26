@@ -93,9 +93,9 @@ function modeFor(modelName: string): GuardMode {
  * `$or: [{siteId…}, {siteId: {$exists:false}}, …]` form used during the
  * migration window.
  */
-export function hasSiteScope(filter: any): boolean {
+export function hasSiteScope(filter: any, field: string = "siteId"): boolean {
   if (!filter || typeof filter !== "object") return false;
-  if ("siteId" in filter) return true;
+  if (field in filter) return true;
 
   // The deliberate "match nothing" filter from siteFilter() when a user has
   // no station. Restrictive, so it counts as scoped.
@@ -105,7 +105,7 @@ export function hasSiteScope(filter: any): boolean {
 
   // $and is conjunctive: every branch must hold, so ONE scoped branch
   // restricts the whole query.
-  if (Array.isArray(filter.$and) && filter.$and.some((b: any) => hasSiteScope(b))) {
+  if (Array.isArray(filter.$and) && filter.$and.some((b: any) => hasSiteScope(b, field))) {
     return true;
   }
 
@@ -116,7 +116,7 @@ export function hasSiteScope(filter: any): boolean {
   if (
     Array.isArray(filter.$or) &&
     filter.$or.length > 0 &&
-    filter.$or.every((b: any) => hasSiteScope(b))
+    filter.$or.every((b: any) => hasSiteScope(b, field))
   ) {
     return true;
   }
@@ -266,8 +266,15 @@ const READ_OPS = [
 
 const WRITE_OPS = ["updateOne", "updateMany", "deleteOne", "deleteMany", "replaceOne"] as const;
 
-export function siteGuard(schema: Schema, options: { modelName: string }) {
+export function siteGuard(
+  schema: Schema,
+  options: { modelName: string; field?: "siteId" | "currentSiteId" | "primarySiteId" }
+) {
   const { modelName } = options;
+  // Transferable models (vehicles, employees) carry their station in a
+  // different field, so the guard has to look for the right one or it
+  // would flag correctly-scoped queries as unscoped.
+  const field = options.field || "siteId";
 
   const check = function (this: any, operation: string) {
     const mode = modeFor(modelName);
@@ -281,7 +288,7 @@ export function siteGuard(schema: Schema, options: { modelName: string }) {
     let filter: any = {};
     try { filter = this.getFilter ? this.getFilter() : this.getQuery?.() || {}; } catch { /* ignore */ }
 
-    if (hasSiteScope(filter)) return;
+    if (hasSiteScope(filter, field)) return;
 
     const kind = isByIdOnly(filter) ? "byId" : "broad";
     const v = record(modelName, operation, filter, kind);
@@ -294,7 +301,8 @@ export function siteGuard(schema: Schema, options: { modelName: string }) {
         `[site-guard] ${modelName}.${operation}() ran without a station filter.\n` +
           `  Filter: ${v.filter}\n` +
           `  From:   ${v.origin}\n\n` +
-          `Use siteFilter(scope) from lib/scoped-query, or if this genuinely needs\n` +
+          `Use siteFilter(scope${field === "siteId" ? "" : `, { field: "${field}" }`}) from lib/scoped-query,\n` +
+          `or if this genuinely needs\n` +
           `to span stations, declare it:  .setOptions({ orgWide: "why" })`
       );
     }
@@ -320,7 +328,7 @@ export function siteGuard(schema: Schema, options: { modelName: string }) {
 
     const pipeline = this.pipeline() || [];
     const firstMatch = pipeline.find((s: any) => s && s.$match);
-    if (firstMatch && hasSiteScope(firstMatch.$match)) return;
+    if (firstMatch && hasSiteScope(firstMatch.$match, field)) return;
 
     const v = record(modelName, "aggregate", firstMatch?.$match || {}, "broad");
     if (mode === "enforce") {

@@ -76,8 +76,24 @@ export async function getRequestScope(): Promise<RequestScope> {
  */
 export function siteFilter(
   scope: RequestScope,
-  opts: { includeUnassigned?: boolean } = {}
+  opts: {
+    includeUnassigned?: boolean;
+    /**
+     * Which field carries the station. Defaults to `siteId` (immutable
+     * ownership). Pass `currentSiteId` / `primarySiteId` for the
+     * transferable models — vehicles and employees, which MOVE between
+     * stations rather than being owned forever by one.
+     *
+     * The distinction is deliberate and load-bearing: a vehicle's repairs
+     * stay with the station where the work was done even after the van is
+     * reassigned, so filtering repairs by the vehicle's CURRENT station
+     * would silently rewrite history in the UI.
+     */
+    field?: "siteId" | "currentSiteId" | "primarySiteId";
+  } = {}
 ): Record<string, any> {
+  const field = opts.field || "siteId";
+
   // No station: match nothing. Critically NOT an empty filter — returning
   // {} here would silently expose every record in the system, which is the
   // exact failure this whole design exists to prevent.
@@ -85,7 +101,7 @@ export function siteFilter(
     return { _id: { $in: [] } };
   }
 
-  const inScope = { siteId: { $in: scope.activeSiteIds } };
+  const inScope = { [field]: { $in: scope.activeSiteIds } };
   if (!opts.includeUnassigned) return inScope;
 
   // Unassigned records belong to the default station. If it isn't in view,
@@ -96,8 +112,8 @@ export function siteFilter(
   return {
     $or: [
       inScope,
-      { siteId: { $exists: false } },
-      { siteId: null },
+      { [field]: { $exists: false } },
+      { [field]: null },
     ],
   };
 }

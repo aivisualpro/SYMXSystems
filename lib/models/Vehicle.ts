@@ -91,7 +91,7 @@ VehicleSchema.index({ vehicleName: 1 });
 // from site-owned records' `siteId`: `currentSiteId` is a mutable fact
 // about today, not history. Records already produced keep their own
 // siteId when this changes.
-VehicleSchema.plugin(siteAssigned, "currentSiteId");
+VehicleSchema.plugin(siteAssigned, { field: "currentSiteId", modelName: "Vehicle" });
 
 const Vehicle: Model<IVehicle> = mongoose.models.Vehicle || mongoose.model<IVehicle>('Vehicle', VehicleSchema);
 

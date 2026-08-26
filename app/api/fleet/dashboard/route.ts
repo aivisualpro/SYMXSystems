@@ -7,6 +7,7 @@ import DailyInspection from "@/lib/models/DailyInspection";
 import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import { authorizeAction } from "@/lib/rbac";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 
 export async function GET(req: NextRequest) {
   try { await requirePermission("Fleet", "view"); } catch (e: any) {
@@ -19,6 +20,20 @@ export async function GET(req: NextRequest) {
     if (!auth.authorized) return auth.response;
 
     await connectToDatabase();
+
+    // ── Station scope ──
+    // Two different fields, deliberately. Vehicles TRANSFER between
+    // stations, so they carry currentSiteId; repairs, inspections and
+    // rental agreements are owned permanently by the station where the
+    // work happened, so they carry siteId.
+    //
+    // Filtering repairs by the vehicle's CURRENT station instead would
+    // silently rewrite history: move a van to DXC8 and its DFO2-era
+    // repairs would follow it out of DFO2's numbers.
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const V = siteFilter(scope, { includeUnassigned: true, field: "currentSiteId" });
+
     const { searchParams } = new URL(req.url);
     const section = searchParams.get("section") || "dashboard";
 
@@ -34,22 +49,22 @@ export async function GET(req: NextRequest) {
         expiredRentals, expiringSoonCount, rentalAmountAgg, fleetNotWorkingDocs,
         registrationExpiringDocs, expiringSoonDocs,
       ] = await Promise.all([
-        Vehicle.countDocuments(notReturned),
-        Vehicle.aggregate([{ $match: notReturned }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
-        Vehicle.countDocuments({ ...notReturned, ownership: "Owned" }),
-        Vehicle.countDocuments({ ...notReturned, ownership: "Leased" }),
-        Vehicle.countDocuments({ ...notReturned, ownership: "Rented" }),
-        VehicleRepair.find({ currentStatus: { $ne: "Completed" } }).sort({ creationDate: -1 }).limit(6).select("description unitNumber estimatedDate currentStatus vin").lean(),
-        VehicleRepair.aggregate([{ $group: { _id: "$currentStatus", count: { $sum: 1 } } }]),
-        DailyInspection.find({}).sort({ routeDate: -1 }).limit(6).select("vin unitNumber routeDate driver anyRepairs").lean(),
-        VehicleRentalAgreement.estimatedDocumentCount(),
-        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now } }),
-        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $lte: now } }),
-        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow } }),
-        VehicleRentalAgreement.aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }]),
-        Vehicle.find({ status: { $in: ["Grounded", "Maintenance", "Inactive"] } }).select("unitNumber vehicleName status mileage updatedAt notes fleetCommunications").lean(),
-        Vehicle.find({ status: "Active", registrationExpiration: { $gte: new Date(), $lte: new Date(new Date().getTime() + 1000 * 60 * 60 * 24 * 90) } }).select("unitNumber vehicleName registrationExpiration status").sort({ registrationExpiration: 1 }).limit(10).lean(),
-        VehicleRentalAgreement.find({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow } }).sort({ registrationEndDate: 1 }).limit(6).select("agreementNumber vin registrationEndDate amount").lean(),
+        Vehicle.countDocuments({ ...notReturned, ...V }),
+        Vehicle.aggregate([{ $match: { ...notReturned, ...V } }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
+        Vehicle.countDocuments({ ...notReturned, ...V, ownership: "Owned" }),
+        Vehicle.countDocuments({ ...notReturned, ...V, ownership: "Leased" }),
+        Vehicle.countDocuments({ ...notReturned, ...V, ownership: "Rented" }),
+        VehicleRepair.find({ currentStatus: { $ne: "Completed" }, ...S }).sort({ creationDate: -1 }).limit(6).select("description unitNumber estimatedDate currentStatus vin").lean(),
+        VehicleRepair.aggregate([{ $match: S }, { $group: { _id: "$currentStatus", count: { $sum: 1 } } }]),
+        DailyInspection.find(S).sort({ routeDate: -1 }).limit(6).select("vin unitNumber routeDate driver anyRepairs").lean(),
+        VehicleRentalAgreement.countDocuments(S),
+        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now }, ...S }),
+        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $lte: now }, ...S }),
+        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow }, ...S }),
+        VehicleRentalAgreement.aggregate([{ $match: S }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+        Vehicle.find({ status: { $in: ["Grounded", "Maintenance", "Inactive"] }, ...V }).select("unitNumber vehicleName status mileage updatedAt notes fleetCommunications").lean(),
+        Vehicle.find({ ...V, status: "Active", registrationExpiration: { $gte: new Date(), $lte: new Date(new Date().getTime() + 1000 * 60 * 60 * 24 * 90) } }).select("unitNumber vehicleName registrationExpiration status").sort({ registrationExpiration: 1 }).limit(10).lean(),
+        VehicleRentalAgreement.find({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow }, ...S }).sort({ registrationEndDate: 1 }).limit(6).select("agreementNumber vin registrationEndDate amount").lean(),
       ]);
 
       const vehicleStatusColorMap: Record<string, string> = {
@@ -78,7 +93,7 @@ export async function GET(req: NextRequest) {
       const todayDateStr = todayStart.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
 
       const todayRoutes = await SYMXRoute.find(
-        { date: { $gte: todayStart, $lt: todayEnd }, type: { $nin: ["off", "Off", "OFF", "oFF"] } },
+        { date: { $gte: todayStart, $lt: todayEnd }, type: { $nin: ["off", "Off", "OFF", "oFF"] }, ...S },
         { type: 1, subType: 1, packageCount: 1, stopCount: 1, routeDuration: 1, van: 1, serviceType: 1, attendance: 1 }
       ).lean() as any[];
 
@@ -156,7 +171,7 @@ export async function GET(req: NextRequest) {
       if (!yearWeek) return NextResponse.json({ error: "yearWeek is required" }, { status: 400 });
 
       const effAgg = await SYMXRoute.aggregate([
-        { $match: { yearWeek, type: { $nin: ["off", "Off", "OFF", "oFF"] }, driverEfficiency: { $gt: 0 } } },
+        { $match: { yearWeek, type: { $nin: ["off", "Off", "OFF", "oFF"] }, driverEfficiency: { $gt: 0 }, ...S } },
         { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: "America/Los_Angeles" } }, avgEfficiency: { $avg: "$driverEfficiency" }, totalCost: { $sum: "$totalCost" }, routeCount: { $sum: 1 } } },
         { $sort: { _id: 1 } },
       ]);
@@ -168,7 +183,7 @@ export async function GET(req: NextRequest) {
       const startDate = new Date(); startDate.setDate(startDate.getDate() - daysBack); startDate.setHours(0, 0, 0, 0);
 
       const histAgg = await SYMXRoute.aggregate([
-        { $match: { date: { $gte: startDate }, type: { $nin: ["off", "Off", "OFF", "oFF"] } } },
+        { $match: { date: { $gte: startDate }, type: { $nin: ["off", "Off", "OFF", "oFF"] }, ...S } },
         { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: "America/Los_Angeles" } }, avgEfficiency: { $avg: { $cond: [{ $gt: ["$driverEfficiency", 0] }, "$driverEfficiency", null] } }, totalCost: { $sum: "$totalCost" }, routesPlanned: { $sum: 1 }, totalPackages: { $sum: "$packageCount" }, totalStops: { $sum: "$stopCount" } } },
         { $sort: { _id: 1 } },
       ]);

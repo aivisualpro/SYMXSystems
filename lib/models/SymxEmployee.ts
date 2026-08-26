@@ -148,7 +148,7 @@ SymxEmployeeSchema.index({ phoneNumber: 1 });
 // from site-owned records' `siteId`: `primarySiteId` is a mutable fact
 // about today, not history. Records already produced keep their own
 // siteId when this changes.
-SymxEmployeeSchema.plugin(siteAssigned, "primarySiteId");
+SymxEmployeeSchema.plugin(siteAssigned, { field: "primarySiteId", modelName: "SymxEmployee" });
 
 const SymxEmployee: Model<ISymxEmployee> = mongoose.models.SymxEmployee || mongoose.model<ISymxEmployee>('SymxEmployee', SymxEmployeeSchema);
 
