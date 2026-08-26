@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import Site from "@/lib/models/Site";
 import SymxHrTicket from "@/lib/models/SymxHrTicket";
 import {
   getNextTicketNumber,
@@ -107,6 +108,9 @@ export async function POST(req: NextRequest) {
     // ── Rate limit by IP ──
     const ip = getClientIp(req);
     if (ip !== "unknown") {
+      // Rate limit is deliberately org-wide, not per station. It exists to
+      // stop one IP flooding the form, and scoping it would let the same
+      // source submit its full quota again at every station.
       const recentCount = await SymxHrTicket.countDocuments({
         submitterIp: ip,
         createdAt: { $gte: new Date(Date.now() - RATE_LIMIT_WINDOW_MS) },
@@ -144,9 +148,40 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // ── Which station does this person work at? ──
+    // The form is one public link shared everywhere, so there is no
+    // session and no subdomain to infer from. The submitter picks their
+    // station explicitly — inferring it from an auto-matched employee
+    // record would silently misfile every ticket from someone whose name
+    // did not match, which is exactly the case where a person most needs
+    // HR to see their ticket.
+    //
+    // Validated against real, active stations rather than trusted: this
+    // endpoint is unauthenticated, so the body is hostile input.
+    let ticketSiteId: any = undefined;
+    if (body.stationId) {
+      const station: any = await Site.findOne(
+        { _id: body.stationId, status: "active" },
+        { _id: 1 }
+      ).lean();
+      if (!station) {
+        return NextResponse.json(
+          { error: "Please choose a valid station." },
+          { status: 400 }
+        );
+      }
+      ticketSiteId = station._id;
+    } else if (exact?.primarySiteId) {
+      // Auto-matched employee with a known station: use it as a fallback
+      // so an older client that predates the dropdown still files
+      // correctly rather than leaving the ticket unassigned.
+      ticketSiteId = exact.primarySiteId;
+    }
+
     const ticketNumber = await getNextTicketNumber();
     const ticket = await SymxHrTicket.create({
       ticketNumber,
+      siteId: ticketSiteId,
       category: typeof body.category === "string" ? body.category.slice(0, 200) : "",
       issue: typeof body.issue === "string" ? body.issue.slice(0, 5000) : "",
       timeOffDateType,

@@ -166,7 +166,32 @@ const CHUNK_SIZE = 500;
 function ShareDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copied, setCopied] = useState(false);
-  const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/apply` : "";
+  const [stations, setStations] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [station, setStation] = useState("");
+
+  // Each station gets its OWN link and QR. An applicant scanning the
+  // poster at DXC8 should land in DXC8's pipeline without being asked
+  // which station they are applying to — they often do not know the
+  // station code, and the answer is already implied by where they are
+  // standing.
+  const shareUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/apply${station ? `?station=${encodeURIComponent(station)}` : ""}`
+      : "";
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/user/sites")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = d.sites || [];
+        setStations(list);
+        // Preselect when there is only one station to choose from, so the
+        // common single-station case needs no interaction.
+        if (list.length === 1) setStation(list[0].code);
+      })
+      .catch(() => {});
+  }, [open]);
 
   useEffect(() => {
     if (!open || !shareUrl) return;
@@ -217,6 +242,29 @@ function ShareDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
           </div>
         </div>
 
+        {stations.length > 1 && (
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
+              Station this QR code is for
+            </label>
+            <select
+              value={station}
+              onChange={(e) => setStation(e.target.value)}
+              className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+            >
+              <option value="">No station — applicant must be assigned manually</option>
+              {stations.map((s) => (
+                <option key={s.id} value={s.code}>
+                  {s.code} — {s.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Print a separate code per station. Applications from a code with
+              no station arrive unassigned rather than going to a default.
+            </p>
+          </div>
+        )}
         <p className="text-center text-xs text-muted-foreground mb-4">Scan QR code or share the link below</p>
 
         <div className="px-6 pb-4">

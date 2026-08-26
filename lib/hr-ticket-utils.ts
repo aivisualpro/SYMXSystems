@@ -82,9 +82,14 @@ export interface EmployeeMatchCandidate {
   lastName: string;
   transporterId: string;
   profileImage: string;
+  /** Home station, used as a fallback when a ticket carries no station. */
+  primarySiteId?: string | null;
 }
 
-const EMPLOYEE_MATCH_SELECT = { firstName: 1, lastName: 1, transporterId: 1, profileImage: 1 };
+// primarySiteId is selected so an auto-matched employee can supply the
+// station for a ticket submitted by an older client that predates the
+// station dropdown — otherwise those tickets file as unassigned.
+const EMPLOYEE_MATCH_SELECT = { firstName: 1, lastName: 1, transporterId: 1, profileImage: 1, primarySiteId: 1 };
 
 function toCandidate(doc: any): EmployeeMatchCandidate {
   return {
@@ -93,6 +98,7 @@ function toCandidate(doc: any): EmployeeMatchCandidate {
     lastName: doc.lastName || "",
     transporterId: doc.transporterId || "",
     profileImage: doc.profileImage || "",
+    primarySiteId: doc.primarySiteId ? String(doc.primarySiteId) : null,
   };
 }
 
