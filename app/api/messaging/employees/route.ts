@@ -138,7 +138,7 @@ export async function GET(req: NextRequest) {
 
     // ── Run all queries IN PARALLEL for maximum speed ──
     const employeePromise = SymxEmployee.find(
-      { status: "Active", phoneNumber: { $exists: true, $ne: "" } },
+      { status: "Active", phoneNumber: { $exists: true, $ne: "" }, ...E },
       { _id: 1, firstName: 1, lastName: 1, transporterId: 1, phoneNumber: 1, type: 1, status: 1, email: 1 }
     )
       .sort({ firstName: 1, lastName: 1 })

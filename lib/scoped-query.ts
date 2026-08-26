@@ -109,13 +109,19 @@ export function siteFilter(
   const defaultInView = !!scope.defaultSiteId && scope.activeSiteIds.includes(scope.defaultSiteId);
   if (!defaultInView) return inScope;
 
-  return {
-    $or: [
-      inScope,
-      { [field]: { $exists: false } },
-      { [field]: null },
-    ],
-  };
+  // ── Why $in: [...ids, null] and not $or ──
+  // This used to return { $or: [ {siteId:...}, {siteId:{$exists:false}}, ... ] }.
+  // That shape is a trap: callers spread it into a filter that often has its
+  // OWN $or, and the second $or silently overwrites the first — duplicate
+  // key in an object literal, last one wins, station filter gone. It happened
+  // in the revenue-cost pipeline and was invisible in review; only the
+  // runtime guard caught it.
+  //
+  // A single `siteId` key composes safely with anything. It relies on a real
+  // MongoDB behaviour rather than a trick: $in containing null matches
+  // documents where the field is null AND where it is missing entirely,
+  // which is exactly the set of pre-migration records.
+  return { [field]: { $in: [...scope.activeSiteIds, null] } };
 }
 
 /**

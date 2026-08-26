@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   // Otherwise, return all signature statuses for the week (lightweight)
   const allRemarks = await SymxScoreCardRemarks.find(
-    { week },
+    { week, ...S },
     { transporterId: 1, driverSignature: 1, managerSignature: 1 }
   ).lean();
 

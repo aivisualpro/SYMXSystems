@@ -56,9 +56,27 @@ describe("siteFilter", () => {
 
   describe("includeUnassigned (migration window only)", () => {
     it("matches records with no siteId when the DEFAULT station is in view", () => {
+      // $in containing null matches documents where siteId is null AND
+      // where it is missing entirely — exactly the pre-migration records.
       const f = siteFilter(scope(), { includeUnassigned: true });
-      expect(f.$or).toHaveLength(3);
-      expect(f.$or[0]).toEqual({ siteId: { $in: [SITE_A] } });
+      expect(f).toEqual({ siteId: { $in: [SITE_A, null] } });
+    });
+
+    it("returns a single siteId key, never a top-level $or", () => {
+      // Regression, and a nasty one. The filter used to be
+      //   { $or: [ {siteId:...}, {siteId:{$exists:false}}, ... ] }
+      // which callers spread into filters that often have their OWN $or —
+      // the second silently overwrote the first, dropping the station
+      // filter entirely. Invisible in review; only the runtime guard
+      // caught it, in the revenue-cost pipeline.
+      //
+      // A single key composes safely with anything, so this asserts the
+      // SHAPE rather than the behaviour.
+      const f = siteFilter(scope(), { includeUnassigned: true });
+      expect(Object.keys(f)).toEqual(["siteId"]);
+
+      const merged = { ...f, $or: [{ a: 1 }, { b: 2 }] };
+      expect(merged.siteId).toEqual({ $in: [SITE_A, null] });
     });
 
     it("does NOT match unassigned records at a non-default station", () => {
@@ -78,13 +96,13 @@ describe("siteFilter", () => {
         scope({ activeSiteIds: [SITE_A, SITE_B], allowedSiteIds: [SITE_A, SITE_B], mode: "multi" }),
         { includeUnassigned: true }
       );
-      expect(withDefault.$or).toBeDefined();
+      expect(withDefault.siteId).toEqual({ $in: [SITE_A, SITE_B, null] });
 
       const withoutDefault = siteFilter(
         scope({ activeSiteIds: [SITE_B, SITE_C], allowedSiteIds: [SITE_B, SITE_C], mode: "multi" }),
         { includeUnassigned: true }
       );
-      expect(withoutDefault.$or).toBeUndefined();
+      expect(withoutDefault).toEqual({ siteId: { $in: [SITE_B, SITE_C] } });
     });
 
     it("still matches nothing when the user has no station", () => {

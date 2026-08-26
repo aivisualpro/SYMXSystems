@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
         if (yearWeek) {
             // Read confirmation status from the schedule's futureShift array (single source of truth)
             const weekSchedules = await SymxEmployeeSchedule.find(
-                { yearWeek, futureShift: { $exists: true, $ne: [] } },
+                { yearWeek, futureShift: { $exists: true, $ne: [] }, ...S },
                 { transporterId: 1, futureShift: 1 }
             ).lean() as any[];
             weekSchedules.forEach((s: any) => {

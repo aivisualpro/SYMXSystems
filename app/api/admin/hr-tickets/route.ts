@@ -2,7 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
-import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId, orgWide} from "@/lib/scoped-query";
 import SymxHrTicket from "@/lib/models/SymxHrTicket";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxUser from "@/lib/models/SymxUser";
@@ -87,9 +87,12 @@ async function enrichTickets(tickets: any[]) {
 
   const empByTransporterMap = new Map<string, { employeeName: string; profileImage: string }>();
   if (transporterIds.length > 0) {
-    const employees = await SymxEmployee.find(
-      { transporterId: { $in: transporterIds } },
-      { transporterId: 1, firstName: 1, lastName: 1, profileImage: 1 }
+    const employees = await orgWide(
+      SymxEmployee.find(
+        { transporterId: { $in: transporterIds } },
+        { transporterId: 1, firstName: 1, lastName: 1, profileImage: 1 }
+      ),
+      "resolving names for records already scoped to this station — someone loaned in or since transferred must still display, not appear blank"
     ).lean();
     employees.forEach((emp: any) => {
       empByTransporterMap.set(emp.transporterId, {

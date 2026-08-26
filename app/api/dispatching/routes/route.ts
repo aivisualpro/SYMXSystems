@@ -1,7 +1,7 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
-import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId, orgWide} from "@/lib/scoped-query";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SYMXRoute from "@/lib/models/SYMXRoute";
@@ -186,7 +186,10 @@ export async function GET(req: NextRequest) {
                 { $group: { _id: "$transporterId", count: { $sum: 1 } } },
             ]),
             allVanNames.length > 0
-                ? Vehicle.find({ vehicleName: { $in: allVanNames } }, { vin: 1, vehicleName: 1 }).lean()
+                ? orgWide(
+                    Vehicle.find({ vehicleName: { $in: allVanNames } }, { vin: 1, vehicleName: 1 }),
+                    "resolving names/vans for records already scoped to this station — a driver or van loaned in from elsewhere must still display, not appear blank"
+                  ).lean()
                 : [],
             // Fetch schedules linked to these routes (for shiftNotification status)
             (() => {

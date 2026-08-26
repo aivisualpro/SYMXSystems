@@ -79,7 +79,12 @@ export async function GET(req: NextRequest) {
       }
 
       const inspVins = [...new Set(inspections.map((i: any) => i.vin).filter(Boolean))];
-      const vinVehicles = inspVins.length > 0 ? await Vehicle.find({ vin: { $in: inspVins } }, { vin: 1, vehicleName: 1 }).lean() : [];
+      const vinVehicles = inspVins.length > 0
+        ? await orgWide(
+            Vehicle.find({ vin: { $in: inspVins } }, { vin: 1, vehicleName: 1 }),
+            "resolving names/vans for records already scoped to this station — a driver or van loaned in from elsewhere must still display, not appear blank"
+          ).lean()
+        : [];
       const vinNameMap: Record<string, string> = {};
       for (const v of vinVehicles as any[]) {
         if (v.vin && v.vehicleName) vinNameMap[v.vin] = v.vehicleName;

@@ -2,7 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectToDatabase from "@/lib/db";
-import { getRequestScope, siteFilter } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, orgWide} from "@/lib/scoped-query";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import RouteType from "@/lib/models/RouteType";
@@ -76,9 +76,12 @@ export async function GET(req: NextRequest) {
     const transporterIds = [...new Set(routes.map((r: any) => (r.transporterId || "").trim().toUpperCase()))];
 
     const [employees, auditEntries] = await Promise.all([
-      SymxEmployee.find(
-        { transporterId: { $in: transporterIds } },
-        { transporterId: 1, firstName: 1, lastName: 1, email: 1, phoneNumber: 1, hiredDate: 1, status: 1 }
+      orgWide(
+        SymxEmployee.find(
+          { transporterId: { $in: transporterIds } },
+          { transporterId: 1, firstName: 1, lastName: 1, email: 1, phoneNumber: 1, hiredDate: 1, status: 1 }
+        ),
+        "resolving names for records already scoped to this station — someone loaned in or since transferred must still display, not appear blank"
       ).lean(),
       // Every time a schedule's typeId was changed TO "Call Out" — oldValue tells us
       // what shift the employee was originally scheduled for.

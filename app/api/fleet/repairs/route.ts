@@ -5,7 +5,7 @@ import connectToDatabase from "@/lib/db";
 import Vehicle from "@/lib/models/Vehicle";
 import VehicleRepair from "@/lib/models/VehicleRepair";
 import { authorizeAction } from "@/lib/rbac";
-import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId, orgWide} from "@/lib/scoped-query";
 
 export async function GET(req: NextRequest) {
   try { await requirePermission("Fleet", "view"); } catch (e: any) {
@@ -60,7 +60,10 @@ export async function GET(req: NextRequest) {
     const vinsToResolve = repairs.filter((r: any) => r.vin && !r.vehicleName).map((r: any) => r.vin);
     let vinToNameMap: Record<string, string> = {};
     if (vinsToResolve.length > 0) {
-      const vehicles = await Vehicle.find({ vin: { $in: vinsToResolve } }, { vin: 1, vehicleName: 1 }).lean();
+      const vehicles = await orgWide(
+        Vehicle.find({ vin: { $in: vinsToResolve } }, { vin: 1, vehicleName: 1 }),
+        "resolving names/vans for records already scoped to this station — a driver or van loaned in from elsewhere must still display, not appear blank"
+      ).lean();
       vehicles.forEach((v: any) => { if (v.vin && v.vehicleName) vinToNameMap[v.vin] = v.vehicleName; });
     }
     const enrichedRepairs = repairs.map((r: any) => ({
