@@ -248,6 +248,61 @@ describe("seasonal sites", () => {
   });
 });
 
+describe("per-station Quo numbers", () => {
+  // The inbound webhook is unauthenticated and carries no station, so the
+  // number a reply arrives at is the ONLY evidence of where it belongs.
+  // Every property below exists to keep that lookup unambiguous.
+
+  it("refuses to let two stations share a sending number", async () => {
+    await Site.findByIdAndUpdate(fx.sites.a._id, {
+      $set: { "messaging.quoPhoneNumberId": "PNshared123" },
+    });
+    await expect(
+      Site.findByIdAndUpdate(
+        fx.sites.b._id,
+        { $set: { "messaging.quoPhoneNumberId": "PNshared123" } },
+        { runValidators: true }
+      )
+    ).rejects.toThrow();
+  });
+
+  it("allows many stations to have no number configured", async () => {
+    // The reason neither field carries an empty-string default: with one,
+    // every unconfigured station would collide on the unique index and the
+    // second station saved would fail for a reason that looks unrelated.
+    await Site.findByIdAndUpdate(fx.sites.a._id, { $unset: { "messaging.quoPhoneNumberId": "" } });
+    await Site.findByIdAndUpdate(fx.sites.b._id, { $unset: { "messaging.quoPhoneNumberId": "" } });
+    await expect(
+      Site.findByIdAndUpdate(fx.sites.c._id, { $unset: { "messaging.quoPhoneNumberId": "" } })
+    ).resolves.toBeTruthy();
+
+    const unconfigured = await Site.countDocuments({ "messaging.quoPhoneNumberId": { $exists: false } });
+    expect(unconfigured).toBeGreaterThanOrEqual(3);
+  });
+
+  it("resolves a station from its number", async () => {
+    await Site.findByIdAndUpdate(fx.sites.b._id, {
+      $set: { "messaging.quoPhoneNumberId": "PNbbb", "messaging.quoPhoneNumber": "+15550000002" },
+    });
+    const { resolveStationByNumber } = await import("@/lib/messaging/station-numbers");
+
+    // Both forms must resolve: the API speaks OpenPhone ids, the webhook
+    // payload reports E.164 numbers depending on event type.
+    expect((await resolveStationByNumber("PNbbb"))?.code).toBe(fx.sites.b.code);
+    expect((await resolveStationByNumber("+15550000002"))?.code).toBe(fx.sites.b.code);
+  });
+
+  it("returns null for an unknown number rather than guessing a station", async () => {
+    // The critical one. Falling back to the default station here would
+    // file a driver's reply under a station they never texted, and nothing
+    // downstream would ever reveal it.
+    const { resolveStationByNumber } = await import("@/lib/messaging/station-numbers");
+    expect(await resolveStationByNumber("PNnot-a-real-number")).toBeNull();
+    expect(await resolveStationByNumber("")).toBeNull();
+    expect(await resolveStationByNumber(null)).toBeNull();
+  });
+});
+
 describe("data model constraints", () => {
   it("prevents duplicate active assignments to the same site", async () => {
     await expect(

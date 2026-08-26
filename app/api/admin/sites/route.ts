@@ -128,11 +128,19 @@ export async function PUT(req: NextRequest) {
   // Per-station Quo number. Both forms are stored because the two sides of
   // the integration speak different ones: the API wants OpenPhone's PNxxxx
   // id, while the inbound webhook reports the E.164 number.
-  if (body.quoPhoneNumberId !== undefined) {
-    updates["messaging.quoPhoneNumberId"] = String(body.quoPhoneNumberId).trim();
-  }
-  if (body.quoPhoneNumber !== undefined) {
-    updates["messaging.quoPhoneNumber"] = String(body.quoPhoneNumber).trim();
+  // Clearing a number must UNSET it, not write "". The lookup indexes are
+  // unique+sparse, so a second station cleared to "" would collide with
+  // the first and the save would fail with an unrelated-looking duplicate
+  // key error.
+  const unsets: Record<string, ""> = {};
+  for (const [field, key] of [
+    ["quoPhoneNumberId", "messaging.quoPhoneNumberId"],
+    ["quoPhoneNumber", "messaging.quoPhoneNumber"],
+  ] as const) {
+    if (body[field] === undefined) continue;
+    const value = String(body[field] ?? "").trim();
+    if (value) updates[key] = value;
+    else unsets[key] = "";
   }
 
   if (body.status !== undefined) {
@@ -159,6 +167,9 @@ export async function PUT(req: NextRequest) {
     );
   }
 
-  await Site.findByIdAndUpdate(id, { $set: updates });
+  await Site.findByIdAndUpdate(id, {
+    $set: updates,
+    ...(Object.keys(unsets).length ? { $unset: unsets } : {}),
+  });
   return NextResponse.json({ success: true });
 }

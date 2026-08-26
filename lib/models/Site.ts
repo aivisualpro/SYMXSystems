@@ -79,25 +79,34 @@ const SiteSchema: Schema = new Schema(
     // wants); quoPhoneNumber is the human-readable E.164 number (what the
     // webhook reports and what a person recognises). Both are stored
     // because each side of the integration speaks a different one.
+    // No `default: ""` on either field. An empty-string default would make
+    // the field always present, which defeats the sparse unique indexes
+    // below — every unconfigured station would collide with every other.
+    // Unset means absent.
     messaging: {
-      quoPhoneNumberId: { type: String, default: "" },
-      quoPhoneNumber: { type: String, default: "" },
+      quoPhoneNumberId: { type: String },
+      quoPhoneNumber: { type: String },
     },
   },
   { timestamps: true, collection: "SYMXSites" }
 );
 
-// Reverse lookup for the inbound webhook: number -> station. Sparse
-// because stations without messaging configured have an empty string, and
-// a non-sparse unique index would collide across all of them.
-SiteSchema.index(
-  { "messaging.quoPhoneNumberId": 1 },
-  { sparse: true, partialFilterExpression: { "messaging.quoPhoneNumberId": { $type: "string", $ne: "" } } }
-);
-SiteSchema.index(
-  { "messaging.quoPhoneNumber": 1 },
-  { sparse: true, partialFilterExpression: { "messaging.quoPhoneNumber": { $type: "string", $ne: "" } } }
-);
+// Reverse lookup for the inbound webhook: number -> station.
+//
+// UNIQUE, because the number is the only evidence of which station an
+// inbound reply belongs to. If two stations shared one, resolving it would
+// return whichever document came back first and quietly file drivers'
+// replies under the wrong station. Better to make that state impossible
+// than to detect it later.
+//
+// SPARSE so stations with no number configured don't all collide on
+// "missing" — which is why neither field has an empty-string default.
+//
+// sparse and partialFilterExpression cannot be combined (MongoDB rejects
+// the spec outright), and $ne is not permitted inside a partial filter, so
+// sparse alone is the correct tool here.
+SiteSchema.index({ "messaging.quoPhoneNumberId": 1 }, { unique: true, sparse: true });
+SiteSchema.index({ "messaging.quoPhoneNumber": 1 }, { unique: true, sparse: true });
 
 // Slug is unique per organization, not globally — the org boundary is the
 // real namespace even though there is only one org today.
