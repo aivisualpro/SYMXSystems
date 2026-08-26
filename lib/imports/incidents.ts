@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { orgWide } from "@/lib/scoped-query";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxDeliveryExcellence from "@/lib/models/SymxDeliveryExcellence";
 import SymxPhotoOnDelivery from "@/lib/models/SymxPhotoOnDelivery";
@@ -496,9 +497,12 @@ export async function processIncidents(type: string, data: any, week: string | u
                 .map((row: any) => (row["Transporter ID"] || row["transporterId"] || "").toString().trim())
                 .filter((id: string) => id);
 
-            const employees = await SymxEmployee.find(
-                { transporterId: { $in: transporterIds } },
-                { _id: 1, transporterId: 1 }
+            const employees = await orgWide(
+                SymxEmployee.find(
+                  { transporterId: { $in: transporterIds } },
+                  { _id: 1, transporterId: 1 }
+                ),
+                "identity lookup — a person is matched by who they are, not where they work; scoping this would make a loaned or transferred employee unresolvable"
             ).lean();
             const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
 
@@ -559,9 +563,12 @@ export async function processIncidents(type: string, data: any, week: string | u
                 .map((row: any) => (row["Transporter ID"] || row["transporterId"] || "").toString().trim())
                 .filter((id: string) => id);
 
-            const employees = await SymxEmployee.find(
-                { transporterId: { $in: transporterIds } },
-                { _id: 1, transporterId: 1 }
+            const employees = await orgWide(
+                SymxEmployee.find(
+                  { transporterId: { $in: transporterIds } },
+                  { _id: 1, transporterId: 1 }
+                ),
+                "identity lookup — a person is matched by who they are, not where they work; scoping this would make a loaned or transferred employee unresolvable"
             ).lean();
             const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
 

@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import Vehicle from "@/lib/models/Vehicle";
 import mongoose from "mongoose";
 
@@ -15,6 +16,9 @@ export async function POST(
         if (!session || !session.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         await connectToDatabase();
+
+        const scope = await getRequestScope();
+        const V = siteFilter(scope, { includeUnassigned: true, field: "currentSiteId" });
         const { id } = await params;
         if (!mongoose.Types.ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid vehicle ID" }, { status: 400 });
 
@@ -64,7 +68,7 @@ export async function PUT(
         if (!commId) return NextResponse.json({ error: "Communication ID required" }, { status: 400 });
 
         const vehicle = await Vehicle.findOneAndUpdate(
-            { _id: id, "fleetCommunications._id": commId },
+            { _id: id, "fleetCommunications._id": commId, ...V },
             {
                 $set: {
                     "fleetCommunications.$.date": new Date(date),

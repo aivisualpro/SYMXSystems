@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, canAccessRecord, orgWide } from "@/lib/scoped-query";
 import { getSession } from "@/lib/auth";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import { canViewCompensation, maskRate } from "@/lib/compensation-visibility";

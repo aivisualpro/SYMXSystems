@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, canAccessRecord, orgWide } from "@/lib/scoped-query";
 import Vehicle from "@/lib/models/Vehicle";
 
 // GET /api/incidents/vans
@@ -16,8 +17,11 @@ export async function GET() {
 
   try {
     await connectToDatabase();
+
+    const scope = await getRequestScope();
+    const V = siteFilter(scope, { includeUnassigned: true, field: "currentSiteId" });
     const vehicles = await Vehicle.find(
-      { status: { $ne: "Decommissioned" } },
+      { status: { $ne: "Decommissioned" }, ...V },
       { vehicleName: 1, unitNumber: 1, vin: 1 }
     ).lean();
 

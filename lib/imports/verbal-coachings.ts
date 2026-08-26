@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import SymxEmployee from "@/lib/models/SymxEmployee";
+import { orgWide } from "@/lib/scoped-query";
 import DropdownOption from "@/lib/models/DropdownOption";
 import VerbalCoaching from "@/lib/models/VerbalCoaching";
 
@@ -49,7 +50,13 @@ export async function processVerbalCoachings(type: string, data: any[], _week: s
 
   // Pre-fetch all employees once — small enough table to match in memory,
   // and this data is too messy (ID or name, mixed casing) to bulk-query.
-  const employees = await SymxEmployee.find({}, { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }).lean();
+  // Whole-table pre-fetch for fuzzy name matching. Org-wide on purpose:
+  // an imported coaching names a person, and refusing to match someone
+  // because they transferred would silently drop their record.
+  const employees = await orgWide(
+    SymxEmployee.find({}, { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }),
+    "fuzzy name matching against the company roster — a transferred employee must still resolve"
+  ).lean();
   const byTransporterId = new Map<string, any>();
   const byFullName = new Map<string, any>();
   for (const emp of employees as any[]) {

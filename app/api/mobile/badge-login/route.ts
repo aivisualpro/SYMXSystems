@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SignJWT } from "jose";
 import connectToDatabase from "@/lib/db";
+import { orgWide } from "@/lib/scoped-query";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 
 // ── JWT secret (reuse the same secret used by the main auth system) ──
@@ -44,8 +45,8 @@ export async function GET(req: NextRequest) {
   const email = req.nextUrl.searchParams.get("email");
   if (!email) return NextResponse.json({ error: "pass ?email=..." }, { headers: corsHeaders });
   await connectToDatabase();
-  const exact   = await SymxEmployee.findOne({ email }).lean() as any;
-  const lower   = await SymxEmployee.findOne({ email: email.toLowerCase() }).lean() as any;
+  const exact   = await orgWide(SymxEmployee.findOne({ email }), "badge login — a driver authenticates by who they are; scoping this would lock out anyone working away from their home station").lean() as any;
+  const lower   = await orgWide(SymxEmployee.findOne({ email: email.toLowerCase() }), "badge login — a driver authenticates by who they are; scoping this would lock out anyone working away from their home station").lean() as any;
   const escaped = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regex   = await SymxEmployee.findOne({ email: { $regex: new RegExp(`^${escaped}$`, "i") } }).lean() as any;
   return NextResponse.json({
@@ -80,20 +81,20 @@ export async function POST(req: NextRequest) {
 
       // Strategy 1: case-insensitive regex
       const escapedEmail = emailRaw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      employee = await SymxEmployee.findOne({
+      employee = await orgWide(SymxEmployee.findOne({
         email: { $regex: new RegExp(`^${escapedEmail}$`, "i") },
-      }).lean();
+      }), "badge login — a driver authenticates by who they are; scoping this would lock out anyone working away from their home station").lean();
 
       // Strategy 2: exact lowercase fallback (in case regex fails)
       if (!employee) {
-        employee = await SymxEmployee.findOne({
+        employee = await orgWide(SymxEmployee.findOne({
           email: emailRaw.toLowerCase(),
-        }).lean();
+        }), "badge login — a driver authenticates by who they are; scoping this would lock out anyone working away from their home station").lean();
       }
 
       // Strategy 3: exact as-typed fallback
       if (!employee) {
-        employee = await SymxEmployee.findOne({ email: emailRaw }).lean();
+        employee = await orgWide(SymxEmployee.findOne({ email: emailRaw }), "badge login — a driver authenticates by who they are; scoping this would lock out anyone working away from their home station").lean();
       }
 
       console.log(`[badge-login] Email lookup result — found: ${!!employee}, status: ${employee?.status}`);
@@ -117,9 +118,9 @@ export async function POST(req: NextRequest) {
       // Escape regex special characters to prevent injection
       const escaped = badgeNumber.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-      employee = await SymxEmployee.findOne({
+      employee = await orgWide(SymxEmployee.findOne({
         badgeNumber: { $regex: new RegExp(`^${escaped}$`, "i") },
-      }).lean();
+      }), "badge login — a driver authenticates by who they are; scoping this would lock out anyone working away from their home station").lean();
 
       if (!employee || employee.status !== "Active") {
         return NextResponse.json(

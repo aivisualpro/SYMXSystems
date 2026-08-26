@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
+import { getRequestScope, siteFilter, canAccessRecord, orgWide } from "@/lib/scoped-query";
 import SymxEmployee from '@/lib/models/SymxEmployee';
 import { getSession } from '@/lib/auth';
 import { canViewCompensation, maskRateInList, maskRate } from '@/lib/compensation-visibility';
@@ -18,6 +19,12 @@ export async function GET(req: Request) {
 
   try {
     await connectToDatabase();
+
+    const scope = await getRequestScope();
+    // Employees are rostered at their PRIMARY station. Someone loaned out
+    // for a day still belongs to their home roster, so this list shows the
+    // people based here rather than everyone who happened to work a shift.
+    const E = siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" });
     
     // Check permissions if needed, for now assume admin/manager access
     const session = await getSession();
@@ -48,7 +55,7 @@ export async function GET(req: Request) {
     const filterSpecial = searchParams.get('filter'); // dlExpiring, missingDocs
 
     // Construct query
-    const query: any = {};
+    const query: any = { ...E };
 
     if (search) {
       // Escape special regex characters to prevent crashes
@@ -231,7 +238,12 @@ export async function POST(req: Request) {
     }
     
     // Check for duplicate email
-    const existingEmployee = await SymxEmployee.findOne({ email: body.email }).lean();
+    // Email uniqueness is company-wide: the same person must not be
+    // created twice because one station could not see the other's roster.
+    const existingEmployee = await orgWide(
+      SymxEmployee.findOne({ email: body.email }),
+      "email uniqueness is company-wide — a duplicate must be caught even if the existing record is at another station"
+    ).lean();
     if (existingEmployee) {
       return new NextResponse("Email already exists", { status: 409 });
     }

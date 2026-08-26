@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import connectToDatabase from "@/lib/db";
+import { orgWide } from "@/lib/scoped-query";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 
 // ── JWT secret (same as badge-login) ──
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
       ? { transporterId }
       : { badgeNumber: { $regex: new RegExp(`^${escaped}$`, "i") } };
 
-    const employee = await SymxEmployee.findOne(query).lean();
+    const employee = await orgWide(SymxEmployee.findOne(query), "resolving the signed-in driver's own record from their token identity").lean();
 
     if (!employee || employee.status !== "Active") {
       return NextResponse.json(

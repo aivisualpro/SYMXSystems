@@ -1,6 +1,7 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, canAccessRecord, orgWide } from "@/lib/scoped-query";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import { getSession } from "@/lib/auth";
 
@@ -20,6 +21,9 @@ export async function GET() {
 
     await connectToDatabase();
 
+    const scope = await getRequestScope();
+    const E = siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" });
+
     const now = new Date();
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -29,6 +33,7 @@ export async function GET() {
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
     const [result] = await SymxEmployee.aggregate([
+      { $match: E },
       {
         $facet: {
           // ── Status counts ──

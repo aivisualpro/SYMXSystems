@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import SymxEmployee from "@/lib/models/SymxEmployee";
+import { orgWide } from "@/lib/scoped-query";
 import DropdownOption from "@/lib/models/DropdownOption";
 import Writeup from "@/lib/models/Writeup";
 
@@ -54,9 +55,12 @@ export async function processWriteups(type: string, data: any[], _week: string |
     .map((row: any) => (row["Transporter ID"] || row["transporterId"] || "").toString().trim())
     .filter((id: string) => id);
 
-  const employees = await SymxEmployee.find(
-    { transporterId: { $in: transporterIds } },
-    { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }
+  const employees = await orgWide(
+    SymxEmployee.find(
+      { transporterId: { $in: transporterIds } },
+      { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }
+    ),
+    "identity lookup — a person is matched by who they are, not where they work; scoping this would make a loaned or transferred employee unresolvable"
   ).lean();
   const employeeMap = new Map<string, { id: any; name: string }>(
     employees.map((emp: any) => [emp.transporterId, { id: emp._id, name: `${emp.firstName || ""} ${emp.lastName || ""}`.trim() }])
