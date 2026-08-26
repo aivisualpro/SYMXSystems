@@ -3,6 +3,7 @@ import { authorizeAction } from "@/lib/rbac";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 import SymxIncident from "@/lib/models/SymxIncident";
 
 const PRIVILEGED_FIELDS = [
@@ -64,7 +65,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     await connectToDatabase();
-    const incident = await SymxIncident.findById(id).lean();
+    const scope = await getRequestScope();
+    const incident = await findScopedById<any>(SymxIncident, id, scope);
     if (!incident) return NextResponse.json({ error: "Incident not found" }, { status: 404 });
 
     const canManage = await hasFullAccess();
@@ -172,6 +174,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       if (contactPush) updateDoc.$push.contactLog = contactPush;
       if (attachmentPush) updateDoc.$push.attachments = attachmentPush;
     }
+
+    // Ownership check before writing — findByIdAndUpdate alone would edit
+    // another station's incident. 404, not 403, so a mismatch does not
+    // confirm the record exists.
+    const editScope = await getRequestScope();
+    const owned = await findScopedById<any>(SymxIncident, id, editScope);
+    if (!owned) return NextResponse.json({ error: "Incident not found" }, { status: 404 });
 
     const incident = await SymxIncident.findByIdAndUpdate(id, updateDoc, { new: true, lean: true });
     if (!incident) return NextResponse.json({ error: "Incident not found" }, { status: 404 });

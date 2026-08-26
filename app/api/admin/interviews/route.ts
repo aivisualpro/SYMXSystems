@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxInterview from "@/lib/models/SymxInterview";
 
 export async function GET(req: NextRequest) {
@@ -21,7 +22,8 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "0");
     const status = searchParams.get("status");
 
-    const query: any = {};
+    const scope = await getRequestScope();
+    const query: any = { ...siteFilter(scope, { includeUnassigned: true }) };
     if (status && status !== "all") query.status = status;
 
     if (limit > 0) {

@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxIncident from "@/lib/models/SymxIncident";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 
@@ -26,7 +27,8 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50", 10);
     const search = searchParams.get("search") || "";
 
-    const filter: any = {};
+    const scope = await getRequestScope();
+    const filter: any = { ...siteFilter(scope, { includeUnassigned: true }) };
     if (search) {
       filter.$or = [
         { employeeName: { $regex: search, $options: "i" } },
@@ -46,6 +48,7 @@ export async function GET(req: NextRequest) {
         .lean(),
       SymxIncident.countDocuments(filter),
       SymxIncident.aggregate([
+        { $match: filter },
         {
           $group: {
             _id: null,
@@ -64,7 +67,10 @@ export async function GET(req: NextRequest) {
           },
         },
       ]),
-      SymxEmployee.find({}, { transporterId: 1, firstName: 1, lastName: 1 }).lean(),
+      SymxEmployee.find(
+        siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" }),
+        { transporterId: 1, firstName: 1, lastName: 1 }
+      ).lean(),
     ]);
 
     const nameMap = new Map<string, string>();

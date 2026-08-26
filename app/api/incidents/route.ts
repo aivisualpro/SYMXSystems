@@ -3,6 +3,7 @@ import { authorizeAction } from "@/lib/rbac";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxIncident from "@/lib/models/SymxIncident";
 
 // Fields that only privileged (HR/Admin) viewers get to see. Everyone else
@@ -49,7 +50,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || "open";
 
-    const query: any = {};
+    const scope = await getRequestScope();
+    const query: any = { ...siteFilter(scope, { includeUnassigned: true }) };
     if (status === "open") {
       // "Open" = anything not explicitly Closed — matches New + Open.
       query.claimStatus = { $ne: "Close" };

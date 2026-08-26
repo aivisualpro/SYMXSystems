@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxHrTicket from "@/lib/models/SymxHrTicket";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxUser from "@/lib/models/SymxUser";
@@ -23,7 +24,8 @@ export async function GET(req: NextRequest) {
     const skip = parseInt(searchParams.get("skip") || "0");
     const limit = parseInt(searchParams.get("limit") || "0");
 
-    const query: any = {};
+    const scope = await getRequestScope();
+    const query: any = { ...siteFilter(scope, { includeUnassigned: true }) };
 
     let tickets: any[];
 

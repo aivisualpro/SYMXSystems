@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import { v2 as cloudinary } from "cloudinary";
 import { getNextRequestNumber, enrichReimbursements } from "@/lib/reimbursement-utils";
@@ -55,7 +56,8 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") || "";
 
-    const filter: any = {};
+    const scope = await getRequestScope();
+    const filter: any = { ...siteFilter(scope, { includeUnassigned: true }) };
     if (status) filter.status = status;
     if (search) {
       filter.$or = [
@@ -73,6 +75,7 @@ export async function GET(req: NextRequest) {
       SymxReimbursement.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       SymxReimbursement.countDocuments(filter),
       SymxReimbursement.aggregate([
+        { $match: filter },
         STATUS_NORMALIZE_STAGE,
         {
           $group: {

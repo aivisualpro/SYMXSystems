@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import SymxNotification from '@/lib/models/SymxNotification';
+import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 
 export async function GET() {
   try {
@@ -16,7 +17,10 @@ export async function GET() {
   try {
     await connectToDatabase();
     // Fetch notifications, sorted by newest first
-    const notifications = await SymxNotification.find().sort({ createdAt: -1 }).limit(50).lean();
+    const scope = await getRequestScope();
+    const notifications = await SymxNotification.find(
+      siteFilter(scope, { includeUnassigned: true })
+    ).sort({ createdAt: -1 }).limit(50).lean();
     return NextResponse.json(notifications);
   } catch (error) {
     console.error("Failed to fetch notifications:", error);

@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SYMXCoachingWriteUp from "@/lib/models/SYMXCoachingWriteUp";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import DropdownOption from "@/lib/models/DropdownOption";
@@ -25,10 +26,12 @@ export async function GET(req: NextRequest) {
     if (action === "counts") {
       const empId = searchParams.get("employeeId");
       if (!empId) return NextResponse.json({ correctiveActionCount: 0, metricNoticeCount: 0 });
-      const correctiveActionCount = await SYMXCoachingWriteUp.countDocuments({ employeeId: empId });
+      const cScope = await getRequestScope();
+      const cS = siteFilter(cScope, { includeUnassigned: true });
+      const correctiveActionCount = await SYMXCoachingWriteUp.countDocuments({ employeeId: empId, ...cS });
       const metricId = searchParams.get("metric");
       const metricNoticeCount = metricId
-        ? await SYMXCoachingWriteUp.countDocuments({ employeeId: empId, metric: metricId })
+        ? await SYMXCoachingWriteUp.countDocuments({ employeeId: empId, metric: metricId, ...cS })
         : 0;
       return NextResponse.json({ correctiveActionCount, metricNoticeCount });
     }
@@ -38,7 +41,8 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const skip = (page - 1) * limit;
 
-    const filter: any = {};
+    const scope = await getRequestScope();
+    const filter: any = { ...siteFilter(scope, { includeUnassigned: true }) };
     if (search) {
       filter.$or = [
         { type: { $regex: search, $options: "i" } },
@@ -79,7 +83,7 @@ export async function GET(req: NextRequest) {
         .limit(limit)
         .lean(),
       SYMXCoachingWriteUp.countDocuments(filter),
-      SymxEmployee.find({}, { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }).sort({ firstName: 1, lastName: 1 }).lean(),
+      SymxEmployee.find(siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" }), { _id: 1, transporterId: 1, firstName: 1, lastName: 1 }).sort({ firstName: 1, lastName: 1 }).lean(),
       SymxEmployee.find({ type: "Operations", status: "Active" }, { _id: 1, firstName: 1, lastName: 1 }).sort({ firstName: 1, lastName: 1 }).lean(),
       DropdownOption.find({ type: "metric" }, { _id: 1, description: 1, icon: 1, color: 1 }).lean(),
     ]);
