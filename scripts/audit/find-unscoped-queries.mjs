@@ -35,6 +35,8 @@ const QUERY_OPS = [
 // Markers that indicate the caller thought about stations.
 const SCOPE_MARKERS = [
   "siteId",
+  "primarySiteId",
+  "currentSiteId",
   "siteFilter",
   "orgWide",
   "getRequestScope",
@@ -65,7 +67,16 @@ function siteOwnedModels() {
   const names = new Set();
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".ts"))) {
     const src = readFileSync(path.join(dir, file), "utf8");
-    if (/\.plugin\(\s*siteOwned/.test(src) || /\.plugin\(\s*siteGuard/.test(src)) {
+    // siteAssigned counts too. Employees and vehicles TRANSFER between
+    // stations rather than being owned by one, but their queries still
+    // need scoping — an unscoped employee list is every station's roster.
+    // Omitting it here meant those two models were never audited at all,
+    // and the report still said zero.
+    if (
+      /\.plugin\(\s*siteOwned/.test(src) ||
+      /\.plugin\(\s*siteGuard/.test(src) ||
+      /\.plugin\(\s*siteAssigned/.test(src)
+    ) {
       names.add(file.replace(/\.ts$/, ""));
     }
   }

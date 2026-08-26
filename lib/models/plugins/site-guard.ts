@@ -161,15 +161,17 @@ const NOISE = [
  *     [project]/app/... under Turbopack, .next/server/...) rather than
  *     source paths, so naive matching on "/app/" misses them.
  */
-function callOrigin(): string {
+function callOrigin(boundary: Function): string {
   const prevLimit = Error.stackTraceLimit;
   Error.stackTraceLimit = 60;
   const holder: { stack?: string } = {};
-  // Cuts every frame above and including callOrigin itself. Doing this by
-  // string-matching the filename does not work: a bundler rewrites the
-  // path, so the previous version filtered on "site-guard", matched
-  // nothing, and reported callOrigin as the caller of every query.
-  Error.captureStackTrace(holder, callOrigin);
+  // Cuts every frame above AND INCLUDING `boundary`. The boundary must be
+  // the guard's outermost function, not this one: passing callOrigin only
+  // strips callOrigin, leaving record() and check() on the stack — which
+  // is why the first version reported "record" as the caller of all 17
+  // violations. String-matching the filename does not work either, since
+  // a bundler rewrites the path.
+  Error.captureStackTrace(holder, boundary);
   const stack = holder.stack || "";
   Error.stackTraceLimit = prevLimit;
 
@@ -224,8 +226,8 @@ function filterShape(filter: any): string {
   return keys.length ? keys.join(",") : "{}";
 }
 
-function record(modelName: string, operation: string, filter: any, kind: "byId" | "broad") {
-  const origin = callOrigin();
+function record(modelName: string, operation: string, filter: any, kind: "byId" | "broad", boundary: Function) {
+  const origin = callOrigin(boundary);
   // Shape is in the key so two different call sites querying the same
   // model don't collapse into one entry when origin can't be resolved.
   const key = `${modelName}|${operation}|${kind}|${origin}|${filterShape(filter)}`;
@@ -276,7 +278,7 @@ export function siteGuard(
   // would flag correctly-scoped queries as unscoped.
   const field = options.field || "siteId";
 
-  const check = function (this: any, operation: string) {
+  function check(this: any, operation: string) {
     const mode = modeFor(modelName);
     if (mode === "off") return;
 
@@ -291,7 +293,7 @@ export function siteGuard(
     if (hasSiteScope(filter, field)) return;
 
     const kind = isByIdOnly(filter) ? "byId" : "broad";
-    const v = record(modelName, operation, filter, kind);
+    const v = record(modelName, operation, filter, kind, check);
 
     // byId is the fetch-then-check pattern and is usually fine — never
     // throw on it, only report. Throwing would break legitimate code the
@@ -318,10 +320,12 @@ export function siteGuard(
     schema.pre(op as any, function (this: any) { check.call(this, op); });
   }
 
+  // Named so it can be used as the stack boundary, same as check().
+  function aggregateHook(this: any) {
+
   // Aggregations bypass query middleware entirely, so they need their own
   // hook — and they are exactly where cross-station blending happens
   // silently, since a pipeline with no $match reads the whole collection.
-  schema.pre("aggregate", function (this: any) {
     const mode = modeFor(modelName);
     if (mode === "off") return;
     if (this.options?.orgWide) return;
@@ -330,7 +334,7 @@ export function siteGuard(
     const firstMatch = pipeline.find((s: any) => s && s.$match);
     if (firstMatch && hasSiteScope(firstMatch.$match, field)) return;
 
-    const v = record(modelName, "aggregate", firstMatch?.$match || {}, "broad");
+    const v = record(modelName, "aggregate", firstMatch?.$match || {}, "broad", aggregateHook);
     if (mode === "enforce") {
       throw new Error(
         `[site-guard] ${modelName}.aggregate() has no station filter in its first $match.\n` +
@@ -341,5 +345,6 @@ export function siteGuard(
     if (v.count === 1) {
       console.warn(`[site-guard] UNSCOPED ${modelName}.aggregate() — ${v.origin}`);
     }
-  });
+  }
+  schema.pre("aggregate", aggregateHook);
 }
