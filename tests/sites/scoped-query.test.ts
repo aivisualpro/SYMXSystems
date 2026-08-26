@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 /**
  * Site scoping primitives.
  *
@@ -10,6 +11,10 @@ import { describe, it, expect } from "vitest";
 import { siteFilter, canAccessRecord, resolveWriteSiteId, type RequestScope } from "@/lib/scoped-query";
 
 const SITE_A = "aaaaaaaaaaaaaaaaaaaaaaaa";
+// siteFilter emits ObjectIds, not strings: aggregation pipelines are handed
+// to MongoDB uncast, so a string id there matches nothing and the aggregate
+// silently returns zero rows. oid() keeps the assertions readable.
+const oid = (id: string) => new mongoose.Types.ObjectId(id);
 const SITE_B = "bbbbbbbbbbbbbbbbbbbbbbbb";
 const SITE_C = "cccccccccccccccccccccccc";
 
@@ -27,12 +32,12 @@ const scope = (over: Partial<RequestScope> = {}): RequestScope => ({
 
 describe("siteFilter", () => {
   it("restricts to the active station", () => {
-    expect(siteFilter(scope())).toEqual({ siteId: { $in: [SITE_A] } });
+    expect(siteFilter(scope())).toEqual({ siteId: { $in: [oid(SITE_A)] } });
   });
 
   it("includes every selected station in multi mode", () => {
     const f = siteFilter(scope({ activeSiteIds: [SITE_A, SITE_B], mode: "multi" }));
-    expect(f).toEqual({ siteId: { $in: [SITE_A, SITE_B] } });
+    expect(f).toEqual({ siteId: { $in: [oid(SITE_A), oid(SITE_B)] } });
     expect(f.siteId.$in).not.toContain(SITE_C);
   });
 
@@ -54,12 +59,46 @@ describe("siteFilter", () => {
     expect(f).toEqual({ siteId: { $in: [SITE_A, SITE_B, SITE_C] } });
   });
 
+  describe("id type (aggregation safety)", () => {
+    it("emits ObjectIds, never strings", () => {
+      // The bug this pins: mongoose casts strings to ObjectId in find()
+      // using the schema, but aggregation pipelines are passed to MongoDB
+      // RAW. A string id in a $match compares against a stored ObjectId,
+      // matches nothing, and the aggregate returns zero rows.
+      //
+      // Every dashboard KPI is an aggregate, so this presented as "the
+      // station has no data" rather than as a broken filter — which is why
+      // it survived a green test suite and a static audit reading zero.
+      const f = siteFilter(scope());
+      const ids = (f.siteId as any).$in;
+      expect(ids).toHaveLength(1);
+      expect(ids[0]).toBeInstanceOf(mongoose.Types.ObjectId);
+      expect(typeof ids[0]).not.toBe("string");
+    });
+
+    it("keeps null as a literal null, not an ObjectId", () => {
+      // null means "no station recorded" — the pre-migration rows. Casting
+      // it would produce a random ObjectId and match nothing.
+      const f = siteFilter(scope(), { includeUnassigned: true });
+      const ids = (f.siteId as any).$in;
+      expect(ids[ids.length - 1]).toBeNull();
+    });
+
+    it("drops unparseable ids rather than throwing", () => {
+      // A malformed id in the context cookie should narrow what the user
+      // sees, never crash the request — and an empty result then falls
+      // through to the match-nothing path, which fails closed.
+      const f = siteFilter(scope({ activeSiteIds: ["not-an-object-id"], allowedSiteIds: ["not-an-object-id"] }));
+      expect((f.siteId as any).$in).toEqual([]);
+    });
+  });
+
   describe("includeUnassigned (migration window only)", () => {
     it("matches records with no siteId when the DEFAULT station is in view", () => {
       // $in containing null matches documents where siteId is null AND
       // where it is missing entirely — exactly the pre-migration records.
       const f = siteFilter(scope(), { includeUnassigned: true });
-      expect(f).toEqual({ siteId: { $in: [SITE_A, null] } });
+      expect(f).toEqual({ siteId: { $in: [oid(SITE_A), null] } });
     });
 
     it("returns a single siteId key, never a top-level $or", () => {
@@ -76,7 +115,7 @@ describe("siteFilter", () => {
       expect(Object.keys(f)).toEqual(["siteId"]);
 
       const merged = { ...f, $or: [{ a: 1 }, { b: 2 }] };
-      expect(merged.siteId).toEqual({ $in: [SITE_A, null] });
+      expect(merged.siteId).toEqual({ $in: [oid(SITE_A), null] });
     });
 
     it("does NOT match unassigned records at a non-default station", () => {
@@ -87,7 +126,7 @@ describe("siteFilter", () => {
         scope({ activeSiteIds: [SITE_B], allowedSiteIds: [SITE_B] }),
         { includeUnassigned: true }
       );
-      expect(f).toEqual({ siteId: { $in: [SITE_B] } });
+      expect(f).toEqual({ siteId: { $in: [oid(SITE_B)] } });
       expect(f.$or).toBeUndefined();
     });
 
@@ -96,13 +135,13 @@ describe("siteFilter", () => {
         scope({ activeSiteIds: [SITE_A, SITE_B], allowedSiteIds: [SITE_A, SITE_B], mode: "multi" }),
         { includeUnassigned: true }
       );
-      expect(withDefault.siteId).toEqual({ $in: [SITE_A, SITE_B, null] });
+      expect(withDefault.siteId).toEqual({ $in: [oid(SITE_A), oid(SITE_B), null] });
 
       const withoutDefault = siteFilter(
         scope({ activeSiteIds: [SITE_B, SITE_C], allowedSiteIds: [SITE_B, SITE_C], mode: "multi" }),
         { includeUnassigned: true }
       );
-      expect(withoutDefault).toEqual({ siteId: { $in: [SITE_B, SITE_C] } });
+      expect(withoutDefault).toEqual({ siteId: { $in: [oid(SITE_B), oid(SITE_C)] } });
     });
 
     it("still matches nothing when the user has no station", () => {

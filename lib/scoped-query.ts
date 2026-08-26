@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { getSession } from "@/lib/auth";
 import { resolveUserSiteAccess, getDefaultSite, type UserSiteAccess } from "@/lib/sites";
 import { resolveActiveContext, type SiteContext } from "@/lib/site-context";
@@ -59,6 +60,21 @@ export async function getRequestScope(): Promise<RequestScope> {
 }
 
 /**
+ * Station ids as ObjectIds, skipping anything unparseable.
+ *
+ * Skipping rather than throwing: a malformed id in a cookie should narrow
+ * what the user sees, never crash the request. An empty result then hits
+ * the match-nothing path above, which fails closed.
+ */
+function toObjectIds(ids: string[]): mongoose.Types.ObjectId[] {
+  const out: mongoose.Types.ObjectId[] = [];
+  for (const id of ids) {
+    if (mongoose.Types.ObjectId.isValid(id)) out.push(new mongoose.Types.ObjectId(id));
+  }
+  return out;
+}
+
+/**
  * Mongo filter restricting a query to the stations currently in view.
  *
  * `includeUnassigned` covers the migration window: records created before
@@ -101,7 +117,19 @@ export function siteFilter(
     return { _id: { $in: [] } };
   }
 
-  const inScope = { [field]: { $in: scope.activeSiteIds } };
+  // ── ObjectIds, not strings ──
+  // Mongoose casts strings to ObjectId in find()/countDocuments() using the
+  // schema, but aggregation pipelines are handed to MongoDB RAW — no
+  // casting. A string id in a $match compares against a stored ObjectId,
+  // matches nothing, and the aggregate returns zero rows.
+  //
+  // That is not a subtle failure in a dashboard: every KPI reads as empty,
+  // which looks like "this station has no data" rather than "the filter is
+  // broken". Emitting ObjectIds works for both query styles, so callers
+  // never have to know which one they are in.
+  const ids = toObjectIds(scope.activeSiteIds);
+
+  const inScope = { [field]: { $in: ids } };
   if (!opts.includeUnassigned) return inScope;
 
   // Unassigned records belong to the default station. If it isn't in view,
@@ -121,7 +149,7 @@ export function siteFilter(
   // MongoDB behaviour rather than a trick: $in containing null matches
   // documents where the field is null AND where it is missing entirely,
   // which is exactly the set of pre-migration records.
-  return { [field]: { $in: [...scope.activeSiteIds, null] } };
+  return { [field]: { $in: [...ids, null] } };
 }
 
 /**
