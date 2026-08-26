@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 import { generateScheduleForWeek, getNextYearWeek } from "@/lib/schedule-generation";
 
@@ -36,14 +37,27 @@ export async function POST(req: NextRequest) {
         let { yearWeek } = body;
 
         if (!yearWeek) {
-            const latestWeek = await SymxAvailableWeek.findOne().sort({ week: -1 }).lean();
+            // "Latest generated week" is per station — DXC8 may be a week
+            // behind DFO2, and taking the global maximum would skip it.
+            const weekScope = await getRequestScope();
+            const latestWeek = await SymxAvailableWeek.findOne(
+                siteFilter(weekScope, { includeUnassigned: true })
+            ).sort({ week: -1 }).lean();
             if (!latestWeek) {
                 return NextResponse.json({ error: "No existing weeks found" }, { status: 400 });
             }
             yearWeek = getNextYearWeek((latestWeek as any).week);
         }
 
-        const result = await generateScheduleForWeek(yearWeek, session.id);
+        const genScope = await getRequestScope();
+        const genSiteId = resolveWriteSiteId(genScope, null);
+        if (!genSiteId) {
+            return NextResponse.json(
+                { error: "Select a single station before generating a schedule." },
+                { status: 400 }
+            );
+        }
+        const result = await generateScheduleForWeek(yearWeek, genSiteId, session.id);
         return NextResponse.json(result);
     } catch (error: any) {
         console.error("Generate schedule error:", error);

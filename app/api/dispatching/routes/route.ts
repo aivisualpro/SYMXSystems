@@ -429,7 +429,15 @@ export async function POST(req: NextRequest) {
         
         const { yearWeek, regenerate } = validation.data;
 
-        const result = await generateRoutesForWeek(yearWeek, regenerate);
+        const genScope = await getRequestScope();
+        const genSiteId = resolveWriteSiteId(genScope, null);
+        if (!genSiteId) {
+            return NextResponse.json(
+                { error: "Select a single station before generating routes." },
+                { status: 400 }
+            );
+        }
+        const result = await generateRoutesForWeek(yearWeek, genSiteId, regenerate);
         return NextResponse.json(result);
     } catch (error: any) {
         console.error("Error generating routes:", error);

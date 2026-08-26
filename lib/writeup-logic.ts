@@ -1,4 +1,5 @@
 import connectToDatabase from "@/lib/db";
+import { orgWide } from "@/lib/scoped-query";
 import Writeup from "@/lib/models/Writeup";
 import WriteupSettings, { DEFAULT_CORRECTIVE_ACTION_TEMPLATES } from "@/lib/models/WriteupSettings";
 import DropdownOption from "@/lib/models/DropdownOption";
@@ -71,7 +72,14 @@ export interface WriteupRecommendation {
 // making saved changes appear to vanish.
 async function getSettings() {
   await connectToDatabase();
-  let settings = await WriteupSettings.findOne().sort({ _id: 1 }).lean();
+  // Escalation thresholds are organisation policy rather than station
+  // configuration — the same conduct earns the same response wherever it
+  // happens, and per-station thresholds would mean a transfer changed how
+  // an employee's existing record is judged.
+  let settings = await orgWide(
+    WriteupSettings.findOne().sort({ _id: 1 }),
+    "escalation thresholds are org-wide policy, not per-station config"
+  ).lean();
   if (!settings) {
     settings = (await WriteupSettings.create({})).toObject();
   }
@@ -148,8 +156,18 @@ export async function recommendWarningLevel(
   };
   if (excludeWriteupId) query._id = { $ne: excludeWriteupId };
 
-  const priorDocs = await Writeup.find(query)
-    .sort({ incidentDate: -1 })
+  // ── Deliberately cross-station ──
+  // Discipline follows the PERSON, not the building. Employees get sent
+  // to other stations, and a driver with two prior write-ups at DFO2 has
+  // not earned a clean slate by working a week at DXC8 — scoping this
+  // would silently restart their escalation on transfer.
+  //
+  // Same rule as a van's maintenance history: the record describes
+  // something that moves, not something that happened at a place.
+  const priorDocs = await orgWide(
+    Writeup.find(query).sort({ incidentDate: -1 }),
+    "discipline history follows the employee — a write-up issued at their previous station still counts toward escalation"
+  )
     .select({ incidentDate: 1, warningLevel: 1, categoryLabel: 1, subCategory: 1, managerReview: 1, escalation: 1 })
     .lean();
 
@@ -301,13 +319,17 @@ export async function getVerbalCoachingContext(
   const settings = await getSettings();
   const cutoff = new Date(Date.now() - (lookbackDays ?? settings.lookbackDays ?? 90) * 24 * 60 * 60 * 1000);
 
-  const docs = await VerbalCoaching.find({
+  // Cross-station for the same reason as prior write-ups above.
+  const docs = await orgWide(
+    VerbalCoaching.find({
     employeeId,
     categoryLabels: new RegExp(`^${categoryLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
     coachingDate: { $gte: cutoff },
   })
     .sort({ coachingDate: -1 })
-    .limit(10)
+    .limit(10),
+    "discipline history follows the employee — a write-up issued at their previous station still counts toward escalation"
+  )
     .select({ coachingDate: 1, categoryLabels: 1, status: 1, notes: 1 })
     .lean();
 

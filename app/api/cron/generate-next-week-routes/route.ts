@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateScheduleForWeek, getCurrentYearWeek, getNextYearWeek } from "@/lib/schedule-generation";
 import { generateRoutesForWeek } from "@/lib/route-generation";
+import connectToDatabase from "@/lib/db";
+import Site from "@/lib/models/Site";
 
 // Force Node runtime (mongoose needs Node, not Edge).
 export const runtime = "nodejs";
@@ -40,17 +42,42 @@ export async function GET(req: NextRequest) {
   const targetWeek = getNextYearWeek(getCurrentYearWeek());
 
   try {
-    const scheduleResult = await generateScheduleForWeek(targetWeek);
-    console.log(`[cron/generate-next-week-routes] Schedule for ${targetWeek}:`, scheduleResult);
+    // ── Runs per station ──
+    // This job is unauthenticated and has no station context of its own,
+    // so it loops over the active stations rather than generating once.
+    // Generating "for everything" would merge every station's roster into
+    // a single week of routes belonging nowhere.
+    //
+    // Stations are read from the database, never hard-coded: opening a
+    // fourth station must not require editing this file.
+    await connectToDatabase();
+    const stations = await Site.find({ status: "active" }, { _id: 1, code: 1 }).lean();
 
-    const routesResult = await generateRoutesForWeek(targetWeek, false);
-    console.log(`[cron/generate-next-week-routes] Routes for ${targetWeek}:`, routesResult);
+    // One station failing must not stop the others. A seasonal station
+    // with no roster yet throws "No active employees found", and that
+    // should not prevent the permanent stations getting their week.
+    const results: Record<string, any> = {};
+    for (const station of stations as any[]) {
+      const code = station.code || String(station._id);
+      try {
+        const scheduleResult = await generateScheduleForWeek(targetWeek, String(station._id));
+        const routesResult = await generateRoutesForWeek(targetWeek, String(station._id), false);
+        results[code] = { ok: true, schedule: scheduleResult, routes: routesResult };
+        console.log(`[cron/generate-next-week-routes] ${code} ${targetWeek}:`, routesResult);
+      } catch (err: any) {
+        results[code] = { ok: false, error: err?.message || "failed" };
+        console.error(`[cron/generate-next-week-routes] ${code} failed:`, err?.message);
+      }
+    }
+
+    const failed = Object.entries(results).filter(([, r]) => !r.ok).map(([c]) => c);
 
     return NextResponse.json({
-      ok: true,
+      ok: failed.length === 0,
       yearWeek: targetWeek,
-      schedule: scheduleResult,
-      routes: routesResult,
+      stations: results,
+      // Surfaced explicitly so a partial run doesn't read as a clean success.
+      failedStations: failed,
     });
   } catch (err: any) {
     console.error("[cron/generate-next-week-routes] Failed:", err);

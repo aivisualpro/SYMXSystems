@@ -90,15 +90,31 @@ export interface GenerateScheduleResult {
  *   a manager already edited is left untouched.
  * - Idempotent: calling twice is safe.
  */
-export async function generateScheduleForWeek(yearWeek: string, userId?: string): Promise<GenerateScheduleResult> {
+/**
+ * Generate a week's schedule for ONE station.
+ *
+ * siteId is required, not optional. This is called from a request handler
+ * and from an unauthenticated cron job; optional would let the cron path
+ * build one combined schedule from every station's roster.
+ */
+export async function generateScheduleForWeek(
+    yearWeek: string,
+    siteId: string,
+    userId?: string
+): Promise<GenerateScheduleResult> {
+    if (!siteId) throw new Error("generateScheduleForWeek requires a siteId");
     await connectToDatabase();
+    const S = { siteId };
 
+    // Employees are rostered at their PRIMARY station. Someone loaned to
+    // another station for a day still belongs to their home roster, so the
+    // week is built from the people based here.
     const employees = await SymxEmployee.find(
-        { status: "Active", transporterId: { $exists: true, $ne: "" } },
+        { status: "Active", transporterId: { $exists: true, $ne: "" }, primarySiteId: siteId },
         { _id: 1, transporterId: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1 }
     ).lean();
 
-    const routeTypes = await RouteType.find().lean();
+    const routeTypes = await RouteType.find(S).lean();
     const routeTypeMap = new Map<string, any>();
     for (const rt of routeTypes) {
         routeTypeMap.set(String(rt._id), rt);
@@ -111,7 +127,7 @@ export async function generateScheduleForWeek(yearWeek: string, userId?: string)
     const dates = getWeekDates(yearWeek);
 
     const existingRecords = await SymxEmployeeSchedule.find(
-        { yearWeek },
+        { yearWeek, ...S },
         { transporterId: 1 }
     ).lean();
 
@@ -152,6 +168,7 @@ export async function generateScheduleForWeek(yearWeek: string, userId?: string)
 
             return {
                 transporterId: emp.transporterId,
+                siteId,
                 employeeId: emp._id,
                 weekDay: DAY_NAMES[dayIdx],
                 yearWeek,
@@ -172,8 +189,8 @@ export async function generateScheduleForWeek(yearWeek: string, userId?: string)
         await dbSession.withTransaction(async () => {
             await SymxEmployeeSchedule.insertMany(records, { session: dbSession });
             await SymxAvailableWeek.updateOne(
-                { week: yearWeek },
-                { $set: { week: yearWeek } },
+                { week: yearWeek, ...S },
+                { $set: { week: yearWeek, siteId } },
                 { upsert: true, session: dbSession }
             );
         });

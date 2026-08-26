@@ -23,10 +23,25 @@ export interface GenerateRoutesResult {
  * hand (time data, attendance, route info) is left alone, and brand-new
  * routes get blank defaults via $setOnInsert. Nothing is ever deleted.
  */
-export async function generateRoutesForWeek(yearWeek: string, regenerate = false): Promise<GenerateRoutesResult> {
+/**
+ * Generate routes for one week AT ONE STATION.
+ *
+ * siteId is required rather than optional. This runs from a request
+ * handler and from an unauthenticated cron job, and an optional
+ * parameter would let the cron path silently generate across every
+ * station's schedules at once — producing routes that belong nowhere and
+ * mixing two stations' drivers into one week.
+ */
+export async function generateRoutesForWeek(
+    yearWeek: string,
+    siteId: string,
+    regenerate = false
+): Promise<GenerateRoutesResult> {
+    if (!siteId) throw new Error("generateRoutesForWeek requires a siteId");
     await connectToDatabase();
+    const S = { siteId };
 
-    const existingCount = await SYMXRoute.countDocuments({ yearWeek });
+    const existingCount = await SYMXRoute.countDocuments({ yearWeek, ...S });
     if (existingCount > 0 && !regenerate) {
         return {
             message: "Routes already generated for this week",
@@ -41,7 +56,7 @@ export async function generateRoutesForWeek(yearWeek: string, regenerate = false
 
     // Fetch all schedules for this week — only fields needed for route generation
     const schedules = await SymxEmployeeSchedule.find(
-        { yearWeek },
+        { yearWeek, ...S },
         { _id: 1, transporterId: 1, date: 1, weekDay: 1, typeId: 1, van: 1 }
     ).lean();
 
@@ -52,7 +67,7 @@ export async function generateRoutesForWeek(yearWeek: string, regenerate = false
     }
 
     // Build RouteType map: typeId → { routeStatus, partOf }
-    const routeTypes = await RouteType.find({}, { _id: 1, routeStatus: 1, partOf: 1 }).lean() as any[];
+    const routeTypes = await RouteType.find(S, { _id: 1, routeStatus: 1, partOf: 1 }).lean() as any[];
     const typeIdToMeta = new Map<string, { routeStatus: string; partOf: string[] }>();
     for (const rt of routeTypes) {
         typeIdToMeta.set(String(rt._id), {
@@ -88,7 +103,10 @@ export async function generateRoutesForWeek(yearWeek: string, regenerate = false
 
     const bulkOps = workingSchedules.map((s: any) => ({
         updateOne: {
-            filter: { transporterId: s.transporterId, date: s.date },
+            // siteId in the FILTER, not just the update: without it a driver
+            // loaned to another station on the same date would collide onto
+            // one route document shared by both stations.
+            filter: { transporterId: s.transporterId, date: s.date, siteId },
             update: {
                 $set: {
                     scheduleId: String(s._id),
@@ -98,6 +116,7 @@ export async function generateRoutesForWeek(yearWeek: string, regenerate = false
                 },
                 // Only set these on NEW inserts — never overwrite existing data
                 $setOnInsert: {
+                    siteId,
                     van: s.van || "",
                     serviceType: "",
                     dashcam: "",
@@ -113,14 +132,14 @@ export async function generateRoutesForWeek(yearWeek: string, regenerate = false
 
     // ── RE-APPLY ROUTES INFO DATA ──
     try {
-        await reApplyRoutesInfo(yearWeek, workingSchedules);
+        await reApplyRoutesInfo(yearWeek, workingSchedules, siteId);
     } catch (err: any) {
         console.error("[Re-Apply RoutesInfo] Error:", err.message);
     }
 
     // ── AUTO VAN ASSIGNMENT ──
     try {
-        await autoAssignVans(yearWeek);
+        await autoAssignVans(yearWeek, siteId);
     } catch (err: any) {
         console.error("[Auto Van Assignment] Error:", err.message);
     }
@@ -140,7 +159,8 @@ export async function generateRoutesForWeek(yearWeek: string, regenerate = false
 // a linked transporterId and re-apply their fields to the
 // corresponding SYMXRoute records.
 // ══════════════════════════════════════════════════════════
-async function reApplyRoutesInfo(yearWeek: string, schedules: any[]) {
+async function reApplyRoutesInfo(yearWeek: string, schedules: any[], siteId: string) {
+    const S = { siteId };
     // Collect unique dates from the schedules
     const dateSet = new Set<string>();
     for (const s of schedules) {
@@ -157,6 +177,7 @@ async function reApplyRoutesInfo(yearWeek: string, schedules: any[]) {
     const routesInfoRows = await SYMXRoutesInfo.find({
         date: { $in: dateObjects },
         transporterId: { $nin: ["", null] },
+        ...S,
     }).lean() as any[];
 
     if (routesInfoRows.length === 0) {
@@ -167,7 +188,7 @@ async function reApplyRoutesInfo(yearWeek: string, schedules: any[]) {
     // Build bulk update ops for SYMXRoute
     const updateOps = routesInfoRows.map((row: any) => ({
         updateOne: {
-            filter: { transporterId: row.transporterId, date: row.date },
+            filter: { transporterId: row.transporterId, date: row.date, ...S },
             update: {
                 $set: {
                     routeNumber: row.routeNumber || "",
@@ -201,14 +222,15 @@ async function reApplyRoutesInfo(yearWeek: string, schedules: any[]) {
 //   4. Assign: untrained first, then trained
 //   5. Auto-populate: serviceType + dashcam from vehicle
 // ══════════════════════════════════════════════════════════
-async function autoAssignVans(yearWeek: string) {
+async function autoAssignVans(yearWeek: string, siteId: string) {
+    const S = { siteId };
     const SIZE_CATEGORIES = ["SP XL", "SP L"];
     const NINETY_DAYS_AGO = new Date();
     NINETY_DAYS_AGO.setDate(NINETY_DAYS_AGO.getDate() - 90);
 
     // Resolve eligible typeIds (non-"off" route status routes with van assignment intent)
     const eligibleRouteTypes = await RouteType.find(
-        { routeStatus: { $nin: ["off", "Off", "OFF"] }, isActive: { $ne: false } },
+        { routeStatus: { $nin: ["off", "Off", "OFF"] }, isActive: { $ne: false }, ...S },
         { _id: 1 }
     ).lean() as any[];
     const eligibleTypeIds = eligibleRouteTypes.map((rt: any) => String(rt._id));
@@ -216,6 +238,7 @@ async function autoAssignVans(yearWeek: string) {
     const allRoutes = await SYMXRoute.find(
         {
             yearWeek,
+            ...S,
             van: { $in: ["", null] },
             typeId: { $in: eligibleTypeIds },
         },
@@ -240,15 +263,21 @@ async function autoAssignVans(yearWeek: string) {
     }
 
     // 3. Get all vans already assigned this week (to exclude them)
+    // Van assignment is per station: two stations can each use their own
+    // van without colliding, so availability must be judged within one.
     const assignedVans = await SYMXRoute.distinct("van", {
         yearWeek,
         van: { $nin: ["", null] },
+        ...S,
     }) as string[];
     const assignedVanSet = new Set(assignedVans);
 
     // 4. Fetch all Active vehicles
+    // Only this station's vans are available to assign — a van parked at
+    // DXC8 cannot run a DFO2 route. Vehicles use currentSiteId because they
+    // transfer between stations.
     const activeVehicles = await Vehicle.find(
-        { status: "Active", serviceType: { $in: SIZE_CATEGORIES } },
+        { status: "Active", serviceType: { $in: SIZE_CATEGORIES }, currentSiteId: siteId },
         { vin: 1, vehicleName: 1, serviceType: 1, dashcam: 1 }
     ).sort({ vehicleName: -1 }).lean() as any[];
 
