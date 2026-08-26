@@ -145,15 +145,17 @@ async function main() {
         updatedAt: new Date(),
       }))
     );
-    // History follows each van. Matches on vehicleId, vin AND unitNumber
-    // because these collections were populated by different importers and
-    // do not all carry the same link field — matching on one alone would
-    // leave part of the history behind at the old station.
+    // History follows each van, matched by VIN — the vehicle's identity,
+    // one VIN to one van for its whole life. vehicleId too, since some
+    // collections link by document id.
+    //
+    // NOT unitNumber: those are fleet labels that get reassigned to a
+    // different van when one is retired, so matching on one would drag
+    // some other vehicle's repair history along with this transfer.
     let historyMoved = 0;
     for (const v of toMove) {
       const or = [{ vehicleId: v._id }];
       if (v.vin) or.push({ vin: v.vin });
-      if (v.unitNumber) or.push({ unitNumber: v.unitNumber });
       for (const col of [
         "vehiclesRepairs", "vehiclesInspections", "vehiclesRentalAgreements",
         "vehiclesActivityLogs", "dailyInspections",

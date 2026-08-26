@@ -40,18 +40,22 @@ export interface TransferCounts {
 /**
  * Repoint every record belonging to a vehicle at its new station.
  *
- * Matches on vehicleId, vin AND unitNumber because these collections were
- * populated by different importers over time and do not all carry the
- * same link field — matching on only one would silently leave part of the
- * history behind at the old station.
+ * Matched by VIN, which is the vehicle's identity — one VIN, one van, for
+ * the life of the vehicle. vehicleId is included as well because some
+ * collections link by document id instead.
+ *
+ * unitNumber is deliberately NOT matched on. Unit numbers are fleet
+ * labels that get reassigned to a different van when one is retired, so
+ * matching on one would move some OTHER vehicle's repair history along
+ * with this transfer — silently, and to a station where nobody would
+ * think to look for it.
  */
 export async function moveVehicleRecords(
-  vehicle: { _id: any; vin?: string; unitNumber?: string },
+  vehicle: { _id: any; vin?: string },
   toSiteId: string
 ): Promise<TransferCounts> {
   const match: any = { $or: [{ vehicleId: vehicle._id }] };
   if (vehicle.vin) match.$or.push({ vin: vehicle.vin });
-  if (vehicle.unitNumber) match.$or.push({ unitNumber: vehicle.unitNumber });
 
   const counts: TransferCounts = {};
 

@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     let historyMoved = 0;
     for (const v of toMove) {
       const counts = await moveVehicleRecords(
-        { _id: v._id, vin: (v as any).vin, unitNumber: (v as any).unitNumber },
+        { _id: v._id, vin: (v as any).vin },
         String(toSiteId)
       );
       historyMoved += Object.values(counts).reduce((a, b) => a + b, 0);

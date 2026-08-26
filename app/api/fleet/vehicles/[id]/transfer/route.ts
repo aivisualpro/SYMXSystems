@@ -93,7 +93,7 @@ export async function POST(
 
     // History follows the van.
     const movedCounts = await moveVehicleRecords(
-      { _id: vehicle._id, vin: (vehicle as any).vin, unitNumber: (vehicle as any).unitNumber },
+      { _id: vehicle._id, vin: (vehicle as any).vin },
       String(toSiteId)
     );
 
