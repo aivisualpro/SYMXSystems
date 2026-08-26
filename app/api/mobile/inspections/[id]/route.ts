@@ -51,6 +51,11 @@ export async function GET(
 
     // By-id lookup from the driver's own app. The inspection id comes
     // from a list already restricted to this driver's routes.
+    // By-id from the driver's own app; the id comes from a list already
+    // restricted to this driver's routes. No station filter, deliberately:
+    // adding one would lock out a driver whose employee record has not
+    // been backfilled, and the record is already their own either way.
+    // (siteId intentionally not filtered here — see the comment above.)
     const inspection = await DailyInspection.findById(id).lean();
     if (!inspection) {
       return NextResponse.json(

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import Site from "@/lib/models/Site";
 import SYMXRoutesInfo from "@/lib/models/SYMXRoutesInfo";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
@@ -178,6 +179,23 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
 
+    // ── Station for this sync ──
+    // Authenticated by shared key, not a session, so the station comes
+    // from an explicit ?station=CODE. Without one the sync is refused
+    // rather than defaulted: silently pulling DFO2's routes into a DXC8
+    // extension would look like working software returning wrong data.
+    const syncCode = (new URL(req.url).searchParams.get("station") || "").trim().toUpperCase();
+    const syncSite: any = syncCode
+      ? await Site.findOne({ code: syncCode, status: "active" }, { _id: 1 }).lean()
+      : null;
+    if (!syncSite) {
+      return NextResponse.json(
+        { error: "A valid ?station=CODE is required." },
+        { status: 400 }
+      );
+    }
+    const S = { siteId: syncSite._id };
+
         const dateObj = new Date(date);
 
         console.log(`[Extension Sync] Received ${routes.length} routes for ${date}`);
@@ -202,7 +220,7 @@ export async function POST(req: NextRequest) {
 
         // ── Fetch existing SYMXRoute records for this date to get transporterIds by routeCode ──
         const existingRoutes = await SYMXRoute.find(
-            { date: dateObj },
+            { date: dateObj, ...S },
             { transporterId: 1, routeNumber: 1, employeeName: 1 }
         ).lean() as any[];
 
@@ -216,7 +234,7 @@ export async function POST(req: NextRequest) {
 
         // ── Fetch existing SYMXRoutesInfo records for this date to preserve rowIndex ──
         const existingInfoRows = await SYMXRoutesInfo.find(
-            { date: dateObj },
+            { date: dateObj, ...S },
             { rowIndex: 1, routeNumber: 1, transporterId: 1 }
         ).sort({ rowIndex: -1 }).lean() as any[];
 
@@ -236,7 +254,7 @@ export async function POST(req: NextRequest) {
         });
 
         // ── Fetch WST options to map Amazon serviceTypeName → WST ──
-        const wstOpts = await SYMXWSTOption.find({ isActive: true }).lean();
+        const wstOpts = await SYMXWSTOption.find({ isActive: true, ...S }).lean();
         const amazonServiceTypeToWst = new Map<string, string>();
         wstOpts.forEach((opt: any) => {
             if (opt.amazonServiceType && opt.wst) {

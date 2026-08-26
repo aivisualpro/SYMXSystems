@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId, orgWide } from "@/lib/scoped-query";
 import SymxHrTicketSettings from "@/lib/models/SymxHrTicketSettings";
 
 export async function GET() {
@@ -15,7 +16,10 @@ export async function GET() {
 
   try {
     await connectToDatabase();
-    let settings = await SymxHrTicketSettings.findOne().lean();
+    let settings = await orgWide(
+      SymxHrTicketSettings.findOne(),
+      "holds the company-wide ticket/request number sequence, shared by all stations"
+    ).lean();
     if (!settings) {
       settings = (await SymxHrTicketSettings.create({})).toObject();
     }
@@ -45,7 +49,10 @@ export async function PUT(req: NextRequest) {
           .filter((e: string) => e.length > 0)
       : [];
 
-    let settings = await SymxHrTicketSettings.findOne();
+    let settings = await orgWide(
+      SymxHrTicketSettings.findOne(),
+      "holds the company-wide ticket/request number sequence, shared by all stations"
+    );
     if (!settings) {
       settings = await SymxHrTicketSettings.create({ notificationEmails });
     } else {

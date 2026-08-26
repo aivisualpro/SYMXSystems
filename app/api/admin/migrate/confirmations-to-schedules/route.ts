@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId } from "@/lib/scoped-query";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 
@@ -27,8 +28,13 @@ const MESSAGE_TYPE_TO_FIELD: Record<string, string> = {
 async function runMigration() {
     await connectToDatabase();
 
+    // One-off backfill. Scoped to the selected station so re-running it
+    // for one station cannot rewrite another's schedules.
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+
     // Fetch all non-week-schedule confirmations
-    const confirmations = await ScheduleConfirmation.find({
+    const confirmations = await ScheduleConfirmation.find({ ...S,
         messageType: { $in: Object.keys(MESSAGE_TYPE_TO_FIELD) },
     }).lean();
 
@@ -55,7 +61,7 @@ async function runMigration() {
         }
 
         // Find the matching schedule
-        const schedule = await SymxEmployeeSchedule.findOne({
+        const schedule = await SymxEmployeeSchedule.findOne({ ...S,
             transporterId: conf.transporterId,
             date: scheduleDate,
         });

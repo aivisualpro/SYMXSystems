@@ -1,6 +1,7 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 
 export async function PUT(req: NextRequest) {
@@ -15,6 +16,10 @@ export async function PUT(req: NextRequest) {
 
     try {
         await connectToDatabase();
+
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+        const writeSiteId = resolveWriteSiteId(scope, null);
         const { transporterId, dateStr, dayBeforeConfirmation } = await req.json();
 
         if (!transporterId || !dateStr) {
@@ -28,7 +33,7 @@ export async function PUT(req: NextRequest) {
         // The exact date might be slightly shifted based on timezone during creation,
         // so query the entire day in UTC
         const record = await SymxEmployeeSchedule.findOneAndUpdate(
-            { 
+            { ...S, 
                 transporterId, 
                 date: { $gte: startOfDay, $lte: endOfDay }
             },

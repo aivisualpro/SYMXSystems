@@ -33,7 +33,18 @@ const QUERY_OPS = [
 ];
 
 // Markers that indicate the caller thought about stations.
-const SCOPE_MARKERS = ["siteId", "siteFilter", "orgWide", "getRequestScope", "scope."];
+const SCOPE_MARKERS = [
+  "siteId",
+  "siteFilter",
+  "orgWide",
+  "getRequestScope",
+  "scope.",
+  // Driver-facing mobile routes take the station from the employee record
+  // rather than a session, since there is no station picker in the app.
+  "resolveDriverScope",
+  // Public token flows derive the station from the token-matched record.
+  "tokenSite",
+];
 
 function walk(dir, out = [], skip = new Set(["node_modules", ".next", ".git", "dist"])) {
   for (const entry of readdirSync(dir)) {

@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import connectToDatabase from "@/lib/db";
+import { orgWide } from "@/lib/scoped-query";
 import SYMXCoachingWriteUp from "@/lib/models/SYMXCoachingWriteUp";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import DropdownOption from "@/lib/models/DropdownOption";
@@ -65,6 +66,9 @@ export async function generateCoachingPdf(recordId: string): Promise<string> {
   await connectToDatabase();
 
   // ── 1. Load the record ──
+  // By-id, and every caller has already checked the record belongs to
+  // their station before asking for a PDF of it — this renders a
+  // document, it does not decide who may see one.
   const record = await SYMXCoachingWriteUp.findById(recordId).lean();
   if (!record) throw new Error(`Coaching writeup ${recordId} not found`);
 
@@ -90,11 +94,17 @@ export async function generateCoachingPdf(recordId: string): Promise<string> {
   // ── 2b. Query past records for same employee + same metric ──
   const pastRecords: { type: string; incidentDate: string }[] = [];
   if ((record as any).employeeId && (record as any).metric) {
-    const pastDocs = await SYMXCoachingWriteUp.find({
+    // Prior records for the same employee, deliberately across stations:
+    // a coaching document exists to show the pattern of behaviour, and an
+    // employee who transferred would otherwise appear to have a clean
+    // record on the very form that is meant to summarise it.
+    const pastDocs = await orgWide(SYMXCoachingWriteUp.find({
       _id: { $ne: (record as any)._id },
       employeeId: (record as any).employeeId,
       metric: (record as any).metric,
-    })
+    }),
+      "a coaching document shows the pattern of behaviour — an employee who transferred must not appear to have a clean record on it"
+    )
       .sort({ incidentDate: -1 })
       .select({ type: 1, incidentDate: 1 })
       .lean();

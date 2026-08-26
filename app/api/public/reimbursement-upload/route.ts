@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 import connectToDatabase from "@/lib/db";
+import { orgWide } from "@/lib/scoped-query";
 import SymxPublicUploadLog from "@/lib/models/SymxPublicUploadLog";
 
 export const config = {
@@ -52,11 +53,14 @@ export async function POST(req: NextRequest) {
       const recentCount = // Rate limit counted org-wide on purpose. It exists to stop one
     // source flooding the form; scoping it per station would let the same
     // submitter spend a full quota again at each station.
-    await SymxPublicUploadLog.countDocuments({
+    await orgWide(
+        SymxPublicUploadLog.countDocuments({
         ip,
         purpose: "reimbursement-receipt",
         createdAt: { $gte: new Date(Date.now() - RATE_LIMIT_WINDOW_MS) },
-      });
+        }),
+        "rate limiting is org-wide on purpose — a per-station limit would let one source spend a full quota again at every station"
+      );
       if (recentCount >= RATE_LIMIT_MAX) {
         return NextResponse.json({ error: "Too many uploads. Please try again later." }, { status: 429 });
       }

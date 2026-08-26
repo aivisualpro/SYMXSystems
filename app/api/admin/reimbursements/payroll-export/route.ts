@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 
@@ -26,7 +27,10 @@ export async function GET(req: NextRequest) {
 
   try {
     await connectToDatabase();
-    const records = await SymxReimbursement.find({ status: "queued_for_payroll" }).sort({ payrollQueuedAt: 1 }).lean();
+
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const records = await SymxReimbursement.find({ ...S, status: "queued_for_payroll" }).sort({ payrollQueuedAt: 1 }).lean();
 
     const employeeIds = [...new Set(records.map((r) => r.employeeId).filter(Boolean).map((id: any) => String(id)))];
     const employees = employeeIds.length

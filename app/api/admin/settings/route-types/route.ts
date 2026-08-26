@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import RouteType from "@/lib/models/RouteType";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 
@@ -30,7 +31,10 @@ export async function GET() {
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         await connectToDatabase();
-        const routes = await RouteType.find().sort({ sortOrder: 1, name: 1 }).lean();
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+        const writeSiteId = resolveWriteSiteId(scope, null);
+        const routes = await RouteType.find(S).sort({ sortOrder: 1, name: 1 }).lean();
         return NextResponse.json(routes);
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -53,6 +57,9 @@ export async function POST(req: NextRequest) {
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         await connectToDatabase();
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+        const writeSiteId = resolveWriteSiteId(scope, null);
         const body = await req.json();
         const { _id, name, color, startTime, theoryHrs, group, routeStatus, isDefault, partOf, isDA, isOps, isStandby, icon, sortOrder, isActive } = body;
 
@@ -62,7 +69,7 @@ export async function POST(req: NextRequest) {
 
         if (_id) {
             // Fetch the existing record to detect startTime changes
-            const existing = await RouteType.findById(_id).lean();
+            const existing = await findScopedById<any>(RouteType, _id, scope);
             if (!existing) return NextResponse.json({ error: "Route type not found" }, { status: 404 });
 
             // Update existing
@@ -79,8 +86,13 @@ export async function POST(req: NextRequest) {
                 const currentWeek = getCurrentYearWeek();
                 const typeName = (existing.name || "").trim();
                 if (typeName) {
+                    // Propagating a start-time change must not reach into
+                    // another station's schedules — start times differ per
+                    // station, so DXC8 editing its own route type would
+                    // otherwise rewrite DFO2's shifts.
                     const result = await SymxEmployeeSchedule.updateMany(
                         {
+                            ...S,
                             yearWeek: { $gte: currentWeek },
                             type: { $regex: new RegExp(`^${typeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
                         },
@@ -95,6 +107,7 @@ export async function POST(req: NextRequest) {
         } else {
             // Create new
             const route = await RouteType.create({
+                siteId: writeSiteId,
                 name: name.trim(),
                 color: color || "#6B7280",
                 startTime: startTime || "",
@@ -136,6 +149,9 @@ export async function PATCH(req: NextRequest) {
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         await connectToDatabase();
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+        const writeSiteId = resolveWriteSiteId(scope, null);
         const body = await req.json();
 
         if (Array.isArray(body)) {
@@ -173,6 +189,9 @@ export async function DELETE(req: NextRequest) {
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         await connectToDatabase();
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+        const writeSiteId = resolveWriteSiteId(scope, null);
         const { searchParams } = new URL(req.url);
         const id = searchParams.get("id");
         if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });

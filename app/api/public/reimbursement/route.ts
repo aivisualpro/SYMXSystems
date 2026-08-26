@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { orgWide } from "@/lib/scoped-query";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import {
   getNextRequestNumber,
@@ -72,10 +73,13 @@ export async function POST(req: NextRequest) {
       const recentCount = // Rate limit counted org-wide on purpose. It exists to stop one
     // source flooding the form; scoping it per station would let the same
     // submitter spend a full quota again at each station.
-    await SymxReimbursement.countDocuments({
+    await orgWide(
+        SymxReimbursement.countDocuments({
         submitterIp: ip,
         createdAt: { $gte: new Date(Date.now() - RATE_LIMIT_WINDOW_MS) },
-      });
+        }),
+        "rate limiting is org-wide on purpose — a per-station limit would let one source spend a full quota again at every station"
+      );
       if (recentCount >= RATE_LIMIT_MAX) {
         return NextResponse.json({ error: "Too many submissions. Please try again later." }, { status: 429 });
       }

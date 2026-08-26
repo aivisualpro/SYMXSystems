@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId, orgWide } from "@/lib/scoped-query";
 import SymxReimbursementSettings from "@/lib/models/SymxReimbursementSettings";
 
 export async function GET() {
@@ -15,7 +16,10 @@ export async function GET() {
 
   try {
     await connectToDatabase();
-    let settings = await SymxReimbursementSettings.findOne().lean();
+    let settings = await orgWide(
+      SymxReimbursementSettings.findOne(),
+      "holds the company-wide ticket/request number sequence, shared by all stations"
+    ).lean();
     if (!settings) {
       settings = (await SymxReimbursementSettings.create({})).toObject();
     }
@@ -43,7 +47,10 @@ export async function PUT(req: NextRequest) {
       ? body.notificationEmails.map((e: any) => String(e || "").trim()).filter((e: string) => e.length > 0)
       : [];
 
-    let settings = await SymxReimbursementSettings.findOne();
+    let settings = await orgWide(
+      SymxReimbursementSettings.findOne(),
+      "holds the company-wide ticket/request number sequence, shared by all stations"
+    );
     if (!settings) {
       settings = await SymxReimbursementSettings.create({ notificationEmails });
     } else {
