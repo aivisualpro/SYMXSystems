@@ -2,6 +2,9 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxNotification extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   title: string;
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';

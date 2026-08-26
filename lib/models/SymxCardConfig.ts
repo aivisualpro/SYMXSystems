@@ -9,6 +9,9 @@ export interface ICardConfig {
 }
 
 export interface ISymxCardConfig extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   page: string; // 'dispatch' | 'hr' | 'manager' | 'reports' | 'owner'
   cards: ICardConfig[];
   updatedBy: string;

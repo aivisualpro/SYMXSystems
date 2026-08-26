@@ -2,6 +2,9 @@ import mongoose, { Schema, Document } from "mongoose";
 import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxInterview extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   fullName?: string;
   phoneNumber?: string;
   workStartDate?: string;

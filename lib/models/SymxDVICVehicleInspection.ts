@@ -3,6 +3,9 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 import { siteOwned } from "./plugins/site-owned";
 
 export interface ISymxDVICVehicleInspection extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   week: string;                // Auto-calculated from startDate, e.g. "2026-W05"
   startDate?: string;          // Original date from CSV
   dsp?: string;

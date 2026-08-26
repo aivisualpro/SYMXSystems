@@ -7,6 +7,9 @@ export interface ICoachingWriteUpFile {
 }
 
 export interface ISYMXCoachingWriteUp extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   employeeId?: mongoose.Types.ObjectId;
   durationOfIncident?: string;
   incidentDate?: Date;

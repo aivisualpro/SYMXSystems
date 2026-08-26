@@ -51,6 +51,10 @@ export async function GET() {
       slug: s.slug,
       siteType: s.siteType,
       address: s.address || "",
+      messaging: {
+        quoPhoneNumberId: s.messaging?.quoPhoneNumberId || "",
+        quoPhoneNumber: s.messaging?.quoPhoneNumber || "",
+      },
       status: s.status,
       isDefault: !!s.isDefault,
       userCount: countBySite[String(s._id)] || 0,
@@ -121,6 +125,15 @@ export async function PUT(req: NextRequest) {
   if (body.name !== undefined) updates.name = String(body.name).trim();
   if (body.address !== undefined) updates.address = String(body.address);
   if (body.siteType !== undefined) updates.siteType = body.siteType === "seasonal" ? "seasonal" : "permanent";
+  // Per-station Quo number. Both forms are stored because the two sides of
+  // the integration speak different ones: the API wants OpenPhone's PNxxxx
+  // id, while the inbound webhook reports the E.164 number.
+  if (body.quoPhoneNumberId !== undefined) {
+    updates["messaging.quoPhoneNumberId"] = String(body.quoPhoneNumberId).trim();
+  }
+  if (body.quoPhoneNumber !== undefined) {
+    updates["messaging.quoPhoneNumber"] = String(body.quoPhoneNumber).trim();
+  }
 
   if (body.status !== undefined) {
     const status = body.status === "inactive" ? "inactive" : "active";

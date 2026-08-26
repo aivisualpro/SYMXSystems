@@ -2,6 +2,9 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 import { siteOwned } from "./plugins/site-owned";
 
 export interface IVehicleRentalAgreement extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   vehicleId: mongoose.Types.ObjectId;
   vin: string;
   unitNumber: string;

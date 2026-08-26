@@ -2,6 +2,9 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 import { siteOwned } from "./plugins/site-owned";
 
 export interface IScheduleAuditLog extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
     yearWeek: string;           // e.g. "2026-W10"
     transporterId: string;      // Employee transporter ID
     employeeName: string;       // Snapshot of employee name at time of action

@@ -22,6 +22,9 @@ export interface IHrTicketActivityEntry {
 }
 
 export interface ISymxHrTicket extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   ticketNumber?: string;
   transporterId?: string;
   // Links this ticket to a real SymxEmployee record. Either set manually

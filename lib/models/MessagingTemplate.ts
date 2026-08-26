@@ -1,5 +1,4 @@
 import mongoose, { Schema, Document } from "mongoose";
-import { siteOwned } from "./plugins/site-owned";
 // Hot reload trigger: ensure route-itinerary is loaded
 
 export interface IMessagingTemplate extends Document {
@@ -29,7 +28,17 @@ const MessagingTemplateSchema = new Schema<IMessagingTemplate>(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-MessagingTemplateSchema.plugin(siteOwned, { modelName: "MessagingTemplate" });
+// ── Organization-level, NOT site-owned ────────────────────────────────
+// Message wording is the same at every station — the station-specific
+// parts (start times, route names) come from the data merged into the
+// template, not from the template itself. Keeping one copy means editing
+// a template once rather than three times and drifting.
+//
+// Deliberately reclassified out of siteOwned after the Phase 2 backfill,
+// which had stamped these to DFO2. scripts/migrate/06 clears that.
+//
+// Contrast with SYMXSetting / RouteType / SYMXWSTOption, which stay
+// site-owned: those carry per-station start times and rates.
 
 delete mongoose.models.MessagingTemplate;
 

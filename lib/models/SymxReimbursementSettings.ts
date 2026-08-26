@@ -8,6 +8,9 @@ import { siteOwned } from "./plugins/site-owned";
 // created requests so numbering can never collide between the two entry
 // points.
 export interface ISymxReimbursementSettings extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   notificationEmails: string[];
   lastRequestNumber: number;
   updatedAt?: Date;

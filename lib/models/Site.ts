@@ -29,6 +29,10 @@ export interface ISite extends Document {
   address: string;
   status: "active" | "inactive";
   isDefault: boolean;
+  messaging?: {
+    quoPhoneNumberId?: string;
+    quoPhoneNumber?: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,8 +62,41 @@ const SiteSchema: Schema = new Schema(
     // still in place. A site is never deleted — closing one sets
     // status: "inactive" so its history stays queryable.
     isDefault: { type: Boolean, default: false, index: true },
+    // ── Per-station messaging (Quo / OpenPhone) ──
+    // Each station texts drivers from its own number, so the number is a
+    // property of the station rather than a single environment variable.
+    //
+    // This is what makes the number authoritative in both directions:
+    //   outbound — the sending number is derived from the station that
+    //              owns the schedule being messaged about, never taken
+    //              from the request body. Otherwise a DXC8 user could
+    //              send as DFO2 by passing a different id.
+    //   inbound  — the Quo webhook is unauthenticated and carries no
+    //              station, so the `to` number is the ONLY way to know
+    //              which station a reply belongs to.
+    //
+    // quoPhoneNumberId is OpenPhone's PNxxxxxxxx handle (what the API
+    // wants); quoPhoneNumber is the human-readable E.164 number (what the
+    // webhook reports and what a person recognises). Both are stored
+    // because each side of the integration speaks a different one.
+    messaging: {
+      quoPhoneNumberId: { type: String, default: "" },
+      quoPhoneNumber: { type: String, default: "" },
+    },
   },
   { timestamps: true, collection: "SYMXSites" }
+);
+
+// Reverse lookup for the inbound webhook: number -> station. Sparse
+// because stations without messaging configured have an empty string, and
+// a non-sparse unique index would collide across all of them.
+SiteSchema.index(
+  { "messaging.quoPhoneNumberId": 1 },
+  { sparse: true, partialFilterExpression: { "messaging.quoPhoneNumberId": { $type: "string", $ne: "" } } }
+);
+SiteSchema.index(
+  { "messaging.quoPhoneNumber": 1 },
+  { sparse: true, partialFilterExpression: { "messaging.quoPhoneNumber": { $type: "string", $ne: "" } } }
 );
 
 // Slug is unique per organization, not globally — the org boundary is the

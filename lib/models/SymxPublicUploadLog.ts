@@ -8,6 +8,9 @@ import { siteOwned } from "./plugins/site-owned";
 // touching Cloudinary. `createdAt` has a TTL index so rows self-expire and
 // this collection never needs manual cleanup.
 export interface ISymxPublicUploadLog extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   ip: string;
   purpose: string; // e.g. "reimbursement-receipt" — lets one log serve multiple public upload endpoints later
   createdAt: Date;

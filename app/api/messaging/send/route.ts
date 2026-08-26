@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
+import { resolveSendingNumber, getSendableNumbers } from "@/lib/messaging/station-numbers";
 import connectToDatabase from "@/lib/db";
 import MessageLog from "@/lib/models/MessageLog";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
@@ -53,10 +55,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!from) {
+    // ── Sending number must belong to a station the caller may use ──
+    // `from` arrives in the request body. Trusting it would let a user at
+    // one station send messages that appear to come from another — to
+    // that station's drivers, from that station's number. The body is
+    // treated as a PREFERENCE and validated against the caller's stations.
+    const scope = await getRequestScope();
+    const sendingNumber = await resolveSendingNumber(scope, from);
+
+    if (!sendingNumber) {
+      const available = await getSendableNumbers(scope);
       return NextResponse.json(
-        { error: "from phone number ID is required" },
-        { status: 400 }
+        {
+          error:
+            available.length === 0
+              ? "No Quo number is configured for your station. Set one in Owner > Stations."
+              : from
+              ? "That sending number does not belong to a station you have access to."
+              : "Select which station to send from.",
+          availableStations: available.map((n) => ({
+            siteId: n.siteId,
+            code: n.code,
+            phoneNumberId: n.phoneNumberId,
+            phoneNumber: n.phoneNumber,
+          })),
+        },
+        { status: available.length === 0 ? 400 : 403 }
       );
     }
 
@@ -91,7 +115,8 @@ export async function POST(req: NextRequest) {
         try {
           const requestBody = {
             content: personalizedContent,
-            from,
+            // Resolved from the station, not the request body.
+            from: sendingNumber.phoneNumberId,
             to: [recipient.phone],
           };
 
@@ -110,7 +135,8 @@ export async function POST(req: NextRequest) {
             console.error("[Messaging] OpenPhone error:", res.status, JSON.stringify(responseData));
 
             await MessageLog.create({
-              fromNumber: from,
+              siteId: sendingNumber.siteId,
+              fromNumber: sendingNumber.phoneNumberId,
               toNumber: recipient.phone,
               recipientName: recipient.name ?? "",
               messageType,
@@ -134,9 +160,10 @@ export async function POST(req: NextRequest) {
 
           // Persist to SYMXMessageLogs
           await MessageLog.create({
+            siteId: sendingNumber.siteId,
             openPhoneMessageId,
-            fromNumber: from,
-            fromDisplay: responseData?.data?.from ?? from,
+            fromNumber: sendingNumber.phoneNumberId,
+            fromDisplay: responseData?.data?.from ?? sendingNumber.phoneNumber,
             toNumber: recipient.phone,
             recipientName: recipient.name ?? "",
             messageType,
@@ -153,6 +180,9 @@ export async function POST(req: NextRequest) {
             try {
               const ScheduleConfirmation = (await import("@/lib/models/ScheduleConfirmation")).default;
               await ScheduleConfirmation.create({
+                // The station that sent it owns the confirmation, so the
+                // driver's reply lands at the right station.
+                siteId: sendingNumber.siteId,
                 token: confirmationToken,
                 transporterId: recipient.transporterId,
                 employeeName: recipient.name || "",
@@ -219,7 +249,7 @@ export async function POST(req: NextRequest) {
           console.error("[Messaging] Network error:", err.message);
 
           await MessageLog.create({
-            fromNumber: from,
+            fromNumber: sendingNumber.phoneNumberId,
             toNumber: recipient.phone,
             recipientName: recipient.name ?? "",
             messageType,

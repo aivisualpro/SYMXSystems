@@ -3,6 +3,9 @@ import crypto from "crypto";
 import { siteOwned } from "./plugins/site-owned";
 
 export interface IScheduleConfirmation extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
     token: string;
     transporterId: string;
     employeeName: string;

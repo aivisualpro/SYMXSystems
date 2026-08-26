@@ -31,6 +31,9 @@ export interface IWriteupCategoryLookbackOverride {
 }
 
 export interface IWriteupSettings extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   lookbackDays: number;
   escalationThresholds: IWriteupEscalationThresholds;
   // Each inner array is a group of DropdownOption `description` values

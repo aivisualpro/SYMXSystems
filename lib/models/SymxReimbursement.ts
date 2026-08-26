@@ -29,6 +29,9 @@ export interface IReimbursementActivityEntry {
 }
 
 export interface ISymxReimbursement extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   requestNumber?: string;
   transporterId?: string;
   employeeName?: string;

@@ -2,6 +2,9 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 import { siteOwned } from "./plugins/site-owned";
 
 export interface IRouteType extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
     name: string;        // e.g. "Route", "Open", "Close"
     color: string;       // hex color e.g. "#10B981"
     startTime: string;   // default start time e.g. "06:00 AM"

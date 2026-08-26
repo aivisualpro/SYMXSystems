@@ -7,6 +7,9 @@ import { siteOwned } from "./plugins/site-owned";
 // counter for ticket numbers shared by BOTH the public form and admin-created
 // tickets so numbering can never collide between the two entry points.
 export interface ISymxHrTicketSettings extends Document {
+  /** Owning station. Added by the siteOwned plugin; optional until
+   *  siteId becomes required at the Phase 5 contract step. */
+  siteId?: mongoose.Types.ObjectId;
   notificationEmails: string[];
   lastTicketNumber: number;
   updatedAt?: Date;

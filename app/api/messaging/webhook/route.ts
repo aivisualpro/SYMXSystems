@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import connectToDatabase from "@/lib/db";
 import MessageLog from "@/lib/models/MessageLog";
+import { resolveStationByNumber } from "@/lib/messaging/station-numbers";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
@@ -124,7 +125,15 @@ export async function POST(req: NextRequest) {
                 );
             } else {
                 console.warn(`[Webhook] No matching MessageLog for id="${openPhoneMessageId}" — storing stub`);
+                // The webhook is unauthenticated and carries no station, so
+                // the sending number is the only evidence of which station
+                // this belongs to. Unresolved stays null rather than
+                // defaulting — a message filed under the wrong station is
+                // worse than one flagged as needing attention, because
+                // nothing later reveals the mistake.
+                const stubStation = await resolveStationByNumber(data?.from ?? "");
                 await MessageLog.create({
+                    siteId: stubStation?.siteId,
                     openPhoneMessageId,
                     fromNumber: data?.from ?? "",
                     fromDisplay: data?.from ?? "",
@@ -164,6 +173,13 @@ export async function POST(req: NextRequest) {
                     logEntry.repliedAt = receivedAt;
                     logEntry.replyContent = replyContent;
                     logEntry.replyWebhookPayload = body;
+                    // Inherit the station from the outbound message this is
+                    // a reply to — more reliable than re-deriving it, and it
+                    // keeps a conversation on one station.
+                    if (!logEntry.siteId) {
+                        const s = await resolveStationByNumber(to);
+                        if (s) logEntry.siteId = s.siteId as any;
+                    }
                     await logEntry.save();
                     console.log(`[Webhook] ✅ Recorded reply for log ${logEntry._id}`);
 
@@ -176,7 +192,11 @@ export async function POST(req: NextRequest) {
                         logEntry._id
                     );
                 } else {
+                    // No prior outbound to inherit from, so derive the
+                    // station from the number the reply arrived at.
+                    const inboundStation = await resolveStationByNumber(to);
                     await MessageLog.create({
+                        siteId: inboundStation?.siteId,
                         openPhoneMessageId: data?.id ?? undefined,
                         fromNumber: to,
                         fromDisplay: to,
