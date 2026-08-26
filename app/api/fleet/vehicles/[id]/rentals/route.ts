@@ -5,6 +5,7 @@ import connectToDatabase from "@/lib/db";
 import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
 import Vehicle from "@/lib/models/Vehicle";
 import mongoose from "mongoose";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 
 // POST: Add rental agreement
 export async function POST(
@@ -72,8 +73,12 @@ export async function PUT(
         if (file) filesImages.push(file);
         if (image) filesImages.push(image);
 
+        // Station filter in the query, not a check afterwards: a rental
+        // agreement belongs to the station that signed it, and editing
+        // another station's agreement must simply not match.
+        const putScope = await getRequestScope();
         const updated = await VehicleRentalAgreement.findOneAndUpdate(
-            { _id: rentalId, vehicleId: id },
+            { _id: rentalId, vehicleId: id, ...siteFilter(putScope, { includeUnassigned: true }) },
             {
                 $set: {
                     invoiceNumber: invoiceNumber || "",
@@ -115,7 +120,12 @@ export async function DELETE(
             return NextResponse.json({ error: "Invalid request parameters" }, { status: 400 });
         }
 
-        const deleted = await VehicleRentalAgreement.findOneAndDelete({ _id: rentalId, vehicleId: id }).lean();
+        const delScope = await getRequestScope();
+        const deleted = await VehicleRentalAgreement.findOneAndDelete({
+            _id: rentalId,
+            vehicleId: id,
+            ...siteFilter(delScope, { includeUnassigned: true }),
+        }).lean();
         if (!deleted) return NextResponse.json({ error: "Rental agreement not found" }, { status: 404 });
 
         return NextResponse.json({ success: true, deletedId: rentalId });

@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, orgWide, resolveWriteSiteId } from "@/lib/scoped-query";
 import Vehicle from "@/lib/models/Vehicle";
 import DailyInspection from "@/lib/models/DailyInspection";
 import VehicleInspection from "@/lib/models/VehicleInspection";
@@ -31,7 +32,8 @@ export async function GET(req: NextRequest) {
       const skip = Math.max(0, parseInt(searchParams.get("skip") || "0"));
       const limit = Math.min(Math.max(1, parseInt(searchParams.get("limit") || "50")), 500);
 
-      let filter: any = {};
+      const scope = await getRequestScope();
+      let filter: any = { ...siteFilter(scope, { includeUnassigned: true }) };
       if (q) {
         if (q.length >= 3 && !q.includes(' ')) {
           filter = {
@@ -105,7 +107,8 @@ export async function GET(req: NextRequest) {
     if (section === "inspection-detail" || section === "detail") {
       const id = searchParams.get("id");
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-      const inspection = await DailyInspection.findById(id).lean() as any;
+      const detailScope = await getRequestScope();
+      const inspection = await findScopedById<any>(DailyInspection, id, detailScope) as any;
       if (!inspection) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
       const enriched = { ...inspection } as any;
@@ -113,7 +116,7 @@ export async function GET(req: NextRequest) {
         inspection.driver ? SymxEmployee.findOne({ transporterId: inspection.driver }, { firstName: 1, lastName: 1 }).lean() : null,
         inspection.inspectedBy ? SymxUser.findOne({ email: inspection.inspectedBy }, { name: 1 }).lean().then(u => u || SymxUser.findOne({ email: { $regex: `^${inspection.inspectedBy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } }, { name: 1 }).lean()) : null,
         inspection.vin ? Vehicle.findOne({ vin: inspection.vin }, { image: 1, vehicleName: 1, unitNumber: 1 }).lean() : null,
-        inspection.vin ? DailyInspection.countDocuments({ vin: inspection.vin, isStandardPhoto: true, _id: { $ne: inspection._id } }) : 0,
+        inspection.vin ? orgWide(DailyInspection.countDocuments({ vin: inspection.vin, isStandardPhoto: true, _id: { $ne: inspection._id } }), "a van's inspection photos belong to the asset — comparing today against a previous condition must work even if the van changed stations") : 0,
       ]);
 
       if (emp) enriched.driverName = `${(emp as any).firstName || ""} ${(emp as any).lastName || ""}`.trim();
@@ -129,14 +132,15 @@ export async function GET(req: NextRequest) {
     if (section === "inspection-compare" || section === "compare") {
       const id = searchParams.get("id");
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-      const current = await DailyInspection.findById(id).lean() as any;
+      const cmpScope = await getRequestScope();
+      const current = await findScopedById<any>(DailyInspection, id, cmpScope) as any;
       if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
       const [emp, user, vehicle, previous] = await Promise.all([
         current.driver ? SymxEmployee.findOne({ transporterId: current.driver }, { firstName: 1, lastName: 1 }).lean() : null,
         current.inspectedBy ? SymxUser.findOne({ email: current.inspectedBy }, { name: 1 }).lean().then(u => u || SymxUser.findOne({ email: { $regex: `^${current.inspectedBy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } }, { name: 1 }).lean()) : null,
         current.vin ? Vehicle.findOne({ vin: current.vin }, { image: 1, vehicleName: 1 }).lean() : null,
-        current.vin && current.routeDate ? DailyInspection.findOne({ vin: current.vin, _id: { $ne: current._id }, routeDate: { $lt: current.routeDate } }).sort({ routeDate: -1 }).lean() : null,
+        current.vin && current.routeDate ? orgWide(DailyInspection.findOne({ vin: current.vin, _id: { $ne: current._id }, routeDate: { $lt: current.routeDate } }).sort({ routeDate: -1 }), "a van's inspection photos belong to the asset — comparing today against a previous condition must work even if the van changed stations").lean() : null,
       ]);
 
       const enrichedCurrent = { ...current } as any;
@@ -163,10 +167,11 @@ export async function GET(req: NextRequest) {
     if (section === "inspection-master" || section === "master") {
       const id = searchParams.get("id");
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-      const current = await DailyInspection.findById(id).lean() as any;
+      const cmpScope = await getRequestScope();
+      const current = await findScopedById<any>(DailyInspection, id, cmpScope) as any;
       if (!current || !current.vin) return NextResponse.json({ error: "Not found or no VIN" }, { status: 404 });
 
-      const master = await DailyInspection.findOne({ vin: current.vin, isStandardPhoto: true, _id: { $ne: current._id } }).sort({ routeDate: -1 }).lean() as any;
+      const master = await orgWide(DailyInspection.findOne({ vin: current.vin, isStandardPhoto: true, _id: { $ne: current._id } }).sort({ routeDate: -1 }), "a van's inspection photos belong to the asset — comparing today against a previous condition must work even if the van changed stations").lean() as any;
       if (!master) return NextResponse.json({ master: null });
 
       const [mEmp, mUser] = await Promise.all([
@@ -194,11 +199,11 @@ export async function GET(req: NextRequest) {
 
       let found: any = null;
       if (dateParam === "master") {
-        found = await DailyInspection.findOne({ ...baseQuery, isStandardPhoto: true }).sort({ routeDate: -1 }).lean();
+        found = await orgWide(DailyInspection.findOne({ ...baseQuery, isStandardPhoto: true }).sort({ routeDate: -1 }), "a van's inspection photos belong to the asset — comparing today against a previous condition must work even if the van changed stations").lean();
       } else {
         const onOrBefore = new Date(`${dateParam}T23:59:59.999Z`);
         if (isNaN(onOrBefore.getTime())) return NextResponse.json({ error: "Invalid date" }, { status: 400 });
-        found = await DailyInspection.findOne({ ...baseQuery, routeDate: { $lte: onOrBefore } }).sort({ routeDate: -1 }).lean();
+        found = await orgWide(DailyInspection.findOne({ ...baseQuery, routeDate: { $lte: onOrBefore } }).sort({ routeDate: -1 }), "a van's inspection photos belong to the asset — comparing today against a previous condition must work even if the van changed stations").lean();
       }
 
       if (!found) return NextResponse.json({ inspection: null });
@@ -334,7 +339,8 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     // Fetch first so we can get the routeId for SYMXRoute cleanup
-    const inspection = await DailyInspection.findById(id).select("routeId").lean() as any;
+    const delScope = await getRequestScope();
+    const inspection = await findScopedById<any>(DailyInspection, id, delScope) as any;
     if (!inspection) return NextResponse.json({ error: "Record not found" }, { status: 404 });
 
     // Delete the inspection from DailyInspection
@@ -374,15 +380,22 @@ export async function PATCH(req: NextRequest) {
 
     if (action === "toggle-standard-photo") {
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-      const inspection = await DailyInspection.findById(id) as any;
+      const patchScope = await getRequestScope();
+      const inspection = await findScopedById<any>(DailyInspection, id, patchScope) as any;
       if (!inspection) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
       const newValue = !inspection.isStandardPhoto;
 
       if (newValue && inspection.vin) {
-        await DailyInspection.updateMany(
-          { vin: inspection.vin, isStandardPhoto: true, _id: { $ne: inspection._id } },
-          { $set: { isStandardPhoto: false } }
+        // Clearing the previous master spans stations deliberately: a VIN
+        // has ONE master photo. Scoped, a van that moved would end up with
+        // a master at each station and comparisons would pick either.
+        await orgWide(
+          DailyInspection.updateMany(
+            { vin: inspection.vin, isStandardPhoto: true, _id: { $ne: inspection._id } },
+            { $set: { isStandardPhoto: false } }
+          ),
+          "a van's inspection photos belong to the asset — comparing today against a previous condition must work even if the van changed stations"
         );
       }
 

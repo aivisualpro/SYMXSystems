@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import Vehicle from "@/lib/models/Vehicle";
 import DailyInspection from "@/lib/models/DailyInspection";
 import { authorizeAction } from "@/lib/rbac";
@@ -19,7 +20,12 @@ export async function GET(req: NextRequest) {
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
     const includeReturned = searchParams.get("includeReturned") === "true";
-    const filter: any = includeReturned ? {} : { status: { $ne: "Returned" } };
+    // Vehicles carry currentSiteId — they transfer between stations.
+    const vScope = await getRequestScope();
+    const filter: any = {
+      ...siteFilter(vScope, { includeUnassigned: true, field: "currentSiteId" }),
+      ...(includeReturned ? {} : { status: { $ne: "Returned" } }),
+    };
     
     // Fetch vehicles and latest inspection mileage in parallel
     const [vehiclesRaw, latestMileages] = await Promise.all([
@@ -29,7 +35,10 @@ export async function GET(req: NextRequest) {
         .lean(),
       // Get the latest non-zero mileage per VIN from daily inspections
       DailyInspection.aggregate([
-        { $match: { mileage: { $gt: 0 } } },
+        // Scoped: this feeds the mileage column of the station's own
+        // vehicle list, so it must not average in another station's
+        // odometer readings.
+        { $match: { mileage: { $gt: 0 }, ...siteFilter(vScope, { includeUnassigned: true }) } },
         { $sort: { routeDate: -1 } },
         { $group: {
           _id: "$vin",
