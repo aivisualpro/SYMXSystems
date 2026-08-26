@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, resolveWriteSiteId } from "@/lib/scoped-query";
 import { z } from "zod";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
 
@@ -39,6 +40,18 @@ export async function POST(req: NextRequest) {
     const { type, data, week } = parsed.data;
 
     await connectToDatabase();
+
+    // Which station is this scorecard for? Imports must not land
+    // unassigned — a scorecard with no station shows at every station or
+    // none depending on who is looking.
+    const importScope = await getRequestScope();
+    const importSiteId = resolveWriteSiteId(importScope, null);
+    if (!importSiteId) {
+      return NextResponse.json(
+        { error: "Select a single station before importing a scorecard." },
+        { status: 400 }
+      );
+    }
     if (week) {
         await SymxAvailableWeek.updateOne({ week }, { $set: { week } }, { upsert: true });
     }
@@ -46,7 +59,7 @@ export async function POST(req: NextRequest) {
     let response = await processEmployees(type, data, week);
     if (response) return response;
 
-    response = await processScorecard(type, data, week);
+    response = await processScorecard(type, data, week, importSiteId);
     if (response) return response;
 
     response = await processIncidents(type, data, week);

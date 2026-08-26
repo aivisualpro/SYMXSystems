@@ -92,6 +92,17 @@ export async function createInspectionForRoute(
 
   await connectToDatabase();
 
+  // ── Owning station comes from the ROUTE ─────────────────────────
+  // This helper runs from the driver's mobile app, which has no station
+  // picker, so the station is taken from the route being inspected — the
+  // inspection happened wherever that route was dispatched from.
+  //
+  // Deliberately not from the vehicle's current station: a van loaned to
+  // another station for the day produces an inspection belonging to the
+  // station that ran the route, not to the van's home.
+  const parentRoute: any = await SYMXRoute.findById(input.routeId, { siteId: 1 }).lean();
+  const routeSiteId = parentRoute?.siteId || null;
+
   // ── Vehicle resolution ──────────────────────────────────────────
   let vin = input.vin || "";
   let unitNumber = "";
@@ -178,6 +189,7 @@ export async function createInspectionForRoute(
     comments: input.comments || null,
     inspectedBy: input.inspectedBy || "",
     routeId: input.routeId,
+    siteId: routeSiteId,
     timeStamp: now,
     vehiclePicture1: input.vehiclePicture1 || null,
     vehiclePicture2: input.vehiclePicture2 || null,

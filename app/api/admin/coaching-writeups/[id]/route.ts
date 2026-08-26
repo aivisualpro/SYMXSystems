@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 import SYMXCoachingWriteUp from "@/lib/models/SYMXCoachingWriteUp";
 import { generateCoachingPdf } from "@/lib/googleDocs";
 
@@ -8,7 +9,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     await connectToDatabase();
     const { id } = await params;
-    const record = await SYMXCoachingWriteUp.findById(id).lean();
+    const record = await findScopedById<any>(SYMXCoachingWriteUp, id, await getRequestScope());
     if (!record) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(record);
   } catch (error: any) {

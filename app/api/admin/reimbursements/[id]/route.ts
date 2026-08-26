@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 import SymxReimbursement, { ReimbursementStatus } from "@/lib/models/SymxReimbursement";
 import { enrichReimbursements } from "@/lib/reimbursement-utils";
 
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
     await connectToDatabase();
     const { id } = await params;
-    const record = await SymxReimbursement.findById(id).lean();
+    const record = await findScopedById<any>(SymxReimbursement, id, await getRequestScope());
     if (!record) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const [enriched] = await enrichReimbursements([record]);
     return NextResponse.json(enriched);
@@ -136,7 +137,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
     const updated = Object.keys(update).length > 0
       ? await SymxReimbursement.findByIdAndUpdate(id, update, { new: true }).lean()
-      : await SymxReimbursement.findById(id).lean();
+      : await findScopedById<any>(SymxReimbursement, id, await getRequestScope());
 
     if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const [enriched] = await enrichReimbursements([updated]);

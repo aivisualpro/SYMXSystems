@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 import SymxHrTicket, { HrTicketStatus } from "@/lib/models/SymxHrTicket";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
     await connectToDatabase();
     const { id } = await params;
-    const ticket = await SymxHrTicket.findById(id).lean();
+    const ticket = await findScopedById<any>(SymxHrTicket, id, await getRequestScope());
     if (!ticket) return new NextResponse("Not Found", { status: 404 });
     return NextResponse.json(ticket);
   } catch (error) {
@@ -116,7 +117,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
     const ticket = Object.keys(update).length > 0
       ? await SymxHrTicket.findByIdAndUpdate(id, update, { new: true })
-      : await SymxHrTicket.findById(id);
+      : await findScopedById<any>(SymxHrTicket, id, await getRequestScope());
 
     if (!ticket) return new NextResponse("Not Found", { status: 404 });
     return NextResponse.json(ticket);

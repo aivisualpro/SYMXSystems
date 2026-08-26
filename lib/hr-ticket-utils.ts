@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import connectToDatabase from "@/lib/db";
+import { orgWide } from "@/lib/scoped-query";
 import SymxHrTicketSettings from "@/lib/models/SymxHrTicketSettings";
 import SymxHrTicket from "@/lib/models/SymxHrTicket";
 import SymxEmployee from "@/lib/models/SymxEmployee";
@@ -23,9 +24,16 @@ const FROM_ADDRESS = "SYMX Systems Support <info@adeelfullstack.com>";
  */
 export async function getNextTicketNumber(): Promise<string> {
   await connectToDatabase();
-  let settings = await SymxHrTicketSettings.findOne();
+  // ── Deliberately org-wide ──
+  // One company-wide sequence, not one per station. Per-station counters
+  // would issue ticket #100 at DFO2 and another #100 at DXC8, so a
+  // ticket number would stop identifying a single record — and HR works
+  // across all three stations, where that ambiguity would bite daily.
+  let settings = await orgWide(SymxHrTicketSettings.findOne(), "ticket numbers are a single company-wide sequence — per-station counters would issue the same number at two stations");
   if (!settings) {
-    const existing = await SymxHrTicket.find({}, { ticketNumber: 1 }).lean();
+    // Seeding the counter reads every existing ticket across stations,
+    // for the same reason — the sequence spans the company.
+    const existing = await orgWide(SymxHrTicket.find({}, { ticketNumber: 1 }), "ticket numbers are a single company-wide sequence — per-station counters would issue the same number at two stations").lean();
     let maxNum = 0;
     for (const t of existing) {
       const n = parseInt(String((t as any).ticketNumber || "").replace(/\D/g, ""), 10);
@@ -33,11 +41,11 @@ export async function getNextTicketNumber(): Promise<string> {
     }
     settings = await SymxHrTicketSettings.create({ lastTicketNumber: maxNum });
   }
-  const updated = await SymxHrTicketSettings.findOneAndUpdate(
+  const updated = await orgWide(SymxHrTicketSettings.findOneAndUpdate(
     { _id: settings._id },
     { $inc: { lastTicketNumber: 1 } },
     { new: true }
-  );
+  ), "ticket numbers are a single company-wide sequence — per-station counters would issue the same number at two stations");
   return String(updated!.lastTicketNumber);
 }
 

@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import connectToDatabase from "@/lib/db";
+import { orgWide } from "@/lib/scoped-query";
 import SymxReimbursementSettings from "@/lib/models/SymxReimbursementSettings";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import SymxEmployee from "@/lib/models/SymxEmployee";
@@ -19,9 +20,16 @@ const FROM_ADDRESS = "SYMX Systems Support <info@adeelfullstack.com>";
  */
 export async function getNextRequestNumber(): Promise<string> {
   await connectToDatabase();
-  let settings = await SymxReimbursementSettings.findOne();
+  // ── Deliberately org-wide ──
+  // One company-wide sequence, not one per station. Per-station counters
+  // would issue request #100 at DFO2 and another #100 at DXC8, so a
+  // request number would stop identifying a single record — and HR works
+  // across all three stations, where that ambiguity would bite daily.
+  let settings = await orgWide(SymxReimbursementSettings.findOne(), "request numbers are a single company-wide sequence — per-station counters would issue the same number at two stations");
   if (!settings) {
-    const existing = await SymxReimbursement.find({}, { requestNumber: 1 }).lean();
+    // Seeding the counter reads every existing request across stations,
+    // for the same reason — the sequence spans the company.
+    const existing = await orgWide(SymxReimbursement.find({}, { requestNumber: 1 }), "request numbers are a single company-wide sequence — per-station counters would issue the same number at two stations").lean();
     let maxNum = 0;
     for (const r of existing) {
       const n = parseInt(String((r as any).requestNumber || "").replace(/\D/g, ""), 10);
@@ -29,11 +37,11 @@ export async function getNextRequestNumber(): Promise<string> {
     }
     settings = await SymxReimbursementSettings.create({ lastRequestNumber: maxNum });
   }
-  const updated = await SymxReimbursementSettings.findOneAndUpdate(
+  const updated = await orgWide(SymxReimbursementSettings.findOneAndUpdate(
     { _id: settings._id },
     { $inc: { lastRequestNumber: 1 } },
     { new: true }
-  );
+  ), "request numbers are a single company-wide sequence — per-station counters would issue the same number at two stations");
   return String(updated!.lastRequestNumber);
 }
 

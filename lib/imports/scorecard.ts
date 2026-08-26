@@ -490,7 +490,21 @@ const employeeScheduleHeaderMap: Record<string, string> = {
 };
 
 
-export async function processScorecard(type: string, data: any, week: string | undefined) {
+/**
+ * Import a scorecard file for ONE station.
+ *
+ * siteId is required. Scorecard data is per station by nature — DFO2 and
+ * DXC8 receive separate Amazon scorecards — and an optional parameter
+ * would let an import land unassigned, where it would show up at every
+ * station or none depending on the reader's scope.
+ */
+export async function processScorecard(
+  type: string,
+  data: any,
+  week: string | undefined,
+  siteId: string
+) {
+  if (!siteId) throw new Error("processScorecard requires a siteId");
   if (type === 'delivery-excellence') {
             // 1. Gather all Transporter IDs to fetch Employees
             const transporterIds = data
@@ -548,8 +562,12 @@ export async function processScorecard(type: string, data: any, week: string | u
                 // Construct Upsert Operation
                 return {
                     updateOne: {
-                        filter: { week: processedData.week, transporterId: processedData.transporterId },
-                        update: { $set: processedData },
+                        // siteId in the FILTER as well as the document: these upserts key on
+                        // week + driver, so without it importing DXC8's scorecard would
+                        // overwrite DFO2's row for the same driver and week rather than
+                        // creating its own.
+                        filter: { week: processedData.week, transporterId: processedData.transporterId, siteId },
+                        update: { $set: { ...processedData, siteId } },
                         upsert: true
                     }
                 };
@@ -623,8 +641,12 @@ export async function processScorecard(type: string, data: any, week: string | u
 
                 return {
                     updateOne: {
-                        filter: { week: processedData.week, transporterId: processedData.transporterId },
-                        update: { $set: processedData },
+                        // siteId in the FILTER as well as the document: these upserts key on
+                        // week + driver, so without it importing DXC8's scorecard would
+                        // overwrite DFO2's row for the same driver and week rather than
+                        // creating its own.
+                        filter: { week: processedData.week, transporterId: processedData.transporterId, siteId },
+                        update: { $set: { ...processedData, siteId } },
                         upsert: true
                     }
                 };
@@ -692,8 +714,9 @@ export async function processScorecard(type: string, data: any, week: string | u
                             week: processedData.week,
                             transporterId: processedData.transporterId,
                             eventId: processedData.eventId || '',
+                            siteId,
                         },
-                        update: { $set: processedData },
+                        update: { $set: { ...processedData, siteId } },
                         upsert: true
                     }
                 };
@@ -756,8 +779,8 @@ export async function processScorecard(type: string, data: any, week: string | u
 
                 return {
                     updateOne: {
-                        filter: { week, transporterId },
-                        update: { $set: processedData },
+                        filter: { week, transporterId, siteId },
+                        update: { $set: { ...processedData, siteId } },
                         upsert: true
                     }
                 };
@@ -821,8 +844,8 @@ export async function processScorecard(type: string, data: any, week: string | u
 
                 return {
                     updateOne: {
-                        filter: { week, transporterId },
-                        update: { $set: processedData },
+                        filter: { week, transporterId, siteId },
+                        update: { $set: { ...processedData, siteId } },
                         upsert: true
                     }
                 };
@@ -887,8 +910,9 @@ export async function processScorecard(type: string, data: any, week: string | u
                             week,
                             deliveryAssociate,
                             trackingId: processedData.trackingId || '',
+                            siteId,
                         },
-                        update: { $set: processedData },
+                        update: { $set: { ...processedData, siteId } },
                         upsert: true
                     }
                 };
@@ -952,8 +976,9 @@ export async function processScorecard(type: string, data: any, week: string | u
                             transporterId,
                             trackingId: processedData.trackingId || '',
                             plannedDeliveryDate: processedData.plannedDeliveryDate || '',
+                            siteId,
                         },
-                        update: { $set: processedData },
+                        update: { $set: { ...processedData, siteId } },
                         upsert: true
                     }
                 };
@@ -963,7 +988,8 @@ export async function processScorecard(type: string, data: any, week: string | u
             const rtsWeeks = new Set<string>();
             operations.forEach((op: any) => { if (op.updateOne.filter.week) rtsWeeks.add(op.updateOne.filter.week); });
             for (const w of rtsWeeks) {
-                await SymxAvailableWeek.updateOne({ week: w }, { $set: { week: w } }, { upsert: true });
+                await SymxAvailableWeek.updateOne(
+      { week: w, siteId }, { $set: { week: w, siteId } }, { upsert: true });
             }
 
             if (operations.length > 0) {

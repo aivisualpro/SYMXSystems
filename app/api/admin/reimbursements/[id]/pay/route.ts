@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 import SymxReimbursement from "@/lib/models/SymxReimbursement";
 import { enrichReimbursements } from "@/lib/reimbursement-utils";
 import { normalizeReimbursementStatus } from "@/lib/reimbursement-status";
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const body = await req.json();
     const action = body.action;
 
-    const record = await SymxReimbursement.findById(id);
+    const record = await findScopedById<any>(SymxReimbursement, id, await getRequestScope());
     if (!record) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const byName = session.name || session.email || "Staff";

@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 import SymxInterview from "@/lib/models/SymxInterview";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
     await connectToDatabase();
     const { id } = await params;
-    const doc = await SymxInterview.findById(id).lean();
+    const doc = await findScopedById<any>(SymxInterview, id, await getRequestScope());
     if (!doc) return new NextResponse("Not Found", { status: 404 });
     return NextResponse.json(doc);
   } catch (error) {
