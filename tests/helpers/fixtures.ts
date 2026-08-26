@@ -27,6 +27,10 @@ export interface SeededSite {
   _id: mongoose.Types.ObjectId;
   name: string;
   slug: string;
+  /** Amazon station code (DFO2, DXC8, DFO3). Exposed because assertions
+   *  about which station a lookup resolved to read far better against a
+   *  code than an ObjectId. */
+  code: string;
 }
 
 export interface SeededUser {
@@ -152,9 +156,9 @@ export async function seedMultiSiteOrg(): Promise<MultiSiteFixture> {
   return {
     org: { _id: orgId, name: org.name },
     sites: {
-      a: { _id: aId, name: siteA.name, slug: siteA.slug },
-      b: { _id: bId, name: siteB.name, slug: siteB.slug },
-      c: { _id: siteC._id as mongoose.Types.ObjectId, name: siteC.name, slug: siteC.slug },
+      a: { _id: aId, name: siteA.name, slug: siteA.slug, code: siteA.code },
+      b: { _id: bId, name: siteB.name, slug: siteB.slug, code: siteB.code },
+      c: { _id: siteC._id as mongoose.Types.ObjectId, name: siteC.name, slug: siteC.slug, code: siteC.code },
     },
     roles: { dispatcher: dispatcherRole, manager: managerRole, auditor: auditorRole },
     users: { siteAOnly, siteBOnly, siteAandB, orgAdmin, auditor, unassigned },
