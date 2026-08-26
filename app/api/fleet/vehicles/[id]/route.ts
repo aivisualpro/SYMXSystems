@@ -11,6 +11,7 @@ import DailyInspection from "@/lib/models/DailyInspection";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxUser from "@/lib/models/SymxUser";
 import mongoose from "mongoose";
+import { getRequestScope, canAccessRecord, orgWide } from "@/lib/scoped-query";
 
 // GET: Single vehicle + related data
 export async function GET(
@@ -30,7 +31,14 @@ export async function GET(
             return NextResponse.json({ error: "Invalid vehicle ID" }, { status: 400 });
         }
 
+        // Access is decided by the vehicle's CURRENT station: you can open
+        // vans at your own station. 404 rather than 403 so a mismatch does
+        // not confirm the vehicle exists.
+        const scope = await getRequestScope();
         const vehicle = await Vehicle.findById(id).lean();
+        if (vehicle && !canAccessRecord(scope, { siteId: (vehicle as any).currentSiteId })) {
+            return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
+        }
         if (!vehicle) {
             return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
         }
@@ -77,25 +85,44 @@ export async function GET(
 
         const [repairs, activityLogs, inspections, rentalAgreements, masterPhotoInspection, dailyInspections] =
             await Promise.all([
-                VehicleRepair.find(matchByVinOrId).sort({ creationDate: -1 }).lean(),
-                VehicleActivityLog.find(matchByVinOrId).sort({ createdAt: -1 }).lean(),
-                VehicleInspection.find(matchByVinOrId)
-                    .sort({ inspectionDate: -1 })
-                    .lean(),
-                VehicleRentalAgreement.find(matchByVinOrId)
-                    .sort({ createdAt: -1 })
-                    .lean(),
+                // ── Deliberately cross-station ──
+                // Access to the VEHICLE was already decided above. Its
+                // history is a property of the physical asset, not of the
+                // station that happens to hold it today: a van transferred
+                // from DFO2 to DXC8 keeps its DFO2-era repairs, and hiding
+                // them from the people now maintaining it would mean
+                // servicing a vehicle with an incomplete record.
+                //
+                // The records themselves keep their original siteId, so
+                // DFO2's reporting is unaffected — this widens one detail
+                // view, not the numbers.
+                orgWide(
+                    VehicleRepair.find(matchByVinOrId).sort({ creationDate: -1 }),
+                    "a vehicle's maintenance history belongs to the asset — hiding a previous station's repairs from whoever maintains it now is a safety problem"
+                ).lean(),
+                orgWide(
+                    VehicleActivityLog.find(matchByVinOrId).sort({ createdAt: -1 }),
+                    "a vehicle's maintenance history belongs to the asset — hiding a previous station's repairs from whoever maintains it now is a safety problem"
+                ).lean(),
+                orgWide(
+                    VehicleInspection.find(matchByVinOrId).sort({ inspectionDate: -1 }),
+                    "a vehicle's maintenance history belongs to the asset — hiding a previous station's repairs from whoever maintains it now is a safety problem"
+                ).lean(),
+                orgWide(
+                    VehicleRentalAgreement.find(matchByVinOrId).sort({ createdAt: -1 }),
+                    "a vehicle's maintenance history belongs to the asset — hiding a previous station's repairs from whoever maintains it now is a safety problem"
+                ).lean(),
                 vin
-                    ? DailyInspection.findOne(
+                    ? orgWide(DailyInspection.findOne(
                         { vin, isStandardPhoto: true },
                         { vehiclePicture1: 1, vehiclePicture2: 1, vehiclePicture3: 1, vehiclePicture4: 1, dashboardImage: 1, additionalPicture: 1, routeDate: 1, driver: 1, mileage: 1, comments: 1 }
-                    ).sort({ routeDate: -1 }).lean()
+                    ).sort({ routeDate: -1 }), "a vehicle's maintenance history belongs to the asset — hiding a previous station's repairs from whoever maintains it now is a safety problem").lean()
                     : null,
                 vin
-                    ? DailyInspection.find(
+                    ? orgWide(DailyInspection.find(
                         { vin },
                         { routeDate: 1, driver: 1, mileage: 1, comments: 1, anyRepairs: 1, isStandardPhoto: 1, isCompared: 1, inspectedBy: 1 }
-                    ).sort({ routeDate: -1 }).lean()
+                    ).sort({ routeDate: -1 }), "a vehicle's maintenance history belongs to the asset — hiding a previous station's repairs from whoever maintains it now is a safety problem").lean()
                     : [],
             ]);
 

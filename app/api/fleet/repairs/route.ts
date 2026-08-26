@@ -5,6 +5,7 @@ import connectToDatabase from "@/lib/db";
 import Vehicle from "@/lib/models/Vehicle";
 import VehicleRepair from "@/lib/models/VehicleRepair";
 import { authorizeAction } from "@/lib/rbac";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 
 export async function GET(req: NextRequest) {
   try { await requirePermission("Fleet", "view"); } catch (e: any) {
@@ -24,7 +25,8 @@ export async function GET(req: NextRequest) {
     const excludeCompleted = searchParams.get("excludeCompleted") === "true";
     const exactVin = searchParams.get("vin");
 
-    let filter: any = {};
+    const scope = await getRequestScope();
+    let filter: any = { ...siteFilter(scope, { includeUnassigned: true }) };
     if (exactVin) {
       filter.vin = exactVin;
     }
@@ -99,6 +101,19 @@ export async function POST(req: NextRequest) {
     }
 
     data.createdBy = session.id;
+
+    // Owning station comes from the scope, never the request body — a
+    // client-supplied siteId would let anyone file a repair against
+    // another station's fleet.
+    const scope = await getRequestScope();
+    const siteId = resolveWriteSiteId(scope, null);
+    if (!siteId) {
+      return NextResponse.json(
+        { error: "Select a single station before creating a repair." },
+        { status: 400 }
+      );
+    }
+    data.siteId = siteId;
     if (data.currentStatus === "Completed" && !data.completionDate) {
       data.completionDate = new Date();
     }
@@ -145,6 +160,12 @@ export async function PUT(req: NextRequest) {
        }
     }
     
+    // Ownership check before writing. findByIdAndUpdate on its own would
+    // happily update another station's repair record.
+    const putScope = await getRequestScope();
+    const owned = await findScopedById<any>(VehicleRepair, id, putScope);
+    if (!owned) return NextResponse.json({ error: "Repair not found" }, { status: 404 });
+
     const updatePayload: Record<string, any> = { $set: data };
     if (data.$unset) {
        updatePayload.$unset = data.$unset;
@@ -174,6 +195,13 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get("id");
 
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+    // Same hole as the verbal-coaching DELETE found earlier: deleting by
+    // id alone crosses stations. 404 rather than 403 so a mismatch does
+    // not confirm the record exists.
+    const delScope = await getRequestScope();
+    const target = await findScopedById<any>(VehicleRepair, id, delScope);
+    if (!target) return NextResponse.json({ error: "Repair not found" }, { status: 404 });
 
     await VehicleRepair.findByIdAndDelete(id);
     return NextResponse.json({ message: "Record deleted successfully" });

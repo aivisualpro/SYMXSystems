@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import Vehicle from "@/lib/models/Vehicle";
 import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
 import { authorizeAction } from "@/lib/rbac";
@@ -18,7 +19,10 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
     
-    const rentals = await VehicleRentalAgreement.find({}).sort({ createdAt: -1 }).lean();
+    const scope = await getRequestScope();
+    const rentals = await VehicleRentalAgreement.find(
+      siteFilter(scope, { includeUnassigned: true })
+    ).sort({ createdAt: -1 }).lean();
 
     let enrichedRentals: any[] = rentals as any[];
     try {
