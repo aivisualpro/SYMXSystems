@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import InsurancePolicy from "@/lib/models/InsurancePolicy";
 import SymxIncident from "@/lib/models/SymxIncident";
 
@@ -22,10 +23,14 @@ export async function GET() {
 
   try {
     await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const E = siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" });
 
     const [policies, rollups] = await Promise.all([
       InsurancePolicy.find({}).sort({ type: 1, startDate: -1 }).lean(),
       SymxIncident.aggregate([
+      { $match: S },
         { $match: { insurancePolicyId: { $exists: true, $ne: null } } },
         {
           $group: {

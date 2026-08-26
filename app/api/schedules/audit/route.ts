@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
 import SymxUser from "@/lib/models/SymxUser";
 
@@ -49,11 +50,13 @@ export async function GET(req: NextRequest) {
         }
 
         await connectToDatabase();
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
 
         // Return per-employee counts for the week
         if (countsOnly) {
             const counts = await ScheduleAuditLog.aggregate([
-                { $match: { yearWeek } },
+                { $match: { yearWeek, ...S } },
                 { $group: { _id: "$transporterId", count: { $sum: 1 } } },
             ]);
             const countsMap: Record<string, number> = {};
@@ -67,7 +70,7 @@ export async function GET(req: NextRequest) {
         }
 
         const logs = await ScheduleAuditLog
-            .find(filter)
+            .find({ ...filter, ...S })
             .sort({ createdAt: -1 })
             .limit(limit)
             .lean();

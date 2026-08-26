@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import { auditDay, computeWeekPay, type DayInput, type WeekPay } from "@/lib/payroll-audit";
@@ -35,13 +36,16 @@ export async function GET(req: NextRequest) {
     }
 
     await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const E = siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" });
 
     // Routes are fetched first so we know which transporterIds actually have punch
     // data in this pay period — an employee terminated mid-period still needs to be
     // audited (and paid) for the days they worked before their status flipped, so
     // "Active" alone can't be the only way into this list.
     const routes = await SYMXRoute.find(
-      { date: { $gte: start, $lte: end } },
+      { date: { $gte: start, $lte: end }, ...S },
       {
         transporterId: 1,
         date: 1,

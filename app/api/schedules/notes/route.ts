@@ -1,6 +1,7 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import { getSession } from "@/lib/auth";
 import SymxEmployeeNote from "@/lib/models/SymxEmployeeNote";
 import SymxUser from "@/lib/models/SymxUser";
@@ -35,6 +36,9 @@ export async function GET(req: NextRequest) {
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const E = siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" });
     const { searchParams } = new URL(req.url);
     const transporterId = searchParams.get("transporterId");
     const getCounts = searchParams.get("getCounts") === "true";
@@ -42,6 +46,7 @@ export async function GET(req: NextRequest) {
     // 1. Fetch bulk counts map for the whole table
     if (getCounts) {
       const countsRaw = await SymxEmployeeNote.aggregate([
+        { $match: S },
         { $group: { _id: "$transporterId", count: { $sum: 1 } } }
       ]);
       const countsMap: Record<string, number> = {};
@@ -56,7 +61,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "transporterId required" }, { status: 400 });
     }
 
-    const notes = await SymxEmployeeNote.find({ transporterId })
+    const notes = await SymxEmployeeNote.find({ transporterId, ...S })
       .sort({ createdAt: -1 })
       .lean();
 

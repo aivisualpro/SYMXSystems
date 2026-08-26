@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
@@ -87,13 +88,17 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
 
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const E = siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" });
+
     // Return all available weeks for the dropdown (cached)
     if (weeksList === "true") {
       const now = Date.now();
       if (weeksListCache && (now - weeksListCache.timestamp) < WEEKS_CACHE_TTL) {
         return NextResponse.json({ weeks: weeksListCache.data });
       }
-      const weeks = await SymxEmployeeSchedule.distinct("yearWeek");
+      const weeks = await SymxEmployeeSchedule.distinct("yearWeek", S);
       weeks.sort((a: string, b: string) => b.localeCompare(a));
       weeksListCache = { data: weeks, timestamp: Date.now() };
       return NextResponse.json({ weeks });
@@ -105,7 +110,7 @@ export async function GET(req: NextRequest) {
 
     // Fetch all schedule entries for this week
     const schedules = await SymxEmployeeSchedule.find(
-      { yearWeek },
+      { yearWeek, ...S },
       { transporterId: 1, date: 1, weekDay: 1, status: 1, routeStatus: 1, type: 1, typeId: 1, subType: 1, trainingDay: 1, startTime: 1, dayBeforeConfirmation: 1, dayOfConfirmation: 1, weekConfirmation: 1, van: 1, note: 1 }
     )
       .sort({ date: 1 })
@@ -128,29 +133,29 @@ export async function GET(req: NextRequest) {
     const [employees, prevSchedules, auditCountsRaw, routeTypes, wstOptions, weekScheduleConfirmationsRaw] = await Promise.all([
       // Employee info
       SymxEmployee.find(
-        { transporterId: { $in: transporterIds } },
+        { transporterId: { $in: transporterIds }, ...E },
         { _id: 1, transporterId: 1, firstName: 1, lastName: 1, type: 1, status: 1, ScheduleNotes: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1, hiredDate: 1, profileImage: 1, rate: 1 }
       ).lean(),
       // Previous week schedules (only need date, transporterId, status)
       prevYearWeek
         ? SymxEmployeeSchedule.find(
-          { yearWeek: prevYearWeek, transporterId: { $in: transporterIds } },
+          { yearWeek: prevYearWeek, transporterId: { $in: transporterIds }, ...S },
           { transporterId: 1, date: 1, status: 1 }
         ).lean()
         : Promise.resolve([]),
       // Audit counts
       ScheduleAuditLog.aggregate([
-        { $match: { yearWeek } },
+        { $match: { yearWeek, ...S } },
         { $group: { _id: "$transporterId", count: { $sum: 1 } } },
       ]),
       // Route types
-      RouteType.find({ isActive: true }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
+      RouteType.find({ isActive: true, ...S }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
       // WST Options
-      SYMXWSTOption.find({ isActive: true }).lean(),
+      SYMXWSTOption.find({ isActive: true, ...S }).lean(),
       // Week-schedule confirmation status (employee confirming next week's schedule) —
       // lives in SYMXScheduleConfirmations, not on the schedule doc itself.
       ScheduleConfirmation.find(
-        { yearWeek, messageType: "week-schedule", transporterId: { $in: transporterIds } },
+        { yearWeek, messageType: "week-schedule", transporterId: { $in: transporterIds }, ...S },
         { transporterId: 1, status: 1, createdAt: 1 }
       ).sort({ createdAt: -1 }).lean(),
     ]);
@@ -322,7 +327,7 @@ export async function GET(req: NextRequest) {
     const dailyRevenueBreakdown: Record<string, any[]> = {};
     
     if (dates.length > 0) {
-      const dbRecords = await SymxEveryday.find({ date: { $in: dates } }).lean();
+      const dbRecords = await SymxEveryday.find({ date: { $in: dates }, ...S }).lean();
       dbRecords.forEach((r: any) => {
         if (!r.date) return;
         const dStr = r.date instanceof Date ? r.date.toISOString().split("T")[0] : new Date(r.date).toISOString().split("T")[0];
@@ -338,7 +343,7 @@ export async function GET(req: NextRequest) {
       });
       const dateObjects = dates.map(d => new Date(d));
       const routeRecords = await SYMXRoute.find(
-        { date: { $in: dateObjects } },
+        { date: { $in: dateObjects }, ...S },
         { date: 1, transporterId: 1, type: 1, typeId: 1, wst: 1, wstDuration: 1, totalCost: 1, paycomInDay: 1, paycomOutLunch: 1, paycomInLunch: 1, paycomOutDay: 1, totalHours: 1 }
       ).lean();
 
@@ -611,7 +616,8 @@ export async function PATCH(req: NextRequest) {
     // Update schedule entry type
     if (scheduleId) {
       // Fetch existing record BEFORE update (for audit old values)
-      const existing = await SymxEmployeeSchedule.findById(scheduleId).lean() as any;
+      const editScope = await getRequestScope();
+      const existing = await findScopedById<any>(SymxEmployeeSchedule, scheduleId, editScope) as any;
 
       const newType = (type || "").trim();
       const updateFields: Record<string, any> = { type: newType };

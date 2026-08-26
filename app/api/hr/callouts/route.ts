@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import RouteType from "@/lib/models/RouteType";
@@ -34,10 +35,13 @@ export async function GET(req: NextRequest) {
     }
 
     await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const E = siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" });
 
     // Resolve all RouteTypes once — needed both to find "Call Out" and to
     // resolve whatever type a route was previously scheduled as.
-    const allRouteTypes = await RouteType.find({}, { _id: 1, name: 1 }).lean() as any[];
+    const allRouteTypes = await RouteType.find(S, { _id: 1, name: 1 }).lean() as any[];
     const rtIdToName = new Map<string, string>();
     allRouteTypes.forEach((rt) => rtIdToName.set(String(rt._id), rt.name || ""));
 
@@ -58,6 +62,7 @@ export async function GET(req: NextRequest) {
 
     const routes = await SYMXRoute.find(
       {
+        ...S,
         date: { $gte: startDate, $lte: endDate },
         typeId: { $in: typeIdVariants },
       },
@@ -79,6 +84,7 @@ export async function GET(req: NextRequest) {
       // what shift the employee was originally scheduled for.
       ScheduleAuditLog.find(
         {
+          ...S,
           transporterId: { $in: transporterIds },
           date: { $gte: startDate, $lte: endDate },
           action: "type_changed",
