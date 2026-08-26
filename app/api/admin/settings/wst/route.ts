@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId, orgWide } from "@/lib/scoped-query";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
 
 // GET — list all WST options (no admin guard — read-only reference data used by dispatching)
@@ -11,7 +12,11 @@ export async function GET(req: NextRequest) {
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         await connectToDatabase();
-        const options = await SYMXWSTOption.find().sort({ sortOrder: 1, wst: 1 }).lean();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const writeSiteId = resolveWriteSiteId(scope, null);
+        // WST rates differ per station, so each keeps its own options.
+        const options = await SYMXWSTOption.find(S).sort({ sortOrder: 1, wst: 1 }).lean();
         return NextResponse.json(options);
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });

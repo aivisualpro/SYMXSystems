@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId, orgWide } from "@/lib/scoped-query";
 import SymxCardConfig from "@/lib/models/SymxCardConfig";
 import SymxAppModule from "@/lib/models/SymxAppModule";
 
@@ -20,8 +21,11 @@ export async function GET(req: NextRequest) {
     }
 
     await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const writeSiteId = resolveWriteSiteId(scope, null);
 
-    const config = await SymxCardConfig.findOne({ page });
+    const config = await SymxCardConfig.findOne({ page, ...S });
     return NextResponse.json({ cards: config?.cards || [] });
 
   } catch (error) {
@@ -54,7 +58,7 @@ export async function PUT(req: NextRequest) {
 
     // Merge strategy: fetch existing config, then merge incoming data
     // This way we don't lose image URLs when only name changes, or vice versa
-    const existing = await SymxCardConfig.findOne({ page });
+    const existing = await SymxCardConfig.findOne({ page, ...S });
     const existingCards = existing?.cards || [];
 
     const mergedCards = cards.map((incoming: any) => {
@@ -67,10 +71,15 @@ export async function PUT(req: NextRequest) {
       };
     });
 
+    if (!writeSiteId) {
+      return NextResponse.json({ error: "Select a single station first." }, { status: 400 });
+    }
+
     const config = await SymxCardConfig.findOneAndUpdate(
-      { page },
+      { page, ...S },
       { 
         page,
+        siteId: writeSiteId,
         cards: mergedCards,
         updatedBy: session.name || session.id,
       },

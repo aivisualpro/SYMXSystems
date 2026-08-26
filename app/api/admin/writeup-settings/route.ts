@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId, orgWide } from "@/lib/scoped-query";
 import WriteupSettings, { DEFAULT_CORRECTIVE_ACTION_TEMPLATES } from "@/lib/models/WriteupSettings";
 import DropdownOption from "@/lib/models/DropdownOption";
 
@@ -11,7 +12,13 @@ import DropdownOption from "@/lib/models/DropdownOption";
 // was added (see scripts/dedupe-writeup-settings.mjs for a one-time
 // cleanup of any that already exist).
 async function getCanonicalSettings() {
-  let settings = await WriteupSettings.findOne().sort({ _id: 1 });
+  // Escalation thresholds are org-wide policy: the same conduct earns the
+  // same response wherever it happens, and a transfer must not change how
+  // an employee's existing record is judged.
+  let settings = await orgWide(
+    WriteupSettings.findOne().sort({ _id: 1 }),
+    "escalation thresholds are org-wide policy, not per-station config"
+  );
   if (!settings) {
     settings = await WriteupSettings.create({});
   }
@@ -28,6 +35,9 @@ export async function GET() {
 
   try {
     await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const writeSiteId = resolveWriteSiteId(scope, null);
     const settings = (await getCanonicalSettings()).toObject();
     const categories = await DropdownOption.find({ type: "metric" }, { description: 1, isActive: 1, sortOrder: 1 })
       .sort({ sortOrder: 1, description: 1 })

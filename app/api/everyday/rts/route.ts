@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId, orgWide } from "@/lib/scoped-query";
 import SYMXRTS from "@/lib/models/SYMXRTS";
 
 export async function GET(req: NextRequest) {
@@ -21,10 +22,13 @@ export async function GET(req: NextRequest) {
         const dateStr = req.nextUrl.searchParams.get("dateStr");
 
         await connectToDatabase();
-        const reasons = await SYMXRTS.distinct("reason");
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const writeSiteId = resolveWriteSiteId(scope, null);
+        const reasons = await SYMXRTS.distinct("reason", S);
         let records = [];
         if (dateStr) {
-            records = await SYMXRTS.find({ date: dateStr }).lean() as any[];
+            records = await SYMXRTS.find({ date: dateStr, ...S }).lean() as any[];
         }
 
         return NextResponse.json({ reasons: reasons.filter(Boolean), records });

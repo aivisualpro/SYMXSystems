@@ -1,6 +1,7 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId, orgWide } from "@/lib/scoped-query";
 import SymxEveryday from "@/lib/models/SymxEveryday";
 import { authorizeAction } from "@/lib/rbac";
 
@@ -20,6 +21,9 @@ export async function GET(req: NextRequest) {
         if (!auth.authorized) return auth.response;
 
         await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const writeSiteId = resolveWriteSiteId(scope, null);
         const url = new URL(req.url);
 
         const date = url.searchParams.get("date");
@@ -27,7 +31,7 @@ export async function GET(req: NextRequest) {
 
         if (datesStr) {
             const dateArray = datesStr.split(",");
-            const records = await SymxEveryday.find({ date: { $in: dateArray } });
+            const records = await SymxEveryday.find({ date: { $in: dateArray }, ...S });
             const result: Record<string, any> = {};
             records.forEach(r => {
                 result[r.date] = { notes: r.notes || "", attachments: r.attachments || [], routesAssigned: r.routesAssigned || 0, endDay: !!r.endDay, SYMXRouteSheet: r.SYMXRouteSheet || "" };
@@ -39,7 +43,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Date is required" }, { status: 400 });
         }
 
-        const record = await SymxEveryday.findOne({ date });
+        const record = await SymxEveryday.findOne({ date, ...S });
         return NextResponse.json({ notes: record?.notes || "", attachments: record?.attachments || [], routesAssigned: record?.routesAssigned || 0, endDay: !!record?.endDay, SYMXRouteSheet: record?.SYMXRouteSheet || "", SYMXRouteSheetData: record?.SYMXRouteSheetData || [] });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -75,9 +79,16 @@ export async function POST(req: NextRequest) {
         if (endDay !== undefined) updateData.endDay = endDay;
         if (SYMXRouteSheet !== undefined) updateData.SYMXRouteSheet = SYMXRouteSheet;
 
+        if (!writeSiteId) {
+            return NextResponse.json(
+                { error: "Select a single station first." },
+                { status: 400 }
+            );
+        }
+
         const record = await SymxEveryday.findOneAndUpdate(
-            { date },
-            { $set: updateData },
+            { date, ...S },
+            { $set: { ...updateData, siteId: writeSiteId } },
             { upsert: true, new: true }
         );
 
