@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteGuard } from "./plugins/site-guard";
 
 // ── Verbal Coaching log ──
 // A lightweight, high-volume companion to the formal Write-Up ladder.
@@ -116,6 +117,10 @@ VerbalCoachingSchema.index({ siteId: 1, coachingDate: -1 });
 VerbalCoachingSchema.index({ siteId: 1, status: 1, coachingDate: -1 });
 VerbalCoachingSchema.index({ employeeId: 1, coachingDate: -1 });
 VerbalCoachingSchema.index({ status: 1, coachingDate: -1 });
+
+// Applied directly rather than via siteOwned() — scoped by hand before the
+// plugin existed, so siteId and the compound indexes are already declared.
+VerbalCoachingSchema.plugin(siteGuard, { modelName: "VerbalCoaching" });
 
 const VerbalCoaching = mongoose.models.VerbalCoaching || mongoose.model<IVerbalCoaching>("VerbalCoaching", VerbalCoachingSchema);
 

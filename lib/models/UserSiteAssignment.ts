@@ -64,6 +64,15 @@ UserSiteAssignmentSchema.index(
   { unique: true, partialFilterExpression: { endDate: null } }
 );
 
+// ── Deliberately NOT guarded ──────────────────────────────────────────
+// This model has a siteId, but it is a POINTER to a station rather than
+// ownership by one. It is the table that answers "which stations may this
+// user reach", so resolveUserSiteAccess() has to query it by userId alone,
+// before any station scope exists. Guarding it would flag — and in enforce
+// mode break — the very lookup that establishes scope in the first place.
+//
+// The site-guard coverage test asserts this exemption explicitly, so it
+// stays a decision rather than decaying into an oversight.
 const UserSiteAssignment: Model<IUserSiteAssignment> =
   mongoose.models.UserSiteAssignment ||
   mongoose.model<IUserSiteAssignment>("UserSiteAssignment", UserSiteAssignmentSchema);

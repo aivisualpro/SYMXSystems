@@ -40,7 +40,25 @@ export interface GuardViolation {
   count: number;
 }
 
-const violations = new Map<string, GuardViolation>();
+// ── State lives on globalThis, not in module scope ────────────────────
+// Next.js bundles each route handler separately, so a module-level Map
+// gives every route its OWN copy: the fleet route records violations into
+// one instance while /api/admin/site-guard reads an empty one, and the
+// guard reports "0 violations" for an app full of them.
+//
+// This is the same reason lib/db.ts caches its connection on
+// global.mongoose. First version of this file ignored that precedent and
+// reported a clean bill of health across six unscoped modules.
+interface GuardState {
+  violations: Map<string, GuardViolation>;
+  moduleModes: Map<string, GuardMode>;
+}
+const g = globalThis as any;
+if (!g.__symxSiteGuard) {
+  g.__symxSiteGuard = { violations: new Map(), moduleModes: new Map() } as GuardState;
+}
+const state: GuardState = g.__symxSiteGuard;
+const violations = state.violations;
 
 function globalMode(): GuardMode {
   const m = process.env.SITE_GUARD_MODE as GuardMode | undefined;
@@ -52,15 +70,13 @@ function globalMode(): GuardMode {
   return process.env.NODE_ENV === "production" ? "off" : "log";
 }
 
-const moduleModes = new Map<string, GuardMode>();
-
 /** Override the mode for one model, e.g. after its routes are scoped. */
 export function setModuleGuardMode(modelName: string, mode: GuardMode) {
-  moduleModes.set(modelName, mode);
+  state.moduleModes.set(modelName, mode);
 }
 
 function modeFor(modelName: string): GuardMode {
-  return moduleModes.get(modelName) ?? globalMode();
+  return state.moduleModes.get(modelName) ?? globalMode();
 }
 
 /**

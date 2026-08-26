@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { siteGuard } from "./plugins/site-guard";
 
 // ── Employee Coaching / Write-Up module ──
 // Replaces the old ad-hoc SYMXCoachingWriteUp (Dispatching > Coaching
@@ -308,6 +309,15 @@ WriteupSchema.index({ siteId: 1, status: 1, incidentDate: -1 });
 WriteupSchema.index({ employeeId: 1, categoryId: 1, incidentDate: -1 });
 WriteupSchema.index({ status: 1, incidentDate: -1 });
 WriteupSchema.index({ isHistorical: 1 });
+
+// Applied directly rather than via siteOwned(): this model was scoped by
+// hand before the plugin existed, so it already declares siteId and its
+// own compound indexes. siteOwned() would re-declare both.
+//
+// It still needs the guard. Write-Ups being the one fully scoped module
+// is exactly why — the guard's job here is catching a regression, not
+// finding existing gaps.
+WriteupSchema.plugin(siteGuard, { modelName: "Writeup" });
 
 const Writeup = mongoose.models.Writeup || mongoose.model<IWriteup>("Writeup", WriteupSchema);
 
