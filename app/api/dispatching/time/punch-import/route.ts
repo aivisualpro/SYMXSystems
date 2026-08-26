@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import * as XLSX from "xlsx";
@@ -74,6 +75,16 @@ export async function POST(req: NextRequest) {
     }
 
     await connectToDatabase();
+
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+        const writeSiteId = resolveWriteSiteId(scope, null);
+        if (!writeSiteId) {
+            return NextResponse.json(
+                { error: "Select a single station first." },
+                { status: 400 }
+            );
+        }
 
     // ── Group non-deleted punches by EE Code + Punch Date ──
     type PunchRow = { type: string; time: string; deleted: boolean; lastModified: string; modifiedBy: string };
@@ -199,7 +210,7 @@ export async function POST(req: NextRequest) {
       }
       withMinutes.sort((a, b) => (a.parsed as any).minutes - (b.parsed as any).minutes);
 
-      const route = await SYMXRoute.findOne({ transporterId: employee.transporterId, date: dateObj }, { _id: 1, paycomInDay: 1, paycomOutLunch: 1, paycomInLunch: 1, paycomOutDay: 1 }).lean();
+      const route = await SYMXRoute.findOne({ transporterId: employee.transporterId, date: dateObj, ...S }, { _id: 1, paycomInDay: 1, paycomOutLunch: 1, paycomInLunch: 1, paycomOutDay: 1 }).lean();
       if (!route) {
         exceptions.push({
           eeCode: group.eeCode,

@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SYMXRoutesInfo from "@/lib/models/SYMXRoutesInfo";
 
@@ -207,6 +208,16 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
 
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+        const writeSiteId = resolveWriteSiteId(scope, null);
+        if (!writeSiteId) {
+            return NextResponse.json(
+                { error: "Select a single station first." },
+                { status: 400 }
+            );
+        }
+
         // ── Process rows ──
         const routeOps: any[] = [];
         const routesInfoMap = new Map<string, { date: Date; transporterId: string; fields: Record<string, any> }>();
@@ -358,7 +369,7 @@ export async function POST(req: NextRequest) {
 
                 // Find existing RoutesInfo rows for this date to determine next rowIndex
                 const existingRows = await SYMXRoutesInfo.find(
-                    { date: dateObj },
+                    { date: dateObj, ...S },
                     { rowIndex: 1, transporterId: 1 }
                 ).sort({ rowIndex: -1 }).lean() as any[];
 

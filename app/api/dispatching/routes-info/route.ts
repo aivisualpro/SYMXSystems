@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, resolveWriteSiteId } from "@/lib/scoped-query";
 import SYMXRoutesInfo from "@/lib/models/SYMXRoutesInfo";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
@@ -53,18 +54,21 @@ export async function GET(req: NextRequest) {
 
         await connectToDatabase();
 
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+
         const dateObj = new Date(date);
 
         // Fetch saved rows, route-based drivers, dropdown options in parallel
         const [saved, routeDrivers, waveTimeOpts, padOpts, wstOpts] = await Promise.all([
             // 1. Saved RoutesInfo rows for the date
-            SYMXRoutesInfo.find({ date: dateObj })
+            SYMXRoutesInfo.find({ date: dateObj, ...S })
                 .sort({ rowIndex: 1 })
                 .lean(),
 
             // 2. Drivers from SYMXRoutes for this date (only drivers that have a route on this day)
             SYMXRoute.find(
-                { date: dateObj, transporterId: { $exists: true, $ne: "" } },
+                { date: dateObj, transporterId: { $exists: true, $ne: "" }, ...S },
                 { transporterId: 1 }
             ).lean(),
 
@@ -83,7 +87,7 @@ export async function GET(req: NextRequest) {
                 .lean(),
 
             // 5. WST options
-            SYMXWSTOption.find({ isActive: true })
+            SYMXWSTOption.find({ isActive: true, ...S })
                 .sort({ sortOrder: 1, wst: 1 })
                 .lean(),
         ]);
@@ -189,12 +193,15 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
 
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+
         const dateObj = new Date(date);
 
         // ── Fetch existing RoutesInfo rows BEFORE saving, to detect driver replacements ──
         const changedRowIndices = rows.map((r: any) => r.rowIndex);
         const existingRows = await SYMXRoutesInfo.find(
-            { date: dateObj, rowIndex: { $in: changedRowIndices } },
+            { date: dateObj, rowIndex: { $in: changedRowIndices }, ...S },
             { rowIndex: 1, transporterId: 1 }
         ).lean() as any[];
 
@@ -257,13 +264,15 @@ export async function POST(req: NextRequest) {
             try {
                 for (const oldTid of driversToClean) {
                     const otherRow = await SYMXRoutesInfo.findOne({
+                    ...S,
                         date: dateObj,
                         transporterId: oldTid,
+                        ...S,
                     }).lean();
 
                     if (!otherRow) {
                         await SYMXRoute.updateOne(
-                            { transporterId: oldTid, date: dateObj },
+                            { transporterId: oldTid, date: dateObj, ...S },
                             { $set: blankRouteInfoForRoute() }
                         );
                         console.log(`[RoutesInfo POST] Cleared route info from replaced driver ${oldTid}`);
@@ -364,22 +373,35 @@ export async function PUT(req: NextRequest) {
 
         await connectToDatabase();
 
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+
         const dateObj = new Date(date);
 
         // ── If the driver is being changed, capture the OLD transporterId first ──
         let oldTransporterId: string | null = null;
         if (field === "transporterId") {
             const existingRow = await SYMXRoutesInfo.findOne(
-                { date: dateObj, rowIndex },
+                { date: dateObj, rowIndex, ...S },
                 { transporterId: 1 }
             ).lean() as any;
             oldTransporterId = existingRow?.transporterId || null;
         }
 
         // Upsert the specific field
+        const writeSiteId = resolveWriteSiteId(scope, null);
+        if (!writeSiteId) {
+            return NextResponse.json(
+                { error: "Select a single station before editing route info." },
+                { status: 400 }
+            );
+        }
+
+        // Upsert stamps siteId on insert, so a row created here belongs to
+        // the station that made it rather than landing unassigned.
         const result = await SYMXRoutesInfo.findOneAndUpdate(
-            { date: dateObj, rowIndex },
-            { $set: { [field]: value || "", date: dateObj, rowIndex } },
+            { date: dateObj, rowIndex, ...S },
+            { $set: { [field]: value || "", date: dateObj, rowIndex, siteId: writeSiteId } },
             { upsert: true, new: true, lean: true }
         );
 
@@ -404,11 +426,12 @@ export async function PUT(req: NextRequest) {
                         date: dateObj,
                         transporterId: oldTransporterId,
                         rowIndex: { $ne: rowIndex },
+                        ...S,
                     }).lean();
 
                     if (!otherRowWithOldDriver) {
                         await SYMXRoute.updateOne(
-                            { transporterId: oldTransporterId, date: dateObj },
+                            { transporterId: oldTransporterId, date: dateObj, ...S },
                             { $set: blankRouteInfoForRoute() }
                         );
                         console.log(`[RoutesInfo PUT] Cleared route info from old driver ${oldTransporterId}`);
@@ -423,7 +446,7 @@ export async function PUT(req: NextRequest) {
                 try {
                     const syncFields = buildRouteSyncFields(row);
                     await SYMXRoute.updateOne(
-                        { transporterId: newTransporterId, date: dateObj },
+                        { transporterId: newTransporterId, date: dateObj, ...S },
                         { $set: syncFields }
                     );
                     console.log(`[RoutesInfo PUT] Applied route info to new driver ${newTransporterId}`);
@@ -486,10 +509,13 @@ export async function DELETE(req: NextRequest) {
 
         const rowIndex = parseInt(rowIndexRaw, 10);
         await connectToDatabase();
+
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
         const dateObj = new Date(date);
 
         // Fetch the row before deleting to know if we need to clear a driver's route info
-        const existingRow = await SYMXRoutesInfo.findOne({ date: dateObj, rowIndex }).lean() as any;
+        const existingRow = await SYMXRoutesInfo.findOne({ date: dateObj, rowIndex, ...S }).lean() as any;
 
         if (existingRow) {
             await SYMXRoutesInfo.deleteOne({ _id: existingRow._id });
@@ -504,7 +530,7 @@ export async function DELETE(req: NextRequest) {
 
                 if (!otherRow) {
                     await SYMXRoute.updateOne(
-                        { transporterId: oldTid, date: dateObj },
+                        { transporterId: oldTid, date: dateObj, ...S },
                         { $set: blankRouteInfoForRoute() }
                     );
                     console.log(`[RoutesInfo DELETE] Cleared route info from driver ${oldTid}`);

@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SYMXRoutesInfo from "@/lib/models/SYMXRoutesInfo";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEveryday from "@/lib/models/SymxEveryday";
@@ -52,6 +53,16 @@ export async function POST(req: NextRequest) {
         }
 
         await connectToDatabase();
+
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+        const writeSiteId = resolveWriteSiteId(scope, null);
+        if (!writeSiteId) {
+            return NextResponse.json(
+                { error: "Select a single station first." },
+                { status: 400 }
+            );
+        }
         const dateObj = new Date(date);
 
         // ── 1. Upload PDF to Cloudinary (optional — fails gracefully) ──
@@ -87,13 +98,13 @@ export async function POST(req: NextRequest) {
         const everydayUpdate: Record<string, any> = { SYMXRouteSheetData: pages };
         if (cloudinaryUrl) everydayUpdate.SYMXRouteSheet = cloudinaryUrl;
         await SymxEveryday.findOneAndUpdate(
-            { date },
-            { $set: everydayUpdate },
+            { date, ...S },
+            { $set: { ...everydayUpdate, siteId: writeSiteId } },
             { upsert: true, new: true }
         );
 
         // ── 3. Bulk-update RoutesInfo records ──
-        const existingRows = await SYMXRoutesInfo.find({ date: dateObj }).lean() as any[];
+        const existingRows = await SYMXRoutesInfo.find({ date: dateObj, ...S }).lean() as any[];
 
         const routeMap = new Map<string, any>();
         existingRows.forEach(row => {

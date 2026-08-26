@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 
 export const dynamic = "force-dynamic";
@@ -49,11 +50,21 @@ export async function PUT(req: NextRequest) {
 
         await connectToDatabase();
 
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+        const writeSiteId = resolveWriteSiteId(scope, null);
+        if (!writeSiteId) {
+            return NextResponse.json(
+                { error: "Select a single station first." },
+                { status: 400 }
+            );
+        }
+
         // ── Push status change into schedule's shiftNotification array ──
         // Single source of truth: SYMXEmployeeSchedules.shiftNotification
         const senderEmail = (session as any).email || (session as any).user?.email || "dispatcher";
 
-        const scheduleQuery: any = { transporterId };
+        const scheduleQuery: any = { transporterId, ...S };
         if (scheduleDate) {
             scheduleQuery.date = new Date(scheduleDate);
         }

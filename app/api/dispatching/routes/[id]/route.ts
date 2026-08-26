@@ -2,6 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 
 // GET: Fetch a single route by ID (all fields)
@@ -23,7 +24,8 @@ export async function GET(
 
         await connectToDatabase();
 
-        const route = await SYMXRoute.findById(id).lean();
+        const scope = await getRequestScope();
+        const route = await findScopedById<any>(SYMXRoute, id, scope);
 
         if (!route) {
             return NextResponse.json({ error: "Route not found" }, { status: 404 });
