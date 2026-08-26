@@ -164,7 +164,13 @@ const NOISE = [
 function callOrigin(): string {
   const prevLimit = Error.stackTraceLimit;
   Error.stackTraceLimit = 60;
-  const stack = new Error().stack || "";
+  const holder: { stack?: string } = {};
+  // Cuts every frame above and including callOrigin itself. Doing this by
+  // string-matching the filename does not work: a bundler rewrites the
+  // path, so the previous version filtered on "site-guard", matched
+  // nothing, and reported callOrigin as the caller of every query.
+  Error.captureStackTrace(holder, callOrigin);
+  const stack = holder.stack || "";
   Error.stackTraceLimit = prevLimit;
 
   const frames = stack.split("\n").slice(1);
