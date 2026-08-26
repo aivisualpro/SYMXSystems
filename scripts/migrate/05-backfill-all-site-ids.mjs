@@ -59,6 +59,20 @@ const SITE_OWNED_COLLECTIONS = [
   "SYMXWriteupSettings", "symxhrticketsettings", "symxreimbursementsettings",
   // Misc
   "symxpublicuploadlogs",
+
+  // ── Orphan, pre-existing ──
+  // `symxrts` (lowercase, 3 docs) is NOT the same collection as `SYMXRTS`
+  // (4 docs) — MongoDB collection names are case-sensitive. The model
+  // originally had no explicit `collection:` option, so mongoose derived
+  // "symxrts" and early writes landed there; a later commit pinned it to
+  // "SYMXRTS" and those first records were stranded. Nothing reads them now.
+  //
+  // Stamped anyway: it costs nothing and means the records are correctly
+  // attributed if they're ever merged back or recovered. Left as its own
+  // collection rather than merged here, because merging data is a decision
+  // for whoever knows whether those 3 records still matter — not a side
+  // effect of a backfill script.
+  "symxrts",
 ];
 
 // ── Org-owned but station-assigned: transferable ──────────────────────
