@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SYMXRoute from "@/lib/models/SYMXRoute";
@@ -85,6 +86,9 @@ export async function GET(req: NextRequest) {
     const date = searchParams.get("date");
 
     await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const E = siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" });
 
     // ── Detect cross-week boundary ──
     // When the target date falls outside the selected week, also fetch adjacent week's schedules.
@@ -150,7 +154,7 @@ export async function GET(req: NextRequest) {
       : null;
     const schedulePromise = scheduleQuery
       ? SymxEmployeeSchedule.find(
-        scheduleQuery,
+        { ...scheduleQuery, ...S },
         { transporterId: 1, date: 1, weekDay: 1, type: 1, typeId: 1, subType: 1, status: 1, routeStatus: 1, startTime: 1, van: 1, shiftNotification: 1, futureShift: 1, routeItinerary: 1 }
       )
         .sort({ date: 1 })
@@ -158,7 +162,7 @@ export async function GET(req: NextRequest) {
       : Promise.resolve(null);
 
     // Build typeId → { partOf, routeStatus } map for Shift filtering
-    const routeTypePromise = RouteType.find({}, { _id: 1, name: 1, partOf: 1, routeStatus: 1 }).lean();
+    const routeTypePromise = RouteType.find(S, { _id: 1, name: 1, partOf: 1, routeStatus: 1 }).lean();
 
     const routeQuery = yearWeek
       ? (allWeeks.length > 1
@@ -167,7 +171,7 @@ export async function GET(req: NextRequest) {
       : null;
     const routePromise = routeQuery
       ? SYMXRoute.find(
-          routeQuery,
+          { ...routeQuery, ...S },
           { transporterId: 1, date: 1, routeNumber: 1, stagingLocation: 1, pad: 1, waveTime: 1, van: 1 }
         ).lean()
       : Promise.resolve(null);
@@ -290,7 +294,7 @@ export async function GET(req: NextRequest) {
     let weekScheduleConfMap: Map<string, any> | null = null;
     if (filter === "week-schedule" && yearWeek) {
       const confirmations = await ScheduleConfirmation.find(
-        { yearWeek, messageType: "week-schedule" },
+        { yearWeek, messageType: "week-schedule", ...S },
         { transporterId: 1, status: 1, createdAt: 1 }
       ).sort({ createdAt: -1 }).lean() as any[];
 

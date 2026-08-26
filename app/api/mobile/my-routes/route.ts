@@ -19,6 +19,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import connectToDatabase from "@/lib/db";
+import { resolveDriverScope } from "@/lib/mobile/driver-scope";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import DailyInspection from "@/lib/models/DailyInspection";
 import SymxEmployee from "@/lib/models/SymxEmployee";
@@ -103,8 +104,13 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
 
+    // The driver's station determines which configuration they see —
+    // start times and route types differ per station.
+    const driver = await resolveDriverScope(transporterId);
+    const S = driver.filter;
+
     // ── Fetch system timezone from settings ──
-    const tzSetting = await SYMXSetting.findOne({ key: "system_timezone" }).lean() as any;
+    const tzSetting = await SYMXSetting.findOne({ key: "system_timezone", ...S }).lean() as any;
     const businessTZ = tzSetting?.value || DEFAULT_TZ;
 
     // ── Query params ──
@@ -126,7 +132,7 @@ export async function GET(req: NextRequest) {
 
     // ── Parallel fetches ──
     const [routes, employee, allRouteTypes] = await Promise.all([
-      SYMXRoute.find(query)
+      SYMXRoute.find({ ...query, ...S })
         .sort({ date: 1 })
         .lean(),
       SymxEmployee.findOne(
@@ -141,7 +147,7 @@ export async function GET(req: NextRequest) {
         }
       ).lean(),
       RouteType.find(
-        {},
+        S,
         { _id: 1, name: 1, color: 1, icon: 1 }
       ).lean(),
     ]);
@@ -160,7 +166,7 @@ export async function GET(req: NextRequest) {
     const routeIds = (routes as any[]).map((r) => String(r._id));
     const inspections = routeIds.length > 0
       ? await DailyInspection.find(
-          { routeId: { $in: routeIds } },
+          { routeId: { $in: routeIds }, ...S },
           { _id: 1, routeId: 1, timeStamp: 1, mileage: 1 }
         )
           .sort({ timeStamp: -1 })
@@ -210,7 +216,7 @@ export async function GET(req: NextRequest) {
       // Fire-and-forget: back-fill stale SYMXRoute if needed
       if (insp && r.inspectionId !== inspectionId) {
         SYMXRoute.updateOne(
-          { _id: r._id },
+          { _id: r._id, ...S },
           { $set: { inspectionId, inspectionTime } }
         ).exec().catch(() => {});
       }

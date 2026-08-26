@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
@@ -32,6 +33,8 @@ export async function GET(req: NextRequest) {
     }
 
     await connectToDatabase();
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
 
     // ── week-schedule: read from SYMXScheduleConfirmations ──
     if (messageType === "week-schedule") {
@@ -44,6 +47,7 @@ export async function GET(req: NextRequest) {
           yearWeek,
           messageType: "week-schedule",
           transporterId: { $in: transporterIds },
+          ...S,
         },
         { transporterId: 1, status: 1, createdAt: 1, changeRemarks: 1 }
       ).sort({ createdAt: -1 }).lean() as any[];
@@ -80,7 +84,7 @@ export async function GET(req: NextRequest) {
     }
 
     const schedules = await SymxEmployeeSchedule.find(
-      scheduleQuery,
+      { ...scheduleQuery, ...S },
       { transporterId: 1, [scheduleField]: 1 }
     ).lean() as any[];
 

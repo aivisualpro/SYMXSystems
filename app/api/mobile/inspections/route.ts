@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import connectToDatabase from "@/lib/db";
+import { resolveDriverScope } from "@/lib/mobile/driver-scope";
 import DailyInspection from "@/lib/models/DailyInspection";
 import Vehicle from "@/lib/models/Vehicle";
 import { createInspectionForRoute } from "@/lib/inspections/createInspectionForRoute";
@@ -57,6 +58,10 @@ export async function GET(req: NextRequest) {
     // ── Route-based lookup: GET /api/mobile/inspections?routeId=... ──
     const routeId = searchParams.get("routeId");
     if (routeId) {
+      // routeId already identifies one route, so this is a by-id lookup
+      // rather than a listing — no station filter needed to prevent a
+      // cross-station listing, and adding one would break a driver whose
+      // employee record has not been backfilled.
       const inspection = await DailyInspection.findOne({ routeId })
         .sort({ timeStamp: -1 })
         .lean();
@@ -87,6 +92,9 @@ export async function GET(req: NextRequest) {
       vin = (vehicle as any).vin;
     }
 
+    // Last known mileage for this VIN. Deliberately not station-filtered:
+    // it is a property of the physical van, and a van that moved stations
+    // would otherwise report a stale odometer reading to its new driver.
     const lastInspection = await DailyInspection.findOne(
       { vin },
       { mileage: 1 }

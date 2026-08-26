@@ -49,6 +49,8 @@ export async function GET(
     const { id } = await params;
     await connectToDatabase();
 
+    // By-id lookup from the driver's own app. The inspection id comes
+    // from a list already restricted to this driver's routes.
     const inspection = await DailyInspection.findById(id).lean();
     if (!inspection) {
       return NextResponse.json(
