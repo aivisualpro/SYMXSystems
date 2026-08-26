@@ -6,6 +6,7 @@ import Vehicle from "@/lib/models/Vehicle";
 import VehicleActivityLog from "@/lib/models/VehicleActivityLog";
 import Site from "@/lib/models/Site";
 import { getRequestScope, siteFilter } from "@/lib/scoped-query";
+import { moveVehicleRecords } from "@/lib/fleet/transfer-vehicle";
 
 // POST /api/fleet/vehicles/transfer  { vehicleIds: string[], toSiteId, notes? }
 //
@@ -13,10 +14,11 @@ import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 // means moving vans in batches, and doing that one at a time invites
 // stopping halfway and losing track of which ones moved.
 //
-// Only the van's CURRENT station changes. Every record it produced —
-// repairs, inspections, rental agreements — keeps its original siteId,
-// because that is where the work happened. Rewriting that would make past
-// fleet reports disagree with themselves depending on when they were run.
+// Each van's history moves with it: repairs, inspections, rental
+// agreements and activity log are repointed at the new station, because
+// the station running a van needs its full record and carries its cost.
+// See lib/fleet/transfer-vehicle.ts for why this differs from routes and
+// write-ups, which stay with the station where they happened.
 
 export async function POST(req: NextRequest) {
   try {
@@ -87,6 +89,18 @@ export async function POST(req: NextRequest) {
     const movedIds = toMove.map((v: any) => v._id);
     await Vehicle.updateMany({ _id: { $in: movedIds } }, { $set: { currentSiteId: toSiteId } });
 
+    // History follows each van. Sequential rather than parallel: these are
+    // multi-collection updates and a burst of them across a large batch
+    // would contend for the same documents.
+    let historyMoved = 0;
+    for (const v of toMove) {
+      const counts = await moveVehicleRecords(
+        { _id: v._id, vin: (v as any).vin, unitNumber: (v as any).unitNumber },
+        String(toSiteId)
+      );
+      historyMoved += Object.values(counts).reduce((a, b) => a + b, 0);
+    }
+
     // One audit entry per van. A van disappearing from a station's list
     // needs to be explainable months later, and a single summary row would
     // not be findable from the vehicle it describes.
@@ -114,7 +128,7 @@ export async function POST(req: NextRequest) {
         `Moved ${toMove.length} van${toMove.length === 1 ? "" : "s"} to ${destination.code}.` +
         (alreadyThere ? ` ${alreadyThere} already there.` : "") +
         (notFound ? ` ${notFound} not found or not yours.` : "") +
-        " Their previous stations keep their repair and inspection history.",
+        ` ${historyMoved} history record${historyMoved === 1 ? "" : "s"} moved with them.`,
     });
   } catch (error: any) {
     console.error("Bulk vehicle transfer error:", error);

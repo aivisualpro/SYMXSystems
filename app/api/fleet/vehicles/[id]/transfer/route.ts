@@ -6,6 +6,7 @@ import Vehicle from "@/lib/models/Vehicle";
 import VehicleActivityLog from "@/lib/models/VehicleActivityLog";
 import Site from "@/lib/models/Site";
 import { getRequestScope, canAccessRecord } from "@/lib/scoped-query";
+import { moveVehicleRecords, summariseTransfer } from "@/lib/fleet/transfer-vehicle";
 
 // POST /api/fleet/vehicles/[id]/transfer  { toSiteId, notes? }
 //
@@ -18,11 +19,15 @@ import { getRequestScope, canAccessRecord } from "@/lib/scoped-query";
 // van out of a station removes it from that station's fleet list, which
 // is exactly the kind of change someone will later need explained.
 //
-// What does NOT move: every record the van produced. Its DFO2-era
-// repairs, inspections and rental agreements keep siteId = DFO2, because
-// that is where the work actually happened. Only the van's current
-// location changes. Rewriting that history would make past fleet reports
-// disagree with themselves depending on when they were run.
+// The van's records move WITH it. Repairs, inspections, rental
+// agreements and activity log all get repointed at the new station,
+// because a van's history is part of the asset — the station running it
+// now needs the complete record and carries its maintenance cost.
+//
+// This is the opposite rule from operational and HR data, deliberately:
+// a route or a write-up records something that happened at a place on a
+// date and stays there forever, whereas a repair describes an object
+// that moves. See lib/fleet/transfer-vehicle.ts.
 
 export async function POST(
   req: NextRequest,
@@ -86,6 +91,12 @@ export async function POST(
     (vehicle as any).currentSiteId = toSiteId;
     await vehicle.save();
 
+    // History follows the van.
+    const movedCounts = await moveVehicleRecords(
+      { _id: vehicle._id, vin: (vehicle as any).vin, unitNumber: (vehicle as any).unitNumber },
+      String(toSiteId)
+    );
+
     // Audit trail on the vehicle itself. A van vanishing from one station's
     // list and appearing at another's needs to be explainable months later.
     await VehicleActivityLog.create({
@@ -107,7 +118,8 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: `Moved to ${toCode}. Its ${fromCode} history stays with ${fromCode}.`,
+      message: `Moved to ${toCode} along with its history (${summariseTransfer(movedCounts)}).`,
+      movedRecords: movedCounts,
       vehicle: { id: String(vehicle._id), currentSiteId: String(toSiteId) },
     });
   } catch (error: any) {

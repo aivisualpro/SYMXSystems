@@ -17,10 +17,9 @@ interface Station {
  * a batch, and one-at-a-time invites stopping halfway without knowing
  * which ones moved.
  *
- * The copy is explicit that history stays behind, because that is the
- * part people get wrong: moving a van does NOT move its repairs and
- * inspections. Those belong to the station where the work happened, so a
- * past fleet report stays true after a transfer.
+ * A van's history travels with it: repairs, inspections and rental
+ * agreements are repointed at the new station, because the station
+ * running a van needs its complete record and carries its cost.
  */
 export function VehicleTransfer({
   vehicleIds,
@@ -126,8 +125,8 @@ export function VehicleTransfer({
 
       {!compact && (
         <p className="text-xs text-neutral-500 leading-relaxed">
-          Repairs, inspections and rental agreements stay with the station where
-          they happened — only the van's current location changes.
+          Repairs, inspections and rental agreements move with the van, so the
+          receiving station gets its full history.
         </p>
       )}
 

@@ -6,9 +6,9 @@
  * that through the UI one van at a time invites stopping halfway with no
  * record of which ones moved.
  *
- * Only the van's CURRENT station changes. Its repairs, inspections and
- * rental agreements keep their original siteId, because that is where the
- * work happened — so DFO2's past fleet reports stay true after a move.
+ * A van's history moves with it. Repairs, inspections, rental agreements
+ * and activity log are repointed at the destination, because the station
+ * running a van needs its complete record and carries its cost.
  *
  * Usage:
  *   node scripts/config/assign-vehicles.mjs --list
@@ -145,8 +145,26 @@ async function main() {
         updatedAt: new Date(),
       }))
     );
+    // History follows each van. Matches on vehicleId, vin AND unitNumber
+    // because these collections were populated by different importers and
+    // do not all carry the same link field — matching on one alone would
+    // leave part of the history behind at the old station.
+    let historyMoved = 0;
+    for (const v of toMove) {
+      const or = [{ vehicleId: v._id }];
+      if (v.vin) or.push({ vin: v.vin });
+      if (v.unitNumber) or.push({ unitNumber: v.unitNumber });
+      for (const col of [
+        "vehiclesRepairs", "vehiclesInspections", "vehiclesRentalAgreements",
+        "vehiclesActivityLogs", "dailyInspections",
+      ]) {
+        const r = await db.collection(col).updateMany({ $or: or }, { $set: { siteId: site._id } });
+        historyMoved += r.modifiedCount;
+      }
+    }
+
     console.log(`\n✓ Moved ${toMove.length} van(s) to ${site.code}.`);
-    console.log("  Their previous stations keep all repair and inspection history.");
+    console.log(`  ${historyMoved} history record(s) moved with them.`);
   }
 
   await mongo.close();

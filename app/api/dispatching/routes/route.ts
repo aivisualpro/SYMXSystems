@@ -1,6 +1,7 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import SYMXRoute from "@/lib/models/SYMXRoute";
@@ -82,12 +83,24 @@ export async function GET(req: NextRequest) {
 
         // Fast path: layout just needs to know if routes exist (no full data fetch)
         if (checkOnly === "true") {
-            const count = await SYMXRoute.countDocuments({ yearWeek });
+            const probeScope = await getRequestScope();
+            const count = await SYMXRoute.countDocuments({
+                yearWeek,
+                ...siteFilter(probeScope, { includeUnassigned: true }),
+            });
             return NextResponse.json({ routesGenerated: count > 0 });
         }
 
         // Fetch RouteType metadata — filter to only those with "Dispatching" in partOf
-        const allRouteTypes = await RouteType.find({}, { _id: 1, name: 1, routeStatus: 1, partOf: 1 }).lean() as any[];
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+
+        // Route types are per-station: start times differ by station, so
+        // each one keeps its own set rather than sharing a catalogue.
+        const allRouteTypes = await RouteType.find(
+            { ...S },
+            { _id: 1, name: 1, routeStatus: 1, partOf: 1 }
+        ).lean() as any[];
         const rtNameToId = new Map<string, string>();   // name.lower → typeId string
 
         // Include all types except those whose name is literally "Off"
@@ -109,7 +122,7 @@ export async function GET(req: NextRequest) {
 
         // Build query — only show routes whose typeId is a Dispatching-partOf, non-Off RouteType
         // Match both string AND ObjectId stored values (handles pre-migration records)
-        const query: any = { yearWeek };
+        const query: any = { yearWeek, ...S };
         if (date) query.date = new Date(date);
         if (dispatchingTypeIds.length > 0) {
             const asObjectIds = dispatchingTypeIds
@@ -127,7 +140,7 @@ export async function GET(req: NextRequest) {
         // ── PHASE 1: Fetch routes + completion setting in parallel ──
         const [routes, completionSetting] = await Promise.all([
             SYMXRoute.find(query).sort({ date: 1, transporterId: 1 }).lean(),
-            SYMXSetting.findOne({ key: "routes_completion_types" }).lean(),
+            SYMXSetting.findOne({ key: "routes_completion_types", ...S }).lean(),
         ]);
 
         if (routes.length === 0) {
@@ -165,11 +178,11 @@ export async function GET(req: NextRequest) {
                 { transporterId: 1, firstName: 1, lastName: 1, phoneNumber: 1, type: 1, status: 1, profileImage: 1, routesComp: 1, rate: 1, hiredDate: 1 }
             ).lean(),
             SYMXRoute.aggregate([
-                { $match: routeCountMatch },
+                { $match: { ...routeCountMatch, ...S } },
                 { $group: { _id: { transporterId: "$transporterId", date: { $dateToString: { format: "%Y-%m-%d", date: "$date", timezone: BUSINESS_TZ } } }, count: { $sum: 1 } } },
             ]),
             ScheduleAuditLog.aggregate([
-                { $match: { yearWeek } },
+                { $match: { yearWeek, ...S } },
                 { $group: { _id: "$transporterId", count: { $sum: 1 } } },
             ]),
             allVanNames.length > 0
@@ -184,6 +197,8 @@ export async function GET(req: NextRequest) {
                     .filter(Boolean);
 
                 if (scheduleIds.length === 0) return Promise.resolve([]);
+                // Ids come from routes already filtered to this station,
+                // so this is a by-id fetch of records we just authorised.
                 return SymxEmployeeSchedule.find(
                     { _id: { $in: scheduleIds } },
                     { transporterId: 1, date: 1, shiftNotification: 1 }
@@ -334,7 +349,7 @@ export async function GET(req: NextRequest) {
         const routeIds = enrichedRoutes.map((r: any) => String(r._id));
         const dailyInspections = routeIds.length > 0
           ? await DailyInspection.find(
-              { routeId: { $in: routeIds } },
+              { routeId: { $in: routeIds }, ...S },
               { _id: 1, routeId: 1, timeStamp: 1, mileage: 1 }
             )
               .sort({ timeStamp: -1 })
@@ -455,7 +470,8 @@ export async function PUT(req: NextRequest) {
         await connectToDatabase();
 
         // Fetch existing route BEFORE updating (for audit old values)
-        const existing = await SYMXRoute.findById(routeId).lean() as any;
+        const putScope = await getRequestScope();
+        const existing = await findScopedById<any>(SYMXRoute, routeId, putScope) as any;
         if (!existing) {
             console.error(`[PUT /api/dispatching/routes] Route not found for ID: ${routeId}`);
             return NextResponse.json({ error: "Route not found" }, { status: 404 });
@@ -499,6 +515,12 @@ export async function PUT(req: NextRequest) {
             } else {
                 try {
                     const rt = await RouteType.findById(newTypeId, { routeStatus: 1 }).lean() as any;
+                    // Route type must belong to a station the caller can
+                    // reach, or a route could be retyped using another
+                    // station's configuration.
+                    if (rt && !putScope.allowedSiteIds.includes(String((rt as any).siteId || putScope.defaultSiteId))) {
+                        return NextResponse.json({ error: "Unknown route type" }, { status: 400 });
+                    }
                     if (rt?.routeStatus) newRouteStatus = rt.routeStatus;
                 } catch { }
             }
