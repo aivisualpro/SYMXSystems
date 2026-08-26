@@ -49,7 +49,10 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
 
     if (ip !== "unknown") {
-      const recentCount = await SymxPublicUploadLog.countDocuments({
+      const recentCount = // Rate limit counted org-wide on purpose. It exists to stop one
+    // source flooding the form; scoping it per station would let the same
+    // submitter spend a full quota again at each station.
+    await SymxPublicUploadLog.countDocuments({
         ip,
         purpose: "reimbursement-receipt",
         createdAt: { $gte: new Date(Date.now() - RATE_LIMIT_WINDOW_MS) },
