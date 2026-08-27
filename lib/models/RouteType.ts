@@ -76,7 +76,9 @@ if (mongoose.models.RouteType) {
 RouteTypeSchema.index({ name: 1 }, { unique: true });
 RouteTypeSchema.index({ 'stations.siteId': 1 });
 
-RouteTypeSchema.plugin(siteOwned, { modelName: "RouteType" });
+// No siteOwned plugin: this catalogue is organization-level. The station
+// only decides start times, held in stations[] and resolved by
+// routeTypeStartTime() — there is no siteId to filter on.
 
 /**
  * The start time for a route type at a station.
