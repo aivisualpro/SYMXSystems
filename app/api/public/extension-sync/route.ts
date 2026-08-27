@@ -254,7 +254,7 @@ export async function POST(req: NextRequest) {
         });
 
         // ── Fetch WST options to map Amazon serviceTypeName → WST ──
-        const wstOpts = await SYMXWSTOption.find({ isActive: true, ...S }).lean();
+        const wstOpts = await SYMXWSTOption.find({ isActive: true }).lean();
         const amazonServiceTypeToWst = new Map<string, string>();
         wstOpts.forEach((opt: any) => {
             if (opt.amazonServiceType && opt.wst) {

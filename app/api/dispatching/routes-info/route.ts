@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
                 .lean(),
 
             // 5. WST options
-            SYMXWSTOption.find({ isActive: true, ...S })
+            SYMXWSTOption.find({ isActive: true })
                 .sort({ sortOrder: 1, wst: 1 })
                 .lean(),
         ]);

@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
         { status: "Active" },
         { transporterId: 1, firstName: 1, lastName: 1, rate: 1 }
       ).lean(),
-      SYMXWSTOption.find({ isActive: true, ...S }).lean(),
+      SYMXWSTOption.find({ isActive: true }).lean(),
       RouteType.find({ isActive: true, ...S }, { name: 1, group: 1 }).lean(),
     ]);
 
@@ -217,7 +217,7 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "Route not found" }, { status: 404 });
       }
 
-      const wstOptions = await SYMXWSTOption.find({ isActive: true, ...S }).lean();
+      const wstOptions = await SYMXWSTOption.find({ isActive: true }).lean();
       const wstMap = new Map(
         (wstOptions as any[]).map(w => [(w.wst || "").trim().toLowerCase(), w.revenue || 0])
       );

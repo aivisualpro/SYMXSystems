@@ -2,7 +2,7 @@ import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission
 
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
-import { getRequestScope, siteFilter, canAccessRecord, orgWide } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, canAccessRecord, orgWide, resolveWriteSiteId} from "@/lib/scoped-query";
 import SymxEmployee from '@/lib/models/SymxEmployee';
 import { getSession } from '@/lib/auth';
 import { canViewCompensation, maskRateInList, maskRate } from '@/lib/compensation-visibility';
@@ -247,6 +247,21 @@ export async function POST(req: Request) {
     if (existingEmployee) {
       return new NextResponse("Email already exists", { status: 409 });
     }
+
+    // ── Home station ──
+    // Taken from the scope, never the request body. Without this the new
+    // employee lands with no primarySiteId, and an unassigned record shows
+    // at the DEFAULT station — so creating someone while viewing DXC8 put
+    // them on DFO2's roster with nothing to indicate anything went wrong.
+    const createScope = await getRequestScope();
+    const homeSiteId = resolveWriteSiteId(createScope, null);
+    if (!homeSiteId) {
+      return NextResponse.json(
+        { error: "Select a single station before adding an employee." },
+        { status: 400 }
+      );
+    }
+    body.primarySiteId = homeSiteId;
 
     const employee = await SymxEmployee.create(body);
 

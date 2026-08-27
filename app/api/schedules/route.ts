@@ -151,7 +151,7 @@ export async function GET(req: NextRequest) {
       // Route types
       RouteType.find({ isActive: true, ...S }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
       // WST Options
-      SYMXWSTOption.find({ isActive: true, ...S }).lean(),
+      SYMXWSTOption.find({ isActive: true }).lean(),
       // Week-schedule confirmation status (employee confirming next week's schedule) —
       // lives in SYMXScheduleConfirmations, not on the schedule doc itself.
       ScheduleConfirmation.find(

@@ -2,9 +2,12 @@
 /**
  * Inspect and set per-station WST revenue rates.
  *
- * WST options carry the revenue the station earns for a unit of work, and
- * that rate differs per station — the Amazon rate cards give DFO2, DXC8
- * and DFO3 three different hourly base rates for the same service type.
+ * The WST catalogue is SHARED: the same selections at every station,
+ * because the work is the same work. Only the RATE differs — Amazon's
+ * rate cards price the identical service line differently per station.
+ *
+ * So this does not create or clone options. It writes into the `rates`
+ * array on each shared option, one entry per station.
  *
  * Usage:
  *   node scripts/config/wst-rates.mjs --list
@@ -118,10 +121,10 @@ export const RATE_CARDS = {
 /**
  * WST code -> rate-card line.
  *
- * Empty deliberately. The WST codes in this system are the operation's own
- * labels, and guessing which rate line each one means would put wrong
- * numbers into revenue calculations that look plausible. Run --list first
- * to see the real codes, then fill this in.
+ * Empty deliberately. The WST codes here are the operation's own labels,
+ * and guessing which rate line each one means would put wrong numbers into
+ * revenue calculations that still look entirely plausible. Run --list to
+ * see the real codes, fill this in, then --apply.
  */
 export const WST_TO_RATE_LINE = {
   // "SP":  "Standard Parcel",
@@ -139,33 +142,31 @@ async function main() {
   const wanted = (arg("station") || "").toUpperCase();
 
   if (LIST || !APPLY) {
-    const filter = wanted ? { siteId: siteByCode.get(wanted)?._id } : {};
     const rows = await db
       .collection("SYMXWSTOptions")
-      .find(filter)
+      .find({})
       .sort({ sortOrder: 1, wst: 1 })
       .toArray();
 
-    const byStation = {};
+    const codes = sites.map((s) => s.code);
+    console.log(`\n${rows.length} shared WST option(s) — rate per station\n`);
+    console.log(
+      `   ${"WST".padEnd(26)} ${"default".padStart(8)}` +
+        codes.map((c) => ` ${c.padStart(9)}`).join("") +
+        "   active"
+    );
     for (const r of rows) {
-      const c = r.siteId ? codeOf.get(String(r.siteId)) || "?" : "(unassigned)";
-      (byStation[c] ||= []).push(r);
-    }
-
-    for (const [code, list] of Object.entries(byStation)) {
-      const card = RATE_CARDS[code];
+      const perSite = codes
+        .map((c) => {
+          const site = siteByCode.get(c);
+          const hit = (r.rates || []).find((x) => String(x.siteId) === String(site._id));
+          return ` ${(hit ? String(hit.revenue) : "—").padStart(9)}`;
+        })
+        .join("");
       console.log(
-        `\n── ${code}${card ? ` (${card.station})` : ""} — ${list.length} WST option(s) ──`
+        `   ${String(r.wst).padEnd(26)} ${String(r.revenue ?? 0).padStart(8)}${perSite}` +
+          `   ${r.isActive === false ? "no" : "yes"}`
       );
-      console.log(
-        `   ${"WST".padEnd(28)} ${"revenue".padStart(9)}  ${"amazonServiceType".padEnd(30)} active`
-      );
-      for (const r of list) {
-        console.log(
-          `   ${String(r.wst).padEnd(28)} ${String(r.revenue ?? 0).padStart(9)}  ` +
-            `${String(r.amazonServiceType || "").padEnd(30)} ${r.isActive === false ? "no" : "yes"}`
-        );
-      }
     }
 
     console.log("\n── Rate cards on file ──");
@@ -201,8 +202,8 @@ async function main() {
     );
   }
 
-  const rows = await db.collection("SYMXWSTOptions").find({ siteId: site._id }).toArray();
-  console.log(`\n${wanted} (${card.station}) — ${rows.length} WST option(s)\n`);
+  const rows = await db.collection("SYMXWSTOptions").find({}).toArray();
+  console.log(`\n${wanted} (${card.station}) — ${rows.length} shared WST option(s)\n`);
 
   const updates = [];
   const unmapped = [];
@@ -217,12 +218,21 @@ async function main() {
       console.log(`  ⚠ ${r.wst}: mapped to "${line}", which is not on ${wanted}'s card`);
       continue;
     }
-    if (Number(r.revenue) === rate.standard) continue;
-    updates.push({ id: r._id, wst: r.wst, from: r.revenue ?? 0, to: rate.standard, line });
+    const current = (r.rates || []).find((x) => String(x.siteId) === String(site._id));
+    if (current && Number(current.revenue) === rate.standard) continue;
+    updates.push({
+      id: r._id,
+      wst: r.wst,
+      from: current ? current.revenue : null,
+      to: rate.standard,
+      line,
+      hasEntry: !!current,
+    });
   }
 
   for (const u of updates) {
-    console.log(`  ${u.wst.padEnd(28)} $${String(u.from).padStart(7)} → $${String(u.to).padStart(7)}   (${u.line})`);
+    const from = u.from === null ? "(none)" : `$${u.from}`;
+    console.log(`  ${u.wst.padEnd(26)} ${String(from).padStart(9)} → $${String(u.to).padStart(7)}   (${u.line})`);
   }
   if (unmapped.length) {
     console.log(`\n  ${unmapped.length} unmapped, left unchanged: ${unmapped.join(", ")}`);
@@ -240,12 +250,21 @@ async function main() {
   }
 
   for (const u of updates) {
-    await db.collection("SYMXWSTOptions").updateOne(
-      { _id: u.id },
-      { $set: { revenue: u.to, updatedAt: new Date() } }
-    );
+    if (u.hasEntry) {
+      // Positional update so only THIS station's entry moves — a whole-array
+      // rewrite would drop the other stations' rates.
+      await db.collection("SYMXWSTOptions").updateOne(
+        { _id: u.id, "rates.siteId": site._id },
+        { $set: { "rates.$.revenue": u.to, updatedAt: new Date() } }
+      );
+    } else {
+      await db.collection("SYMXWSTOptions").updateOne(
+        { _id: u.id },
+        { $push: { rates: { siteId: site._id, revenue: u.to } }, $set: { updatedAt: new Date() } }
+      );
+    }
   }
-  console.log(`\n✓ Updated ${updates.length} rate(s) at ${wanted}.`);
+  console.log(`\n✓ Set ${updates.length} rate(s) for ${wanted}. Other stations untouched.`);
 
   await mongo.close();
 }

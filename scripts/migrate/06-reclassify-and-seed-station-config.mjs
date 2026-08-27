@@ -43,9 +43,11 @@ const { uri: TARGET_URI } = resolveTargetDb(env, { scriptName: "06-reclassify-an
 const RECLASSIFY_TO_ORG = ["messagingtemplates"];
 
 // Per-station config to clone from the default station to the others.
+// WST options are NOT cloned. The catalogue is shared company-wide and
+// carries per-station rates in an embedded array, so copying it would
+// create three drifting lists of the same selections.
 const CLONE_PER_STATION = [
   { name: "SYMXRouteTypes", label: "route types" },
-  { name: "SYMXWSTOptions", label: "WST options" },
   { name: "SYMXSettings", label: "settings" },
   { name: "symxcardconfigs", label: "card configs" },
 ];

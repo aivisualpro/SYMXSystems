@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const S = siteFilter(scope, { includeUnassigned: true });
     const writeSiteId = resolveWriteSiteId(scope, null);
         // WST rates differ per station, so each keeps its own options.
-        const options = await SYMXWSTOption.find(S).sort({ sortOrder: 1, wst: 1 }).lean();
+        const options = await SYMXWSTOption.find({}).sort({ sortOrder: 1, wst: 1 }).lean();
         return NextResponse.json(options);
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });

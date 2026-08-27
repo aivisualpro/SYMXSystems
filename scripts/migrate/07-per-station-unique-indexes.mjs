@@ -2,9 +2,8 @@
 /**
  * Phase 3b — make per-station config uniqueness per-station.
  *
- * Four config collections had a GLOBALLY unique field:
+ * Three config collections had a GLOBALLY unique field:
  *
- *   SYMXWSTOptions   wst
  *   SYMXRouteTypes   name
  *   SYMXSettings     key
  *   symxcardconfigs  page
@@ -37,8 +36,11 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const env = loadEnv(rootDir);
 const { uri } = resolveTargetDb(env, { scriptName: "07-per-station-unique-indexes" });
 
+// SYMXWSTOptions is deliberately absent. The WST catalogue is SHARED
+// across stations — the same selections everywhere, priced per station via
+// an embedded rates array — so its global unique index on `wst` is correct
+// and must stay.
 const COLLECTIONS = [
-  { name: "SYMXWSTOptions", field: "wst" },
   { name: "SYMXRouteTypes", field: "name" },
   { name: "SYMXSettings", field: "key" },
   { name: "symxcardconfigs", field: "page" },
