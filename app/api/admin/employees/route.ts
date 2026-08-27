@@ -265,6 +265,26 @@ export async function POST(req: Request) {
 
     const employee = await SymxEmployee.create(body);
 
+    // Fill in the weeks that already exist at their station, from their
+    // hire date onward. Without this a new hire is invisible on the
+    // schedule until someone remembers to regenerate the week — which is
+    // how somebody ends up with no shifts and nobody notices until the day
+    // they turn up.
+    try {
+      const sync = await syncEmployeeSchedules(employee.toObject() as any, {
+        userId: (session as any)?.id,
+      });
+      if (sync.created > 0) {
+        console.log(
+          `[employees] Created ${sync.created} schedule row(s) for ${employee.transporterId} ` +
+          `across ${sync.weeks.length} week(s).`
+        );
+      }
+    } catch (e: any) {
+      // The employee exists either way; a failed sync must not undo that.
+      console.error("[employees] Schedule sync failed after create:", e?.message);
+    }
+
     // Pay rate is only visible to Super Admin / Owner-module-level access —
     // see lib/compensation-visibility.ts.
     const canViewComp = await canViewCompensation(session);

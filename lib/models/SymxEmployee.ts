@@ -59,6 +59,15 @@ export interface ISymxEmployee extends Document {
   terminationDate?: Date;
   terminationLetter?: string;
   resignationDate?: Date;
+  /**
+   * When an inactive employee was made active again.
+   *
+   * Schedules resume from this day FORWARD rather than from the original
+   * hire date — backfilling the months someone was away would invent
+   * shifts they never worked, and those carry theory hours into labour
+   * cost and the timecard audit.
+   */
+  reactivatedDate?: Date;
   resignationLetter?: string;
   resignationType?: string;
   terminationReason?: string;
@@ -125,6 +134,7 @@ const SymxEmployeeSchema: Schema = new Schema({
   terminationDate: { type: Date },
   terminationLetter: { type: String },
   resignationDate: { type: Date },
+  reactivatedDate: { type: Date },
   resignationLetter: { type: String },
   resignationType: { type: String },
   terminationReason: { type: String },

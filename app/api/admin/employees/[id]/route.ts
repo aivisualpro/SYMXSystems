@@ -5,6 +5,8 @@ import connectToDatabase from "@/lib/db";
 import { getRequestScope, siteFilter, canAccessRecord, orgWide } from "@/lib/scoped-query";
 import { getSession } from "@/lib/auth";
 import SymxEmployee from "@/lib/models/SymxEmployee";
+import { syncEmployeeSchedules, statusChangeNeedsSync } from "@/lib/scheduling/sync-employee-schedules";
+import { isSchedulableStatus } from "@/lib/scheduling/employment-window";
 import { canViewCompensation, maskRate } from "@/lib/compensation-visibility";
 
 type RouteProps = {
@@ -90,11 +92,64 @@ export async function PUT(
       }
     }
 
+    // Captured BEFORE the write so a status transition can be detected —
+    // "became active today" is the trigger for generating forward, and it
+    // is invisible once the update has landed.
+    const previous = await SymxEmployee.findById(params.id, {
+      status: 1, hiredDate: 1, terminationDate: 1, resignationDate: 1, primarySiteId: 1,
+    }).lean();
+
     const updatedEmployee = await SymxEmployee.findByIdAndUpdate(
       params.id,
       body,
       { new: true, runValidators: true }
     );
+
+    // ── Resync schedules when employment changes ──
+    // Status, hire date, leaving date or station — each changes which days
+    // this person should have rows for. An employee made active again
+    // generates from the new active day FORWARD, never backfilling the
+    // months they were away.
+    if (updatedEmployee) {
+      const p: any = previous || {};
+      const n: any = updatedEmployee;
+      const employmentChanged =
+        statusChangeNeedsSync(p.status, n.status) ||
+        String(p.hiredDate || "") !== String(n.hiredDate || "") ||
+        String(p.terminationDate || "") !== String(n.terminationDate || "") ||
+        String(p.resignationDate || "") !== String(n.resignationDate || "") ||
+        String(p.primarySiteId || "") !== String(n.primarySiteId || "");
+
+      if (employmentChanged) {
+        try {
+          // Becoming schedulable again starts a fresh window from today,
+          // so the dormant period is not invented after the fact.
+          const becameActive =
+            !isSchedulableStatus(p.status) && isSchedulableStatus(n.status);
+          if (becameActive && !n.reactivatedDate) {
+            const today = new Date();
+            today.setUTCHours(0, 0, 0, 0);
+            n.reactivatedDate = today;
+            await SymxEmployee.updateOne(
+              { _id: n._id },
+              { $set: { reactivatedDate: today } }
+            );
+          }
+
+          const sync = await syncEmployeeSchedules(n.toObject ? n.toObject() : n, {
+            userId: (session as any)?.id,
+          });
+          if (sync.created || sync.removed) {
+            console.log(
+              `[employees] Schedule sync for ${n.transporterId}: ` +
+              `+${sync.created} / -${sync.removed}`
+            );
+          }
+        } catch (e: any) {
+          console.error("[employees] Schedule sync failed after update:", e?.message);
+        }
+      }
+    }
 
     if (!updatedEmployee) {
       return new NextResponse("Employee not found", { status: 404 });

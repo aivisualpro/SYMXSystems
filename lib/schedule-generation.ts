@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { isScheduledOn } from "@/lib/scheduling/employment-window";
 import connectToDatabase from "@/lib/db";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
@@ -110,8 +111,18 @@ export async function generateScheduleForWeek(
     // another station for a day still belongs to their home roster, so the
     // week is built from the people based here.
     const employees = await SymxEmployee.find(
-        { status: "Active", transporterId: { $exists: true, $ne: "" }, primarySiteId: siteId },
-        { _id: 1, transporterId: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1 }
+        {
+            status: "Active",
+            transporterId: { $exists: true, $ne: "" },
+            primarySiteId: siteId,
+        },
+        {
+            _id: 1, transporterId: 1, status: 1,
+            // Employment dates: rows are only created for days the person
+            // was actually employed.
+            hiredDate: 1, terminationDate: 1, resignationDate: 1, reactivatedDate: 1,
+            sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1,
+        }
     ).lean();
 
     const routeTypes = await RouteType.find({}).lean();
@@ -159,14 +170,23 @@ export async function generateScheduleForWeek(
 
     const isValidObjectId = userId && typeof userId === "string" && /^[a-f\d]{24}$/i.test(userId);
     const userObjectId = isValidObjectId ? new mongoose.Types.ObjectId(userId) : undefined;
+    // ── Only the days they were employed ──
+    // A row carries theory hours, so one created before someone's hire
+    // date or after they left shows up in labour cost, headcount averages
+    // and the timecard audit as a day they "should" have worked.
+    let skippedDays = 0;
     const records = missingEmployees.flatMap((emp) =>
-        dates.map((date, dayIdx) => {
+        dates.flatMap((date, dayIdx) => {
+            if (!isScheduledOn(emp as any, date)) {
+                skippedDays++;
+                return [];
+            }
             const dayField = DAY_FIELDS[dayIdx];
             const empDayId = (emp as any)[dayField] ? String((emp as any)[dayField]) : null;
             const matchedRoute = empDayId ? routeTypeMap.get(empDayId) : null;
             const resolvedTypeId = matchedRoute?._id ? String(matchedRoute._id) : (offRouteType?._id ? String(offRouteType._id) : undefined);
 
-            return {
+            return [{
                 transporterId: emp.transporterId,
                 siteId,
                 employeeId: emp._id,
@@ -182,9 +202,16 @@ export async function generateScheduleForWeek(
                 weekConfirmation: "",
                 van: "",
                 ...(userObjectId ? { createdBy: userObjectId } : {}),
-            };
+            }];
         })
     );
+
+    if (skippedDays > 0) {
+        console.log(
+            `[Generate Schedule] Skipped ${skippedDays} day(s) outside employment dates ` +
+            `(before hire, after termination, or inactive).`
+        );
+    }
 
     const dbSession = await mongoose.startSession();
     try {

@@ -1292,16 +1292,32 @@ function SchedulingPageContent() {
                 identical in the grid. Without this a station that simply
                 had not generated its week read as a broken page. */}
             {!loadingData && weekData && weekData.hasSchedule === false && (
-              <div className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-                <p className="text-sm font-medium text-amber-200">
-                  No schedule has been generated for this week yet.
-                </p>
-                <p className="mt-1 text-xs text-amber-200/80">
-                  The week is empty rather than broken — generate it from
-                  Scheduling &gt; Generate, or switch stations using the
-                  selector above. Generating builds the week from the
-                  employees whose home station is the one you have selected.
-                </p>
+              <div className="mb-3 flex flex-col gap-3 rounded-xl border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/40 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                    No schedule generated for this week yet
+                  </p>
+                  <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-200/90">
+                    The week is empty, not broken. Generating builds it from
+                    active employees based at this station, from their hire
+                    date onward.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={generatingWeek}
+                  onClick={() => generateWeek(selectedWeek, "next")}
+                  className="shrink-0 bg-amber-600 text-white hover:bg-amber-500"
+                >
+                  {generatingWeek ? (
+                    <>
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      Generating…
+                    </>
+                  ) : (
+                    "Generate this week"
+                  )}
+                </Button>
               </div>
             )}
 
