@@ -56,7 +56,7 @@ describe("siteFilter", () => {
     // It must never degrade into "no filter at all", which would also pick
     // up records belonging to no station.
     const f = siteFilter(scope({ isOrgAdmin: true, mode: "org", allowedSiteIds: [SITE_A, SITE_B, SITE_C], activeSiteIds: [SITE_A, SITE_B, SITE_C] }));
-    expect(f).toEqual({ siteId: { $in: [SITE_A, SITE_B, SITE_C] } });
+    expect(f).toEqual({ siteId: { $in: [oid(SITE_A), oid(SITE_B), oid(SITE_C)] } });
   });
 
   describe("id type (aggregation safety)", () => {
