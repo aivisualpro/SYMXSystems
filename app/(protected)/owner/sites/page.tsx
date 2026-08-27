@@ -18,6 +18,7 @@ interface SiteRow {
   slug: string;
   siteType: "permanent" | "seasonal";
   address: string;
+  messaging?: { quoPhoneNumberId?: string; quoPhoneNumber?: string };
   status: "active" | "inactive";
   isDefault: boolean;
   userCount: number;
@@ -34,7 +35,14 @@ export default function SitesPage() {
   const [form, setForm] = useState({ name: "", code: "", siteType: "permanent", address: "" });
 
   const [editing, setEditing] = useState<SiteRow | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", address: "", siteType: "permanent", status: "active" });
+  const [editForm, setEditForm] = useState({
+    name: "",
+    address: "",
+    siteType: "permanent",
+    status: "active",
+    quoPhoneNumberId: "",
+    quoPhoneNumber: "",
+  });
 
   const load = useCallback(async () => {
     try {
@@ -80,7 +88,14 @@ export default function SitesPage() {
 
   const openEdit = (s: SiteRow) => {
     setEditing(s);
-    setEditForm({ name: s.name, address: s.address, siteType: s.siteType, status: s.status });
+    setEditForm({
+      name: s.name,
+      address: s.address,
+      siteType: s.siteType,
+      status: s.status,
+      quoPhoneNumberId: s.messaging?.quoPhoneNumberId || "",
+      quoPhoneNumber: s.messaging?.quoPhoneNumber || "",
+    });
   };
 
   const handleSaveEdit = async () => {
@@ -271,6 +286,46 @@ export default function SitesPage() {
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">Address</Label>
                 <Input value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+              </div>
+
+              {/* ── Messaging (Quo / OpenPhone) ──
+                  Each station texts drivers from its own number. It is also
+                  the ONLY way an inbound reply can be attributed: the
+                  webhook is unauthenticated and carries no station, so a
+                  reply is matched by the number it arrived at. */}
+              <div className="rounded-lg border border-border/60 p-3 space-y-3">
+                <div>
+                  <Label className="text-xs font-semibold">Messaging (Quo)</Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    This station&apos;s texting number. Without it, sending from
+                    this station is refused rather than falling back to another
+                    station&apos;s number.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">OpenPhone ID</Label>
+                    <Input
+                      value={editForm.quoPhoneNumberId}
+                      onChange={(e) => setEditForm({ ...editForm, quoPhoneNumberId: e.target.value })}
+                      placeholder="PNxxxxxxxxxxxx"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">Phone number</Label>
+                    <Input
+                      value={editForm.quoPhoneNumber}
+                      onChange={(e) => setEditForm({ ...editForm, quoPhoneNumber: e.target.value })}
+                      placeholder="+15551234567"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Both are needed: the API sends by ID, the webhook reports the
+                  number. No two stations may share either.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">

@@ -71,6 +71,25 @@ export async function PUT(
       delete body.rate;
     }
 
+    // ── Home station ──
+    // Editable, but only to a station the caller can reach — otherwise this
+    // becomes a way to move someone somewhere the mover cannot see, leaving
+    // them unrecoverable from that side. An empty value is dropped rather
+    // than clearing the station, since unassigned reads as the default
+    // station and would look like a silent move to DFO2.
+    const editScope = await getRequestScope();
+    if (body.primarySiteId !== undefined) {
+      const requested = String(body.primarySiteId || "");
+      if (!requested) {
+        delete body.primarySiteId;
+      } else if (!editScope.allowedSiteIds.includes(requested)) {
+        return NextResponse.json(
+          { error: "You don't have access to that station." },
+          { status: 403 }
+        );
+      }
+    }
+
     const updatedEmployee = await SymxEmployee.findByIdAndUpdate(
       params.id,
       body,

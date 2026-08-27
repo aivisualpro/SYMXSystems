@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import { getRequestScope, siteFilter, resolveWriteSiteId, orgWide } from "@/lib/scoped-query";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
+import Site from "@/lib/models/Site";
 
 // GET — list all WST options (no admin guard — read-only reference data used by dispatching)
 export async function GET(req: NextRequest) {
@@ -12,12 +13,27 @@ export async function GET(req: NextRequest) {
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         await connectToDatabase();
-    const scope = await getRequestScope();
-    const S = siteFilter(scope, { includeUnassigned: true });
-    const writeSiteId = resolveWriteSiteId(scope, null);
-        // WST rates differ per station, so each keeps its own options.
+        const scope = await getRequestScope();
+
+        // The catalogue is SHARED — same selections at every station — so it
+        // is not station-filtered. Only the rate differs, and that lives in
+        // each option's rates[] array.
         const options = await SYMXWSTOption.find({}).sort({ sortOrder: 1, wst: 1 }).lean();
-        return NextResponse.json(options);
+
+        // Stations the caller may edit rates for, so the UI renders one
+        // column per station rather than hard-coding three.
+        const sites = await Site.find(
+            { _id: { $in: scope.allowedSiteIds }, status: "active" },
+            { _id: 1, code: 1, name: 1 }
+        ).sort({ code: 1 }).lean();
+
+        return NextResponse.json({
+            options,
+            stations: sites.map((s: any) => ({ id: String(s._id), code: s.code, name: s.name })),
+            // Older clients expect a bare array; they still get one from
+            // `options` above rather than breaking on the new shape.
+            legacy: options,
+        });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -40,11 +56,23 @@ export async function POST(req: NextRequest) {
 
         await connectToDatabase();
         const body = await req.json();
-        const { _id, wst, revenue, isActive, sortOrder, amazonServiceType } = body;
+        const { _id, wst, revenue, isActive, sortOrder, amazonServiceType, rates } = body;
 
         if (!wst?.trim()) {
             return NextResponse.json({ error: "WST is required" }, { status: 400 });
         }
+
+
+        // ── Per-station rates ──
+        // Only stations the caller can reach are accepted, so a rate cannot
+        // be set for a station they have no access to. Anything else in the
+        // payload is dropped rather than trusted.
+        const scope = await getRequestScope();
+        const cleanRates = Array.isArray(rates)
+            ? rates
+                  .filter((r: any) => r && scope.allowedSiteIds.includes(String(r.siteId)))
+                  .map((r: any) => ({ siteId: r.siteId, revenue: parseFloat(r.revenue) || 0 }))
+            : undefined;
 
         if (_id) {
             const updated = await SYMXWSTOption.findByIdAndUpdate(
@@ -55,6 +83,9 @@ export async function POST(req: NextRequest) {
                     amazonServiceType: amazonServiceType ?? '',
                     isActive: isActive ?? true,
                     sortOrder: sortOrder ?? 0,
+                    // Only replace rates when the client actually sent them,
+                    // so a partial save cannot wipe every station's pricing.
+                    ...(cleanRates ? { rates: cleanRates } : {}),
                 },
                 { new: true }
             ).lean();
@@ -67,6 +98,7 @@ export async function POST(req: NextRequest) {
                 amazonServiceType: amazonServiceType ?? '',
                 isActive: isActive ?? true,
                 sortOrder: sortOrder ?? 0,
+                rates: cleanRates ?? [],
             });
             return NextResponse.json(option.toJSON());
         }

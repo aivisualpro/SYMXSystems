@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { StationSelect } from "@/components/station-select";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -235,6 +236,16 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
                 <Label htmlFor="badgeNumber">Badge Number</Label>
                 <Input id="badgeNumber" value={formData.badgeNumber || ""} onChange={(e) => handleChange("badgeNumber", e.target.value)} />
               </div>
+              {/* Home station. Without this an employee is created with no
+                  station, and an unassigned record shows on the DEFAULT
+                  station's roster — so someone added while viewing DXC8
+                  silently appeared under DFO2. */}
+              <StationSelect
+                label="Home station"
+                value={formData.primarySiteId || ""}
+                onChange={(siteId) => handleChange("primarySiteId", siteId)}
+                hint="Where this employee is based. They can still work routes at other stations."
+              />
             </div>
 
             <p className="text-[11px] text-muted-foreground -mt-1">

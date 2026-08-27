@@ -8,10 +8,24 @@ import { notify } from "@/lib/notify";
 import { useAddRef } from "../_components/add-ref-context";
 import { cn } from "@/lib/utils";
 
+interface StationRate {
+    siteId: string;
+    revenue: number;
+}
+
+interface Station {
+    id: string;
+    code: string;
+    name: string;
+}
+
 interface WSTRow {
     _id?: string;
     wst: string;
+    /** Fallback rate, used by any station without one of its own. */
     revenue: number;
+    /** Per-station rates. The selections are shared; only the price differs. */
+    rates?: StationRate[];
     amazonServiceType: string;
     isActive: boolean;
     sortOrder: number;
@@ -19,9 +33,16 @@ interface WSTRow {
     isEditing?: boolean;
 }
 
+/** This option's rate at a station, or null when it has none of its own. */
+function rateAt(row: WSTRow, siteId: string): number | null {
+    const hit = (row.rates || []).find((r) => String(r.siteId) === String(siteId));
+    return hit ? hit.revenue : null;
+}
+
 export default function WSTPage() {
     const { addRef } = useAddRef();
     const [rows, setRows] = useState<WSTRow[]>([]);
+    const [stations, setStations] = useState<Station[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState<string | null>(null);
 
@@ -29,7 +50,11 @@ export default function WSTPage() {
         try {
             const res = await fetch("/api/admin/settings/wst");
             const data = await res.json();
-            setRows(data.map((r: any) => ({ ...r, isEditing: false, isNew: false })));
+            // The endpoint returns { options, stations }. Tolerate a bare
+            // array too, so a stale cached response doesn't blank the page.
+            const options = Array.isArray(data) ? data : data.options || [];
+            setStations(Array.isArray(data) ? [] : data.stations || []);
+            setRows(options.map((r: any) => ({ ...r, isEditing: false, isNew: false })));
         } catch {
             notify.error("Failed to load WST options");
         } finally {
@@ -41,6 +66,7 @@ export default function WSTPage() {
 
     const addRow = useCallback(() => {
         setRows(prev => [...prev, {
+            rates: [],
             wst: "",
             revenue: 0,
             amazonServiceType: "",
@@ -57,6 +83,26 @@ export default function WSTPage() {
         setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value, isEditing: true } : r));
     };
 
+    /** Set (or clear) one station's rate without touching the others. */
+    const setStationRate = (idx: number, siteId: string, raw: string) => {
+        setRows(prev => prev.map((r, i) => {
+            if (i !== idx) return r;
+            const rates = [...(r.rates || [])];
+            const at = rates.findIndex((x) => String(x.siteId) === String(siteId));
+            if (raw === "") {
+                // Cleared means "no rate of its own" — fall back to the
+                // default rather than storing a zero, which would silently
+                // price the work at nothing.
+                if (at !== -1) rates.splice(at, 1);
+            } else {
+                const revenue = parseFloat(raw) || 0;
+                if (at === -1) rates.push({ siteId, revenue });
+                else rates[at] = { siteId, revenue };
+            }
+            return { ...r, rates, isEditing: true };
+        }));
+    };
+
     const saveRow = async (idx: number) => {
         const row = rows[idx];
         if (!row.wst.trim()) { notify.error("WST is required"); return; }
@@ -66,7 +112,15 @@ export default function WSTPage() {
             const res = await fetch("/api/admin/settings/wst", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ _id: row._id, wst: row.wst, revenue: row.revenue, amazonServiceType: row.amazonServiceType, isActive: row.isActive, sortOrder: row.sortOrder }),
+                body: JSON.stringify({
+                    _id: row._id,
+                    wst: row.wst,
+                    revenue: row.revenue,
+                    rates: row.rates || [],
+                    amazonServiceType: row.amazonServiceType,
+                    isActive: row.isActive,
+                    sortOrder: row.sortOrder,
+                }),
             });
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
             const saved = await res.json();
@@ -122,13 +176,22 @@ export default function WSTPage() {
                             <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[200px]">WST</th>
                             <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[400px]">Amazon Service Type</th>
                             <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[150px]">Revenue ($)</th>
+                            {stations.map((st) => (
+                                <th
+                                    key={st.id}
+                                    title={`${st.name} — leave blank to use the default rate`}
+                                    className="text-right text-xs font-semibold text-muted-foreground px-3 py-2.5 w-[110px]"
+                                >
+                                    {st.code}
+                                </th>
+                            ))}
                             <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[80px]">Active</th>
                             <th className="text-right text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[120px]">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {rows.length === 0 && (
-                            <tr><td colSpan={6} className="text-center text-sm text-muted-foreground py-8">No WST options configured. Click &quot;Add WST&quot; to get started.</td></tr>
+                            <tr><td colSpan={6 + stations.length} className="text-center text-sm text-muted-foreground py-8">No WST options configured. Click &quot;Add WST&quot; to get started.</td></tr>
                         )}
                         {rows.map((row, idx) => {
                             const isSaving = saving === (row._id || `new-${idx}`);
@@ -167,6 +230,28 @@ export default function WSTPage() {
                                             />
                                         </div>
                                     </td>
+                                    {stations.map((st) => {
+                                        const own = rateAt(row, st.id);
+                                        return (
+                                            <td key={st.id} className="px-3 py-2">
+                                                <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={own === null ? "" : own}
+                                                    onChange={(e) => setStationRate(idx, st.id, e.target.value)}
+                                                    // Placeholder shows the rate this station would
+                                                    // actually use, so a blank cell reads as
+                                                    // "inherits 38.70" rather than as missing data.
+                                                    placeholder={row.revenue ? String(row.revenue) : "0.00"}
+                                                    className={cn(
+                                                        "h-8 text-sm text-right font-mono",
+                                                        own === null && "text-muted-foreground/60 italic"
+                                                    )}
+                                                    disabled={!row.isEditing && !row.isNew}
+                                                />
+                                            </td>
+                                        );
+                                    })}
                                     <td className="px-4 py-2 text-center">
                                         <button
                                             className={cn(
