@@ -67,7 +67,7 @@ export async function generateRoutesForWeek(
     }
 
     // Build RouteType map: typeId → { routeStatus, partOf }
-    const routeTypes = await RouteType.find(S, { _id: 1, routeStatus: 1, partOf: 1 }).lean() as any[];
+    const routeTypes = await RouteType.find({}, { _id: 1, routeStatus: 1, partOf: 1 }).lean() as any[];
     const typeIdToMeta = new Map<string, { routeStatus: string; partOf: string[] }>();
     for (const rt of routeTypes) {
         typeIdToMeta.set(String(rt._id), {
@@ -230,7 +230,7 @@ async function autoAssignVans(yearWeek: string, siteId: string) {
 
     // Resolve eligible typeIds (non-"off" route status routes with van assignment intent)
     const eligibleRouteTypes = await RouteType.find(
-        { routeStatus: { $nin: ["off", "Off", "OFF"] }, isActive: { $ne: false }, ...S },
+        { routeStatus: { $nin: ["off", "Off", "OFF"] }, isActive: { $ne: false } },
         { _id: 1 }
     ).lean() as any[];
     const eligibleTypeIds = eligibleRouteTypes.map((rt: any) => String(rt._id));

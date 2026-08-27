@@ -162,7 +162,7 @@ export async function GET(req: NextRequest) {
       : Promise.resolve(null);
 
     // Build typeId → { partOf, routeStatus } map for Shift filtering
-    const routeTypePromise = RouteType.find(S, { _id: 1, name: 1, partOf: 1, routeStatus: 1 }).lean();
+    const routeTypePromise = RouteType.find({}, { _id: 1, name: 1, partOf: 1, routeStatus: 1 }).lean();
 
     const routeQuery = yearWeek
       ? (allWeeks.length > 1

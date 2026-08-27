@@ -34,7 +34,7 @@ export async function GET() {
         const scope = await getRequestScope();
         const S = siteFilter(scope, { includeUnassigned: true });
         const writeSiteId = resolveWriteSiteId(scope, null);
-        const routes = await RouteType.find(S).sort({ sortOrder: 1, name: 1 }).lean();
+        const routes = await RouteType.find({}).sort({ sortOrder: 1, name: 1 }).lean();
         return NextResponse.json(routes);
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });

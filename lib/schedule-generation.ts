@@ -3,7 +3,7 @@ import connectToDatabase from "@/lib/db";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxAvailableWeek from "@/lib/models/SymxAvailableWeek";
-import RouteType from "@/lib/models/RouteType";
+import RouteType, { routeTypeStartTime } from "@/lib/models/RouteType";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAY_FIELDS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -114,7 +114,7 @@ export async function generateScheduleForWeek(
         { _id: 1, transporterId: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1 }
     ).lean();
 
-    const routeTypes = await RouteType.find(S).lean();
+    const routeTypes = await RouteType.find({}).lean();
     const routeTypeMap = new Map<string, any>();
     for (const rt of routeTypes) {
         routeTypeMap.set(String(rt._id), rt);
@@ -174,7 +174,9 @@ export async function generateScheduleForWeek(
                 yearWeek,
                 date,
                 typeId: resolvedTypeId,
-                startTime: matchedRoute?.startTime || "",
+                // The station's own start time for this shared route type —
+                // the same type runs at different hours per station.
+                startTime: routeTypeStartTime(matchedRoute, siteId),
                 dayBeforeConfirmation: "",
                 dayOfConfirmation: "",
                 weekConfirmation: "",

@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
         { transporterId: 1, firstName: 1, lastName: 1, rate: 1 }
       ).lean(),
       SYMXWSTOption.find({ isActive: true }).lean(),
-      RouteType.find({ isActive: true, ...S }, { name: 1, group: 1 }).lean(),
+      RouteType.find({ isActive: true }, { name: 1, group: 1 }).lean(),
     ]);
 
     // Build lookup maps

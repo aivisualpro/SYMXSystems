@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
     // Resolve all RouteTypes once — needed both to find "Call Out" and to
     // resolve whatever type a route was previously scheduled as.
-    const allRouteTypes = await RouteType.find(S, { _id: 1, name: 1 }).lean() as any[];
+    const allRouteTypes = await RouteType.find({}, { _id: 1, name: 1 }).lean() as any[];
     const rtIdToName = new Map<string, string>();
     allRouteTypes.forEach((rt) => rtIdToName.set(String(rt._id), rt.name || ""));
 

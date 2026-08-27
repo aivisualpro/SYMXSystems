@@ -146,8 +146,10 @@ export async function GET(req: NextRequest) {
           badgeNumber: 1,
         }
       ).lean(),
+      // Shared catalogue — every station has the same types. The driver's
+      // station only affects start times, resolved per route below.
       RouteType.find(
-        S,
+        {},
         { _id: 1, name: 1, color: 1, icon: 1 }
       ).lean(),
     ]);

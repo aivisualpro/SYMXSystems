@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 
     // ── 1. Fetch reference data in parallel ──
     const [routeTypes, wstOptions, activeEmployees] = await Promise.all([
-      RouteType.find({ isActive: true, ...S }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
+      RouteType.find({ isActive: true }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
       SYMXWSTOption.find({ isActive: true }).lean(),
       SymxEmployee.find(
         { status: "Active" },

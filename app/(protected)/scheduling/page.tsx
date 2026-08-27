@@ -1287,6 +1287,24 @@ function SchedulingPageContent() {
 
 
 
+            {/* ── No schedule yet for this week at this station ──
+                Distinct from "generated but everyone is off", which looks
+                identical in the grid. Without this a station that simply
+                had not generated its week read as a broken page. */}
+            {!loadingData && weekData && weekData.hasSchedule === false && (
+              <div className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+                <p className="text-sm font-medium text-amber-200">
+                  No schedule has been generated for this week yet.
+                </p>
+                <p className="mt-1 text-xs text-amber-200/80">
+                  The week is empty rather than broken — generate it from
+                  Scheduling &gt; Generate, or switch stations using the
+                  selector above. Generating builds the week from the
+                  employees whose home station is the one you have selected.
+                </p>
+              </div>
+            )}
+
             {/* ── Main Schedule Table ── */}
             {loadingData ? (
               <div className="flex items-center justify-center py-20">

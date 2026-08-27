@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
+import { getWeekDates } from "@/lib/schedule-generation";
 import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
@@ -149,7 +150,7 @@ export async function GET(req: NextRequest) {
         { $group: { _id: "$transporterId", count: { $sum: 1 } } },
       ]),
       // Route types
-      RouteType.find({ isActive: true, ...S }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
+      RouteType.find({ isActive: true }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
       // WST Options
       SYMXWSTOption.find({ isActive: true }).lean(),
       // Week-schedule confirmation status (employee confirming next week's schedule) —
@@ -229,19 +230,18 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Get the date range for the week
-    const dates: string[] = [];
-    if (schedules.length > 0) {
-      const firstDate = new Date(schedules[0].date);
-      const dayOfWeek = firstDate.getUTCDay();
-      const sunday = new Date(firstDate);
-      sunday.setUTCDate(firstDate.getUTCDate() - dayOfWeek);
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(sunday);
-        d.setUTCDate(sunday.getUTCDate() + i);
-        dates.push(d.toISOString().split('T')[0]);
-      }
-    }
+    // ── The week's dates come from the WEEK, not from the data ──
+    // This used to derive them from schedules[0].date, which meant a week
+    // with no schedules produced no dates — and the UI renders its day
+    // columns from this array, so the entire grid disappeared. A station
+    // that simply had not generated its schedule yet looked like a broken
+    // page rather than an empty one.
+    //
+    // yearWeek is always known, so the seven columns are always there and
+    // the emptiness shows up as empty rows, which is the truth.
+    const dates: string[] = getWeekDates(yearWeek).map(
+      (d) => d.toISOString().split("T")[0]
+    );
 
     // Compute Labor Cost Theory per day
     // Compute Labor Cost Theory per day
@@ -524,6 +524,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       yearWeek,
       dates,
+      // Lets the UI distinguish "no schedule generated yet" from "generated
+      // but everyone is off" — the two look identical in the grid and mean
+      // very different things.
+      hasSchedule: schedules.length > 0,
       employees: Object.values(activeGrouped),
       totalEmployees: Object.keys(activeGrouped).length,
       prevWeekTrailing,

@@ -29,8 +29,11 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Unknown station." }, { status: 400 });
     }
 
+    // Shared catalogue: the same route types exist at every station, so
+    // the station is validated (it scopes the application itself) but does
+    // not filter this list.
     const routes = await RouteType.find(
-        { siteId: site._id, isActive: { $ne: false } },
+        { isActive: { $ne: false } },
         { _id: 1, name: 1 }
     ).sort({ sortOrder: 1, name: 1 }).lean();
 
