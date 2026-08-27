@@ -13,12 +13,14 @@ describe("getScopingState", () => {
     expect(getScopingState("/writeups/anything")).toBe("scoped");
   });
 
-  it.each([
-    "/hr", "/hr/callouts", "/fleet", "/fleet/vehicles",
-    "/dispatching", "/scheduling", "/scorecard", "/incidents", "/dashboard",
-  ])("reports %s as UNSCOPED — it still shows every station", (path) => {
-    expect(getScopingState(path)).toBe("unscoped");
-  });
+  // Real protected pages whose API routes have not been audited yet. The
+  // banner must keep showing on these.
+  it.each(["/closing", "/load-out"])(
+    "reports %s as UNSCOPED — it still shows every station",
+    (path) => {
+      expect(getScopingState(path)).toBe("unscoped");
+    }
+  );
 
   it.each(["/owner", "/owner/sites", "/profile", "/admin"])(
     "reports %s as station-agnostic — no banner needed",
@@ -44,19 +46,25 @@ describe("getScopingState", () => {
       "/writeups",
       "/fleet",
       "/dispatching",
-      "/schedules",
+      "/scheduling",
       "/scorecard",
       "/dashboard",
       "/hr",
       "/incidents",
-      "/everyday",
-      "/messaging",
       "/insurance",
     ]);
   });
 
+  it("lists UI pathnames, not API paths", () => {
+    // The banner keys off the page the user is on. /scheduling is the page;
+    // /api/schedules is its API. Listing the API path would leave the banner
+    // showing on a page that is genuinely scoped.
+    expect(getScopingState("/scheduling")).toBe("scoped");
+    expect(getScopingState("/schedules")).toBe("unscoped");
+  });
+
   it("marks the modules scoped in this migration as scoped", () => {
-    for (const p of ["/fleet", "/dispatching", "/schedules", "/scorecard", "/hr"]) {
+    for (const p of ["/fleet", "/dispatching", "/scheduling", "/scorecard", "/hr"]) {
       expect(getScopingState(p)).toBe("scoped");
       expect(getScopingState(`${p}/something/deep`)).toBe("scoped");
     }

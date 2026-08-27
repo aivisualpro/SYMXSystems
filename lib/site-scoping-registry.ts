@@ -19,19 +19,27 @@
  * routes behind them filter by siteId, and switching stations changes the
  * data. Verified, not aspirational.
  */
+// These are UI pathnames, not API paths — the banner keys off the page the
+// user is looking at. Worth stating because they differ: the scheduling
+// PAGE is /scheduling while its API is /api/schedules, and /messaging and
+// /everyday are API-only with no page of their own. Listing an API path
+// here would leave the banner showing on a page that is actually scoped.
 export const SCOPED_PATH_PREFIXES: string[] = [
   "/writeups",     // Write-Ups + Verbal Coachings
   "/fleet",        // vehicles, repairs, inspections, rentals
   "/dispatching",  // routes, route info, imports
-  "/schedules",    // schedules, audit, notes
+  "/scheduling",   // schedules, audit logs, notes  (API: /api/schedules)
   "/scorecard",    // all eight scorecard collections + remarks
   "/dashboard",    // KPI pipelines
   "/hr",           // employees, callouts, timecard audit, tickets
   "/incidents",
-  "/everyday",
-  "/messaging",
   "/insurance",
 ];
+
+// Deliberately absent: /closing and /load-out. Their API routes have not
+// been audited for station scoping, and the safe default is to keep the
+// banner up. Marking a page scoped before it is converts visible confusion
+// into invisible trust.
 
 /**
  * Path prefixes where the station switcher is irrelevant by design, so no
