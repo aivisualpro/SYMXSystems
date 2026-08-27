@@ -20,13 +20,29 @@
  * data. Verified, not aspirational.
  */
 export const SCOPED_PATH_PREFIXES: string[] = [
-  "/writeups", // Write-Ups + Verbal Coachings — app/api/writeups, app/api/verbal-coachings
+  "/writeups",     // Write-Ups + Verbal Coachings
+  "/fleet",        // vehicles, repairs, inspections, rentals
+  "/dispatching",  // routes, route info, imports
+  "/schedules",    // schedules, audit, notes
+  "/scorecard",    // all eight scorecard collections + remarks
+  "/dashboard",    // KPI pipelines
+  "/hr",           // employees, callouts, timecard audit, tickets
+  "/incidents",
+  "/everyday",
+  "/messaging",
+  "/insurance",
 ];
 
 /**
  * Path prefixes where the station switcher is irrelevant by design, so no
  * banner is needed. These are organization-level or personal screens, not
  * station-owned data.
+ *
+ * /admin is listed here, but note it is a mixed bag: app configuration is
+ * genuinely org-level, while the per-station settings underneath it (route
+ * types, WST rates, card configs) ARE station-scoped and show a station
+ * column of their own. The banner would be misleading either way, so it
+ * stays off and those pages label their own columns.
  */
 export const STATION_AGNOSTIC_PATH_PREFIXES: string[] = [
   "/owner",    // stations, users, roles — organization-level administration

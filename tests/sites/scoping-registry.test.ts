@@ -38,7 +38,27 @@ describe("getScopingState", () => {
   it("only lists modules that are genuinely scoped", () => {
     // Guard against the registry drifting ahead of reality. Update this
     // list in the same commit that actually scopes a module's API routes,
-    // never in advance.
-    expect(SCOPED_PATH_PREFIXES).toEqual(["/writeups"]);
+    // never in advance — a page marked scoped that isn't converts visible
+    // confusion into invisible trust.
+    expect(SCOPED_PATH_PREFIXES).toEqual([
+      "/writeups",
+      "/fleet",
+      "/dispatching",
+      "/schedules",
+      "/scorecard",
+      "/dashboard",
+      "/hr",
+      "/incidents",
+      "/everyday",
+      "/messaging",
+      "/insurance",
+    ]);
+  });
+
+  it("marks the modules scoped in this migration as scoped", () => {
+    for (const p of ["/fleet", "/dispatching", "/schedules", "/scorecard", "/hr"]) {
+      expect(getScopingState(p)).toBe("scoped");
+      expect(getScopingState(`${p}/something/deep`)).toBe("scoped");
+    }
   });
 });

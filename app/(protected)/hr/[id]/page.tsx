@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, use, useMemo } from "react";
+import { StationSelect } from "@/components/station-select";
 import { useRouter } from "next/navigation";
 import { 
   User, 
@@ -221,6 +222,23 @@ export default function EmployeeDetailPage(props: PageProps) {
       .sort((a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }));
   }, [storeVehicles]);
 
+  /**
+   * Move this employee to another station.
+   *
+   * Only the HOME station changes. Their write-ups, schedules and routes
+   * keep the station where they happened — that history is not rewritten,
+   * because it records where the work actually took place.
+   */
+  const handleStationChange = async (siteId: string) => {
+    if (!employee || !siteId) return;
+    try {
+      await updateEmployee({ id: String(employee._id), data: { primarySiteId: siteId } });
+      notify.success("Home station updated");
+    } catch (error) {
+      notify.error("Failed to update station");
+    }
+  };
+
   const handleVanChange = async (field: string, value: string) => {
     if (!employee) return;
     try {
@@ -378,6 +396,25 @@ export default function EmployeeDetailPage(props: PageProps) {
                   <InfoRow label="Gender" value={employee.gender} icon={User} />
                   <InfoRow label="Type" value={employee.type} icon={Briefcase} />
                   <InfoRow label="Hourly Status" value={employee.hourlyStatus} icon={Clock} />
+               </div>
+
+               {/* ── Home station ──
+                   Editable inline. An employee with none appears on the
+                   DEFAULT station's roster, which reads as "they're at DFO2"
+                   rather than "no station set" — so this shows the real state
+                   and offers a fix in the same place. */}
+               <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
+                  <StationSelect
+                     label="Home station"
+                     value={employee.primarySiteId ? String(employee.primarySiteId) : ""}
+                     onChange={handleStationChange}
+                     allowNone={false}
+                     hint={
+                        employee.primarySiteId
+                           ? "Changing this moves them to another roster. Their write-ups, schedules and routes stay at the station where they happened."
+                           : "No station set — they currently appear on the default station's roster."
+                     }
+                  />
                </div>
 
                {/* ── ROW 4: email / phone / address (stacked) ── */}
