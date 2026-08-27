@@ -69,10 +69,27 @@ export async function GET(req: NextRequest) {
     // they'll just show "No record" cells), PLUS anyone of any status who has at least
     // one route record in this period (covers employees terminated/marked inactive
     // partway through the pay period).
+    // ── Why this was showing every station ──
+    // The routes above are station-filtered, but this query was not, and
+    // its `status: "Active"` branch matches every active employee company-
+    // wide. So the audit listed all three stations' rosters while only one
+    // station's punch data existed — rows with no hours, which reads as a
+    // data problem rather than a filtering one.
+    //
+    // Two branches, scoped differently on purpose:
+    //   • the ROSTER branch is limited to this station's own people;
+    //   • the HAS-PUNCH-DATA branch stays org-wide, because those
+    //     transporterIds already came from routes filtered to this station.
+    //     A driver loaned in from DXC8 who ran a DFO2 route must appear in
+    //     DFO2's audit — they worked here, and their hours are DFO2's
+    //     compliance problem.
     const employees = await SymxEmployee.find(
       {
         transporterId: { $exists: true, $ne: "" },
-        $or: [{ status: "Active" }, { transporterId: { $in: transporterIdsWithData } }],
+        $or: [
+          { status: "Active", ...E },
+          { transporterId: { $in: transporterIdsWithData } },
+        ],
       },
       { firstName: 1, lastName: 1, transporterId: 1, eeCode: 1, mealWaiverFile: 1, rate: 1, status: 1 }
     ).lean();

@@ -20,9 +20,7 @@ export async function GET(req: NextRequest) {
     await connectToDatabase();
     
     const scope = await getRequestScope();
-    const rentals = await VehicleRentalAgreement.find(
-      siteFilter(scope, { includeUnassigned: true })
-    ).sort({ createdAt: -1 }).lean();
+    const rentals = await VehicleRentalAgreement.find({}).sort({ createdAt: -1 }).lean();
 
     let enrichedRentals: any[] = rentals as any[];
     try {

@@ -5,7 +5,7 @@ import connectToDatabase from "@/lib/db";
 import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
-import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
+import SYMXWSTOption, { wstRateFor, wstRevenueForRoute } from "@/lib/models/SYMXWSTOption";
 import RouteType from "@/lib/models/RouteType";
 import { canViewCompensation } from "@/lib/compensation-visibility";
 
@@ -104,8 +104,10 @@ export async function GET(req: NextRequest) {
     const empMap = new Map(
       (employees as any[]).map(e => [e.transporterId, e])
     );
+    // Keep the whole option: the rate depends on the station and the
+    // route's duration, so a single number cannot be resolved up front.
     const wstMap = new Map(
-      (wstOptions as any[]).map(w => [(w.wst || "").trim().toLowerCase(), w.revenue || 0])
+      (wstOptions as any[]).map(w => [(w.wst || "").trim().toLowerCase(), w])
     );
     const rtMap = new Map(
       (routeTypes as any[]).map(rt => [String(rt._id), rt])
@@ -127,7 +129,12 @@ export async function GET(req: NextRequest) {
       let totalHrsDecimal = r.wstDuration || durToHrs(r.totalHours || "");
 
       const wstVal = (r.wst || "").trim().toLowerCase();
-      const wstRate = wstMap.get(wstVal) || 0;
+      // The rate depends on BOTH the station and the scheduled duration:
+      // a route over 8 hours bills every hour at the higher tier. Passing
+      // the route's own siteId rather than the viewer's scope means a route
+      // is priced by where it ran, which is what makes revenue correct when
+      // several stations are in view at once.
+      const wstRate = wstRateFor(wstMap.get(wstVal), r.siteId, totalHrsDecimal);
       const computedRevenue = Math.round(wstRate * totalHrsDecimal * 100) / 100;
       const storedRevenue = r.wstRevenue || 0;
 
@@ -219,15 +226,22 @@ export async function PATCH(req: NextRequest) {
 
       const wstOptions = await SYMXWSTOption.find({ isActive: true }).lean();
       const wstMap = new Map(
-        (wstOptions as any[]).map(w => [(w.wst || "").trim().toLowerCase(), w.revenue || 0])
+        (wstOptions as any[]).map(w => [(w.wst || "").trim().toLowerCase(), w])
       );
 
       const finalWst = (updates.wst !== undefined ? updates.wst : route.wst || "").trim().toLowerCase();
-      const wstRate = wstMap.get(finalWst) || 0;
+      const finalWstDuration =
+        updates.wstDuration !== undefined
+          ? Number(updates.wstDuration)
+          : route.wstDuration || durToHrs(route.totalHours || "");
 
-      const finalWstDuration = updates.wstDuration !== undefined ? Number(updates.wstDuration) : route.wstDuration || durToHrs(route.totalHours || "");
-
-      setPayload.wstRevenue = Math.round(wstRate * finalWstDuration * 100) / 100;
+      // Priced by the ROUTE's station and its scheduled duration — a route
+      // over 8 hours bills every hour at the higher tier.
+      setPayload.wstRevenue = wstRevenueForRoute(
+        wstMap.get(finalWst),
+        (route as any).siteId,
+        finalWstDuration
+      );
     }
 
     const updatedRoute = await SYMXRoute.findByIdAndUpdate(

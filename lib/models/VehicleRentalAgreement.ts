@@ -1,5 +1,4 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import { siteOwned } from "./plugins/site-owned";
 
 export interface IVehicleRentalAgreement extends Document {
   /** Owning station. Added by the siteOwned plugin; optional until
@@ -43,7 +42,13 @@ VehicleRentalAgreementSchema.index({ createdAt: -1 });
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
-VehicleRentalAgreementSchema.plugin(siteOwned, { modelName: "VehicleRentalAgreement" });
+// ── Organization-level, NOT site-owned ────────────────────────────────
+// Rental agreements are held company-wide, not per station: the contract
+// is with the leasing company rather than with a building, and the same
+// agreement can cover a van that moves between stations.
+//
+// Deliberately reclassified after the Phase 2 backfill, which had stamped
+// these to DFO2 — see migration 09.
 
 const VehicleRentalAgreement: Model<IVehicleRentalAgreement> = mongoose.models.VehicleRentalAgreement || mongoose.model<IVehicleRentalAgreement>('VehicleRentalAgreement', VehicleRentalAgreementSchema);
 

@@ -71,7 +71,11 @@ export async function POST(req: NextRequest) {
         const cleanRates = Array.isArray(rates)
             ? rates
                   .filter((r: any) => r && scope.allowedSiteIds.includes(String(r.siteId)))
-                  .map((r: any) => ({ siteId: r.siteId, revenue: parseFloat(r.revenue) || 0 }))
+                  .map((r: any) => ({
+                      siteId: r.siteId,
+                      standard: parseFloat(r.standard) || 0,
+                      over8: parseFloat(r.over8) || 0,
+                  }))
             : undefined;
 
         if (_id) {

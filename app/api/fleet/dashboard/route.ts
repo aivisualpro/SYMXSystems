@@ -57,14 +57,14 @@ export async function GET(req: NextRequest) {
         VehicleRepair.find({ currentStatus: { $ne: "Completed" }, ...S }).sort({ creationDate: -1 }).limit(6).select("description unitNumber estimatedDate currentStatus vin").lean(),
         VehicleRepair.aggregate([{ $match: S }, { $group: { _id: "$currentStatus", count: { $sum: 1 } } }]),
         DailyInspection.find(S).sort({ routeDate: -1 }).limit(6).select("vin unitNumber routeDate driver anyRepairs").lean(),
-        VehicleRentalAgreement.countDocuments(S),
-        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now }, ...S }),
-        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $lte: now }, ...S }),
-        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow }, ...S }),
+        VehicleRentalAgreement.countDocuments({}),
+        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now } }),
+        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $lte: now } }),
+        VehicleRentalAgreement.countDocuments({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow } }),
         VehicleRentalAgreement.aggregate([{ $match: S }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
         Vehicle.find({ status: { $in: ["Grounded", "Maintenance", "Inactive"] }, ...V }).select("unitNumber vehicleName status mileage updatedAt notes fleetCommunications").lean(),
         Vehicle.find({ ...V, status: "Active", registrationExpiration: { $gte: new Date(), $lte: new Date(new Date().getTime() + 1000 * 60 * 60 * 24 * 90) } }).select("unitNumber vehicleName registrationExpiration status").sort({ registrationExpiration: 1 }).limit(10).lean(),
-        VehicleRentalAgreement.find({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow }, ...S }).sort({ registrationEndDate: 1 }).limit(6).select("agreementNumber vin registrationEndDate amount").lean(),
+        VehicleRentalAgreement.find({ registrationEndDate: { $gt: now, $lte: thirtyDaysFromNow } }).sort({ registrationEndDate: 1 }).limit(6).select("agreementNumber vin registrationEndDate amount").lean(),
       ]);
 
       const vehicleStatusColorMap: Record<string, string> = {

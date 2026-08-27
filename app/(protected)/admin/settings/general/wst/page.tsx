@@ -10,7 +10,10 @@ import { cn } from "@/lib/utils";
 
 interface StationRate {
     siteId: string;
-    revenue: number;
+    /** Rate for a route scheduled 1–8 hours. */
+    standard: number;
+    /** Rate for a route scheduled over 8 hours. */
+    over8: number;
 }
 
 interface Station {
@@ -33,10 +36,12 @@ interface WSTRow {
     isEditing?: boolean;
 }
 
-/** This option's rate at a station, or null when it has none of its own. */
-function rateAt(row: WSTRow, siteId: string): number | null {
+/** One tier of this option's rate at a station, or null when unset. */
+function rateAt(row: WSTRow, siteId: string, tier: "standard" | "over8"): number | null {
     const hit = (row.rates || []).find((r) => String(r.siteId) === String(siteId));
-    return hit ? hit.revenue : null;
+    if (!hit) return null;
+    const v = hit[tier];
+    return typeof v === "number" ? v : null;
 }
 
 export default function WSTPage() {
@@ -83,21 +88,27 @@ export default function WSTPage() {
         setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value, isEditing: true } : r));
     };
 
-    /** Set (or clear) one station's rate without touching the others. */
-    const setStationRate = (idx: number, siteId: string, raw: string) => {
+    /** Set one tier of one station's rate, leaving every other value alone. */
+    const setStationRate = (
+        idx: number,
+        siteId: string,
+        tier: "standard" | "over8",
+        raw: string
+    ) => {
         setRows(prev => prev.map((r, i) => {
             if (i !== idx) return r;
             const rates = [...(r.rates || [])];
             const at = rates.findIndex((x) => String(x.siteId) === String(siteId));
-            if (raw === "") {
-                // Cleared means "no rate of its own" — fall back to the
-                // default rather than storing a zero, which would silently
-                // price the work at nothing.
-                if (at !== -1) rates.splice(at, 1);
+            const value = raw === "" ? 0 : parseFloat(raw) || 0;
+
+            if (at === -1) {
+                rates.push({ siteId, standard: 0, over8: 0, [tier]: value } as StationRate);
             } else {
-                const revenue = parseFloat(raw) || 0;
-                if (at === -1) rates.push({ siteId, revenue });
-                else rates[at] = { siteId, revenue };
+                rates[at] = { ...rates[at], [tier]: value };
+                // Both tiers cleared means this station has no rate at all —
+                // drop the entry rather than storing a pair of zeros, which
+                // would price the work at nothing rather than falling back.
+                if (!rates[at].standard && !rates[at].over8) rates.splice(at, 1);
             }
             return { ...r, rates, isEditing: true };
         }));
@@ -163,7 +174,7 @@ export default function WSTPage() {
                 {rows.length > 0 && (
                     <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
                         <DollarSign className="h-3 w-3" />
-                        Avg Revenue: ${(rows.reduce((sum, r) => sum + (r.revenue || 0), 0) / rows.length).toFixed(2)}
+                        {stations.length} station{stations.length === 1 ? "" : "s"} × 2 rate tiers
                     </span>
                 )}
             </div>
@@ -175,14 +186,18 @@ export default function WSTPage() {
                             <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[50px]">#</th>
                             <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[200px]">WST</th>
                             <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[400px]">Amazon Service Type</th>
-                            <th className="text-left text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[150px]">Revenue ($)</th>
                             {stations.map((st) => (
                                 <th
                                     key={st.id}
-                                    title={`${st.name} — leave blank to use the default rate`}
-                                    className="text-right text-xs font-semibold text-muted-foreground px-3 py-2.5 w-[110px]"
+                                    colSpan={2}
+                                    title={st.name}
+                                    className="text-center text-xs font-semibold text-muted-foreground px-3 py-1.5 w-[200px] border-l border-border/50"
                                 >
-                                    {st.code}
+                                    <div>{st.code}</div>
+                                    <div className="flex gap-2 mt-1 font-normal text-[10px] text-muted-foreground/70">
+                                        <span className="flex-1 text-right">1–8 hrs</span>
+                                        <span className="flex-1 text-right">Over 8</span>
+                                    </div>
                                 </th>
                             ))}
                             <th className="text-center text-xs font-semibold text-muted-foreground px-4 py-2.5 w-[80px]">Active</th>
@@ -191,7 +206,7 @@ export default function WSTPage() {
                     </thead>
                     <tbody>
                         {rows.length === 0 && (
-                            <tr><td colSpan={6 + stations.length} className="text-center text-sm text-muted-foreground py-8">No WST options configured. Click &quot;Add WST&quot; to get started.</td></tr>
+                            <tr><td colSpan={5 + stations.length * 2} className="text-center text-sm text-muted-foreground py-8">No WST options configured. Click &quot;Add WST&quot; to get started.</td></tr>
                         )}
                         {rows.map((row, idx) => {
                             const isSaving = saving === (row._id || `new-${idx}`);
@@ -216,42 +231,38 @@ export default function WSTPage() {
                                             disabled={!row.isEditing && !row.isNew}
                                         />
                                     </td>
-                                    <td className="px-4 py-2">
-                                        <div className="relative">
-                                            <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                                            <Input
-                                                type="number"
-                                                step="0.01"
-                                                value={row.revenue || ""}
-                                                onChange={(e) => updateField(idx, "revenue", parseFloat(e.target.value) || 0)}
-                                                placeholder="0.00"
-                                                className="h-8 text-sm pl-7 font-mono"
-                                                disabled={!row.isEditing && !row.isNew}
-                                            />
-                                        </div>
-                                    </td>
-                                    {stations.map((st) => {
-                                        const own = rateAt(row, st.id);
-                                        return (
-                                            <td key={st.id} className="px-3 py-2">
-                                                <Input
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={own === null ? "" : own}
-                                                    onChange={(e) => setStationRate(idx, st.id, e.target.value)}
-                                                    // Placeholder shows the rate this station would
-                                                    // actually use, so a blank cell reads as
-                                                    // "inherits 38.70" rather than as missing data.
-                                                    placeholder={row.revenue ? String(row.revenue) : "0.00"}
+                                    {stations.flatMap((st) =>
+                                        (["standard", "over8"] as const).map((tier) => {
+                                            const own = rateAt(row, st.id, tier);
+                                            return (
+                                                <td
+                                                    key={`${st.id}-${tier}`}
                                                     className={cn(
-                                                        "h-8 text-sm text-right font-mono",
-                                                        own === null && "text-muted-foreground/60 italic"
+                                                        "px-2 py-2",
+                                                        tier === "standard" && "border-l border-border/50"
                                                     )}
-                                                    disabled={!row.isEditing && !row.isNew}
-                                                />
-                                            </td>
-                                        );
-                                    })}
+                                                >
+                                                    <Input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={own || ""}
+                                                        onChange={(e) => setStationRate(idx, st.id, tier, e.target.value)}
+                                                        placeholder="0.00"
+                                                        title={
+                                                            tier === "standard"
+                                                                ? `${st.code}: routes scheduled 1–8 hours`
+                                                                : `${st.code}: routes scheduled over 8 hours — every hour bills at this rate`
+                                                        }
+                                                        className={cn(
+                                                            "h-8 text-sm text-right font-mono",
+                                                            !own && "text-muted-foreground/50"
+                                                        )}
+                                                        disabled={!row.isEditing && !row.isNew}
+                                                    />
+                                                </td>
+                                            );
+                                        })
+                                    )}
                                     <td className="px-4 py-2 text-center">
                                         <button
                                             className={cn(

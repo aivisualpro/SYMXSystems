@@ -19,22 +19,34 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface IWSTStationRate {
   siteId: mongoose.Types.ObjectId;
-  /** Revenue per hour for this service line at this station. */
-  revenue: number;
+  /**
+   * Hourly rate for a route scheduled 1–8 hours.
+   *
+   * Amazon's rate cards give two columns per service line, and which one
+   * applies is decided by the SCHEDULED duration of the route, not by
+   * anything about the WST itself. A 4-hour route bills at `standard`.
+   */
+  standard: number;
+  /**
+   * Hourly rate for a route scheduled OVER 8 hours. A 9- or 10-hour route
+   * bills every hour at this rate, not just the hours past the eighth.
+   */
+  over8: number;
 }
 
 export interface ISYMXWSTOption extends Document {
   wst: string;
   /**
-   * Fallback revenue, used when a station has no rate of its own.
+   * Legacy single rate, from before rates were per station and per tier.
    *
-   * Kept because every existing record already has one and dropping it
-   * would zero out revenue at any station not yet configured. A station
-   * with no rate should fall back to something plausible rather than
-   * silently valuing the work at nothing.
+   * Kept for one reason: a station with no rate configured yet must not
+   * silently value its work at zero, because zero flows into revenue and
+   * cost-per-route figures that still look like numbers. It is no longer
+   * shown or edited anywhere — see migration 09, which seeds it into
+   * rates[] — and can be dropped once every station is configured.
    */
   revenue: number;
-  /** Per-station overrides. Empty means every station uses `revenue`. */
+  /** Per-station, per-tier rates. This is the real pricing. */
   rates: IWSTStationRate[];
   amazonServiceType: string;
   isActive: boolean;
@@ -53,7 +65,8 @@ const SYMXWSTOptionSchema = new Schema<ISYMXWSTOption>(
       {
         _id: false,
         siteId: { type: Schema.Types.ObjectId, ref: "Site", required: true },
-        revenue: { type: Number, required: true },
+        standard: { type: Number, default: 0 },
+        over8: { type: Number, default: 0 },
       },
     ],
     amazonServiceType: { type: String, default: "" },
@@ -66,24 +79,54 @@ const SYMXWSTOptionSchema = new Schema<ISYMXWSTOption>(
 // Lookup by station when pricing a route.
 SYMXWSTOptionSchema.index({ "rates.siteId": 1 });
 
+/** Routes scheduled beyond this many hours bill at the higher tier. */
+export const OVER8_THRESHOLD_HOURS = 8;
+
 /**
- * The revenue for this WST option at a given station.
+ * The hourly rate for this WST at a station, for a route of a given
+ * scheduled duration.
  *
- * Falls back to the shared `revenue` when the station has no rate of its
- * own — a station that has not been configured yet should price work at
- * the default rather than at zero, because zero flows silently into
- * revenue and cost-per-route figures that still look like numbers.
+ * Which tier applies is decided by the DURATION, not by the WST: the same
+ * service line bills at one rate for a 4-hour route and a higher one for a
+ * 9-hour route. Over 8 hours means EVERY hour bills at the higher rate,
+ * not just the hours past the eighth — that is how the rate card reads
+ * ("Routes Scheduled for Over 8 hrs"), and treating it as a marginal rate
+ * would understate revenue on every long route.
+ *
+ * Falls back to the legacy flat rate when a station has none configured,
+ * so an unconfigured station prices work at something plausible rather
+ * than at zero.
  */
-export function wstRevenueFor(
+export function wstRateFor(
   option: { revenue?: number; rates?: IWSTStationRate[] } | null | undefined,
-  siteId: string | mongoose.Types.ObjectId | null | undefined
+  siteId: string | mongoose.Types.ObjectId | null | undefined,
+  durationHours: number
 ): number {
   if (!option) return 0;
+  const tier = (durationHours || 0) > OVER8_THRESHOLD_HOURS ? "over8" : "standard";
+
   if (siteId && Array.isArray(option.rates)) {
     const hit = option.rates.find((r) => String(r.siteId) === String(siteId));
-    if (hit && typeof hit.revenue === "number") return hit.revenue;
+    if (hit) {
+      const v = hit[tier];
+      if (typeof v === "number" && v > 0) return v;
+      // Only one tier filled in: use it rather than falling all the way
+      // back to the legacy rate, which is likely staler.
+      const other = tier === "over8" ? hit.standard : hit.over8;
+      if (typeof other === "number" && other > 0) return other;
+    }
   }
   return option.revenue ?? 0;
+}
+
+/** Total revenue for a route: hourly rate × scheduled hours. */
+export function wstRevenueForRoute(
+  option: { revenue?: number; rates?: IWSTStationRate[] } | null | undefined,
+  siteId: string | mongoose.Types.ObjectId | null | undefined,
+  durationHours: number
+): number {
+  const rate = wstRateFor(option, siteId, durationHours);
+  return Math.round(rate * (durationHours || 0) * 100) / 100;
 }
 
 const SYMXWSTOption: Model<ISYMXWSTOption> =
