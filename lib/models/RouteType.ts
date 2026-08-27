@@ -24,7 +24,7 @@ export interface IRouteType extends Document {
 }
 
 const RouteTypeSchema: Schema = new Schema({
-    name: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
     color: { type: String, default: '#6B7280' },
     startTime: { type: String, default: '' },
     theoryHrs: { type: Number, default: 0 },
@@ -48,6 +48,17 @@ if (mongoose.models.RouteType) {
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
+// ── Unique PER STATION, not globally ──────────────────────────────────
+// Route type names were globally unique, which makes per-station config
+// impossible: DXC8 could not have its own "name" value if DFO2 already
+// used it. The clone that seeds a new station's config would fail with a
+// duplicate key error, and the station would be left with none.
+//
+// Scoped to siteId, each station owns its own set and they can share names
+// — which is the normal case, since stations run the same kinds of work at
+// different rates and start times.
+RouteTypeSchema.index({ siteId: 1, name: 1 }, { unique: true });
+
 RouteTypeSchema.plugin(siteOwned, { modelName: "RouteType" });
 
 const RouteType: Model<IRouteType> = mongoose.model<IRouteType>('RouteType', RouteTypeSchema);

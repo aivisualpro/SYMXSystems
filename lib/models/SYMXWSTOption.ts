@@ -16,7 +16,7 @@ export interface ISYMXWSTOption extends Document {
 
 const SYMXWSTOptionSchema = new Schema<ISYMXWSTOption>(
     {
-        wst: { type: String, required: true, unique: true },
+        wst: { type: String, required: true },
         revenue: { type: Number, default: 0 },
         amazonServiceType: { type: String, default: '' },
         isActive: { type: Boolean, default: true },
@@ -30,6 +30,17 @@ const SYMXWSTOptionSchema = new Schema<ISYMXWSTOption>(
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
+// ── Unique PER STATION, not globally ──────────────────────────────────
+// Wst codes were globally unique, which makes per-station config
+// impossible: DXC8 could not have its own "wst" value if DFO2 already
+// used it. The clone that seeds a new station's config would fail with a
+// duplicate key error, and the station would be left with none.
+//
+// Scoped to siteId, each station owns its own set and they can share names
+// — which is the normal case, since stations run the same kinds of work at
+// different rates and start times.
+SYMXWSTOptionSchema.index({ siteId: 1, wst: 1 }, { unique: true });
+
 SYMXWSTOptionSchema.plugin(siteOwned, { modelName: "SYMXWSTOption" });
 
 const SYMXWSTOption: Model<ISYMXWSTOption> =
