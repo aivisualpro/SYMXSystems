@@ -279,6 +279,11 @@ export async function POST(req: Request) {
           `[employees] Created ${sync.created} schedule row(s) for ${employee.transporterId} ` +
           `across ${sync.weeks.length} week(s).`
         );
+      } else if (sync.skippedReason) {
+        console.log(
+          `[employees] No schedule rows for ${employee.firstName} ${employee.lastName}: ` +
+          `${sync.skippedReason}.`
+        );
       }
     } catch (e: any) {
       // The employee exists either way; a failed sync must not undo that.

@@ -26,6 +26,8 @@ export interface SyncResult {
   created: number;
   removed: number;
   weeks: string[];
+  /** Why nothing happened, when nothing happened for a fixable reason. */
+  skippedReason?: string;
 }
 
 /**
@@ -54,7 +56,18 @@ export async function syncEmployeeSchedules(
 ): Promise<SyncResult> {
   const result: SyncResult = { created: 0, removed: 0, weeks: [] };
 
-  if (!employee?.transporterId || !employee.primarySiteId) return result;
+  // Both are required, and their absence is worth naming rather than
+  // returning quietly: schedules are keyed by transporterId, so an
+  // employee without one cannot be scheduled at all — and the person who
+  // just created them has no way to know that from silence.
+  if (!employee?.transporterId) {
+    result.skippedReason = "no Transporter ID — schedules are keyed by it";
+    return result;
+  }
+  if (!employee.primarySiteId) {
+    result.skippedReason = "no home station set";
+    return result;
+  }
   const siteId = employee.primarySiteId;
 
   // Weeks that exist at this station. Nothing is created beyond these.

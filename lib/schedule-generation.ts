@@ -132,7 +132,49 @@ export async function generateScheduleForWeek(
     }
 
     if (employees.length === 0) {
-        throw new Error("No active employees found");
+        // ── Say WHY, not just "none found" ──
+        // "No active employees found" is wrong whenever someone active is
+        // sitting right there on the roster: the real reason is almost
+        // always a missing Transporter ID or a different home station, and
+        // reporting the generic message sends people looking at status.
+        const atStation = await SymxEmployee.countDocuments({ primarySiteId: siteId });
+        const activeHere = await SymxEmployee.countDocuments({
+            primarySiteId: siteId,
+            status: "Active",
+        });
+        const missingTransporterId = await SymxEmployee.countDocuments({
+            primarySiteId: siteId,
+            status: "Active",
+            $or: [
+                { transporterId: { $exists: false } },
+                { transporterId: "" },
+                { transporterId: null },
+            ],
+        });
+
+        if (activeHere === 0 && atStation === 0) {
+            throw new Error(
+                "No employees are based at this station yet. Set an employee's " +
+                "home station on their profile, then generate again."
+            );
+        }
+        if (activeHere === 0) {
+            throw new Error(
+                `${atStation} employee(s) are based here but none are Active, ` +
+                "so there is nobody to schedule."
+            );
+        }
+        if (missingTransporterId > 0) {
+            throw new Error(
+                `${missingTransporterId} of ${activeHere} active employee(s) here have no ` +
+                "Transporter ID. Schedules are keyed by Transporter ID, so it has to be " +
+                "set on their profile before they can be scheduled."
+            );
+        }
+        throw new Error(
+            `${activeHere} active employee(s) are based here, but none could be scheduled. ` +
+            "Check their hire dates — a hire date after this week means no shifts yet."
+        );
     }
 
     const dates = getWeekDates(yearWeek);
