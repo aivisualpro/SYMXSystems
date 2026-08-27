@@ -34,12 +34,13 @@ export const SCOPED_PATH_PREFIXES: string[] = [
   "/hr",           // employees, callouts, timecard audit, tickets
   "/incidents",
   "/insurance",
+  // These two have no API of their own — they compose endpoints that are
+  // already scoped (/api/dispatching/routes, /api/everyday/*,
+  // /api/schedules/audit, /api/admin/settings/*), so they filter by
+  // station through those.
+  "/closing",
+  "/load-out",
 ];
-
-// Deliberately absent: /closing and /load-out. Their API routes have not
-// been audited for station scoping, and the safe default is to keep the
-// banner up. Marking a page scoped before it is converts visible confusion
-// into invisible trust.
 
 /**
  * Path prefixes where the station switcher is irrelevant by design, so no

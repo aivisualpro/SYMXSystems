@@ -5,7 +5,13 @@
  * visible confusion into misplaced trust.
  */
 import { describe, it, expect } from "vitest";
-import { getScopingState, SCOPED_PATH_PREFIXES } from "@/lib/site-scoping-registry";
+import { readdirSync, statSync } from "fs";
+import path from "path";
+import {
+  getScopingState,
+  SCOPED_PATH_PREFIXES,
+  STATION_AGNOSTIC_PATH_PREFIXES,
+} from "@/lib/site-scoping-registry";
 
 describe("getScopingState", () => {
   it("reports Write-Ups as scoped", () => {
@@ -13,14 +19,12 @@ describe("getScopingState", () => {
     expect(getScopingState("/writeups/anything")).toBe("scoped");
   });
 
-  // Real protected pages whose API routes have not been audited yet. The
-  // banner must keep showing on these.
-  it.each(["/closing", "/load-out"])(
-    "reports %s as UNSCOPED — it still shows every station",
-    (path) => {
-      expect(getScopingState(path)).toBe("unscoped");
-    }
-  );
+  it("defaults anything unrecognised to UNSCOPED", () => {
+    // Every protected page is now classified, so the banner exists for
+    // pages that do not exist yet. Unknown must mean unscoped: a new module
+    // should show the warning until someone deliberately clears it.
+    expect(getScopingState("/some-future-module")).toBe("unscoped");
+  });
 
   it.each(["/owner", "/owner/sites", "/profile", "/admin"])(
     "reports %s as station-agnostic — no banner needed",
@@ -52,6 +56,8 @@ describe("getScopingState", () => {
       "/hr",
       "/incidents",
       "/insurance",
+      "/closing",
+      "/load-out",
     ]);
   });
 
@@ -68,5 +74,38 @@ describe("getScopingState", () => {
       expect(getScopingState(p)).toBe("scoped");
       expect(getScopingState(`${p}/something/deep`)).toBe("scoped");
     }
+  });
+
+  it("classifies every protected page that actually exists", () => {
+    // The registry is a hand-maintained list, and hand-maintained lists
+    // drift. This walks the real app directory so adding a module forces a
+    // decision rather than silently inheriting "unscoped".
+    //
+    // Unscoped IS a valid answer — it just has to be a deliberate one, which
+    // is why a new directory failing here is the point.
+    const dir = path.resolve(__dirname, "../../app/(protected)");
+    const pages = readdirSync(dir).filter((e) =>
+      statSync(path.join(dir, e)).isDirectory()
+    );
+
+    const unclassified = pages.filter((p) => {
+      const route = `/${p}`;
+      return (
+        !SCOPED_PATH_PREFIXES.includes(route) &&
+        !STATION_AGNOSTIC_PATH_PREFIXES.includes(route)
+      );
+    });
+
+    expect(
+      unclassified,
+      unclassified.length
+        ? `These pages exist but are in neither list, so they show the ` +
+          `"showing all stations" banner by default:\n` +
+          unclassified.map((p) => `  • /${p}`).join("\n") +
+          `\n\nAdd each to SCOPED_PATH_PREFIXES once its API routes filter ` +
+          `by station, or to STATION_AGNOSTIC_PATH_PREFIXES if the station ` +
+          `switcher is irrelevant there.`
+        : ""
+    ).toEqual([]);
   });
 });
