@@ -66,6 +66,42 @@ async function main() {
 
   const existing = new Set((await db.listCollections().toArray()).map((c) => c.name));
 
+  // ── Pre-flight: the per-station indexes must exist first ──
+  //
+  // This script copies DFO2's config to every other station, which means
+  // writing a second row with the same `key` / `page`. While the ORIGINAL
+  // global unique indexes are still in place, that second row is a
+  // duplicate and the insert throws.
+  //
+  // Checked up front rather than discovered mid-loop, because the failure
+  // is not clean: the first run died after cloning for one station and
+  // never reached the next, leaving DXC8 half-configured and DFO3 with
+  // nothing — a state that looks like success for one station and silence
+  // for the other. Refusing before writing anything is recoverable;
+  // stopping halfway is a mess someone has to unpick by hand.
+  const blockingIndexes = [];
+  for (const [collection, indexName] of [
+    ["SYMXSettings", "key_1"],
+    ["symxcardconfigs", "page_1"],
+    ["SYMXRouteTypes", "name_1"],
+  ]) {
+    if (!existing.has(collection)) continue;
+    const indexes = await db.collection(collection).indexes();
+    const found = indexes.find((i) => i.name === indexName && i.unique);
+    if (found) blockingIndexes.push(`${collection}.${indexName}`);
+  }
+
+  if (blockingIndexes.length > 0) {
+    throw new Error(
+      "Per-station indexes are not in place yet, so cloning config to a\n" +
+        "second station would fail on a duplicate key.\n\n" +
+        `  Still global-unique: ${blockingIndexes.join(", ")}\n\n` +
+        "Run this first, then re-run this script:\n" +
+        "  node scripts/migrate/07-per-station-unique-indexes.mjs\n\n" +
+        "Nothing has been changed."
+    );
+  }
+
   // ── 1. Reclassify to organization-level ──
   console.log("Reclassifying as organization-level (removing siteId):");
   for (const name of RECLASSIFY_TO_ORG) {
