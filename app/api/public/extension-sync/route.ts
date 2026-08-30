@@ -217,6 +217,7 @@ export async function POST(req: NextRequest) {
     const siteForRoute = (route: any): any => {
       const raw = route?._raw || route;
       const area = String(route?.serviceAreaId || raw?.serviceAreaId || "").trim();
+      if (area) sawAnyServiceArea = true;
       if (area && siteByServiceArea.has(area)) return siteByServiceArea.get(area);
       // No mapping: fall back only if the caller named a station. Guessing
       // here is what puts one station's routes on another's board.
@@ -229,6 +230,11 @@ export async function POST(req: NextRequest) {
     // Owner > Stations to fix it.
     const unmappedAreas = new Set<string>();
     let skipped = 0;
+    // Whether ANY route in this payload carried a service area at all.
+    // Distinguishes "the id is not mapped yet" from "the extension is not
+    // sending one" — the same symptom, completely different fix, and the
+    // first version of this reported neither.
+    let sawAnyServiceArea = false;
 
         const dateObj = new Date(date);
 
@@ -609,6 +615,37 @@ export async function POST(req: NextRequest) {
         }
 
         console.log(`[Extension Sync] Complete: ${saved} info rows saved, ${synced} routes synced, ${matched} drivers matched`);
+
+        // Nothing synced at all is a failure, not a quiet success. Returning
+        // ok:true with saved:0 is why this could stop working without anyone
+        // noticing: the extension sees 200 and carries on.
+        if (skipped === routes.length && routes.length > 0) {
+            const mappedCount = siteByServiceArea.size;
+            const reason = !sawAnyServiceArea
+                ? "None of the routes carried a serviceAreaId, and no ?station=CODE was given. " +
+                  "Either add ?station=CODE to the sync URL, or have the extension include " +
+                  "Amazon's raw route summary (which contains serviceAreaId)."
+                : mappedCount === 0
+                ? "No station has an Amazon service area configured yet. Set it in " +
+                  "Owner > Stations > Amazon Logistics — the ids seen were: " +
+                  `${[...unmappedAreas].join(", ")}`
+                : "The service area(s) in this payload are not mapped to any station: " +
+                  `${[...unmappedAreas].join(", ")}. Add the id in Owner > Stations.`;
+
+            return NextResponse.json(
+                {
+                    ok: false,
+                    error: `All ${routes.length} route(s) were skipped — nothing was synced.`,
+                    reason,
+                    skipped,
+                    unmappedServiceAreas: [...unmappedAreas],
+                    stationsWithServiceArea: sites
+                        .filter((x: any) => x.amazon?.serviceAreaId)
+                        .map((x: any) => x.code),
+                },
+                { status: 422, headers: corsHeaders },
+            );
+        }
 
         return NextResponse.json({
             ok: true,
