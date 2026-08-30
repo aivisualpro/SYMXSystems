@@ -52,7 +52,16 @@ export async function syncEmployeeSchedules(
     reactivatedDate?: any;
     [key: string]: any;
   },
-  opts: { userId?: string } = {}
+  opts: {
+    userId?: string;
+    /**
+     * The transporter ID this employee had before the update, when it
+     * changed. Their existing rows are keyed by the OLD value, so without
+     * this a correction would leave the old rows stranded and the person
+     * would appear twice on the schedule — once under each ID.
+     */
+    previousTransporterId?: string;
+  } = {}
 ): Promise<SyncResult> {
   const result: SyncResult = { created: 0, removed: 0, weeks: [] };
 
@@ -70,9 +79,52 @@ export async function syncEmployeeSchedules(
   }
   const siteId = employee.primarySiteId;
 
+  // ── Follow a corrected transporter ID ──
+  // The ID is the schedule key, so changing it orphans every row the
+  // person already has. They are the same employee either way, and
+  // employeeId proves it, so the rows move rather than being abandoned.
+  const prev = String(opts.previousTransporterId || "").trim();
+  if (prev && prev !== employee.transporterId) {
+    // Refuse a partial rename: the {transporterId, date} index is unique,
+    // so if anything already sits under the new ID an updateMany would
+    // abort midway and leave the rows split across both IDs — worse than
+    // not moving them and saying so.
+    const collision = await SymxEmployeeSchedule.countDocuments({
+      transporterId: employee.transporterId,
+    });
+    if (collision > 0) {
+      result.skippedReason =
+        `transporter ID changed from ${prev}, but rows already exist under ` +
+        `${employee.transporterId} — the old rows were left in place to avoid ` +
+        `a partial rename. Merge them by hand.`;
+    } else {
+      // Match on employeeId where it is present, since that survives an ID
+      // change; fall back to the old ID for rows predating that field.
+      const moved = await SymxEmployeeSchedule.updateMany(
+        employee._id
+          ? { $or: [{ employeeId: employee._id }, { transporterId: prev }] }
+          : { transporterId: prev },
+        { $set: { transporterId: employee.transporterId } }
+      );
+      if (moved.modifiedCount) {
+        console.log(
+          `[schedules] Moved ${moved.modifiedCount} row(s) from ${prev} to ${employee.transporterId}`
+        );
+      }
+    }
+  }
+
   // Weeks that exist at this station. Nothing is created beyond these.
   const weeks = await SymxAvailableWeek.find({ siteId }, { week: 1 }).lean();
-  if (weeks.length === 0) return result;
+  if (weeks.length === 0) {
+    // Not an error — a new station legitimately has no weeks yet — but
+    // silence here reads exactly like a failure to the person who just
+    // added an employee and is waiting for their shifts to appear.
+    result.skippedReason =
+      "this station has no schedule weeks yet — generate a week first, and " +
+      "the employee will be included";
+    return result;
+  }
 
   const weekKeys = (weeks as any[]).map((w) => w.week).filter(Boolean);
 

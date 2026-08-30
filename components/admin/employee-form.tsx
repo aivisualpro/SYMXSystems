@@ -229,8 +229,12 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
                 <Input id="eeCode" required value={formData.eeCode || ""} onChange={(e) => handleChange("eeCode", e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="transporterId">Transporter ID</Label>
-                <Input id="transporterId" value={formData.transporterId || ""} onChange={(e) => handleChange("transporterId", e.target.value)} />
+                <Label htmlFor="transporterId">Transporter ID *</Label>
+                <Input id="transporterId" required value={formData.transporterId || ""} onChange={(e) => handleChange("transporterId", e.target.value)} />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Schedules are keyed by this. Without it the employee saves
+                  but never appears on a schedule.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="badgeNumber">Badge Number</Label>

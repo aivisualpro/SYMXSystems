@@ -92,12 +92,62 @@ export async function PUT(
       }
     }
 
+    // ── Required identifiers, on edit ──
+    // Only checked when the field is actually being submitted: this is a
+    // partial update, and treating an absent key as an attempt to clear it
+    // would make every unrelated edit fail for employees who predate the
+    // requirement.
+    for (const [field, label] of [
+      ["eeCode", "EE Code"],
+      ["transporterId", "Transporter ID"],
+    ] as const) {
+      if (body[field] === undefined) continue;
+      body[field] = String(body[field] ?? "").trim();
+      if (!body[field]) {
+        return NextResponse.json({ error: `${label} is required.` }, { status: 400 });
+      }
+    }
+
+    // Reassigning an ID that another employee already holds collides on the
+    // schedule's unique {transporterId, date} key. Excludes this employee,
+    // so re-saving their own unchanged ID is not treated as a clash.
+    if (body.transporterId) {
+      const clash = await orgWide(
+        SymxEmployee.findOne({
+          transporterId: body.transporterId,
+          _id: { $ne: params.id },
+        }),
+        "transporter ID collisions break schedule keys company-wide, so a duplicate must be caught across stations"
+      )
+        .select({ firstName: 1, lastName: 1 })
+        .lean();
+      if (clash) {
+        const who = clash as any;
+        return NextResponse.json(
+          {
+            error:
+              `Transporter ID ${body.transporterId} already belongs to ` +
+              `${[who.firstName, who.lastName].filter(Boolean).join(" ") || "another employee"}.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     // Captured BEFORE the write so a status transition can be detected —
     // "became active today" is the trigger for generating forward, and it
     // is invisible once the update has landed.
+    // transporterId is in this projection because the comparison below
+    // depends on it. A field compared against a projection that does not
+    // select it reads as undefined and the check quietly always fires.
     const previous = await SymxEmployee.findById(params.id, {
       status: 1, hiredDate: 1, terminationDate: 1, resignationDate: 1, primarySiteId: 1,
+      transporterId: 1,
     }).lean();
+
+    // Surfaced in the response when the employee saved but got no
+    // schedule, so the UI can say why instead of appearing to succeed.
+    let scheduleNotice: string | null = null;
 
     const updatedEmployee = await SymxEmployee.findByIdAndUpdate(
       params.id,
@@ -118,7 +168,14 @@ export async function PUT(
         String(p.hiredDate || "") !== String(n.hiredDate || "") ||
         String(p.terminationDate || "") !== String(n.terminationDate || "") ||
         String(p.resignationDate || "") !== String(n.resignationDate || "") ||
-        String(p.primarySiteId || "") !== String(n.primarySiteId || "");
+        String(p.primarySiteId || "") !== String(n.primarySiteId || "") ||
+        // Transporter ID belongs here because schedules are KEYED by it:
+        // an employee without one cannot be scheduled at all, so sync
+        // skips them. It was missing from this list, which meant the one
+        // field whose absence blocks scheduling was also the one field
+        // that did not re-run scheduling when it was finally supplied —
+        // the employee stayed permanently unscheduled with no error.
+        String(p.transporterId || "") !== String(n.transporterId || "");
 
       if (employmentChanged) {
         try {
@@ -138,11 +195,21 @@ export async function PUT(
 
           const sync = await syncEmployeeSchedules(n.toObject ? n.toObject() : n, {
             userId: (session as any)?.id,
+            previousTransporterId: p.transporterId,
           });
           if (sync.created || sync.removed) {
             console.log(
               `[employees] Schedule sync for ${n.transporterId}: ` +
               `+${sync.created} / -${sync.removed}`
+            );
+          } else if (sync.skippedReason) {
+            // Returned to the caller, not just logged. "Saved" with no
+            // schedule and no explanation is indistinguishable from a bug,
+            // and that is precisely how an employee sat unscheduled
+            // without anyone knowing why.
+            scheduleNotice = sync.skippedReason;
+            console.log(
+              `[employees] No schedule for ${n.transporterId || n._id}: ${sync.skippedReason}`
             );
           }
         } catch (e: any) {
@@ -155,7 +222,10 @@ export async function PUT(
       return new NextResponse("Employee not found", { status: 404 });
     }
 
-    return NextResponse.json(maskRate(updatedEmployee.toObject(), canViewComp));
+    return NextResponse.json({
+      ...maskRate(updatedEmployee.toObject(), canViewComp),
+      ...(scheduleNotice ? { scheduleNotice } : {}),
+    });
   } catch (error: any) {
     console.error("PUT /api/admin/employees/[id] error:", error);
     if (error?.name === "ValidationError") {

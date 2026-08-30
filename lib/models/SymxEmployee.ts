@@ -88,7 +88,20 @@ const SymxEmployeeSchema: Schema = new Schema({
   // needs to cross-reference Paycom data) matches employees by this field. A blank
   // eeCode means that employee's punches can never be auto-matched.
   eeCode: { type: String, required: [true, "EE Code is required"] },
-  transporterId: { type: String, index: true },
+  // Transporter ID — required, because schedules are KEYED by it. An
+  // employee without one is not merely missing a field: they cannot be
+  // scheduled at all, and nothing says so. They save cleanly, appear on
+  // the roster, and are absent from every generated week until someone
+  // notices the gap by eye.
+  //
+  // Note for existing records: Mongoose only runs `required` against paths
+  // an update actually touches, so anyone already lacking a transporter ID
+  // can still be edited — they just cannot be saved with it blank.
+  transporterId: {
+    type: String,
+    required: [true, "Transporter ID is required — schedules are keyed by it"],
+    index: true,
+  },
   badgeNumber: { type: String },
   gender: { type: String },
   type: { type: String },

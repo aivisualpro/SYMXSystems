@@ -237,6 +237,51 @@ export async function POST(req: Request) {
       if (!body[day]) body[day] = DEFAULT_ROUTE_TYPE;
     }
     
+    // ── Required identifiers ──
+    // Checked here as well as in the schema so the message names the field
+    // in the form's own language. A Mongoose ValidationError surfaces as a
+    // wall of text that does not tell someone which box to fill in.
+    //
+    // Both are trimmed first: a space is not an identifier, and " " would
+    // otherwise satisfy `required` and reintroduce exactly the silent
+    // unschedulable state this is meant to prevent.
+    for (const [field, label] of [
+      ["eeCode", "EE Code"],
+      ["transporterId", "Transporter ID"],
+    ] as const) {
+      body[field] = String(body[field] ?? "").trim();
+      if (!body[field]) {
+        return NextResponse.json(
+          { error: `${label} is required.` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // ── Duplicate transporter ID ──
+    // Schedule rows carry a unique {transporterId, date} index, so two
+    // people sharing an ID do not coexist — the second one's shifts fail
+    // to insert, or worse, the two get read as one person. Company-wide
+    // for the same reason as email: the clash is real even when the other
+    // record sits at a station this user cannot see.
+    const duplicateTransporter = await orgWide(
+      SymxEmployee.findOne({ transporterId: body.transporterId }),
+      "transporter ID collisions break schedule keys company-wide, so a duplicate must be caught across stations"
+    )
+      .select({ firstName: 1, lastName: 1 })
+      .lean();
+    if (duplicateTransporter) {
+      const who = duplicateTransporter as any;
+      return NextResponse.json(
+        {
+          error:
+            `Transporter ID ${body.transporterId} already belongs to ` +
+            `${[who.firstName, who.lastName].filter(Boolean).join(" ") || "another employee"}.`,
+        },
+        { status: 409 }
+      );
+    }
+
     // Check for duplicate email
     // Email uniqueness is company-wide: the same person must not be
     // created twice because one station could not see the other's roster.
