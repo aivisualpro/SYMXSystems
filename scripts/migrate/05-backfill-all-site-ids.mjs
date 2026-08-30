@@ -37,6 +37,21 @@ const { uri: TARGET_URI } = resolveTargetDb(env, { scriptName: "05-backfill-all-
 // A collection missing from this list keeps null siteIds and will simply
 // stop appearing once scoping is enforced — so the post-check below
 // reports any site-owned-looking collection that isn't covered.
+// ── Deliberately NOT in this list ────────────────────────────────────
+//
+//   vehiclesRentalAgreements  (09)  contract is with the leasing company
+//   messagingtemplates        (06)  shared wording across stations
+//   SYMXWSTOptions            (08)  shared catalogue, priced per station
+//   SYMXRouteTypes            (10)  shared catalogue, timed per station
+//
+// These were site-owned when this migration was written and were later
+// reclassified as organization-level. They stayed in the list, so
+// re-running this script re-stamped them with the default station and
+// silently undid migrations 06/08/09/10 — the shared catalogues vanished
+// from every station except DFO2.
+//
+// A backfill has to be safe to run twice. This one was not, because it
+// carried a snapshot of a classification that had since moved on.
 const SITE_OWNED_COLLECTIONS = [
   // Operations
   "SYMXRoutes", "SYMXRoutesInfo", "SYMXRTS", "SYMXRescue", "SYMXEveryday",
@@ -44,7 +59,7 @@ const SITE_OWNED_COLLECTIONS = [
   "SYMXEmployeeSchedules", "SYMXScheduleConfirmations", "ScheduleAuditLogs", "SymxAvailableWeeks",
   // Fleet
   "dailyInspections", "vehiclesInspections", "vehiclesRepairs",
-  "vehiclesActivityLogs", "vehiclesRentalAgreements",
+  "vehiclesActivityLogs",
   // HR / discipline
   "SYMXWriteups", "SYMXVerbalCoachings", "SYMXCoachingWriteUps", "SYMXEmployeeNotes",
   "symxincidents", "symxhrtickets", "symxreimbursements", "symxinterviews",
@@ -53,9 +68,9 @@ const SITE_OWNED_COLLECTIONS = [
   "ScoreCard_DeliveryExcellence", "ScoreCard_PhotoOnDelivery",
   "ScoreCard_safetyDashboardDFO2", "ScoreCard_DVICVehicleInspection", "ScoreCardRemarks",
   // Comms
-  "SYMXMessageLogs", "symxnotifications", "messagingtemplates",
+  "SYMXMessageLogs", "symxnotifications",
   // Per-station settings
-  "SYMXSettings", "symxcardconfigs", "SYMXWSTOptions", "SYMXRouteTypes",
+  "SYMXSettings", "symxcardconfigs",
   "SYMXWriteupSettings", "symxhrticketsettings", "symxreimbursementsettings",
   // Misc
   "symxpublicuploadlogs",
