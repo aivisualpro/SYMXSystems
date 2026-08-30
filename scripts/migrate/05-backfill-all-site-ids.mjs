@@ -103,6 +103,16 @@ const ORG_LEVEL_COLLECTIONS = new Set([
   "SYMXDropdownOptions",     // shared category catalogue — keeps reporting comparable
   "SYMXInsurancePolicies",   // corporate policies, cover every station
   "SYMXRTSSubmissions", "SymxDVICVehicleInspection", "SymxDeliveryExcellence", // empty legacy
+  // Reclassified out of SITE_OWNED_COLLECTIONS after this script was first
+  // written. Declared here rather than merely deleted from that list: the
+  // unaccounted-collections check below exists precisely to catch a
+  // collection that belongs to neither list, and removing these without
+  // adding them here traded a silent re-stamping bug for a silent
+  // unclassified one.
+  "vehiclesRentalAgreements", // (09) contract is with the leasing company
+  "messagingtemplates",       // (06) shared wording across stations
+  "SYMXWSTOptions",           // (08) shared catalogue, priced per station
+  "SYMXRouteTypes",           // (10) shared catalogue, timed per station
 ]);
 
 async function main() {
