@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { useState, useMemo, useCallback } from "react";
 import { useOwner } from "../layout";
 import { UserForm } from "@/components/admin/user-form";
@@ -52,6 +54,7 @@ function getRoleBadge(role: string) {
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function AppUsersPage() {
+  const router = useRouter();
   const { users, loadingUsers, search, fetchUsers, addUserOpen, setAddUserOpen } = useOwner();
 
   const [editingItem, setEditingItem] = useState<User | null>(null);
@@ -284,6 +287,18 @@ export default function AppUsersPage() {
                   onClick={() => openEditSheet(viewUser)}
                 >
                   <IconPencil size={12} /> Edit Profile
+                </Button>
+                {/* The full profile page carries station access and org-wide
+                    grants. Nothing linked to it, so that page — and with it
+                    the only way to give anyone access to a second station —
+                    was unreachable through the UI. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 gap-1.5 rounded-lg text-xs relative z-10"
+                  onClick={() => router.push(`/owner/app-users/${viewUser._id}`)}
+                >
+                  Station access &amp; permissions
                 </Button>
               </div>
 
