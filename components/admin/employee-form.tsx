@@ -246,7 +246,7 @@ export function EmployeeForm({ initialData, onSubmit, isLoading, onCancel }: Emp
                   silently appeared under DFO2. */}
               <StationSelect
                 label="Home station"
-                value={formData.primarySiteId || ""}
+                value={String(formData.primarySiteId || "")}
                 onChange={(siteId) => handleChange("primarySiteId", siteId)}
                 hint="Where this employee is based. They can still work routes at other stations."
               />

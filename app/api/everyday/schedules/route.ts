@@ -69,6 +69,8 @@ export async function GET(req: NextRequest) {
         await connectToDatabase();
         const url = new URL(req.url);
         const dateStr = url.searchParams.get("dateStr");
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
 
         if (!dateStr) {
             return NextResponse.json({ error: "Missing dateStr" }, { status: 400 });

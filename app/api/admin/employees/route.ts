@@ -1,4 +1,5 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
+import { syncEmployeeSchedules } from "@/lib/scheduling/sync-employee-schedules";
 
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';

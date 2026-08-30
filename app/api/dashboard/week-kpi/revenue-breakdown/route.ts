@@ -198,6 +198,7 @@ export async function PATCH(req: NextRequest) {
     await connectToDatabase();
 
     const body = await req.json();
+    const scope = await getRequestScope();
     const { routeId, updates } = body;
 
     if (!routeId || !updates) {

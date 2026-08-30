@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:isolation": "vitest run tests/isolation"
+    "test:isolation": "vitest run tests/isolation",
+    "typecheck": "NODE_OPTIONS=--max-old-space-size=6144 tsc --noEmit"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

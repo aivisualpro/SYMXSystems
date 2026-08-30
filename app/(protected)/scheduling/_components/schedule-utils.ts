@@ -54,6 +54,15 @@ export interface WeekData {
   dates: string[];
   employees: EmployeeSchedule[];
   totalEmployees: number;
+  /**
+   * Whether this week has actually been generated for the station in view.
+   *
+   * Distinct from `employees.length === 0`: a generated week with nobody
+   * rostered and a week that was never generated look identical in the
+   * grid, and at a new station the second is the normal case. Without this
+   * the page reads as broken rather than as "not generated yet".
+   */
+  hasSchedule?: boolean;
   prevWeekTrailing?: Record<string, number>;
   auditCounts?: Record<string, number>;
   everydayRecords?: Record<string, any>;

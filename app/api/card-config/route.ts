@@ -57,6 +57,10 @@ export async function PUT(req: NextRequest) {
     await connectToDatabase();
 
     // Merge strategy: fetch existing config, then merge incoming data
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+    const writeSiteId = resolveWriteSiteId(scope, null);
+
     // This way we don't lose image URLs when only name changes, or vice versa
     const existing = await SymxCardConfig.findOne({ page, ...S });
     const existingCards = existing?.cards || [];

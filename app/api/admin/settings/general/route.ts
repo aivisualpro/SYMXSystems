@@ -48,6 +48,13 @@ export async function POST(req: NextRequest) {
         await connectToDatabase();
         const body = await req.json();
         const { key, value, description } = body;
+        // Scope is per-request, so it has to be resolved inside each
+        // handler. These were declared in GET only and used here too,
+        // which is a ReferenceError the moment this route is called.
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+        const writeSiteId = resolveWriteSiteId(scope, null);
+
 
         if (!key?.trim()) {
             return NextResponse.json({ error: "Setting key is required" }, { status: 400 });

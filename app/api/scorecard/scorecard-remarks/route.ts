@@ -78,6 +78,9 @@ export async function PUT(req: NextRequest) {
   }
 
   await connectToDatabase();
+  const scope = await getRequestScope();
+  const S = siteFilter(scope, { includeUnassigned: true });
+  const writeSiteId = resolveWriteSiteId(scope, null);
 
   // Fetch existing record to detect changes
   const existing = await SymxScoreCardRemarks.findOne({ transporterId, week, ...S }).lean();

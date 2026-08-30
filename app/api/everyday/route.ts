@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Date is required" }, { status: 400 });
         }
 
+
         const record = await SymxEveryday.findOne({ date, ...S });
         return NextResponse.json({ notes: record?.notes || "", attachments: record?.attachments || [], routesAssigned: record?.routesAssigned || 0, endDay: !!record?.endDay, SYMXRouteSheet: record?.SYMXRouteSheet || "", SYMXRouteSheetData: record?.SYMXRouteSheetData || [] });
     } catch (error: any) {
@@ -67,6 +68,10 @@ export async function POST(req: NextRequest) {
         await connectToDatabase();
         const body = await req.json();
         const { date, notes, attachments, routesAssigned, endDay, SYMXRouteSheet } = body;
+
+        const scope = await getRequestScope();
+        const S = siteFilter(scope, { includeUnassigned: true });
+        const writeSiteId = resolveWriteSiteId(scope, null);
 
         if (!date) {
             return NextResponse.json({ error: "Date is required" }, { status: 400 });

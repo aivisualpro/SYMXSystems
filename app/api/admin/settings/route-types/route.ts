@@ -106,8 +106,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ ...updated, schedulesUpdated });
         } else {
             // Create new
+            // No siteId: route types are a SHARED catalogue. Per-station
+            // differences live in `stations[]` (start time, theory hours),
+            // so a new type is immediately available everywhere rather than
+            // being invisible at every station but the one that made it.
             const route = await RouteType.create({
-                siteId: writeSiteId,
                 name: name.trim(),
                 color: color || "#6B7280",
                 startTime: startTime || "",

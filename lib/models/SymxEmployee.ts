@@ -3,6 +3,13 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 import { siteAssigned } from "./plugins/site-owned";
 
 export interface ISymxEmployee extends Document {
+  /**
+   * Home station. Added to the schema by the siteAssigned plugin, and
+   * declared here so TypeScript knows it exists — a plugin-added path is
+   * invisible to the interface, so every consumer that touched this field
+   * failed to compile while the runtime had it all along.
+   */
+  primarySiteId?: mongoose.Types.ObjectId | string;
   firstName: string;
   lastName: string;
   eeCode?: string;

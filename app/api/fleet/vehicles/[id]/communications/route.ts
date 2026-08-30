@@ -66,6 +66,8 @@ export async function PUT(
         const { commId, date, status, comments } = body;
 
         if (!commId) return NextResponse.json({ error: "Communication ID required" }, { status: 400 });
+        const scope = await getRequestScope();
+        const V = siteFilter(scope, { includeUnassigned: true, field: "currentSiteId" });
 
         const vehicle = await Vehicle.findOneAndUpdate(
             { _id: id, "fleetCommunications._id": commId, ...V },
