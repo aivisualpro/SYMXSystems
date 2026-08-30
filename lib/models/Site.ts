@@ -33,6 +33,10 @@ export interface ISite extends Document {
     quoPhoneNumberId?: string;
     quoPhoneNumber?: string;
   };
+  amazon?: {
+    /** Amazon Logistics service area — identifies the station in scraped route data. */
+    serviceAreaId?: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -87,6 +91,24 @@ const SiteSchema: Schema = new Schema(
       quoPhoneNumberId: { type: String },
       quoPhoneNumber: { type: String },
     },
+
+    // ── Amazon Logistics identity ──
+    // serviceAreaId is Amazon's own per-station key, present on every
+    // route in the scraped payload. Recording it here lets the extension
+    // sync work out which station a route belongs to FROM THE DATA rather
+    // than from a URL parameter the browser has to be told to send.
+    //
+    // That distinction matters once there is more than one station: a
+    // parameter can be stale, copied from another tab, or simply wrong,
+    // and the failure is silent — one station's routes quietly filed under
+    // another. The payload cannot be wrong about which station produced it.
+    //
+    // Unset (no default) for the same reason as the messaging fields: an
+    // empty string would collide across every unconfigured station on the
+    // sparse unique index below.
+    amazon: {
+      serviceAreaId: { type: String },
+    },
   },
   { timestamps: true, collection: "SYMXSites" }
 );
@@ -107,6 +129,12 @@ const SiteSchema: Schema = new Schema(
 // sparse alone is the correct tool here.
 SiteSchema.index({ "messaging.quoPhoneNumberId": 1 }, { unique: true, sparse: true });
 SiteSchema.index({ "messaging.quoPhoneNumber": 1 }, { unique: true, sparse: true });
+
+// Same reasoning as the number indexes above: the service area is how a
+// scraped route is attributed to a station, so two stations claiming one
+// would silently route data to whichever matched first. Sparse, so
+// stations that have not been mapped yet do not all collide on "missing".
+SiteSchema.index({ "amazon.serviceAreaId": 1 }, { unique: true, sparse: true });
 
 // Slug is unique per organization, not globally — the org boundary is the
 // real namespace even though there is only one org today.

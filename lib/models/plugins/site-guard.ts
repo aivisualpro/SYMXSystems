@@ -347,4 +347,91 @@ export function siteGuard(
     }
   }
   schema.pre("aggregate", aggregateHook);
+
+  // ── Bulk writes ───────────────────────────────────────────────────────
+  //
+  // bulkWrite() and insertMany() do NOT pass through query middleware, so
+  // every hook above is blind to them. That is not a footnote: 23 write
+  // paths on site-owned models were missing their station filter while the
+  // guard and the audit both reported clean, because neither could see the
+  // operation at all. A check that cannot observe a whole category of
+  // writes reports zero for it forever.
+  //
+  // The `pre("bulkWrite")` hook exists but does not receive the operation
+  // list, so it cannot inspect filters. Wrapping the compiled model is what
+  // actually gives access to the arguments.
+  function guardBulk(model: any) {
+    const mode = () => modeFor(modelName);
+
+    const flag = Symbol.for("symx.siteGuard.bulkWrapped");
+    if (model[flag]) return; // hot reload re-registers the model
+    model[flag] = true;
+
+    /** Complain about one operation that carries no station. */
+    function reportOp(operation: string, filter: any, kind: "broad" | "byId", boundary: Function) {
+      const v = record(modelName, operation, filter, kind, boundary);
+      if (mode() === "enforce" && kind === "broad") {
+        throw new Error(
+          `[site-guard] ${modelName}.${operation}() wrote without a station.\n` +
+            `  Filter: ${v.filter}\n` +
+            `  From:   ${v.origin}\n\n` +
+            `Include ${field} in BOTH the filter and the written document — in a\n` +
+            `bulk upsert the filter is the identity of the row, so omitting it\n` +
+            `lets two stations share one record.`
+        );
+      }
+      if (v.count === 1) {
+        console.warn(
+          `[site-guard] ${kind === "broad" ? "UNSCOPED" : "by-id"} ${modelName}.${operation}() — ${v.origin}`
+        );
+      }
+    }
+
+    const originalBulkWrite = model.bulkWrite.bind(model);
+    function guardedBulkWrite(this: any, ops: any[], ...rest: any[]) {
+      if (mode() !== "off" && Array.isArray(ops)) {
+        for (const op of ops) {
+          if (!op || typeof op !== "object") continue;
+
+          // An insert carries no filter; the document itself must name the
+          // station, or the row lands unowned and surfaces on whichever
+          // station is treated as the default.
+          const insertDoc = op.insertOne?.document;
+          if (insertDoc) {
+            if (!insertDoc[field]) reportOp("bulkWrite:insertOne", insertDoc, "broad", guardedBulkWrite);
+            continue;
+          }
+
+          for (const name of ["updateOne", "updateMany", "replaceOne", "deleteOne", "deleteMany"]) {
+            const spec = op[name];
+            if (!spec) continue;
+            const filter = spec.filter || {};
+            if (hasSiteScope(filter, field)) continue;
+            reportOp(`bulkWrite:${name}`, filter, isByIdOnly(filter) ? "byId" : "broad", guardedBulkWrite);
+          }
+        }
+      }
+      return originalBulkWrite(ops, ...rest);
+    }
+    model.bulkWrite = guardedBulkWrite;
+
+    const originalInsertMany = model.insertMany.bind(model);
+    function guardedInsertMany(this: any, docs: any, ...rest: any[]) {
+      if (mode() !== "off") {
+        const list = Array.isArray(docs) ? docs : [docs];
+        // One report per call, not per document — a 5,000-row import would
+        // otherwise bury every other message in the log.
+        const unowned = list.filter((d: any) => d && !d[field]).length;
+        if (unowned > 0) {
+          reportOp("insertMany", { unownedDocuments: unowned, of: list.length }, "broad", guardedInsertMany);
+        }
+      }
+      return originalInsertMany(docs, ...rest);
+    }
+    model.insertMany = guardedInsertMany;
+  }
+
+  // Fires when the model is compiled from this schema, which is the only
+  // point where the model object exists to be wrapped.
+  schema.on("init", guardBulk);
 }

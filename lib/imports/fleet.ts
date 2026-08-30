@@ -1,4 +1,5 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
+import { stampDocs, stampOwnedOps, stampGlobalOps } from "./stamp-site";
 
 import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
@@ -491,7 +492,15 @@ const employeeScheduleHeaderMap: Record<string, string> = {
 };
 
 
-export async function processFleet(type: string, data: any, week: string | undefined) {
+export async function processFleet(
+    type: string,
+    data: any,
+    week: string | undefined,
+    /** Station these imported records belong to. Threaded from the
+     *  request scope — importers write via insertMany/bulkWrite, which
+     *  bypass Mongoose, so nothing else would stamp ownership. */
+    importSiteId?: any,
+) {
   const session = await getSession();
   if (type === 'dvic-vehicle-inspection') {
             // 1. Gather Transporter IDs
@@ -559,7 +568,7 @@ export async function processFleet(type: string, data: any, week: string | undef
             }).filter((op: any): op is NonNullable<typeof op> => op !== null);
 
             if (operations.length > 0) {
-                const result = await SymxDVICVehicleInspection.bulkWrite(operations);
+                const result = await SymxDVICVehicleInspection.bulkWrite(stampOwnedOps(operations, importSiteId));
                 return NextResponse.json({
                     success: true,
                     count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
@@ -639,7 +648,7 @@ export async function processFleet(type: string, data: any, week: string | undef
             }).filter((op: any): op is NonNullable<typeof op> => op !== null);
 
             if (operations.length > 0) {
-                const result = await Vehicle.bulkWrite(operations);
+                const result = await Vehicle.bulkWrite(stampGlobalOps(operations, importSiteId, "currentSiteId"));
                 return NextResponse.json({
                     success: true,
                     count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
@@ -734,7 +743,7 @@ export async function processFleet(type: string, data: any, week: string | undef
             }).filter((op: any): op is NonNullable<typeof op> => op !== null);
 
             if (operations.length > 0) {
-                const result = await VehicleRepair.bulkWrite(operations);
+                const result = await VehicleRepair.bulkWrite(stampOwnedOps(operations, importSiteId));
                 return NextResponse.json({
                     success: true,
                     count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
@@ -856,7 +865,7 @@ export async function processFleet(type: string, data: any, week: string | undef
             }
 
             if (operations.length > 0) {
-                const result = await DailyInspection.bulkWrite(operations, { ordered: false });
+                const result = await DailyInspection.bulkWrite(stampOwnedOps(operations, importSiteId), { ordered: false });
                 return NextResponse.json({
                     success: true,
                     count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
@@ -916,7 +925,7 @@ export async function processFleet(type: string, data: any, week: string | undef
             }).filter((op: any): op is NonNullable<typeof op> => op !== null);
 
             if (operations.length > 0) {
-                const result = await Vehicle.bulkWrite(operations, { ordered: false });
+                const result = await Vehicle.bulkWrite(stampGlobalOps(operations, importSiteId, "currentSiteId"), { ordered: false });
                 return NextResponse.json({
                     success: true,
                     count: (result.modifiedCount || 0) + (result.upsertedCount || 0),

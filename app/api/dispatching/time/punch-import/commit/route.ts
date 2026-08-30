@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
+import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 
 const PAYCOM_FIELDS = ["paycomInDay", "paycomOutLunch", "paycomInLunch", "paycomOutDay"];
@@ -29,6 +30,18 @@ export async function POST(req: NextRequest) {
 
     await connectToDatabase();
 
+    // Punches are matched to routes by transporter ID and date, neither of
+    // which is unique across stations — a driver who has worked at two
+    // stations has routes at both. Without the station in the filter, an
+    // upload made while viewing one station can write punches onto another
+    // station's routes, and the timecard audit then reports hours against
+    // the wrong location.
+    //
+    // includeUnassigned, because routes created before the migration have
+    // no siteId and legitimately belong to the default station.
+    const scope = await getRequestScope();
+    const S = siteFilter(scope, { includeUnassigned: true });
+
     const ops = records
       .map((r: any) => {
         const setFields: Record<string, string> = {};
@@ -38,7 +51,7 @@ export async function POST(req: NextRequest) {
         if (Object.keys(setFields).length === 0) return null;
         return {
           updateOne: {
-            filter: { transporterId: r.transporterId, date: new Date(r.date) },
+            filter: { transporterId: r.transporterId, date: new Date(r.date), ...S },
             update: { $set: setFields },
           },
         };

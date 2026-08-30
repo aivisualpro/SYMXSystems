@@ -1,4 +1,5 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
+import { stampDocs, stampOwnedOps, stampGlobalOps } from "./stamp-site";
 
 import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
@@ -491,7 +492,15 @@ const employeeScheduleHeaderMap: Record<string, string> = {
 };
 
 
-export async function processEmployees(type: string, data: any, week: string | undefined) {
+export async function processEmployees(
+    type: string,
+    data: any,
+    week: string | undefined,
+    /** Station these imported records belong to. Threaded from the
+     *  request scope — importers write via insertMany/bulkWrite, which
+     *  bypass Mongoose, so nothing else would stamp ownership. */
+    importSiteId?: any,
+) {
   if (type === 'employees') {
             // Get schema paths to dynamically handle types
             const paths = SymxEmployee.schema.paths;
@@ -563,7 +572,7 @@ export async function processEmployees(type: string, data: any, week: string | u
 
             if (operations.length > 0) {
                 try {
-                    const result = await SymxEmployee.bulkWrite(operations, { ordered: false });
+                    const result = await SymxEmployee.bulkWrite(stampGlobalOps(operations, importSiteId, "primarySiteId"), { ordered: false });
                     return NextResponse.json({
                         success: true,
                         count: (result.upsertedCount || 0) + (result.modifiedCount || 0),
@@ -690,7 +699,7 @@ export async function processEmployees(type: string, data: any, week: string | u
             }).filter((op: any): op is NonNullable<typeof op> => op !== null);
 
             if (operations.length > 0) {
-                const result = await SymxEmployeeSchedule.bulkWrite(operations);
+                const result = await SymxEmployeeSchedule.bulkWrite(stampOwnedOps(operations, importSiteId));
                 return NextResponse.json({
                     success: true,
                     count: (result.upsertedCount || 0) + (result.modifiedCount || 0),

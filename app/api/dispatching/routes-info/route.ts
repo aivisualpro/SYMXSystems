@@ -198,6 +198,18 @@ export async function POST(req: NextRequest) {
 
         const dateObj = new Date(date);
 
+        // The station these rows belong to. Required for the upserts below:
+        // a bulk upsert's filter IS the row's identity, so without siteId
+        // "row 3 on this date" means the same document at every station and
+        // each one's save overwrites the others'.
+        const writeSiteId = resolveWriteSiteId(scope, null);
+        if (!writeSiteId) {
+            return NextResponse.json(
+                { error: "Select a single station before saving route info." },
+                { status: 400 },
+            );
+        }
+
         // ── Fetch existing RoutesInfo rows BEFORE saving, to detect driver replacements ──
         const changedRowIndices = rows.map((r: any) => r.rowIndex);
         const existingRows = await SYMXRoutesInfo.find(
@@ -215,7 +227,7 @@ export async function POST(req: NextRequest) {
         // ── Upsert rows ──
         const ops = rows.map((row: any) => ({
             updateOne: {
-                filter: { date: dateObj, rowIndex: row.rowIndex },
+                filter: { date: dateObj, rowIndex: row.rowIndex, siteId: writeSiteId },
                 update: {
                     $set: {
                         date: dateObj,
@@ -288,7 +300,7 @@ export async function POST(req: NextRequest) {
         if (rowsWithTransporter.length > 0) {
             const routeOps = rowsWithTransporter.map((row: any) => ({
                 updateOne: {
-                    filter: { transporterId: row.transporterId, date: dateObj },
+                    filter: { transporterId: row.transporterId, date: dateObj, siteId: writeSiteId },
                     update: {
                         $set: {
                             routeNumber: row.routeNumber || "",

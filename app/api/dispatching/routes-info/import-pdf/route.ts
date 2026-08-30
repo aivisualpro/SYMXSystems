@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
                 if (Object.keys(routeSetFields).length > 0) {
                     routeOps.push({
                         updateOne: {
-                            filter: { transporterId: existingRow.transporterId, date: dateObj },
+                            filter: { transporterId: existingRow.transporterId, date: dateObj, siteId: writeSiteId },
                             update: { $set: routeSetFields },
                         },
                     });

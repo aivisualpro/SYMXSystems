@@ -1,4 +1,5 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
+import { stampDocs, stampOwnedOps, stampGlobalOps } from "./stamp-site";
 
 import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
@@ -491,7 +492,15 @@ const employeeScheduleHeaderMap: Record<string, string> = {
 };
 
 
-export async function processIncidents(type: string, data: any, week: string | undefined) {
+export async function processIncidents(
+    type: string,
+    data: any,
+    week: string | undefined,
+    /** Station these imported records belong to. Threaded from the
+     *  request scope — importers write via insertMany/bulkWrite, which
+     *  bypass Mongoose, so nothing else would stamp ownership. */
+    importSiteId?: any,
+) {
   if (type === 'claims') {
             const transporterIds = data
                 .map((row: any) => (row["Transporter ID"] || row["transporterId"] || "").toString().trim())
@@ -543,7 +552,7 @@ export async function processIncidents(type: string, data: any, week: string | u
             }).filter((doc: any): doc is NonNullable<typeof doc> => doc !== null);
 
             if (documents.length > 0) {
-                const result = await SymxIncident.insertMany(documents, { ordered: false });
+                const result = await SymxIncident.insertMany(stampDocs(documents, importSiteId), { ordered: false });
                 return NextResponse.json({
                     success: true,
                     count: result.length,
@@ -601,7 +610,7 @@ export async function processIncidents(type: string, data: any, week: string | u
             }).filter((doc: any): doc is NonNullable<typeof doc> => doc !== null);
 
             if (documents.length > 0) {
-                const result = await SymxHrTicket.insertMany(documents, { ordered: false });
+                const result = await SymxHrTicket.insertMany(stampDocs(documents, importSiteId), { ordered: false });
                 return NextResponse.json({
                     success: true,
                     count: result.length,

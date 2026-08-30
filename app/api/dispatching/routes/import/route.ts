@@ -315,7 +315,7 @@ export async function POST(req: NextRequest) {
 
             routeOps.push({
                 updateOne: {
-                    filter: { transporterId: mapped.transporterId, date: dateObj },
+                    filter: { transporterId: mapped.transporterId, date: dateObj, siteId: writeSiteId },
                     update: { $set: setFields },
                     upsert: true,
                 },
@@ -388,7 +388,7 @@ export async function POST(req: NextRequest) {
 
                     infoOps.push({
                         updateOne: {
-                            filter: { date: dateObj, rowIndex },
+                            filter: { date: dateObj, rowIndex, siteId: writeSiteId },
                             update: {
                                 $set: {
                                     date: dateObj,

@@ -55,6 +55,9 @@ export async function GET() {
         quoPhoneNumberId: s.messaging?.quoPhoneNumberId || "",
         quoPhoneNumber: s.messaging?.quoPhoneNumber || "",
       },
+      amazon: {
+        serviceAreaId: s.amazon?.serviceAreaId || "",
+      },
       status: s.status,
       isDefault: !!s.isDefault,
       userCount: countBySite[String(s._id)] || 0,
@@ -136,6 +139,7 @@ export async function PUT(req: NextRequest) {
   for (const [field, key] of [
     ["quoPhoneNumberId", "messaging.quoPhoneNumberId"],
     ["quoPhoneNumber", "messaging.quoPhoneNumber"],
+    ["amazonServiceAreaId", "amazon.serviceAreaId"],
   ] as const) {
     if (body[field] === undefined) continue;
     const value = String(body[field] ?? "").trim();

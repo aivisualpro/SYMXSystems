@@ -11,6 +11,15 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Building2, Globe, Loader2, Plus, Snowflake, Users } from "lucide-react";
 
+interface QuoNumber {
+  id: string;
+  number: string;
+  label: string;
+  /** Set when another station already uses this number. */
+  claimedBySiteId: string | null;
+  claimedByCode: string | null;
+}
+
 interface SiteRow {
   id: string;
   name: string;
@@ -19,6 +28,7 @@ interface SiteRow {
   siteType: "permanent" | "seasonal";
   address: string;
   messaging?: { quoPhoneNumberId?: string; quoPhoneNumber?: string };
+  amazon?: { serviceAreaId?: string };
   status: "active" | "inactive";
   isDefault: boolean;
   userCount: number;
@@ -34,6 +44,18 @@ export default function SitesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: "", code: "", siteType: "permanent", address: "" });
 
+  // ── Quo numbers available to assign ──
+  // Loaded once when the page opens rather than per-dialog: the list is
+  // small, rarely changes, and fetching it on every edit made opening the
+  // dialog wait on a third-party API.
+  const [quoNumbers, setQuoNumbers] = useState<QuoNumber[]>([]);
+  const [quoReason, setQuoReason] = useState<string | null>(null);
+  const [quoLoading, setQuoLoading] = useState(true);
+  // Set when the list cannot be used, or when the admin chooses to type
+  // the values in anyway — a number that exists but has not yet appeared
+  // in the API response still has to be enterable.
+  const [manualEntry, setManualEntry] = useState(false);
+
   const [editing, setEditing] = useState<SiteRow | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
@@ -42,6 +64,7 @@ export default function SitesPage() {
     status: "active",
     quoPhoneNumberId: "",
     quoPhoneNumber: "",
+    amazonServiceAreaId: "",
   });
 
   const load = useCallback(async () => {
@@ -59,7 +82,22 @@ export default function SitesPage() {
     }
   }, []);
 
+  const loadQuoNumbers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/quo/numbers");
+      const json = await res.json();
+      setQuoNumbers(Array.isArray(json.numbers) ? json.numbers : []);
+      setQuoReason(json.available ? null : json.reason || "Quo numbers unavailable.");
+    } catch {
+      setQuoNumbers([]);
+      setQuoReason("Could not load numbers from Quo. Enter the values manually.");
+    } finally {
+      setQuoLoading(false);
+    }
+  }, []);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadQuoNumbers(); }, [loadQuoNumbers]);
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.code.trim()) {
@@ -87,6 +125,9 @@ export default function SitesPage() {
   };
 
   const openEdit = (s: SiteRow) => {
+    // Reset per-station: leaving manual entry on from the previous
+    // station would quietly bypass the picker for the next one.
+    setManualEntry(false);
     setEditing(s);
     setEditForm({
       name: s.name,
@@ -95,6 +136,7 @@ export default function SitesPage() {
       status: s.status,
       quoPhoneNumberId: s.messaging?.quoPhoneNumberId || "",
       quoPhoneNumber: s.messaging?.quoPhoneNumber || "",
+      amazonServiceAreaId: s.amazon?.serviceAreaId || "",
     });
   };
 
@@ -111,7 +153,10 @@ export default function SitesPage() {
       if (!res.ok) throw new Error(json.error || "Failed to save");
       notify.success("Station updated");
       setEditing(null);
-      await load();
+      // Reload both: the number list carries which station holds each
+      // number, so without this the next station edited would still show
+      // the one just assigned as free to take.
+      await Promise.all([load(), loadQuoNumbers()]);
     } catch (e: any) {
       notify.error(e.message);
     } finally {
@@ -302,30 +347,158 @@ export default function SitesPage() {
                     station&apos;s number.
                   </p>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs">OpenPhone ID</Label>
-                    <Input
-                      value={editForm.quoPhoneNumberId}
-                      onChange={(e) => setEditForm({ ...editForm, quoPhoneNumberId: e.target.value })}
-                      placeholder="PNxxxxxxxxxxxx"
-                      className="font-mono text-xs"
-                    />
+                {quoLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Loading numbers from Quo…
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-xs">Phone number</Label>
-                    <Input
-                      value={editForm.quoPhoneNumber}
-                      onChange={(e) => setEditForm({ ...editForm, quoPhoneNumber: e.target.value })}
-                      placeholder="+15551234567"
-                      className="font-mono text-xs"
-                    />
-                  </div>
-                </div>
+                ) : !manualEntry && quoNumbers.length > 0 ? (
+                  <>
+                    {/* Picking from the account sets the ID and the number
+                        together. They were two free-text fields, which meant
+                        they could be saved describing different numbers —
+                        and the pair only has to disagree once for messages
+                        to send from one number while replies are attributed
+                        by another. */}
+                    <Select
+                      value={editForm.quoPhoneNumberId || "__none__"}
+                      onValueChange={(v) => {
+                        if (v === "__none__") {
+                          setEditForm({ ...editForm, quoPhoneNumberId: "", quoPhoneNumber: "" });
+                          return;
+                        }
+                        const pick = quoNumbers.find((n) => n.id === v);
+                        if (pick) {
+                          setEditForm({
+                            ...editForm,
+                            quoPhoneNumberId: pick.id,
+                            quoPhoneNumber: pick.number,
+                          });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="text-sm">
+                        <SelectValue placeholder="Select a number" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">
+                          <span className="text-muted-foreground">None — cannot send from this station</span>
+                        </SelectItem>
+                        {quoNumbers.map((n) => {
+                          // A number held by ANOTHER station is shown but not
+                          // selectable. Hiding it would leave the admin
+                          // wondering where the number went; letting it be
+                          // picked would fail on the unique index with a
+                          // database error rather than an explanation.
+                          const takenByOther =
+                            !!n.claimedBySiteId && n.claimedBySiteId !== editing.id;
+                          return (
+                            <SelectItem key={n.id} value={n.id} disabled={takenByOther}>
+                              <span className="font-mono text-xs">{n.number}</span>
+                              {n.label && n.label !== n.number && (
+                                <span className="text-muted-foreground"> · {n.label}</span>
+                              )}
+                              {takenByOther && (
+                                <span className="text-muted-foreground"> — already on {n.claimedByCode}</span>
+                              )}
+                            </SelectItem>
+                          );
+                        })}
+                        {/* The saved number may not be on the account any
+                            more — renumbered, or removed in Quo. Without this
+                            the picker would show an empty box and silently
+                            drop the value on save. */}
+                        {editForm.quoPhoneNumberId &&
+                          !quoNumbers.some((n) => n.id === editForm.quoPhoneNumberId) && (
+                            <SelectItem value={editForm.quoPhoneNumberId}>
+                              <span className="font-mono text-xs">
+                                {editForm.quoPhoneNumber || editForm.quoPhoneNumberId}
+                              </span>
+                              <span className="text-muted-foreground"> — saved, but not found in Quo</span>
+                            </SelectItem>
+                          )}
+                      </SelectContent>
+                    </Select>
+                    <button
+                      type="button"
+                      onClick={() => setManualEntry(true)}
+                      className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    >
+                      Enter values manually instead
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {(quoReason || manualEntry) && (
+                      <p className="text-[11px] text-muted-foreground">
+                        {quoReason ||
+                          "Manual entry — the ID and the number must describe the same line."}
+                      </p>
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs">OpenPhone ID</Label>
+                        <Input
+                          value={editForm.quoPhoneNumberId}
+                          onChange={(e) => setEditForm({ ...editForm, quoPhoneNumberId: e.target.value })}
+                          placeholder="PNxxxxxxxxxxxx"
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs">Phone number</Label>
+                        <Input
+                          value={editForm.quoPhoneNumber}
+                          onChange={(e) => setEditForm({ ...editForm, quoPhoneNumber: e.target.value })}
+                          placeholder="+15551234567"
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                    {!quoReason && manualEntry && quoNumbers.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setManualEntry(false)}
+                        className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                      >
+                        Choose from the Quo account instead
+                      </button>
+                    )}
+                  </>
+                )}
                 <p className="text-[11px] text-muted-foreground">
-                  Both are needed: the API sends by ID, the webhook reports the
-                  number. No two stations may share either.
+                  Both the ID and the number are stored: the API sends by ID,
+                  the webhook reports the number. No two stations may share
+                  either.
                 </p>
+              </div>
+
+              {/* ── Amazon Logistics ──
+                  How scraped route data finds its way to the right station. */}
+              <div className="rounded-lg border border-border/60 p-3 space-y-3">
+                <div>
+                  <Label className="text-xs font-semibold">Amazon Logistics</Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    The service area ID Amazon stamps on this station&apos;s
+                    routes. The route sync uses it to file each route under the
+                    right station, so routes whose service area is unmapped are
+                    skipped rather than guessed at.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">Service Area ID</Label>
+                  <Input
+                    value={editForm.amazonServiceAreaId}
+                    onChange={(e) => setEditForm({ ...editForm, amazonServiceAreaId: e.target.value })}
+                    placeholder="9900c1c3-98c1-4162-b8ca-1363e2944946"
+                    className="font-mono text-xs"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Found as <span className="font-mono">serviceAreaId</span> on any
+                    route in this station&apos;s Amazon data. No two stations may
+                    share one.
+                  </p>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">

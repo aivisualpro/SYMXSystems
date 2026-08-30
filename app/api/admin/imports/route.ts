@@ -56,22 +56,22 @@ export async function POST(req: NextRequest) {
         await SymxAvailableWeek.updateOne({ week }, { $set: { week } }, { upsert: true });
     }
 
-    let response = await processEmployees(type, data, week);
+    let response = await processEmployees(type, data, week, importSiteId);
     if (response) return response;
 
     response = await processScorecard(type, data, week, importSiteId);
     if (response) return response;
 
-    response = await processIncidents(type, data, week);
+    response = await processIncidents(type, data, week, importSiteId);
     if (response) return response;
 
-    response = await processFleet(type, data, week);
+    response = await processFleet(type, data, week, importSiteId);
     if (response) return response;
 
-    response = await processInterviews(type, data, week);
+    response = await processInterviews(type, data, week, importSiteId);
     if (response) return response;
 
-    response = await processMisc(type, data, week);
+    response = await processMisc(type, data, week, importSiteId);
     if (response) return response;
 
     response = await processWriteups(type, data, week);

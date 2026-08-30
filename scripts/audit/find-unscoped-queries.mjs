@@ -30,6 +30,12 @@ const QUERY_OPS = [
   "find", "findOne", "findById", "findOneAndUpdate", "findOneAndDelete",
   "countDocuments", "count", "distinct", "aggregate",
   "updateOne", "updateMany", "deleteOne", "deleteMany", "replaceOne",
+  // bulkWrite and insertMany bypass Mongoose query middleware, so the
+  // runtime guard originally could not see them and this scanner did not
+  // look for them either. Between them that hid 23 unscoped write paths
+  // while both checks reported zero — the scanner needs them precisely
+  // because they are the operations the runtime cannot vouch for.
+  "bulkWrite", "insertMany",
 ];
 
 // Markers that indicate the caller thought about stations.
@@ -46,6 +52,15 @@ const SCOPE_MARKERS = [
   "resolveDriverScope",
   // Public token flows derive the station from the token-matched record.
   "tokenSite",
+  // Importers write through insertMany/bulkWrite and stamp the station via
+  // these helpers rather than naming siteId inline. Listed here so the
+  // audit reflects what the code actually does — an checker that cannot
+  // recognise a correct pattern reports it as a fault forever, and a
+  // report with known-false entries stops being read at all.
+  "stampDocs",
+  "stampOwnedOps",
+  "stampGlobalOps",
+  "importSiteId",
 ];
 
 function walk(dir, out = [], skip = new Set(["node_modules", ".next", ".git", "dist"])) {
