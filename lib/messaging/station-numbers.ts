@@ -43,15 +43,30 @@ export async function getStationNumber(siteId: string): Promise<StationNumber | 
 }
 
 /**
- * Sending numbers for every station the request may reach.
+ * Sending numbers for stations the request may reach.
  *
- * Used to populate the "from" picker, so the list is already limited to
- * what the user is entitled to — the picker cannot offer another
- * station's number in the first place.
+ * Two different questions are being asked here, and conflating them is
+ * what put the wrong number in the picker:
+ *
+ *   activeOnly: false — "may this user send from this number?" The
+ *     entitlement set. Used to VALIDATE an incoming choice, so switching
+ *     station mid-compose does not reject a legitimate send.
+ *
+ *   activeOnly: true — "which number belongs to the station on screen?"
+ *     Used to POPULATE the picker. The picker previously offered every
+ *     station the user could reach, so with DFO2 selected it still listed
+ *     DXC8's number, and since DFO2 had none configured, DXC8 was the only
+ *     entry — the station in view and the number sent from silently
+ *     disagreed.
  */
-export async function getSendableNumbers(scope: RequestScope): Promise<StationNumber[]> {
+export async function getSendableNumbers(
+  scope: RequestScope,
+  opts: { activeOnly?: boolean } = {}
+): Promise<StationNumber[]> {
   if (scope.isEmpty) return [];
-  const sites = await Site.find({ _id: { $in: scope.allowedSiteIds }, status: "active" }).lean();
+  const ids = opts.activeOnly ? scope.activeSiteIds : scope.allowedSiteIds;
+  if (!ids || ids.length === 0) return [];
+  const sites = await Site.find({ _id: { $in: ids }, status: "active" }).lean();
   return sites.map(toStationNumber).filter((n): n is StationNumber => n !== null);
 }
 

@@ -1980,10 +1980,21 @@ export default function MessagingPanel({
             }))
           );
           if (data.data.length > 0) {
-            setFromNumber(data.data[0].id);
-            setFromNumberDisplay(data.data[0].phoneNumber);
+            // The endpoint now returns only the station in view, so the
+            // first entry IS this station's number. It previously returned
+            // every station the user could reach and this took [0] —
+            // whichever the provider happened to list first — so adding a
+            // second number reordered the list and changed who messages
+            // appeared to come from, with nothing on screen to show it.
+            const preferred = data.data[0];
+            setFromNumber(preferred.id);
+            setFromNumberDisplay(preferred.phoneNumber || preferred.number || "");
           } else {
-            setPhoneNumbersError("Your OpenPhone account has no phone numbers on it — add one in OpenPhone, then reload this page.");
+            // Prefer the server's message: it names the station that needs
+            // configuring, rather than pointing at OpenPhone.
+            setFromNumber("");
+            setFromNumberDisplay("");
+            setPhoneNumbersError(data.note || "Your OpenPhone account has no phone numbers on it — add one in OpenPhone, then reload this page.");
           }
         }
       } catch (err: any) {
