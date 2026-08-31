@@ -22,6 +22,17 @@ const HEAR_OPTIONS = [
 const DISCLAIMER_TEXT = `I understand my job classification is eligible for overtime and/or compensatory time payment. I consent to and authorize the Company to contact my former employers, and any and all other persons and organizations for information bearing upon my qualifications for employment. Unless I noted otherwise, I further authorize the listed employers, schools, and personal references to give the Company (without further notice to me) any and all information about my previous employment and education, along with other pertinent information they may have and hereby waive any actions which I may have against either party/parties for providing a reference as part of this application process. I understand that any employment or offer of employment arising from this Application for Employment will be subject to satisfactory verification of all job qualifications and information contained in this Application for Employment. I expressly agree and understand that completion of this application is a preliminary step to employment. It does not obligate the Company to offer me employment or for me to accept employment. I further agree and understand that in the event I am employed by the Company, my employment with the Company will be "at will." This means that my employment is not for a specified term and that it may be terminated by the Company or me at any time, for any reason, with or without cause or notice.`;
 
 export default function ApplyPage() {
+  // The QR code / link printed per station carries ?station=CODE so the
+  // application lands directly in that station's pipeline (see the
+  // Share dialog on the internal Interviews page). This page previously
+  // read the URL but never actually sent it along — every submission,
+  // regardless of which station's poster was scanned, landed unassigned.
+  const [station, setStation] = useState("");
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setStation(params.get("station") || "");
+  }, []);
+
   const [step, setStep] = useState<FormStep>("form");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -64,6 +75,7 @@ export default function ApplyPage() {
           lastEmployerInfo: experience.trim(),
           howDidYouHear: howHeard,
           disclaimer: agreed ? "Agreed" : "",
+          station,
         }),
       });
       if (!res.ok) throw new Error();

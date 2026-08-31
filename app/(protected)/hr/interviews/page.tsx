@@ -44,7 +44,7 @@ import { notify } from "@/lib/notify";
 import Papa from "papaparse";
 import QRCode from "qrcode";
 
-interface Interview {
+export interface Interview {
   _id: string;
   fullName?: string;
   phoneNumber?: string;
@@ -104,7 +104,7 @@ interface Interview {
   createdAt?: string;
 }
 
-interface DropdownStatus {
+export interface DropdownStatus {
   _id: string;
   description: string;
   color?: string;
@@ -141,17 +141,17 @@ const STATUS_ICON_MAP: Record<string, LucideIcon> = {
   "waiting on hire": Clock,
 };
 
-function getStatusColors(name: string, index = 0) {
+export function getStatusColors(name: string, index = 0) {
   const key = name.toLowerCase().trim();
   return STATUS_COLOR_MAP[key] || FALLBACK_PALETTE[index % FALLBACK_PALETTE.length];
 }
 
-function getStatusIcon(name: string): LucideIcon {
+export function getStatusIcon(name: string): LucideIcon {
   const key = name.toLowerCase().trim();
   return STATUS_ICON_MAP[key] || Circle;
 }
 
-function getRatingStars(r: string) {
+export function getRatingStars(r: string) {
   const n = parseInt(r || "0", 10);
   if (isNaN(n) || n <= 0) return null;
   return Math.min(n, 5);
@@ -163,7 +163,7 @@ const CHUNK_SIZE = 500;
  *  SHARE DIALOG
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function ShareDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ShareDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [stations, setStations] = useState<{ id: string; code: string; name: string }[]>([]);
@@ -301,7 +301,7 @@ function ShareDialog({ open, onClose }: { open: boolean; onClose: () => void }) 
  *  CRUD DIALOG
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function InterviewDialog({
+export function InterviewDialog({
   open,
   onClose,
   interview,
