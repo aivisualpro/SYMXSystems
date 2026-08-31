@@ -2,17 +2,34 @@
 /**
  * Phase 3b — make per-station config uniqueness per-station.
  *
- * Three config collections had a GLOBALLY unique field:
+ * Three collections had a GLOBALLY unique field that needed to become
+ * per-station:
  *
- *   SYMXRouteTypes   name
- *   SYMXSettings     key
- *   symxcardconfigs  page
+ *   SYMXSettings       key
+ *   symxcardconfigs    page
+ *   SymxAvailableWeeks week
  *
  * That makes per-station configuration impossible. DXC8 cannot have its
- * own "Route 1" if DFO2 already uses the name, and it cannot have its own
- * system_timezone setting. It also means the config clone in migration 06
- * fails with a duplicate key error, leaving the new station with none —
- * which is very likely what happened when 06 was run.
+ * own system_timezone setting if DFO2 already used that key. It also
+ * means the config clone in migration 06 fails with a duplicate key
+ * error, leaving the new station with none — which is very likely what
+ * happened when 06 was run.
+ *
+ * SymxAvailableWeeks was missed the first time this migration was written
+ * — it's not part of the migration-06 config clone, so it didn't surface
+ * until a second station tried to generate its first schedule week and
+ * hit `E11000 ... week_1` on a week DFO2 had already touched (i.e. nearly
+ * any real calendar week).
+ *
+ * SYMXRouteTypes is DELIBERATELY ABSENT. It was in this list originally,
+ * but migration 10 later reclassified route types as a SHARED, org-wide
+ * catalogue — one "Route 1" means the same thing at every station, with
+ * per-station rates living in each type's `stations[]` array — and
+ * restored its global unique index on `name` to match. This migration's
+ * collection list was never updated after that reclassification, so
+ * re-running it today would have silently undone migration 10's fix and
+ * broken every org-wide route-type lookup by name. Caught before it ran,
+ * not after.
  *
  * The schemas now declare { siteId, field } unique instead. Mongo does NOT
  * replace an index when the schema changes, so the old global one has to
@@ -41,9 +58,9 @@ const { uri } = resolveTargetDb(env, { scriptName: "07-per-station-unique-indexe
 // an embedded rates array — so its global unique index on `wst` is correct
 // and must stay.
 const COLLECTIONS = [
-  { name: "SYMXRouteTypes", field: "name" },
   { name: "SYMXSettings", field: "key" },
   { name: "symxcardconfigs", field: "page" },
+  { name: "SymxAvailableWeeks", field: "week" },
 ];
 
 async function main() {

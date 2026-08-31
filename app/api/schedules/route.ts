@@ -61,8 +61,12 @@ async function resolvePerformerName(session: any): Promise<{ email: string; name
   return { email, name: email };
 }
 
-// Cache for weeksList
-let weeksListCache: { data: string[]; timestamp: number } | null = null;
+// Cache for weeksList — keyed per station scope. This used to be a single
+// shared entry with no scope key at all, so within the 60-second TTL any
+// station could be served whatever the LAST requester's station's weeks
+// list was: DXC8 could see DFO2's weeks, or vice versa, depending purely
+// on request timing. Keying by the resolved active site ids fixes that.
+const weeksListCache = new Map<string, { data: string[]; timestamp: number }>();
 const WEEKS_CACHE_TTL = 60 * 1000; // 1 minute
 
 export async function GET(req: NextRequest) {
@@ -93,15 +97,17 @@ export async function GET(req: NextRequest) {
     const S = siteFilter(scope, { includeUnassigned: true });
     const E = siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" });
 
-    // Return all available weeks for the dropdown (cached)
+    // Return all available weeks for the dropdown (cached per station scope)
     if (weeksList === "true") {
+      const cacheKey = [...scope.activeSiteIds].sort().join(",") || "none";
       const now = Date.now();
-      if (weeksListCache && (now - weeksListCache.timestamp) < WEEKS_CACHE_TTL) {
-        return NextResponse.json({ weeks: weeksListCache.data });
+      const cached = weeksListCache.get(cacheKey);
+      if (cached && (now - cached.timestamp) < WEEKS_CACHE_TTL) {
+        return NextResponse.json({ weeks: cached.data });
       }
       const weeks = await SymxEmployeeSchedule.distinct("yearWeek", S);
       weeks.sort((a: string, b: string) => b.localeCompare(a));
-      weeksListCache = { data: weeks, timestamp: Date.now() };
+      weeksListCache.set(cacheKey, { data: weeks, timestamp: Date.now() });
       return NextResponse.json({ weeks });
     }
 

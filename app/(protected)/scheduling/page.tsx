@@ -1266,19 +1266,38 @@ function SchedulingPageContent() {
               </div>
             </div>
           ) : weeks.length === 0 ? (
+            // This station has never generated a single week — not the same
+            // as "this week specifically is empty" (that's the amber banner
+            // further down, gated on `weeks.length > 0`). A brand-new
+            // station, or one that just had its first employees added,
+            // lands here with nothing to click and a message pointing at a
+            // legacy CSV importer that isn't how scheduling actually works
+            // anymore. Offer the same Generate action instead.
             <div className="flex items-center justify-center h-[60vh]">
               <div className="flex flex-col items-center gap-4 text-center">
                 <div className="h-20 w-20 rounded-full bg-muted/50 flex items-center justify-center">
                   <CalendarDays className="h-10 w-10 text-muted-foreground/50" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">No Schedule Data</h3>
+                  <h3 className="text-lg font-semibold">No schedule generated yet for this station</h3>
                   <p className="text-sm text-muted-foreground max-w-sm mt-1">
-                    Import employee schedules via{" "}
-                    <span className="text-primary font-medium">Admin → Settings → Imports</span>{" "}
-                    to see the weekly schedule dashboard.
+                    That's expected for a station that hasn't run its first week — it's not broken.
+                    Generating builds the current week from active employees based here.
                   </p>
                 </div>
+                <Button
+                  size="sm"
+                  disabled={generatingWeek}
+                  onClick={() => generateWeek(currentWeek, "next")}
+                >
+                  {generatingWeek ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Generating...
+                    </>
+                  ) : (
+                    <>Generate week {currentWeek}</>
+                  )}
+                </Button>
               </div>
             </div>
           ) : (<>
