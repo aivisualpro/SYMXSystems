@@ -38,6 +38,26 @@ window.addEventListener("message", (event) => {
       console.warn("[SYMX Extension] Could not send message to extension (context invalidated). Please refresh the page.", err);
     }
   }
+
+  if (type === "ITINERARY_SYNC_REQUEST") {
+    if (!isExtensionContextValid()) {
+      console.warn("[SYMX Extension] Extension context invalidated. Please refresh the page to reconnect.");
+      return;
+    }
+    try {
+      chrome.runtime.sendMessage(
+        { type: "SYNC_ITINERARY_TO_SYMX", data: payload },
+        (response) => {
+          window.postMessage(
+            { source: "SYMX_CONTENT", type: "ITINERARY_SYNC_RESULT", payload: response },
+            "*"
+          );
+        }
+      );
+    } catch (err) {
+      console.warn("[SYMX Extension] Could not send itinerary sync (context invalidated). Please refresh the page.", err);
+    }
+  }
 });
 
 // Listen for messages from popup/background and forward to MAIN world

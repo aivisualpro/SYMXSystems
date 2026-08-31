@@ -34,6 +34,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+
+  if (message.type === "SYNC_ITINERARY_TO_SYMX") {
+    syncItineraryToSYMX(message.data)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true; // keep channel open for async response
+  }
 });
 
 // Sync scraped routes to SYMX Systems
@@ -53,4 +60,22 @@ async function syncToSYMX(routes, date) {
   }
 
   return response.json();
+}
+
+// Sync a scraped Cortex itinerary to SYMX Systems (Efficiency screen auto-fill)
+async function syncItineraryToSYMX(payload) {
+  const response = await fetch(`${SYMX_API_BASE}/api/public/cortex-sync`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-extension-key": SYMX_API_KEY,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const json = await response.json();
+  if (!response.ok) {
+    throw new Error(json.error || "Cortex sync failed");
+  }
+  return json;
 }

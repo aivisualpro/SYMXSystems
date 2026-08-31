@@ -158,6 +158,8 @@ interface RouteRow {
     typeId: string;
     typeColor: string;
     driverEfficiency: number;
+    cortexSyncedFields?: string[];
+    cortexConflicts?: { field: string; cortexValue: string; currentValue: string; detectedAt: string }[];
 }
 
 type SortKey = typeof COLUMNS[number]["key"];
@@ -353,6 +355,37 @@ export default function EfficiencyPage() {
         }
     }, [queryClient, patchRouteCache]);
 
+    // ── Cortex conflict resolution ──
+    const [openConflictKey, setOpenConflictKey] = useState<string | null>(null);
+    const resolveCortexConflict = useCallback(async (
+        routeId: string, field: string, cortexValue: string, action: "use" | "keep"
+    ) => {
+        setOpenConflictKey(null);
+        // Optimistic update
+        setAllRoutes(prev => prev.map(r => {
+            if (r._id !== routeId) return r;
+            const remaining = (r.cortexConflicts || []).filter(c => c.field !== field);
+            if (action === "use") {
+                const owned = new Set(r.cortexSyncedFields || []);
+                owned.add(field);
+                return { ...r, [field]: cortexValue, cortexConflicts: remaining, cortexSyncedFields: Array.from(owned) };
+            }
+            return { ...r, cortexConflicts: remaining };
+        }));
+        try {
+            const res = await fetch("/api/dispatching/routes/cortex-conflict", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ routeId, field, action }),
+            });
+            if (!res.ok) throw new Error();
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
+        } catch {
+            notify.error("Failed to resolve Cortex conflict");
+            queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" });
+        }
+    }, [queryClient]);
+
     // ── Quick Edit Save Handler ──
     const handleQuickEditSave = async () => {
         if (!quickEditRow) return;
@@ -478,6 +511,8 @@ export default function EfficiencyPage() {
     // ── Cell renderer ──
     const renderCell = (row: RouteRow, field: keyof RouteRow, value: any) => {
         const isEditable = EDITABLE_FIELDS.has(field);
+        const conflict = row.cortexConflicts?.find(c => c.field === field);
+        const conflictKey = `${row._id}:${field}`;
         const raw = value === 0 || value === "" ? "—" : String(value);
         
         let displayVal = raw === "—" ? raw : stripSec(raw);
@@ -522,6 +557,38 @@ export default function EfficiencyPage() {
             }
         }
 
+        // Cortex found a value that disagrees with what's already here — flag it
+        // instead of silently overwriting (see cortex-sync route for the logic).
+        const conflictBadge = conflict ? (
+            <>
+                <button
+                    type="button"
+                    title={`Cortex found ${conflict.cortexValue} (currently ${conflict.currentValue || "blank"})`}
+                    onClick={(e) => { e.stopPropagation(); setOpenConflictKey(k => k === conflictKey ? null : conflictKey); }}
+                    className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-amber-500 border border-background z-10 hover:scale-125 transition-transform"
+                />
+                {openConflictKey === conflictKey && (
+                    <div
+                        className="absolute top-full right-0 mt-1 z-30 w-52 rounded-md border border-border bg-popover shadow-lg p-2 text-left"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <p className="text-[10px] text-muted-foreground mb-1.5">
+                            Cortex found <span className="font-semibold text-foreground">{conflict.cortexValue}</span>
+                            {" "}— you have <span className="font-semibold text-foreground">{conflict.currentValue || "blank"}</span>
+                        </p>
+                        <div className="flex gap-1.5">
+                            <Button size="sm" className="h-6 text-[10px] flex-1" onClick={() => resolveCortexConflict(row._id, field, conflict.cortexValue, "use")}>
+                                Use Cortex
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-6 text-[10px] flex-1" onClick={() => resolveCortexConflict(row._id, field, conflict.cortexValue, "keep")}>
+                                Keep mine
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </>
+        ) : null;
+
         // Global edit mode: show inline inputs
         if (globalEditMode && isEditable) {
             return (
@@ -540,6 +607,7 @@ export default function EfficiencyPage() {
                         }}
                         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
                     />
+                    {conflictBadge}
                 </div>
             );
         }
@@ -555,8 +623,9 @@ export default function EfficiencyPage() {
         );
 
         return (
-            <div className="w-full h-7 flex items-center justify-start px-1.5 text-[11px]">
+            <div className="relative w-full h-7 flex items-center justify-start px-1.5 text-[11px]">
                 {CellContent}
+                {conflictBadge}
             </div>
         );
     };

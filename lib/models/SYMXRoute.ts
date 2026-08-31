@@ -92,6 +92,15 @@ export interface ISYMXRoute extends Document {
     whc: Date;
     bags: string;
     ov: string;
+
+    // ── Cortex sync tracking ──
+    // Which of the 8 auto-fillable fields currently hold a value written
+    // by the Cortex sync (as opposed to a dispatcher typing it in). Used
+    // to tell "safe to auto-update on next sync" apart from "a human's
+    // value — flag a conflict instead of overwriting."
+    cortexSyncedFields: string[];
+    // Pending Cortex-vs-manual disagreements awaiting dispatcher review.
+    cortexConflicts: { field: string; cortexValue: string; currentValue: string; detectedAt: Date }[];
 }
 
 const SYMXRouteSchema = new Schema<ISYMXRoute>(
@@ -183,6 +192,18 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
         whc: { type: Date },
         bags: { type: String, default: "" },
         ov: { type: String, default: "" },
+
+        // Cortex sync tracking
+        cortexSyncedFields: { type: [String], default: [] },
+        cortexConflicts: {
+            type: [{
+                field: { type: String, required: true },
+                cortexValue: { type: String, default: "" },
+                currentValue: { type: String, default: "" },
+                detectedAt: { type: Date, default: Date.now },
+            }],
+            default: [],
+        },
     },
     { timestamps: true, collection: "SYMXRoutes" }
 );

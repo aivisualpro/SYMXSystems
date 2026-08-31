@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "SYMX Route Fetch",
-  "version": "1.0.5",
-  "description": "Scrape Amazon Logistics route data and sync to SYMX Systems",
+  "version": "1.1.0",
+  "description": "Scrape Amazon Logistics route data and Cortex itineraries, sync to SYMX Systems",
   "permissions": [
     "activeTab",
     "storage",
@@ -37,7 +37,7 @@
     {
       "matches": ["https://logistics.amazon.com/*"],
       "js": ["content.js"],
-      "run_at": "document_idle",
+      "run_at": "document_start",
       "world": "MAIN"
     }
   ],

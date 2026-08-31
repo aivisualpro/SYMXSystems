@@ -1,7 +1,9 @@
 // ══════════════════════════════════════════════════════════════
-// SYMX Route Scraper — Content Script (MAIN world) V.1.0.5
+// SYMX Route Scraper — Content Script (MAIN world) V.1.1.0
 // Intercepts Amazon Logistics API responses to capture route data
 // Captures the FULL raw JSON from route-summaries for SYMXRoutesInfo
+// Also intercepts the Cortex per-driver itinerary API to auto-fill
+// Efficiency screen fields (see cortex sync section below)
 // Communicates with extension via window.postMessage bridge
 // ══════════════════════════════════════════════════════════════
 
@@ -36,6 +38,14 @@
           const data = JSON.parse(this.responseText);
           processRouteSummariesResponse(data);
         }
+        if (
+          this._symxUrl &&
+          typeof this._symxUrl === "string" &&
+          this._symxUrl.includes("/execution/api/itineraries/")
+        ) {
+          const data = JSON.parse(this.responseText);
+          processItineraryResponse(data, this._symxUrl);
+        }
       } catch (e) {
         // Silently ignore parse errors
       }
@@ -56,6 +66,11 @@
         const data = await cloned.json();
         processRouteSummariesResponse(data);
       }
+      if (url.includes("/execution/api/itineraries/")) {
+        const cloned = response.clone();
+        const data = await cloned.json();
+        processItineraryResponse(data, url);
+      }
     } catch (e) {
       // Silently ignore
     }
@@ -73,6 +88,168 @@
       if (sa) lastCapturedServiceArea = sa;
     } catch { /* ignore */ }
   }
+
+  // ══════════════════════════════════════════════════════════════
+  // Cortex itinerary sync (Efficiency screen auto-fill)
+  // ══════════════════════════════════════════════════════════════
+  let capturedItinerary = null; // { data, url, itineraryId, serviceAreaId }
+  let cortexSyncInterval = null;
+  const CORTEX_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+  function processItineraryResponse(data, url) {
+    if (!data) return;
+    try {
+      const u = new URL(url, window.location.origin);
+      const itineraryId = u.searchParams.get("itineraryId") || "";
+      const serviceAreaId = u.searchParams.get("serviceAreaId") || "";
+      capturedItinerary = { data, url, itineraryId, serviceAreaId, capturedAt: Date.now() };
+      showCortexSyncButton();
+    } catch (e) {
+      // Silently ignore
+    }
+  }
+
+  // Business-day (Pacific time) date string, matching the server's convention.
+  function businessDateString() {
+    return new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+  }
+
+  function extractItineraryPayload(raw) {
+    // Confirmed real shape: { itineraryDetails: {...}, stops: [...], addresses, transporters, companies }
+    if (raw && raw.itineraryDetails) {
+      return { itineraryDetails: raw.itineraryDetails, stops: Array.isArray(raw.stops) ? raw.stops : [] };
+    }
+    // Defensive fallback in case Amazon ever returns itineraryDetails unwrapped
+    if (raw && raw.transporterId && raw.serviceAreaId) {
+      return { itineraryDetails: raw, stops: [] };
+    }
+    return null;
+  }
+
+  function sendCortexSync() {
+    if (!capturedItinerary) return;
+    const payload = extractItineraryPayload(capturedItinerary.data);
+    if (!payload) {
+      console.warn("[SYMX Cortex Sync] Captured itinerary response didn't match the expected shape.");
+      return;
+    }
+    window.postMessage(
+      {
+        source: "SYMX_CONTENT",
+        type: "ITINERARY_SYNC_REQUEST",
+        payload: {
+          serviceAreaId: capturedItinerary.serviceAreaId || payload.itineraryDetails.serviceAreaId || "",
+          date: businessDateString(),
+          itineraryDetails: payload.itineraryDetails,
+          stops: payload.stops,
+        },
+      },
+      "*"
+    );
+  }
+
+  // Re-fetch the itinerary URL directly (ambient session cookies apply
+  // automatically) rather than relying on the page re-requesting it.
+  async function refetchAndSyncItinerary() {
+    if (!capturedItinerary) return;
+    try {
+      const res = await originalFetch(capturedItinerary.url, { credentials: "include" });
+      const data = await res.json();
+      capturedItinerary = { ...capturedItinerary, data, capturedAt: Date.now() };
+    } catch (e) {
+      console.warn("[SYMX Cortex Sync] Periodic refetch failed, syncing last-known data.", e);
+    }
+    sendCortexSync();
+  }
+
+  function setCortexButtonState(state) {
+    const btn = document.getElementById("symx-cortex-sync-btn");
+    if (!btn) return;
+    if (state === "syncing") {
+      btn.textContent = "Auto-syncing to SYMX — click to stop";
+      btn.style.background = "linear-gradient(135deg, #16a34a, #15803d)";
+    } else {
+      btn.textContent = "Sync to SYMX";
+      btn.style.background = "linear-gradient(135deg, #2563eb, #1d4ed8)";
+    }
+  }
+
+  let cortexButtonInjected = false;
+  function showCortexSyncButton() {
+    if (cortexButtonInjected) return;
+    cortexButtonInjected = true;
+    const btn = document.createElement("div");
+    btn.id = "symx-cortex-sync-btn";
+    btn.style.cssText = `
+      position: fixed;
+      bottom: 60px;
+      right: 20px;
+      z-index: 999999;
+      color: white;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 8px 14px;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(37, 99, 235, 0.4);
+      cursor: pointer;
+      opacity: 0.9;
+      transition: all 0.2s ease;
+    `;
+    btn.addEventListener("mouseover", () => { btn.style.opacity = "1"; btn.style.transform = "scale(1.05)"; });
+    btn.addEventListener("mouseout", () => { btn.style.opacity = "0.9"; btn.style.transform = "scale(1)"; });
+    setCortexButtonState("idle");
+
+    btn.addEventListener("click", () => {
+      if (cortexSyncInterval) {
+        clearInterval(cortexSyncInterval);
+        cortexSyncInterval = null;
+        setCortexButtonState("idle");
+        return;
+      }
+      sendCortexSync(); // sync immediately on click
+      cortexSyncInterval = setInterval(refetchAndSyncItinerary, CORTEX_SYNC_INTERVAL_MS);
+      setCortexButtonState("syncing");
+    });
+
+    // content.js now runs at document_start (to win the race against the
+    // page's own initial itinerary fetch), so document.body may not exist
+    // yet when a response is captured — retry like the badge does.
+    function appendWhenReady() {
+      if (document.body) {
+        document.body.appendChild(btn);
+      } else {
+        setTimeout(appendWhenReady, 50);
+      }
+    }
+    appendWhenReady();
+  }
+
+  // Stop the periodic refresh if the dispatcher navigates away from this itinerary
+  window.addEventListener("beforeunload", () => {
+    if (cortexSyncInterval) clearInterval(cortexSyncInterval);
+  });
+
+  // Show a brief result summary as the button's tooltip after each sync.
+  window.addEventListener("message", (event) => {
+    if (event.source !== window) return;
+    if (!event.data || event.data.source !== "SYMX_CONTENT") return;
+    if (event.data.type !== "ITINERARY_SYNC_RESULT") return;
+
+    const btn = document.getElementById("symx-cortex-sync-btn");
+    if (!btn) return;
+    const result = event.data.payload || {};
+    if (!result.ok) {
+      btn.title = `SYMX sync failed: ${result.error || "unknown error"}`;
+    } else if (result.skipped) {
+      btn.title = `SYMX: ${result.reason || "no matching route found"}`;
+    } else {
+      const updatedCount = (result.updated || []).length;
+      const conflictCount = (result.conflicts || []).length;
+      btn.title = `SYMX: updated ${updatedCount} field${updatedCount === 1 ? "" : "s"}` +
+        (conflictCount ? `, ${conflictCount} conflict${conflictCount === 1 ? "" : "s"} to review` : "");
+    }
+  });
 
   // ── Process route summaries from Amazon API ──
   function processRouteSummariesResponse(data) {

@@ -35,6 +35,19 @@ const updateRouteSchema = z.object({
     updates: z.record(z.string(), z.any())
 });
 
+// The 8 fields the Cortex extension sync can auto-fill (deliveryCompletionTime
+// stays manual). Kept in sync with AUTO_FIELDS in app/api/public/cortex-sync/route.ts.
+const CORTEX_AUTO_FIELDS = new Set([
+    "actualDepartureTime",
+    "plannedOutboundStem",
+    "actualOutboundStem",
+    "plannedFirstStop",
+    "actualFirstStop",
+    "plannedLastStop",
+    "actualLastStop",
+    "stopsRescued",
+]);
+
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 /** Business timezone — all date computations use Pacific Time */
@@ -489,6 +502,20 @@ export async function PUT(req: NextRequest) {
         if (!existing) {
             console.error(`[PUT /api/dispatching/routes] Route not found for ID: ${routeId}`);
             return NextResponse.json({ error: "Route not found" }, { status: 404 });
+        }
+
+        // A dispatcher directly editing one of the Cortex-syncable fields
+        // means this value is now theirs: stop treating it as safe for the
+        // Cortex sync to silently auto-update, and clear any stale conflict
+        // banner for that field (the manual edit supersedes it).
+        const cortexTouchedFields = Object.keys(updates).filter((f) => CORTEX_AUTO_FIELDS.has(f));
+        if (cortexTouchedFields.length > 0) {
+            const remainingOwned = (Array.isArray(existing.cortexSyncedFields) ? existing.cortexSyncedFields : [])
+                .filter((f: string) => !cortexTouchedFields.includes(f));
+            const remainingConflicts = (Array.isArray(existing.cortexConflicts) ? existing.cortexConflicts : [])
+                .filter((c: any) => !cortexTouchedFields.includes(c.field));
+            updates.cortexSyncedFields = remainingOwned;
+            updates.cortexConflicts = remainingConflicts;
         }
 
         // If van is being updated, auto-resolve serviceType + dashcam + vin from Vehicle
