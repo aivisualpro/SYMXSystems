@@ -727,9 +727,18 @@ export async function PATCH(req: NextRequest) {
             const routesCol = mongoose.connection.db!.collection("SYMXRoutes");
 
             if (isNowWorking) {
-              // Update only — no upsert
+              // Update only — no upsert. siteId included in the filter
+              // when the schedule has one: without it, a driver with
+              // route documents at more than one station (a legitimate
+              // case since migration 12) would have this update land on
+              // an arbitrary one of them rather than the station this
+              // schedule actually belongs to.
               await routesCol.updateOne(
-                { transporterId: updated.transporterId, date: updated.date },
+                {
+                  transporterId: updated.transporterId,
+                  date: updated.date,
+                  ...(updated.siteId ? { siteId: updated.siteId } : {}),
+                },
                 {
                   $set: {
                     scheduleId: String(scheduleId),
@@ -823,9 +832,15 @@ export async function PATCH(req: NextRequest) {
             const routesCol = mongoose.connection.db!.collection("SYMXRoutes");
 
             if (isWorking) {
-              // Update only — no upsert
+              // Update only — no upsert. siteId in the filter for the same
+              // reason as the scheduleId-based sync above.
+              const createdSiteId = (created as any).siteId;
               await routesCol.updateOne(
-                { transporterId, date: new Date(date) },
+                {
+                  transporterId,
+                  date: new Date(date),
+                  ...(createdSiteId ? { siteId: createdSiteId } : {}),
+                },
                 {
                   $set: {
                     scheduleId: String((created as any)._id),
