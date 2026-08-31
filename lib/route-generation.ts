@@ -121,12 +121,22 @@ export async function generateRoutesForWeek(
     }
     const dedupedSchedules = Array.from(dedupedByKey.values());
 
+    // This bulkWrite goes through the RAW driver (routesCol), not the
+    // Mongoose model, so nothing here auto-casts siteId to ObjectId the
+    // way SYMXRoute.find({siteId}) would. Writing the raw string left
+    // every route created here permanently invisible to every Mongoose
+    // read in the app — ObjectId("...") and the equal-looking string are
+    // different BSON values, so ordinary queries never matched them, with
+    // no error anywhere. See migration 13 for the backfill of routes
+    // already corrupted this way.
+    const siteObjectId = new mongoose.Types.ObjectId(siteId);
+
     const bulkOps = dedupedSchedules.map((s: any) => ({
         updateOne: {
             // siteId in the FILTER, not just the update: without it a driver
             // loaned to another station on the same date would collide onto
             // one route document shared by both stations.
-            filter: { transporterId: s.transporterId, date: s.date, siteId },
+            filter: { transporterId: s.transporterId, date: s.date, siteId: siteObjectId },
             update: {
                 $set: {
                     scheduleId: String(s._id),
@@ -136,7 +146,7 @@ export async function generateRoutesForWeek(
                 },
                 // Only set these on NEW inserts — never overwrite existing data
                 $setOnInsert: {
-                    siteId,
+                    siteId: siteObjectId,
                     van: s.van || "",
                     serviceType: "",
                     dashcam: "",
