@@ -1,0 +1,20 @@
+# Copy this file to android/key.properties (same folder) and fill in the
+# real values. key.properties is gitignored — it and the .jks keystore file
+# it points to must NEVER be committed. Losing either of them means losing
+# the ability to ever publish an update to this app on Google Play under
+# its existing listing, so back both up somewhere safe (a password manager
+# or an encrypted archive) the moment you generate them.
+#
+# Generate the keystore once, from the android/ folder:
+#   keytool -genkey -v -keystore symx-release.jks -keyalg RSA -keysize 2048 \
+#     -validity 10000 -alias symx
+#
+# It will ask for a store password, a key password (can be the same value),
+# and some certificate identity questions (name, org, etc. — these show up
+# in the certificate, not in the app itself, so answer honestly but it's
+# not user-facing).
+
+storePassword=REPLACE_ME
+keyPassword=REPLACE_ME
+keyAlias=symx
+storeFile=symx-release.jks
