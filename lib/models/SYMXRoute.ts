@@ -208,8 +208,14 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
     { timestamps: true, collection: "SYMXRoutes" }
 );
 
-// Compound index for upsert + fast lookups
-SYMXRouteSchema.index({ transporterId: 1, date: 1 }, { unique: true });
+// Compound index for upsert + fast lookups.
+// siteId is part of the uniqueness, not just a filter field: a driver
+// loaned to another station on a given date needs a SEPARATE route
+// document scoped to that station (see the siteId-in-filter comment in
+// generateRoutesForWeek). Without siteId here, any station's attempt to
+// create a route for a driver+date already used by a DIFFERENT station
+// collides on this index with a raw E11000 — see migration 12.
+SYMXRouteSchema.index({ transporterId: 1, date: 1, siteId: 1 }, { unique: true });
 SYMXRouteSchema.index({ yearWeek: 1, transporterId: 1 });
 SYMXRouteSchema.index({ typeId: 1 });                   // primary type filter
 SYMXRouteSchema.index({ van: 1 });                      // for vehicle name lookups
