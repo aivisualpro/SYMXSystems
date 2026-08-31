@@ -101,7 +101,27 @@ export async function generateRoutesForWeek(
     const db = mongoose.connection.db!;
     const routesCol = db.collection("SYMXRoutes");
 
-    const bulkOps = workingSchedules.map((s: any) => ({
+    // Guard against a race on the {transporterId, date, siteId} unique index:
+    // if two schedule rows exist for the same driver on the same day (a
+    // duplicate schedule entry), an unordered bulkWrite can fire both
+    // upserts before either has inserted — both see "doesn't exist yet"
+    // and one loses with a raw E11000 that used to bubble straight to the
+    // UI. Collapse to one op per key before building the bulk ops; the
+    // last schedule row for a given driver/day wins (matches "last write
+    // wins" semantics elsewhere in this file).
+    const dedupedByKey = new Map<string, any>();
+    let duplicateScheduleCount = 0;
+    for (const s of workingSchedules) {
+        const key = `${s.transporterId}|${new Date(s.date).toISOString()}`;
+        if (dedupedByKey.has(key)) duplicateScheduleCount++;
+        dedupedByKey.set(key, s);
+    }
+    if (duplicateScheduleCount > 0) {
+        console.warn(`[Generate Routes] Found ${duplicateScheduleCount} duplicate schedule row(s) (same driver + day) for ${yearWeek} — collapsed to avoid a unique-index race. Worth checking SymxEmployeeSchedule for why a driver has two schedule entries on the same date.`);
+    }
+    const dedupedSchedules = Array.from(dedupedByKey.values());
+
+    const bulkOps = dedupedSchedules.map((s: any) => ({
         updateOne: {
             // siteId in the FILTER, not just the update: without it a driver
             // loaned to another station on the same date would collide onto
@@ -132,7 +152,7 @@ export async function generateRoutesForWeek(
 
     // ── RE-APPLY ROUTES INFO DATA ──
     try {
-        await reApplyRoutesInfo(yearWeek, workingSchedules, siteId);
+        await reApplyRoutesInfo(yearWeek, dedupedSchedules, siteId);
     } catch (err: any) {
         console.error("[Re-Apply RoutesInfo] Error:", err.message);
     }
