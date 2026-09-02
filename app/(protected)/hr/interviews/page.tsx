@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { useSiteContext } from "@/components/providers/site-context-provider";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { useHrInterviews, useUpsertInterview, useDeleteInterview } from "@/lib/query/hooks/useHr";
 import { useDropdowns } from "@/lib/query/hooks/useShared";
@@ -157,6 +158,19 @@ export function getRatingStars(r: string) {
   return Math.min(n, 5);
 }
 
+// The public application form creates every submission with status "New"
+// (the SymxInterview model's default) — but "New" is not itself one of
+// the "interview status" dropdown options, so a fresh applicant matched
+// nothing in the tab filter and only ever showed up under "All", never
+// under "Undecided" where a dispatcher would actually go looking for
+// them. Every place status is filtered, counted, or color/icon-resolved
+// should treat "New" (and a blank status) as "Undecided".
+export function normalizeStatus(raw?: string): string {
+  const s = (raw || "").trim();
+  if (!s || s.toLowerCase() === "new") return "Undecided";
+  return s;
+}
+
 const CHUNK_SIZE = 500;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -168,6 +182,7 @@ export function ShareDialog({ open, onClose }: { open: boolean; onClose: () => v
   const [copied, setCopied] = useState(false);
   const [stations, setStations] = useState<{ id: string; code: string; name: string }[]>([]);
   const [station, setStation] = useState("");
+  const { activeSiteIds } = useSiteContext();
 
   // Each station gets its OWN link and QR. An applicant scanning the
   // poster at DXC8 should land in DXC8's pipeline without being asked
@@ -186,12 +201,20 @@ export function ShareDialog({ open, onClose }: { open: boolean; onClose: () => v
       .then((d) => {
         const list = d.sites || [];
         setStations(list);
-        // Preselect when there is only one station to choose from, so the
-        // common single-station case needs no interaction.
-        if (list.length === 1) setStation(list[0].code);
+        // Default to whichever station is CURRENTLY selected in the app's
+        // own site switcher — opening Share while viewing DXC8 should
+        // hand you DXC8's QR code, not an empty picker you have to
+        // re-select every time. Only falls back to "the one station you
+        // have" when there's no single active station to read (org-wide
+        // view, or the site context hasn't loaded yet).
+        const active = activeSiteIds.length === 1
+          ? list.find((s: any) => s.id === activeSiteIds[0])
+          : null;
+        if (active) setStation(active.code);
+        else if (list.length === 1) setStation(list[0].code);
       })
       .catch(() => {});
-  }, [open]);
+  }, [open, activeSiteIds]);
 
   useEffect(() => {
     if (!open || !shareUrl) return;
@@ -902,7 +925,7 @@ export default function HRInterviewsPage() {
   const kpiMap = useMemo(() => {
     const map: Record<string, number> = {};
     statusOptions.forEach((opt) => {
-      map[opt.description] = interviews.filter((i) => (i.status || "").toLowerCase().trim() === opt.description.toLowerCase().trim()).length;
+      map[opt.description] = interviews.filter((i) => normalizeStatus(i.status).toLowerCase() === opt.description.toLowerCase().trim()).length;
     });
     return map;
   }, [interviews, statusOptions]);
@@ -911,7 +934,7 @@ export default function HRInterviewsPage() {
   const filtered = useMemo(() => {
     let result = interviews;
     if (statusFilter !== "all") {
-      result = result.filter((i) => (i.status || "").toLowerCase().trim() === statusFilter.toLowerCase().trim());
+      result = result.filter((i) => normalizeStatus(i.status).toLowerCase() === statusFilter.toLowerCase().trim());
     }
     if (search) {
       const q = search.toLowerCase();
@@ -1030,7 +1053,7 @@ export default function HRInterviewsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((item, itemIdx) => {
-            const status = (item.status || "").trim();
+            const status = normalizeStatus(item.status);
             const statusLower = status.toLowerCase();
             const statusColorIdx = statusOptions.findIndex((o) => o.description.toLowerCase() === statusLower);
             const colors = getStatusColors(status, statusColorIdx >= 0 ? statusColorIdx : itemIdx);
