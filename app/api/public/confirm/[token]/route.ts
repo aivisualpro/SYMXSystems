@@ -127,11 +127,19 @@ export async function GET(
             // schedule belonging to one driver, so nothing needs a station
             // filter for access control.
             //
-            // But everything DERIVED from it does. The week's other
-            // schedules must be that driver's own, and route types must be
-            // that station's, or a DXC8 driver would be shown DFO2's start
-            // times for their shift — a wrong answer on the one screen
-            // they use to plan their week.
+            // But the week's OTHER schedules still need to be scoped to
+            // that driver's own station, or a driver loaned between
+            // stations could pull in another station's schedule rows for
+            // the same transporterId+week.
+            //
+            // RouteType is NOT scoped by siteId — it's a shared, org-wide
+            // catalogue since migration 10 (one "Route" means the same
+            // thing everywhere; only startTime varies per station, via
+            // RouteType.stations[]). It has no top-level siteId field at
+            // all. Filtering RouteType.find() by siteId (as this used to)
+            // matched zero documents every time, so every day's type name
+            // silently resolved to the "OFF" fallback — this is the "shows
+            // OFF all week" bug reported against a real week-schedule link.
             const tokenSite = (schedule as any).siteId
                 ? { siteId: (schedule as any).siteId }
                 : {};
@@ -165,7 +173,7 @@ export async function GET(
             const allTypeIds = new Set<string>();
             schedules.forEach((s: any) => { if (s.typeId) allTypeIds.add(String(s.typeId)); });
             const routeTypes = allTypeIds.size > 0
-                ? await RouteType.find({ _id: { $in: [...allTypeIds] }, ...tokenSite }, { _id: 1, name: 1 }).lean() as any[]
+                ? await RouteType.find({ _id: { $in: [...allTypeIds] } }, { _id: 1, name: 1 }).lean() as any[]
                 : [];
             const rtMap = new Map<string, string>();
             routeTypes.forEach((rt: any) => rtMap.set(String(rt._id), rt.name || ""));
