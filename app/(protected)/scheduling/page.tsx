@@ -1753,34 +1753,6 @@ function SchedulingPageContent() {
                                     >
                                       <td className="px-1.5 sm:px-3 py-1 sm:py-1.5 sticky left-0 bg-card z-10 group-hover:bg-muted/20 transition-colors w-[130px] sm:w-[170px]">
                                         <div className="flex items-center gap-1.5 sm:gap-2 w-full h-full pr-1">
-                                          {/* Avatar */}
-                                          {emp.employee?.profileImage ? (
-                                              <img
-                                                  src={emp.employee.profileImage}
-                                                  alt={emp.employee.name}
-                                                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover ring-1 ring-border shrink-0"
-                                              />
-                                          ) : (
-                                              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary/15 flex items-center justify-center ring-1 ring-primary/20 shrink-0">
-                                                  <span className="text-[8px] font-bold text-primary">
-                                                      {(emp.employee?.name || emp.transporterId).split(" ").map(n => n[0]).join("").slice(0, 2)}
-                                                  </span>
-                                              </div>
-                                          )}
-                                          {(() => {
-                                            const confStatus = emp.weekScheduleConfirmation?.status;
-                                            return (
-                                              <span
-                                                className={cn(
-                                                  "text-[10px] sm:text-xs font-normal truncate flex-1 min-w-0",
-                                                  confStatus === "confirmed" && "text-emerald-500 font-semibold"
-                                                )}
-                                                title={emp.employee?.name || emp.transporterId}
-                                              >
-                                                {emp.employee?.name || emp.transporterId}
-                                              </span>
-                                            );
-                                          })()}
                                           {emp.weekScheduleConfirmation?.status === "confirmed" && (
                                             <Tooltip>
                                               <TooltipTrigger asChild>
@@ -1805,6 +1777,20 @@ function SchedulingPageContent() {
                                               <TooltipContent>Employee requested a change</TooltipContent>
                                             </Tooltip>
                                           )}
+                                          {(() => {
+                                            const confStatus = emp.weekScheduleConfirmation?.status;
+                                            return (
+                                              <span
+                                                className={cn(
+                                                  "text-[10px] sm:text-xs font-normal truncate flex-1 min-w-0",
+                                                  confStatus === "confirmed" && "text-emerald-500 font-semibold"
+                                                )}
+                                                title={emp.employee?.name || emp.transporterId}
+                                              >
+                                                {emp.employee?.name || emp.transporterId}
+                                              </span>
+                                            );
+                                          })()}
                                           {isNewHire && (
                                             <Baby className="h-4 w-4 text-pink-500 drop-shadow ml-auto flex-shrink-0" />
                                           )}
