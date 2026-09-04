@@ -5,6 +5,8 @@ import SymxEmployee from "@/lib/models/SymxEmployee";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import RouteType from "@/lib/models/RouteType";
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
+import { getStationNumber } from "@/lib/messaging/station-numbers";
+import { formatPhoneNumber } from "@/lib/utils";
 
 // All schedule array fields that can hold tokens
 const TOKEN_FIELDS = ["shiftNotification", "futureShift", "routeItinerary"];
@@ -105,6 +107,29 @@ export async function GET(
         const employeeName = employee
             ? `${employee.firstName} ${employee.lastName}`.toUpperCase()
             : schedule.transporterId;
+
+        // ── Dispatch phone: the confirming employee's OWN station number ──
+        // Previously hardcoded to one station's number on the frontend, so
+        // every employee at every station was told to text the same number
+        // regardless of who actually dispatches them. Resolved from the
+        // schedule's siteId (the station that owns this schedule row), same
+        // source used for outbound SMS elsewhere in the app. Left undefined
+        // — never defaulted to another station's number — if this station
+        // has no Quo/OpenPhone number configured yet.
+        let dispatchPhone: string | undefined;
+        let dispatchPhoneTel: string | undefined;
+        if ((schedule as any).siteId) {
+            try {
+                const stationNumber = await getStationNumber(String((schedule as any).siteId));
+                if (stationNumber?.phoneNumber) {
+                    const digits = stationNumber.phoneNumber.replace(/\D/g, "").slice(-10);
+                    dispatchPhone = formatPhoneNumber(digits);
+                    dispatchPhoneTel = digits;
+                }
+            } catch (err: any) {
+                console.error("[confirm] dispatch phone lookup error:", err.message);
+            }
+        }
 
         // Fetch schedule info for display
         let scheduleInfo: any = null;
@@ -286,6 +311,8 @@ export async function GET(
             confirmedAt,
             changeRequestedAt,
             changeRemarks,
+            dispatchPhone,
+            dispatchPhoneTel,
             schedule: scheduleInfo,
             weekSchedules,
             messageContent,

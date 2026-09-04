@@ -16,6 +16,10 @@ interface ConfirmData {
     changeRequestedAt?: string;
     changeRemarks?: string;
     messageContent?: string;
+    /** This employee's own station dispatch number, formatted for display. */
+    dispatchPhone?: string;
+    /** Same number, digits only, for the tel: link. */
+    dispatchPhoneTel?: string;
     schedule?: {
         date: string;
         weekDay: string;
@@ -459,18 +463,26 @@ export default function ConfirmPage({ params }: { params: Promise<{ token: strin
                                             Please confirm that you&apos;re working your shift{data.messageType === "future-shift" ? " tomorrow" : ""}.
                                         </p>
                                         <p className="text-zinc-400 text-sm mt-2">
-                                            Tap <span className="text-emerald-400 font-medium">Confirm Shift</span> below, or text Dispatch at{" "}
-                                            <a href="tel:9254417969" className="text-blue-400 underline font-medium">(925) 441-7969</a>{" "}
-                                            if there&apos;s an issue.
+                                            Tap <span className="text-emerald-400 font-medium">Confirm Shift</span> below{data.dispatchPhone ? (
+                                                <>, or text Dispatch at{" "}
+                                                    <a href={`tel:${data.dispatchPhoneTel}`} className="text-blue-400 underline font-medium">{data.dispatchPhone}</a>{" "}
+                                                    if there&apos;s an issue.</>
+                                            ) : (
+                                                " if there's an issue."
+                                            )}
                                         </p>
                                     </>
                                 ) : data.messageType === "week-schedule" ? (
                                     <>
                                         <p className="text-zinc-400 text-sm">Your schedule for next week is now available.</p>
                                         <p className="text-zinc-400 text-sm mt-2">
-                                            Please review it and tap <span className="text-emerald-400 font-medium">Confirm Schedule</span>, or text Dispatch at{" "}
-                                            <a href="tel:9254417969" className="text-blue-400 underline font-medium">(925) 441-7969</a>{" "}
-                                            if there&apos;s an issue.
+                                            Please review it and tap <span className="text-emerald-400 font-medium">Confirm Schedule</span>{data.dispatchPhone ? (
+                                                <>, or text Dispatch at{" "}
+                                                    <a href={`tel:${data.dispatchPhoneTel}`} className="text-blue-400 underline font-medium">{data.dispatchPhone}</a>{" "}
+                                                    if there&apos;s an issue.</>
+                                            ) : (
+                                                " if there's an issue."
+                                            )}
                                         </p>
                                     </>
                                 ) : (
