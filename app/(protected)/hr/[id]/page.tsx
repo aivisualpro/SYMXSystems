@@ -232,8 +232,15 @@ export default function EmployeeDetailPage(props: PageProps) {
   const handleStationChange = async (siteId: string) => {
     if (!employee || !siteId) return;
     try {
-      await updateEmployee({ id: String(employee._id), data: { primarySiteId: siteId } });
-      notify.success("Home station updated");
+      const updated: any = await updateEmployee({ id: String(employee._id), data: { primarySiteId: siteId } });
+      if (updated?.scheduleNotice) {
+        // Station saved, but the server couldn't build a schedule for the
+        // new station — silence here would look like a successful move
+        // when the employee has no shifts to show for it.
+        notify.warning(`Home station updated — no schedule created: ${updated.scheduleNotice}`);
+      } else {
+        notify.success("Home station updated");
+      }
     } catch (error) {
       notify.error("Failed to update station");
     }
@@ -678,13 +685,17 @@ export default function EmployeeDetailPage(props: PageProps) {
             initialData={{ ...employee, _id: String(employee._id) }} 
             onSubmit={async (data) => {
               try {
-                await updateEmployee({ id: String(employee._id), data });
+                const updated: any = await updateEmployee({ id: String(employee._id), data });
                 setIsEditDialogOpen(false);
-                notify.success("Profile updated successfully");
+                if (updated?.scheduleNotice) {
+                  notify.warning(`Profile updated — no schedule created: ${updated.scheduleNotice}`);
+                } else {
+                  notify.success("Profile updated successfully");
+                }
               } catch (e) {
                 notify.error("Failed to update profile");
               }
-            }} 
+            }}
             isLoading={false} 
             onCancel={() => setIsEditDialogOpen(false)}
           />

@@ -233,13 +233,19 @@ function EmployeesPageContent() {
         : "/api/admin/employees";
       const method = editingItem?._id ? "PUT" : "POST";
 
+      let scheduleNotice: string | undefined;
       if (editingItem?._id) {
-        await updateEmployee({ id: editingItem._id, data: formData });
+        const updated: any = await updateEmployee({ id: editingItem._id, data: formData });
+        scheduleNotice = updated?.scheduleNotice;
       } else {
         await createEmployee(formData);
       }
 
-      notify.success(editingItem?._id ? "Employee updated successfully" : "Employee created successfully");
+      if (scheduleNotice) {
+        notify.warning(`Employee updated — no schedule created: ${scheduleNotice}`);
+      } else {
+        notify.success(editingItem?._id ? "Employee updated successfully" : "Employee created successfully");
+      }
       setIsDialogOpen(false);
       fetchEmployees();
     } catch (error: any) {
