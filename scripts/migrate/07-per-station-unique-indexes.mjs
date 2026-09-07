@@ -2,12 +2,13 @@
 /**
  * Phase 3b — make per-station config uniqueness per-station.
  *
- * Three collections had a GLOBALLY unique field that needed to become
+ * Collections that had a GLOBALLY unique field that needed to become
  * per-station:
  *
  *   SYMXSettings       key
  *   symxcardconfigs    page
  *   SymxAvailableWeeks week
+ *   SYMXEveryday       date
  *
  * That makes per-station configuration impossible. DXC8 cannot have its
  * own system_timezone setting if DFO2 already used that key. It also
@@ -35,6 +36,13 @@
  * replace an index when the schema changes, so the old global one has to
  * be dropped explicitly or it keeps rejecting the inserts.
  *
+ * SYMXEveryday was missed for the same reason SymxAvailableWeeks was: it
+ * predates multi-site and nobody revisited its index when siteId was
+ * added. It didn't surface until a NEW station tried to save a "Routes
+ * Assigned" count for a date DFO2 (or any earlier station) had already
+ * touched — which, given DFO2 has been running the longest, is nearly
+ * every date — and hit `E11000 duplicate key ... date_1`.
+ *
  * Safe to re-run: skips anything already in the desired state.
  *
  * Usage:
@@ -61,6 +69,7 @@ const COLLECTIONS = [
   { name: "SYMXSettings", field: "key" },
   { name: "symxcardconfigs", field: "page" },
   { name: "SymxAvailableWeeks", field: "week" },
+  { name: "SYMXEveryday", field: "date" },
 ];
 
 async function main() {

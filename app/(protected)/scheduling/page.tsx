@@ -475,6 +475,7 @@ function SchedulingPageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date, routesAssigned: value })
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setEverydayRecords(prev => ({
           ...prev,
@@ -482,7 +483,10 @@ function SchedulingPageContent() {
         }));
         notify.success("Routes Assigned updated");
       } else {
-        notify.error("Failed to update");
+        // Surface the server's actual reason (e.g. "Select a single station
+        // first.") instead of a blanket message — that's the part that
+        // actually tells you what to fix.
+        notify.error(data?.error || "Failed to update");
       }
     } catch (err) {
       notify.error("Failed to update");
