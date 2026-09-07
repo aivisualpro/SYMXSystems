@@ -196,6 +196,7 @@ export async function PUT(
           const sync = await syncEmployeeSchedules(n.toObject ? n.toObject() : n, {
             userId: (session as any)?.id,
             previousTransporterId: p.transporterId,
+            previousSiteId: p.primarySiteId ? String(p.primarySiteId) : undefined,
           });
           if (sync.created || sync.removed) {
             console.log(

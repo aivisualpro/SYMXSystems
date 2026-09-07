@@ -61,6 +61,19 @@ export async function syncEmployeeSchedules(
      * would appear twice on the schedule — once under each ID.
      */
     previousTransporterId?: string;
+    /**
+     * The employee's primarySiteId before this update, when it changed.
+     * A station transfer moves the roster forward, not history — past
+     * rows at the old station stay put on purpose. But a FUTURE row at
+     * the old station that nobody has messaged about or confirmed is not
+     * history, it's a leftover default. Left alone, the employee reads as
+     * scheduled at BOTH stations for the same day, and — before the
+     * {transporterId,date,siteId} compound index (migration 15) — a
+     * generate-week at the new station for that date would even collide
+     * on the old global {transporterId,date} unique index with a raw
+     * E11000 surfaced straight to whoever clicked Generate.
+     */
+    previousSiteId?: string;
   } = {}
 ): Promise<SyncResult> {
   const result: SyncResult = { created: 0, removed: 0, weeks: [] };
@@ -213,6 +226,38 @@ export async function syncEmployeeSchedules(
       _id: { $in: removable.map((r: any) => r._id) },
     });
     result.removed = removable.length;
+  }
+
+  // ── Also clean up stale FUTURE rows at the OLD station, on a transfer ──
+  // These are not history — they're leftover defaults from before the
+  // move that nobody has acted on. Scoped by date only, not weekKeys: the
+  // old station may have already generated weeks further out than the
+  // new one has, and any of those are just as stale. Without this, the
+  // employee reads as scheduled at BOTH stations for the same day, and
+  // (pre migration 15) a generate-week at the new station for that date
+  // collided on the old global {transporterId,date} index with a raw
+  // E11000 surfaced straight to whoever clicked Generate.
+  if (opts.previousSiteId && String(opts.previousSiteId) !== String(siteId)) {
+    const staleAtOldStation = await SymxEmployeeSchedule.find(
+      { transporterId: employee.transporterId, siteId: opts.previousSiteId, date: { $gte: today } },
+      { date: 1, status: 1, shiftNotification: 1, futureShift: 1, weekConfirmation: 1 }
+    ).lean();
+
+    const staleRemovable = (staleAtOldStation as any[]).filter((r: any) => {
+      return (
+        !r.status &&
+        !(r.shiftNotification || []).length &&
+        !(r.futureShift || []).length &&
+        !r.weekConfirmation
+      );
+    });
+
+    if (staleRemovable.length > 0) {
+      await SymxEmployeeSchedule.deleteMany({
+        _id: { $in: staleRemovable.map((r: any) => r._id) },
+      });
+      result.removed += staleRemovable.length;
+    }
   }
 
   return result;

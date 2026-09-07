@@ -70,8 +70,17 @@ const SymxEmployeeScheduleSchema: Schema = new Schema({
   routeItinerary: { type: [MessageStatusEntrySchema], default: [] },    // route-itinerary
 }, { timestamps: { createdAt: true, updatedAt: false }, collection: 'SYMXEmployeeSchedules' });
 
-// Compound index for upsert
-SymxEmployeeScheduleSchema.index({ transporterId: 1, date: 1 }, { unique: true });
+// ── Unique PER STATION, not globally ──────────────────────────────────
+// This used to be {transporterId, date} unique with no siteId — the same
+// bug class fixed for SYMXRoutes in migration 12. An employee transferred
+// to a new station can still have FUTURE, untouched rows sitting at their
+// OLD station (syncEmployeeSchedules deliberately never rewrites history,
+// and its cleanup pass only looks at the destination station — see that
+// file), so generating a week at the new station tries to insert a row
+// for a transporterId+date that already has a document at the old
+// station, and collides on this index with a raw E11000 surfaced
+// straight to the person clicking "Generate".
+SymxEmployeeScheduleSchema.index({ transporterId: 1, date: 1, siteId: 1 }, { unique: true });
 // Compound index for week-schedule queries (confirmation portal, messaging employees)
 SymxEmployeeScheduleSchema.index({ yearWeek: 1, transporterId: 1, date: 1 });
 // Index for daily filters
