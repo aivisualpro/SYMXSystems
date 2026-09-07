@@ -52,6 +52,27 @@ export function useUpdateEmployee() {
   });
 }
 
+// Manually re-run schedule sync for one employee — for the case where a
+// station transfer happened before the destination station had generated
+// its weeks, so the automatic sync-on-save skipped and nothing since has
+// re-triggered it.
+export function useResyncEmployeeSchedule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/admin/employees/${id}/resync-schedule`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error((await res.text().catch(() => "")) || "Failed to resync schedule");
+      return res.json();
+    },
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: qk.employees.detail(id) });
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+    },
+  });
+}
+
 // Mutate create
 export function useCreateEmployee() {
   const queryClient = useQueryClient();

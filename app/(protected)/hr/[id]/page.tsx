@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   Pencil,
+  RefreshCw,
   CheckCircle2,
   XCircle,
   Truck,
@@ -43,7 +44,7 @@ import { format } from "date-fns";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import { EmployeeScorecard } from "@/components/hr/employee-scorecard";
-import { useEmployeeDetail, useUpdateEmployee } from "@/lib/query/hooks/useEmployees";
+import { useEmployeeDetail, useUpdateEmployee, useResyncEmployeeSchedule } from "@/lib/query/hooks/useEmployees";
 import { useVehicles, useRouteTypes } from "@/lib/query/hooks/useShared";
 import * as LucideIcons from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -198,6 +199,7 @@ export default function EmployeeDetailPage(props: PageProps) {
   const { data: storeVehicles = [] } = useVehicles();
   const { data: allRouteTypes = [] } = useRouteTypes();
   const { mutateAsync: updateEmployee } = useUpdateEmployee();
+  const { mutateAsync: resyncSchedule, isPending: isResyncing } = useResyncEmployeeSchedule();
 
   // Route type maps
   const routeTypeIdMap = useMemo(() => {
@@ -243,6 +245,35 @@ export default function EmployeeDetailPage(props: PageProps) {
       }
     } catch (error) {
       notify.error("Failed to update station");
+    }
+  };
+
+  /**
+   * Re-run schedule sync on demand.
+   *
+   * The automatic sync only fires the moment an employment field is saved.
+   * If the destination station didn't have its weeks generated yet at that
+   * instant, it skips and nothing since has re-triggered it — the employee
+   * stays unscheduled at the new station even after the station catches up.
+   * This lets a dispatcher fix that themselves, without re-touching an
+   * unrelated field just to force a resync.
+   */
+  const handleResyncSchedule = async () => {
+    if (!employee) return;
+    try {
+      const result: any = await resyncSchedule(String(employee._id));
+      if (result?.skippedReason) {
+        notify.warning(`No schedule created: ${result.skippedReason}`);
+      } else if (result?.created || result?.removed) {
+        const parts = [];
+        if (result.created) parts.push(`+${result.created} shift(s)`);
+        if (result.removed) parts.push(`-${result.removed} shift(s)`);
+        notify.success(`Schedule synced: ${parts.join(", ")}${result.weeks?.length ? ` (${result.weeks.join(", ")})` : ""}`);
+      } else {
+        notify.info("Schedule is already up to date");
+      }
+    } catch (error) {
+      notify.error("Failed to resync schedule");
     }
   };
 
@@ -455,9 +486,21 @@ export default function EmployeeDetailPage(props: PageProps) {
 
                {/* ── WEEKLY SCHEDULE (unchanged) ── */}
                <div className="space-y-4">
-                  <div className="flex items-center gap-2 px-1">
-                     <CalendarCheck className="w-3.5 h-3.5 text-muted-foreground/70" />
-                     <span className="text-[10px] font-black text-muted-foreground/70 uppercase tracking-widest">Weekly Schedule</span>
+                  <div className="flex items-center justify-between gap-2 px-1">
+                     <div className="flex items-center gap-2">
+                        <CalendarCheck className="w-3.5 h-3.5 text-muted-foreground/70" />
+                        <span className="text-[10px] font-black text-muted-foreground/70 uppercase tracking-widest">Weekly Schedule</span>
+                     </div>
+                     <button
+                        type="button"
+                        onClick={handleResyncSchedule}
+                        disabled={isResyncing}
+                        title="Re-check this employee's schedule against their current station and employment dates — use this if a station transfer didn't populate shifts because the destination station hadn't generated its weeks yet."
+                        className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/70 hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
+                        <RefreshCw className={cn("w-3 h-3", isResyncing && "animate-spin")} />
+                        {isResyncing ? "Syncing…" : "Resync"}
+                     </button>
                   </div>
                   <div className="space-y-2">
                      {/* Top Row: 3 Days */}
