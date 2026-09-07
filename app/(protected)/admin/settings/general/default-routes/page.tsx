@@ -135,7 +135,7 @@ export default function DefaultRoutesPage() {
             setRoutes(prev => prev.map((r, i) => i === idx ? { ...saved, isEditing: false, isNew: false } : r));
             notify.success("Saved");
             if (schedulesUpdated > 0) {
-                notify.info(`Updated start time for ${schedulesUpdated} schedule${schedulesUpdated === 1 ? '' : 's'} this week`);
+                notify.info(`Updated start time for ${schedulesUpdated} upcoming schedule${schedulesUpdated === 1 ? '' : 's'} of this type`);
             }
         } catch (err: any) { notify.error(err.message || "Failed to save"); }
         finally { setSaving(null); }

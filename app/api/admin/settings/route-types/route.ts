@@ -6,24 +6,6 @@ import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from 
 import RouteType from "@/lib/models/RouteType";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 
-/** Compute current yearWeek (Sun-based) in Pacific Time. */
-function getCurrentYearWeek(): string {
-    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
-    const date = new Date(todayStr + "T00:00:00.000Z");
-    const dayOfWeek = date.getUTCDay(); // 0=Sun … 6=Sat
-    const sundayOfThisWeek = new Date(date);
-    sundayOfThisWeek.setUTCDate(date.getUTCDate() - dayOfWeek);
-    const year = sundayOfThisWeek.getUTCFullYear();
-    const jan1 = new Date(Date.UTC(year, 0, 1));
-    const jan1Day = jan1.getUTCDay();
-    const firstSunday = new Date(jan1);
-    firstSunday.setUTCDate(jan1.getUTCDate() - jan1Day);
-    const diffMs = sundayOfThisWeek.getTime() - firstSunday.getTime();
-    const diffDays = Math.round(diffMs / 86400000);
-    const weekNum = Math.floor(diffDays / 7) + 1;
-    return `${year}-W${weekNum.toString().padStart(2, "0")}`;
-}
-
 // GET — list all route types
 export async function GET() {
     try {
@@ -80,27 +62,35 @@ export async function POST(req: NextRequest) {
             ).lean();
             if (!updated) return NextResponse.json({ error: "Route type not found" }, { status: 404 });
 
-            // If startTime changed, propagate to all current-week schedules matching this route type
+            // If startTime changed, propagate to all future schedules matching this route type
             let schedulesUpdated = 0;
             if (startTime !== undefined && existing.startTime !== startTime) {
-                const currentWeek = getCurrentYearWeek();
-                const typeName = (existing.name || "").trim();
-                if (typeName) {
-                    // Propagating a start-time change must not reach into
-                    // another station's schedules — start times differ per
-                    // station, so DXC8 editing its own route type would
-                    // otherwise rewrite DFO2's shifts.
-                    const result = await SymxEmployeeSchedule.updateMany(
-                        {
-                            ...S,
-                            yearWeek: { $gte: currentWeek },
-                            type: { $regex: new RegExp(`^${typeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
-                        },
-                        { $set: { startTime: startTime || "" } }
-                    );
-                    schedulesUpdated = result.modifiedCount;
-                    console.log(`[Route Type] startTime changed for "${typeName}": updated ${schedulesUpdated} schedules in ${currentWeek}+`);
-                }
+                // ── Match by typeId, not a `type` name field ──
+                // SymxEmployeeSchedule has no `type` string field — schedules
+                // are keyed by `typeId` only (a stringified RouteType _id;
+                // see lib/models/SymxEmployeeSchedule.ts). Matching on `type`
+                // matched zero documents, every time, so this propagation
+                // silently did nothing no matter how many times a start time
+                // was changed — reported as "changing the start time doesn't
+                // update future shifts of that type", which is exactly what
+                // this dead filter looked like from the outside.
+                const today = new Date();
+                today.setUTCHours(0, 0, 0, 0);
+
+                // Propagating a start-time change must not reach into
+                // another station's schedules — start times differ per
+                // station, so DXC8 editing its own route type would
+                // otherwise rewrite DFO2's shifts.
+                const result = await SymxEmployeeSchedule.updateMany(
+                    {
+                        ...S,
+                        date: { $gte: today },
+                        typeId: String(existing._id),
+                    },
+                    { $set: { startTime: startTime || "" } }
+                );
+                schedulesUpdated = result.modifiedCount;
+                console.log(`[Route Type] startTime changed for "${existing.name}": updated ${schedulesUpdated} future schedule(s)`);
             }
 
             return NextResponse.json({ ...updated, schedulesUpdated });
