@@ -272,8 +272,10 @@ export default function EmployeeDetailPage(props: PageProps) {
       } else {
         notify.info("Schedule is already up to date");
       }
-    } catch (error) {
-      notify.error("Failed to resync schedule");
+    } catch (error: any) {
+      // Show the actual server message rather than a blanket "failed" —
+      // this is a diagnostic action, so the reason IS the useful part.
+      notify.error(`Failed to resync schedule: ${error?.message || "unknown error"}`);
     }
   };
 
