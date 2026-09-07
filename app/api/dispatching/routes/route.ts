@@ -108,10 +108,22 @@ export async function GET(req: NextRequest) {
         const scope = await getRequestScope();
         const S = siteFilter(scope, { includeUnassigned: true });
 
-        // Route types are per-station: start times differ by station, so
-        // each one keeps its own set rather than sharing a catalogue.
+        // RouteType is a SHARED, org-wide catalogue since migration 10 — one
+        // "Route" means the same thing at every station, with only start
+        // times varying per station (via RouteType.stations[]). It has no
+        // top-level siteId field at all. Filtering this query by the site
+        // scope (as it used to) matched ZERO documents for any station
+        // other than the default one — the includeUnassigned fallback only
+        // surfaces siteId-less records when the default station is in
+        // view, and a RouteType document never has a siteId to match
+        // otherwise. That silently emptied dispatchingTypeIds below,
+        // which in turn made the routes query below match nothing — so
+        // "Regenerate" reported routes already existed (a separate,
+        // unfiltered count) while the page displayed none. Same bug class
+        // already fixed for the week-schedule confirm page; this consumer
+        // was missed.
         const allRouteTypes = await RouteType.find(
-            { ...S },
+            {},
             { _id: 1, name: 1, routeStatus: 1, partOf: 1 }
         ).lean() as any[];
         const rtNameToId = new Map<string, string>();   // name.lower → typeId string
