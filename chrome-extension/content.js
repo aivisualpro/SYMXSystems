@@ -79,11 +79,32 @@
   };
 
   // ── Extract localDate & serviceAreaId from the API URL ──
+  //
+  // capturedRoutes never expires on its own — it's a module-level Map
+  // that lives for as long as this content script stays injected, which
+  // is the whole tab session. Amazon's app is a single-page app: switching
+  // the station dropdown or the date picker does NOT reload the page, it
+  // just fires a new route-summaries request. Without clearing the Map on
+  // a genuine view change, routes captured for an earlier station or date
+  // just pile up forever — a popup reporting "25 captured routes" on a
+  // 6-route day is really showing today's routes plus leftovers from
+  // whatever was viewed earlier in this same tab (often the station left
+  // open from the last shift). Worse, Amazon reuses route codes across
+  // stations ("CX111" exists at more than one), so a stale entry doesn't
+  // even look obviously wrong sitting in the list.
   function extractApiParams(url) {
     try {
       const u = new URL(url, window.location.origin);
       const ld = u.searchParams.get("localDate");
       const sa = u.searchParams.get("serviceAreaId");
+
+      const isNewView =
+        (ld && lastCapturedApiDate && ld !== lastCapturedApiDate) ||
+        (sa && lastCapturedServiceArea && sa !== lastCapturedServiceArea);
+      if (isNewView) {
+        capturedRoutes.clear();
+      }
+
       if (ld) lastCapturedApiDate = ld;
       if (sa) lastCapturedServiceArea = sa;
     } catch { /* ignore */ }
