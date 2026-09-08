@@ -45,8 +45,15 @@ const SYMXRoutesInfoSchema = new Schema<ISYMXRoutesInfo>(
     { timestamps: true, collection: "SYMXRoutesInfo" }
 );
 
-// Each row is unique per date + rowIndex
-SYMXRoutesInfoSchema.index({ date: 1, rowIndex: 1 }, { unique: true });
+// ── Unique PER STATION, not globally ──────────────────────────────────
+// This used to be {date, rowIndex} unique with no siteId — the same bug
+// class fixed for SYMXRoutes (migration 12) and SYMXEmployeeSchedules
+// (migration 15). Row numbering restarts at 0 per station (see the
+// extension-sync route's nextRowIndexBySite comment), so DFO2's row 0 and
+// DXC8's row 0 on the same date are two different documents by design —
+// but the old index only knew about {date, rowIndex} and rejected the
+// second station's insert as a duplicate of the first's.
+SYMXRoutesInfoSchema.index({ date: 1, rowIndex: 1, siteId: 1 }, { unique: true });
 SYMXRoutesInfoSchema.index({ date: 1 });
 
 // ── Multi-site ──
