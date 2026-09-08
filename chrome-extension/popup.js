@@ -559,7 +559,12 @@ syncBtn.addEventListener("click", async () => {
     syncStatusSection.style.display = "none";
 
     if (!response.ok) {
-      throw new Error(data.error || "Sync failed");
+      // The backend computes a specific `reason` (unmapped service area,
+      // no service area configured anywhere, etc.) precisely so a failed
+      // sync isn't a dead end — dropping it here and showing only the
+      // generic `error` line was hiding the one piece of text that says
+      // what to actually go fix.
+      throw new Error(data.reason ? `${data.error} ${data.reason}` : (data.error || "Sync failed"));
     }
 
     syncResultSection.style.display = "";
