@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
 import { getWeekDates } from "@/lib/schedule-generation";
-import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId, orgWide } from "@/lib/scoped-query";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import ScheduleAuditLog from "@/lib/models/ScheduleAuditLog";
@@ -95,7 +95,6 @@ export async function GET(req: NextRequest) {
 
     const scope = await getRequestScope();
     const S = siteFilter(scope, { includeUnassigned: true });
-    const E = siteFilter(scope, { includeUnassigned: true, field: "primarySiteId" });
 
     // Return all available weeks for the dropdown (cached per station scope)
     if (weeksList === "true") {
@@ -138,10 +137,22 @@ export async function GET(req: NextRequest) {
     }
 
     const [employees, prevSchedules, auditCountsRaw, routeTypes, wstOptions, weekScheduleConfirmationsRaw] = await Promise.all([
-      // Employee info
-      SymxEmployee.find(
-        { transporterId: { $in: transporterIds }, ...E },
-        { _id: 1, transporterId: 1, firstName: 1, lastName: 1, type: 1, status: 1, ScheduleNotes: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1, hiredDate: 1, profileImage: 1, rate: 1 }
+      // Employee info. transporterIds already came from schedules scoped to
+      // THIS station (the `S`-filtered query above) — re-filtering by the
+      // employee's primarySiteId here was redundant at best and, for a
+      // driver loaned in from another station for the day, actively wrong:
+      // their schedule row correctly belongs to this station, but their
+      // primarySiteId still points home, so the old filter silently
+      // dropped them from `employees` and they rendered as a blank/missing
+      // row on the Scheduling page. The Dispatching > Routes page already
+      // gets this right (see its own orgWide() call, same reasoning) —
+      // this brings Scheduling in line with it.
+      orgWide(
+        SymxEmployee.find(
+          { transporterId: { $in: transporterIds } },
+          { _id: 1, transporterId: 1, firstName: 1, lastName: 1, type: 1, status: 1, ScheduleNotes: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1, hiredDate: 1, profileImage: 1, rate: 1 }
+        ),
+        "resolving driver details for schedules already scoped to this station — a driver loaned in from another station must still show a name, not a blank row"
       ).lean(),
       // Previous week schedules (only need date, transporterId, status)
       prevYearWeek
