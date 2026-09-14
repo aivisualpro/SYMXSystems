@@ -131,11 +131,15 @@ export default function DefaultRoutesPage() {
             if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
             const saved = await res.json();
             const schedulesUpdated = saved.schedulesUpdated || 0;
+            const schedulesUpdateSkipped = saved.schedulesUpdateSkipped || "";
             delete saved.schedulesUpdated;
+            delete saved.schedulesUpdateSkipped;
             setRoutes(prev => prev.map((r, i) => i === idx ? { ...saved, isEditing: false, isNew: false } : r));
             notify.success("Saved");
             if (schedulesUpdated > 0) {
                 notify.info(`Updated start time for ${schedulesUpdated} upcoming schedule${schedulesUpdated === 1 ? '' : 's'} of this type`);
+            } else if (schedulesUpdateSkipped) {
+                notify.warning(schedulesUpdateSkipped);
             }
         } catch (err: any) { notify.error(err.message || "Failed to save"); }
         finally { setSaving(null); }

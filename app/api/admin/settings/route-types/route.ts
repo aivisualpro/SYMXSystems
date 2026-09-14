@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
 
             // If startTime changed, propagate to all future schedules matching this route type
             let schedulesUpdated = 0;
+            let schedulesUpdateSkipped = "";
             if (startTime !== undefined && existing.startTime !== startTime) {
                 // ── Match by typeId, not a `type` name field ──
                 // SymxEmployeeSchedule has no `type` string field — schedules
@@ -77,23 +78,41 @@ export async function POST(req: NextRequest) {
                 const today = new Date();
                 today.setUTCHours(0, 0, 0, 0);
 
-                // Propagating a start-time change must not reach into
-                // another station's schedules — start times differ per
-                // station, so DXC8 editing its own route type would
-                // otherwise rewrite DFO2's shifts.
-                const result = await SymxEmployeeSchedule.updateMany(
-                    {
-                        ...S,
-                        date: { $gte: today },
-                        typeId: String(existing._id),
-                    },
-                    { $set: { startTime: startTime || "" } }
-                );
-                schedulesUpdated = result.modifiedCount;
-                console.log(`[Route Type] startTime changed for "${existing.name}": updated ${schedulesUpdated} future schedule(s)`);
+                // ── This field is genuinely SHARED, org-wide — there is no
+                // per-station override UI for it (RouteType.stations[]
+                // exists in the schema but nothing here lets anyone edit
+                // it). Someone changing this value while viewing a SINGLE
+                // station overwhelmingly means "this station's start time",
+                // not "the org-wide default" — so propagation is scoped to
+                // `S` (their active station). But `S` is whatever stations
+                // are currently active in THEIR site context, and for an
+                // org admin viewing "all stations" that is every station —
+                // so the exact same edit, intended for one station, silently
+                // rewrote every other station's future schedules too. That
+                // is precisely what put DXC8's 10:50 AM onto DFO2's board.
+                // Refusing to propagate unless exactly one station is
+                // active closes that hole; the value on the shared record
+                // itself still saves either way.
+                if (scope.activeSiteIds.length === 1) {
+                    const result = await SymxEmployeeSchedule.updateMany(
+                        {
+                            ...S,
+                            date: { $gte: today },
+                            typeId: String(existing._id),
+                        },
+                        { $set: { startTime: startTime || "" } }
+                    );
+                    schedulesUpdated = result.modifiedCount;
+                    console.log(`[Route Type] startTime changed for "${existing.name}": updated ${schedulesUpdated} future schedule(s)`);
+                } else {
+                    schedulesUpdateSkipped =
+                        "Start time saved, but not pushed to any schedules: you're viewing more than one station, " +
+                        "and this field has no per-station override yet — switch to the single station you mean before editing it.";
+                    console.log(`[Route Type] startTime changed for "${existing.name}" while ${scope.activeSiteIds.length} stations were active — propagation skipped to avoid rewriting every station.`);
+                }
             }
 
-            return NextResponse.json({ ...updated, schedulesUpdated });
+            return NextResponse.json({ ...updated, schedulesUpdated, ...(schedulesUpdateSkipped ? { schedulesUpdateSkipped } : {}) });
         } else {
             // Create new
             // No siteId: route types are a SHARED catalogue. Per-station
