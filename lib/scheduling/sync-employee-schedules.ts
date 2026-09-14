@@ -63,15 +63,12 @@ export async function syncEmployeeSchedules(
     previousTransporterId?: string;
     /**
      * The employee's primarySiteId before this update, when it changed.
-     * A station transfer moves the roster forward, not history — past
-     * rows at the old station stay put on purpose. But a FUTURE row at
-     * the old station that nobody has messaged about or confirmed is not
-     * history, it's a leftover default. Left alone, the employee reads as
-     * scheduled at BOTH stations for the same day, and — before the
-     * {transporterId,date,siteId} compound index (migration 15) — a
-     * generate-week at the new station for that date would even collide
-     * on the old global {transporterId,date} unique index with a raw
-     * E11000 surfaced straight to whoever clicked Generate.
+     * Kept for callers that have it (it makes the PUT handler's intent
+     * explicit in a diff), but the stale-row cleanup below no longer
+     * requires it — it looks for ANY other station's future, untouched
+     * rows, so a manual Resync (which has no "previous" value — the
+     * employee just IS at a different station than some of their rows)
+     * cleans up the same way a transfer-triggered sync does.
      */
     previousSiteId?: string;
   } = {}
@@ -228,18 +225,25 @@ export async function syncEmployeeSchedules(
     result.removed = removable.length;
   }
 
-  // ── Also clean up stale FUTURE rows at the OLD station, on a transfer ──
-  // These are not history — they're leftover defaults from before the
-  // move that nobody has acted on. Scoped by date only, not weekKeys: the
-  // old station may have already generated weeks further out than the
-  // new one has, and any of those are just as stale. Without this, the
-  // employee reads as scheduled at BOTH stations for the same day, and
-  // (pre migration 15) a generate-week at the new station for that date
-  // collided on the old global {transporterId,date} index with a raw
-  // E11000 surfaced straight to whoever clicked Generate.
-  if (opts.previousSiteId && String(opts.previousSiteId) !== String(siteId)) {
+  // ── Also clean up stale FUTURE rows at any OTHER station ──
+  // These are not history — they're leftover defaults from before a
+  // transfer that nobody has acted on. Not scoped to opts.previousSiteId
+  // specifically: a manual Resync (no "previous" value available — the
+  // employee just IS at a different station than some of their rows)
+  // needs to catch this too, not just the moment of the PUT that changed
+  // primarySiteId. Scoped by date only, not weekKeys: another station may
+  // have already generated weeks further out than this one has, and any
+  // of those are just as stale. Without this, the employee reads as
+  // scheduled at BOTH stations for the same day, and (pre migration 15) a
+  // generate-week for that date collided on the old global
+  // {transporterId,date} index with a raw E11000 surfaced straight to
+  // whoever clicked Generate.
+  {
+    // $nin (not $ne) so a null/missing siteId — a legitimate pre-migration
+    // "unassigned belongs to the default station" row — is never swept up
+    // as if it were a stale cross-station duplicate.
     const staleAtOldStation = await SymxEmployeeSchedule.find(
-      { transporterId: employee.transporterId, siteId: opts.previousSiteId, date: { $gte: today } },
+      { transporterId: employee.transporterId, siteId: { $nin: [siteId, null] }, date: { $gte: today } },
       { date: 1, status: 1, shiftNotification: 1, futureShift: 1, weekConfirmation: 1 }
     ).lean();
 
