@@ -196,10 +196,25 @@ export async function POST(req: NextRequest) {
             } catch (schedErr: any) {
               console.error("[Messaging] ScheduleConfirmation create error:", schedErr.message);
             }
-          } else if (scheduleField && recipient.transporterId) {
+          }
+
+          let confirmationLinkBroken = false;
+          if (scheduleField && recipient.transporterId) {
             // Other tabs: push "sent" status into the SymxEmployeeSchedule array
             try {
-              const scheduleQuery: Record<string, any> = { transporterId: recipient.transporterId };
+              // Scoped to the SENDING station, not just transporterId+date.
+              // Without siteId, a driver with schedule rows at two stations
+              // for the same date — a transfer or a loan/visit, which does
+              // happen (see e.g. the Jesse Hernandez DFO2/DXC8 case) —
+              // could have the token attached to the WRONG station's row.
+              // The week-schedule path a few lines up already scopes its
+              // confirmation by sendingNumber.siteId for exactly this
+              // reason ("the station that sent it owns the confirmation");
+              // this sibling path had been missed.
+              const scheduleQuery: Record<string, any> = {
+                transporterId: recipient.transporterId,
+                siteId: sendingNumber.siteId,
+              };
               if (recipient.scheduleDate) {
                 // Use day-range to handle timezone/midnight edge cases
                 const dayStart = new Date(recipient.scheduleDate + "T00:00:00.000Z");
@@ -232,6 +247,19 @@ export async function POST(req: NextRequest) {
                     },
                   }
                 );
+              } else if (confirmationToken) {
+                // The SMS already went out with a {confirmationLink} baked
+                // in, but the token was never attached to anything — the
+                // link is dead the moment it's opened ("Invalid or expired
+                // link"). Reported back rather than swallowed: the send
+                // itself succeeded, so this was previously indistinguishable
+                // from a fully working message.
+                confirmationLinkBroken = true;
+                console.error(
+                  `[Messaging] No schedule row found for transporterId=${recipient.transporterId} ` +
+                  `siteId=${sendingNumber.siteId} date=${recipient.scheduleDate || "(none)"} — ` +
+                  `confirmation token generated but not stored anywhere.`
+                );
               }
             } catch (schedErr: any) {
               console.error("[Messaging] Schedule update error:", schedErr.message);
@@ -244,6 +272,9 @@ export async function POST(req: NextRequest) {
             success: true,
             data: responseData.data,
             openPhoneMessageId,
+            ...(confirmationLinkBroken
+              ? { warning: "Sent, but no schedule record was found for this date — the confirmation link won't work." }
+              : {}),
           };
         } catch (err: any) {
           console.error("[Messaging] Network error:", err.message);
