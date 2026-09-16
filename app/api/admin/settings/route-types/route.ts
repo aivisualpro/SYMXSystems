@@ -1,9 +1,10 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import mongoose from "mongoose";
 import connectToDatabase from "@/lib/db";
 import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
-import RouteType from "@/lib/models/RouteType";
+import RouteType, { routeTypeStartTime, routeTypeTheoryHrs } from "@/lib/models/RouteType";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 
 // GET — list all route types
@@ -14,10 +15,20 @@ export async function GET() {
 
         await connectToDatabase();
         const scope = await getRequestScope();
-        const S = siteFilter(scope, { includeUnassigned: true });
+        // Exactly one station in view → show ITS start time/theory hours
+        // (its stations[] override, falling back to the shared default),
+        // not the raw shared field. Viewing "All Stations" (0 or 2+ active)
+        // has no single station to resolve for, so the shared field itself
+        // is shown — that is genuinely what's being edited in that view.
         const writeSiteId = resolveWriteSiteId(scope, null);
         const routes = await RouteType.find({}).sort({ sortOrder: 1, name: 1 }).lean();
-        return NextResponse.json(routes);
+        const resolved = (routes as any[]).map((r) => ({
+            ...r,
+            ...(writeSiteId
+                ? { startTime: routeTypeStartTime(r, writeSiteId), theoryHrs: routeTypeTheoryHrs(r, writeSiteId) }
+                : {}),
+        }));
+        return NextResponse.json(resolved);
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -54,18 +65,66 @@ export async function POST(req: NextRequest) {
             const existing = await findScopedById<any>(RouteType, _id, scope);
             if (!existing) return NextResponse.json({ error: "Route type not found" }, { status: 404 });
 
-            // Update existing
-            const updated = await RouteType.findByIdAndUpdate(
-                _id,
-                { name: name.trim(), color, startTime, theoryHrs, group, routeStatus, isDefault, partOf, isDA, isOps, isStandby, icon, sortOrder, isActive },
-                { new: true }
-            ).lean();
+            // Start time and theory hours are the two fields that genuinely
+            // vary by station (RouteType.stations[]) — everything else
+            // (name, color, grouping, flags...) is the shared catalogue
+            // entry and always written at the top level.
+            const sharedFields = { name: name.trim(), color, group, routeStatus, isDefault, partOf, isDA, isOps, isStandby, icon, sortOrder, isActive };
+
+            // What this station was seeing before the edit — resolved
+            // through the same override-then-fallback logic used
+            // everywhere else, so the comparison below is apples-to-apples
+            // regardless of whether this station already had an override.
+            const previousEffectiveStartTime = routeTypeStartTime(existing, writeSiteId);
+
+            let updated: any;
+            if (writeSiteId) {
+                // ── Exactly one station in view: write ITS override ──
+                // RouteType.stations[] already existed in the schema for
+                // exactly this, but nothing ever wrote to it — every edit
+                // here landed on the shared field, so "DXC8's start time"
+                // and "DFO2's start time" were actually the same value the
+                // whole time; changing one changed both the moment either
+                // was viewed. This is the fix: the value shown/edited while
+                // a single station is active now lives in that station's
+                // own stations[] entry, never the shared default.
+                await RouteType.updateOne({ _id }, { $set: sharedFields });
+
+                const siteObjectId = new mongoose.Types.ObjectId(writeSiteId);
+                const hasOverride = (existing.stations || []).some(
+                    (s: any) => String(s.siteId) === String(writeSiteId)
+                );
+                if (hasOverride) {
+                    await RouteType.updateOne(
+                        { _id, "stations.siteId": siteObjectId },
+                        { $set: { "stations.$.startTime": startTime || "", "stations.$.theoryHrs": theoryHrs || 0 } }
+                    );
+                } else {
+                    await RouteType.updateOne(
+                        { _id },
+                        { $push: { stations: { siteId: siteObjectId, startTime: startTime || "", theoryHrs: theoryHrs || 0 } } }
+                    );
+                }
+                updated = await RouteType.findById(_id).lean();
+            } else {
+                // Viewing 0 or 2+ stations: no single station to attach an
+                // override to, so this edits the shared default itself —
+                // the value any station without its own override falls
+                // back to.
+                updated = await RouteType.findByIdAndUpdate(
+                    _id,
+                    { ...sharedFields, startTime, theoryHrs },
+                    { new: true }
+                ).lean();
+            }
             if (!updated) return NextResponse.json({ error: "Route type not found" }, { status: 404 });
 
-            // If startTime changed, propagate to all future schedules matching this route type
+            // If the EFFECTIVE start time for the station being edited
+            // changed, propagate to that station's own future schedules.
             let schedulesUpdated = 0;
             let schedulesUpdateSkipped = "";
-            if (startTime !== undefined && existing.startTime !== startTime) {
+            const newEffectiveStartTime = writeSiteId ? routeTypeStartTime(updated, writeSiteId) : (startTime ?? updated.startTime);
+            if (startTime !== undefined && previousEffectiveStartTime !== newEffectiveStartTime) {
                 // ── Match by typeId, not a `type` name field ──
                 // SymxEmployeeSchedule has no `type` string field — schedules
                 // are keyed by `typeId` only (a stringified RouteType _id;
@@ -78,41 +137,31 @@ export async function POST(req: NextRequest) {
                 const today = new Date();
                 today.setUTCHours(0, 0, 0, 0);
 
-                // ── This field is genuinely SHARED, org-wide — there is no
-                // per-station override UI for it (RouteType.stations[]
-                // exists in the schema but nothing here lets anyone edit
-                // it). Someone changing this value while viewing a SINGLE
-                // station overwhelmingly means "this station's start time",
-                // not "the org-wide default" — so propagation is scoped to
-                // `S` (their active station). But `S` is whatever stations
-                // are currently active in THEIR site context, and for an
-                // org admin viewing "all stations" that is every station —
-                // so the exact same edit, intended for one station, silently
-                // rewrote every other station's future schedules too. That
-                // is precisely what put DXC8's 10:50 AM onto DFO2's board.
-                // Refusing to propagate unless exactly one station is
-                // active closes that hole; the value on the shared record
-                // itself still saves either way.
-                if (scope.activeSiteIds.length === 1) {
+                if (writeSiteId) {
+                    // Scoped to the EXACT station being edited, not the
+                    // broader `S` (which, with includeUnassigned, can also
+                    // reach pre-migration unassigned rows). Editing DXC8's
+                    // override must only ever touch DXC8's own schedule
+                    // rows — never DFO2's, and never anyone else's.
                     const result = await SymxEmployeeSchedule.updateMany(
                         {
-                            ...S,
+                            siteId: new mongoose.Types.ObjectId(writeSiteId),
                             date: { $gte: today },
                             typeId: String(existing._id),
                         },
-                        { $set: { startTime: startTime || "" } }
+                        { $set: { startTime: newEffectiveStartTime || "" } }
                     );
                     schedulesUpdated = result.modifiedCount;
-                    console.log(`[Route Type] startTime changed for "${existing.name}": updated ${schedulesUpdated} future schedule(s)`);
+                    console.log(`[Route Type] startTime changed for "${existing.name}" at site ${writeSiteId}: updated ${schedulesUpdated} future schedule(s)`);
                 } else {
                     schedulesUpdateSkipped =
                         "Start time saved, but not pushed to any schedules: you're viewing more than one station, " +
-                        "and this field has no per-station override yet — switch to the single station you mean before editing it.";
-                    console.log(`[Route Type] startTime changed for "${existing.name}" while ${scope.activeSiteIds.length} stations were active — propagation skipped to avoid rewriting every station.`);
+                        "so there's no single station to update — switch to the one station you mean and it will push automatically.";
+                    console.log(`[Route Type] shared startTime changed for "${existing.name}" while ${scope.activeSiteIds.length} stations were active — propagation skipped (ambiguous target).`);
                 }
             }
 
-            return NextResponse.json({ ...updated, schedulesUpdated, ...(schedulesUpdateSkipped ? { schedulesUpdateSkipped } : {}) });
+            return NextResponse.json({ ...updated, startTime: newEffectiveStartTime, schedulesUpdated, ...(schedulesUpdateSkipped ? { schedulesUpdateSkipped } : {}) });
         } else {
             // Create new
             // No siteId: route types are a SHARED catalogue. Per-station
