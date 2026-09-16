@@ -35,10 +35,10 @@
 import { MongoClient } from "mongodb";
 import path from "path";
 import { fileURLToPath } from "url";
-import { loadEnv, resolveTargetDb, connectWithDiagnostics } from "./lib/target-db.mjs";
+import { loadEnv, resolveTargetDb, connectWithDiagnostics } from "../lib/target-db.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const rootDir = path.resolve(__dirname, "..");
+const rootDir = path.resolve(__dirname, "../..");
 const DRY_RUN = process.argv.includes("--dry-run");
 
 const env = loadEnv(rootDir);
