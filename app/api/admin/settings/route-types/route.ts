@@ -7,6 +7,11 @@ import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from 
 import RouteType, { routeTypeStartTime, routeTypeTheoryHrs } from "@/lib/models/RouteType";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 
+/** "OFF" days carry no shift — a start time on one is meaningless. */
+function isOffStatus(routeStatus: string | undefined | null): boolean {
+    return (routeStatus || "").trim().toUpperCase() === "OFF";
+}
+
 // GET — list all route types
 export async function GET() {
     try {
@@ -71,6 +76,24 @@ export async function POST(req: NextRequest) {
             // entry and always written at the top level.
             const sharedFields = { name: name.trim(), color, group, routeStatus, isDefault, partOf, isDA, isOps, isStandby, icon, sortOrder, isActive };
 
+            // An "OFF" type (Off, Call Out, Reduction, Suspension, Stand by,
+            // Request Off...) has no shift to start — whatever a form field
+            // sends for it is forced blank, server-side, regardless of the
+            // client. Discovered from the per-station backfill picking up a
+            // stray "10:50 AM" on DFO2's "Reduction" and DXC8's "Call Out":
+            // once a bogus value lands on an OFF type it just sits there
+            // looking like configuration, since nothing depends on it to
+            // ever contradict it.
+            const effectiveRouteStatus = routeStatus !== undefined ? routeStatus : existing.routeStatus;
+            const forceBlankStartTime = isOffStatus(effectiveRouteStatus);
+            // Only override a field the caller actually sent — leaving it
+            // `undefined` when the caller didn't touch startTime/theoryHrs
+            // (e.g. a reorder or a toggle-only save) keeps this from
+            // manufacturing a "change" and firing propagation on every
+            // unrelated edit of an OFF type.
+            const incomingStartTime = startTime === undefined ? undefined : (forceBlankStartTime ? "" : startTime);
+            const incomingTheoryHrs = theoryHrs === undefined ? undefined : (forceBlankStartTime ? 0 : theoryHrs);
+
             // What this station was seeing before the edit — resolved
             // through the same override-then-fallback logic used
             // everywhere else, so the comparison below is apples-to-apples
@@ -97,12 +120,12 @@ export async function POST(req: NextRequest) {
                 if (hasOverride) {
                     await RouteType.updateOne(
                         { _id, "stations.siteId": siteObjectId },
-                        { $set: { "stations.$.startTime": startTime || "", "stations.$.theoryHrs": theoryHrs || 0 } }
+                        { $set: { "stations.$.startTime": incomingStartTime || "", "stations.$.theoryHrs": incomingTheoryHrs || 0 } }
                     );
                 } else {
                     await RouteType.updateOne(
                         { _id },
-                        { $push: { stations: { siteId: siteObjectId, startTime: startTime || "", theoryHrs: theoryHrs || 0 } } }
+                        { $push: { stations: { siteId: siteObjectId, startTime: incomingStartTime || "", theoryHrs: incomingTheoryHrs || 0 } } }
                     );
                 }
                 updated = await RouteType.findById(_id).lean();
@@ -113,7 +136,7 @@ export async function POST(req: NextRequest) {
                 // back to.
                 updated = await RouteType.findByIdAndUpdate(
                     _id,
-                    { ...sharedFields, startTime, theoryHrs },
+                    { ...sharedFields, startTime: incomingStartTime, theoryHrs: incomingTheoryHrs },
                     { new: true }
                 ).lean();
             }
@@ -123,7 +146,7 @@ export async function POST(req: NextRequest) {
             // changed, propagate to that station's own future schedules.
             let schedulesUpdated = 0;
             let schedulesUpdateSkipped = "";
-            const newEffectiveStartTime = writeSiteId ? routeTypeStartTime(updated, writeSiteId) : (startTime ?? updated.startTime);
+            const newEffectiveStartTime = writeSiteId ? routeTypeStartTime(updated, writeSiteId) : (updated.startTime || "");
             if (startTime !== undefined && previousEffectiveStartTime !== newEffectiveStartTime) {
                 // ── Match by typeId, not a `type` name field ──
                 // SymxEmployeeSchedule has no `type` string field — schedules
@@ -168,11 +191,12 @@ export async function POST(req: NextRequest) {
             // differences live in `stations[]` (start time, theory hours),
             // so a new type is immediately available everywhere rather than
             // being invisible at every station but the one that made it.
+            const isOff = isOffStatus(routeStatus);
             const route = await RouteType.create({
                 name: name.trim(),
                 color: color || "#6B7280",
-                startTime: startTime || "",
-                theoryHrs: theoryHrs || 0,
+                startTime: isOff ? "" : (startTime || ""),
+                theoryHrs: isOff ? 0 : (theoryHrs || 0),
                 group: group || "None",
                 routeStatus: routeStatus || "Scheduled",
                 isDefault: isDefault ?? false,

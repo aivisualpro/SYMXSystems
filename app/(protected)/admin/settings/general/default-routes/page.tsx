@@ -363,7 +363,24 @@ function SortableRouteRow({ route, idx, totalCount, saving, updateField, saveRow
                 </button>
             </td>
             <td className="px-2 py-1.5"><Input value={route.routeStatus || ""} onChange={(e) => updateField(idx, "routeStatus", e.target.value)} placeholder="e.g. Scheduled, Off..." className="h-7 text-sm" disabled={!route.isEditing && !route.isNew} /></td>
-            <td className="px-2 py-1.5"><Input value={route.startTime || ""} onChange={(e) => updateField(idx, "startTime", e.target.value)} placeholder="e.g. 06:00 AM" className="h-7 text-sm" disabled={!route.isEditing && !route.isNew} /></td>
+            <td className="px-2 py-1.5">
+                {(() => {
+                    // OFF days have no shift to start — the server forces
+                    // this blank on save regardless of what's typed here,
+                    // so the field is disabled to match rather than let
+                    // someone type a value that will silently not stick.
+                    const isOff = (route.routeStatus || "").trim().toUpperCase() === "OFF";
+                    return (
+                        <Input
+                            value={isOff ? "" : (route.startTime || "")}
+                            onChange={(e) => updateField(idx, "startTime", e.target.value)}
+                            placeholder={isOff ? "N/A — OFF" : "e.g. 06:00 AM"}
+                            className="h-7 text-sm"
+                            disabled={isOff || (!route.isEditing && !route.isNew)}
+                        />
+                    );
+                })()}
+            </td>
             <td className="px-2 py-1.5"><Input type="number" min="0" step="0.1" value={route.theoryHrs ?? ""} onChange={(e) => updateField(idx, "theoryHrs", parseFloat(e.target.value) || 0)} className="h-7 text-sm w-[70px]" disabled={!route.isEditing && !route.isNew} /></td>
             <td className="px-2 py-1.5">
                 <select 
