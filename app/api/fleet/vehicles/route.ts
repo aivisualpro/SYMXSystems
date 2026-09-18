@@ -1,9 +1,10 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import { getRequestScope, siteFilter, canAccessRecord, resolveWriteSiteId } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, canAccessRecord, resolveWriteSiteId, orgWide } from "@/lib/scoped-query";
 import Vehicle from "@/lib/models/Vehicle";
 import DailyInspection from "@/lib/models/DailyInspection";
+import Site from "@/lib/models/Site";
 import { authorizeAction } from "@/lib/rbac";
 import { getSession } from "@/lib/auth";
 
@@ -79,13 +80,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let data: any = null;
   try {
     const auth = await authorizeAction("Fleet", "create");
     if (!auth.authorized) return auth.response;
 
     await connectToDatabase();
     const body = await req.json();
-    const data = body.data || body;
+    data = body.data || body;
 
     if (data) {
       for (const key of Object.keys(data)) {
@@ -118,6 +120,51 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ vehicle, message: "Vehicle created successfully" });
   } catch (error: any) {
     console.error("Fleet Vehicles POST Error:", error);
+
+    // ── E11000 on the VIN's global unique index ──
+    // The raw Mongo error ("E11000 duplicate key... vin_1...") was passed
+    // straight through as the user-facing message. It's technically
+    // accurate but useless in practice: it says a duplicate exists, not
+    // WHERE — and the existing vehicle is very often invisible in the
+    // admin's current view (a different station, or "Returned" status
+    // with the Returned toggle off), so "duplicate" with nothing findable
+    // reads as the app being broken. Looked up org-wide — regardless of
+    // which station is active — so the admin can actually go find it, at
+    // whatever station or status it's really sitting in.
+    if (error.code === 11000) {
+      const vin = data?.vin;
+      if (vin) {
+        try {
+          const dup: any = await orgWide(
+            Vehicle.findOne({ vin }),
+            "reporting where a duplicate VIN already exists, regardless of which station is active — the admin needs to find it to resolve the conflict"
+          ).lean();
+          if (dup) {
+            let stationLabel = "no station (unassigned)";
+            if (dup.currentSiteId) {
+              const site: any = await Site.findById(dup.currentSiteId).lean();
+              stationLabel = site ? `${site.code} — ${site.name}` : "an unknown station";
+            }
+            return NextResponse.json(
+              {
+                error:
+                  `A vehicle with VIN ${vin} already exists` +
+                  (dup.vehicleName ? ` (${dup.vehicleName})` : "") +
+                  ` at ${stationLabel}, status "${dup.status || "Active"}". ` +
+                  (dup.status === "Returned"
+                    ? "It's marked Returned — toggle \"Returned\" on in the vehicle list to find and reactivate it, or transfer it if it belongs elsewhere."
+                    : "Search for it directly, or use Transfer on its page if it belongs at a different station."),
+              },
+              { status: 409 }
+            );
+          }
+        } catch (lookupErr) {
+          console.error("Fleet Vehicles duplicate-VIN lookup failed:", lookupErr);
+        }
+      }
+      return NextResponse.json({ error: "A vehicle with this VIN already exists." }, { status: 409 });
+    }
+
     return NextResponse.json({ error: error.message || "Failed to create vehicle" }, { status: 500 });
   }
 }
