@@ -44,6 +44,7 @@ import { format } from "date-fns";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import { EmployeeScorecard } from "@/components/hr/employee-scorecard";
+import { EmployeeWriteups } from "@/components/hr/employee-writeups";
 import { useEmployeeDetail, useUpdateEmployee, useResyncEmployeeSchedule } from "@/lib/query/hooks/useEmployees";
 import { useVehicles, useRouteTypes } from "@/lib/query/hooks/useShared";
 import * as LucideIcons from "lucide-react";
@@ -615,11 +616,18 @@ export default function EmployeeDetailPage(props: PageProps) {
                 Scorecard
               </TabsTrigger>
 
-              <TabsTrigger 
-                value="documents" 
+              <TabsTrigger
+                value="documents"
                 className="rounded-[0.9rem] px-5 py-2 font-bold text-xs data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/30 transition-all"
               >
                 Documents
+              </TabsTrigger>
+
+              <TabsTrigger
+                value="writeups"
+                className="rounded-[0.9rem] px-5 py-2 font-bold text-xs data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-border/30 transition-all"
+              >
+                Write-Ups
               </TabsTrigger>
               {(employee.status === 'Terminated' || employee.status === 'Resigned' || employee.terminationDate || employee.resignationDate) && (
                 <TabsTrigger 
@@ -648,6 +656,11 @@ export default function EmployeeDetailPage(props: PageProps) {
                 <FileCard label="Drug Test Results" url={employee.drugTestFile} icon={CheckCircle2} />
                 <FileCard label="Final Check Cleared" url={employee.finalCheck} icon={DollarSign} />
               </div>
+            </TabsContent>
+
+            {/* ──────── WRITE-UPS TAB ──────── */}
+            <TabsContent value="writeups" className="animate-in fade-in slide-in-from-right-2 duration-300">
+              <EmployeeWriteups employeeId={String(employee._id)} />
             </TabsContent>
 
             {/* ──────── OFFBOARDING TAB ──────── */}

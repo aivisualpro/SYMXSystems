@@ -5,7 +5,7 @@ import connectToDatabase from "@/lib/db";
 import Writeup from "@/lib/models/Writeup";
 import DropdownOption from "@/lib/models/DropdownOption";
 import { recommendWarningLevel, getCorrectiveActionTemplate, getVerbalCoachingContext } from "@/lib/writeup-logic";
-import { getRequestScope, siteFilter, resolveWriteSiteId } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, resolveWriteSiteId, orgWide } from "@/lib/scoped-query";
 
 // GET /api/writeups?status=&employeeId=&categoryId=&search=&from=&to=
 // Manager/dispatcher/admin tool — employees don't have their own login in
@@ -38,15 +38,27 @@ export async function GET(req: NextRequest) {
     // before this field existed have no siteId and would otherwise vanish
     // from the list mid-migration. Remove once the backfill is complete
     // and siteId is required (Phase 5).
+    //
+    // EXCEPT when the caller asked for one specific employee's history
+    // (e.g. the Write-Ups tab on their HR profile). employeeId already
+    // scopes the query to exactly one person — a write-up doesn't stop
+    // being that person's history just because they've since transferred
+    // stations or because whoever's looking has a different station active
+    // right now. Without this, an employee's profile could show an
+    // incomplete or entirely empty write-up history depending on which
+    // station happened to be selected in the header at the time — which is
+    // exactly how "I can't see write-ups for terminated employees" showed
+    // up: filtered out by site context, not by their employment status.
     const scope = await getRequestScope();
-    const query: any = { ...siteFilter(scope, { includeUnassigned: true }) };
+    const query: any = employeeId
+      ? { employeeId }
+      : { ...siteFilter(scope, { includeUnassigned: true }) };
 
     // "pending_review" also catches the legacy "escalated" status (same
     // meaning, pre-redesign records only) so old suspension-only cases that
     // never got resolved still surface in the Review Workbench.
     if (status === "pending_review") query.status = { $in: ["pending_review", "escalated"] };
     else if (status) query.status = status;
-    if (employeeId) query.employeeId = employeeId;
     if (categoryId) query.categoryId = categoryId;
     if (search) {
       query.$or = [
@@ -63,7 +75,10 @@ export async function GET(req: NextRequest) {
       if (to) query.incidentDate.$lte = new Date(`${to}T23:59:59.999Z`);
     }
 
-    const writeups = await Writeup.find(query).sort({ incidentDate: -1, createdAt: -1 }).lean();
+    const finder = Writeup.find(query);
+    const writeups = employeeId
+      ? await orgWide(finder, "one employee's full write-up history follows them across stations, regardless of which station is active right now").sort({ incidentDate: -1, createdAt: -1 }).lean()
+      : await finder.sort({ incidentDate: -1, createdAt: -1 }).lean();
     return NextResponse.json({ writeups });
   } catch (error: any) {
     console.error("Error fetching writeups:", error);
