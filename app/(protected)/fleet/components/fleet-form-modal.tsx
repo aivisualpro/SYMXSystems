@@ -5,6 +5,7 @@ import * as LucideIcons from "lucide-react";
 import { IconX, IconLoader2, IconUpload, IconPhoto, IconCheck, IconSearch, IconChevronDown, IconTrash, IconDownload } from "@tabler/icons-react";
 import { notify } from "@/lib/notify";
 import { useFleet } from "../layout";
+import { VinScannerButton } from "@/components/fleet/vin-scanner";
 
 const inputClass = "w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors";
 
@@ -581,7 +582,12 @@ export default function FleetFormModal() {
 
             {modalType === "vehicle" && (<>
               <div className="grid grid-cols-2 gap-3">
-                <FormField label="VIN"><input className={inputClass} value={formData.vin || ""} onChange={e => updateForm("vin", e.target.value)} placeholder="Vehicle VIN" required /></FormField>
+                <FormField label="VIN">
+                  <div className="flex items-stretch gap-1.5">
+                    <input className={`${inputClass} flex-1`} value={formData.vin || ""} onChange={e => updateForm("vin", e.target.value)} placeholder="Vehicle VIN" required />
+                    <VinScannerButton onScanned={(vin) => updateForm("vin", vin)} />
+                  </div>
+                </FormField>
                 <FormField label="Unit Number"><input className={inputClass} value={formData.unitNumber || ""} onChange={e => updateForm("unitNumber", e.target.value)} placeholder="Unit #" /></FormField>
                 <FormField label="Station">
                   {editId ? (
