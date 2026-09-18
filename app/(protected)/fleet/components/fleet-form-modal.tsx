@@ -357,6 +357,7 @@ export default function FleetFormModal() {
   const [vehicleProviders, setVehicleProviders] = useState<any[]>([]);
   const [dashcams, setDashcams] = useState<any[]>([]);
   const [serviceTypes, setServiceTypes] = useState<any[]>([]);
+  const [stations, setStations] = useState<{ id: string; code: string; name: string }[]>([]);
 
   // Route Inspection: auto-fetch routes by date
   const [routeEntries, setRouteEntries] = useState<any[]>([]);
@@ -453,6 +454,26 @@ export default function FleetFormModal() {
         const active = data.filter((d: any) => d.isActive !== false);
         if (active.length > 0) setServiceTypes(active);
       }).catch(() => {});
+
+    // Station this van belongs to. Only asked on CREATE — adding a van
+    // used to silently skip this, so it landed with no station at all and
+    // was only ever visible from the default station's view. Editing an
+    // existing van keeps the field read-only here; moving it is a
+    // deliberate Transfer action (Fleet > Vehicle > Transfer), which also
+    // carries its repairs/inspections/rentals along — this form isn't
+    // where that history-preserving move happens.
+    fetch("/api/user/sites")
+      .then(r => r.json())
+      .then((d) => {
+        const sites = (d.sites || []).map((s: any) => ({ id: s.id, code: s.code, name: s.name }));
+        setStations(sites);
+        // Default to the single station currently in view, when adding new
+        // and nothing has been picked yet — the common case needs no click.
+        if (!editId && !formData.currentSiteId && d.context?.mode === "single" && d.context.siteIds?.[0]) {
+          updateForm("currentSiteId", d.context.siteIds[0]);
+        }
+      })
+      .catch(() => {});
   }, [modalOpen, modalType]);
 
   // Fetch vehicles for repair + rental form dropdowns
@@ -549,6 +570,28 @@ export default function FleetFormModal() {
               <div className="grid grid-cols-2 gap-3">
                 <FormField label="VIN"><input className={inputClass} value={formData.vin || ""} onChange={e => updateForm("vin", e.target.value)} placeholder="Vehicle VIN" required /></FormField>
                 <FormField label="Unit Number"><input className={inputClass} value={formData.unitNumber || ""} onChange={e => updateForm("unitNumber", e.target.value)} placeholder="Unit #" /></FormField>
+                <FormField label="Station">
+                  {editId ? (
+                    <input
+                      className={inputClass}
+                      value={stations.find(s => s.id === String(formData.currentSiteId || ""))?.code || "Unassigned"}
+                      disabled
+                      title="Use Transfer on the vehicle's page to move it to another station."
+                    />
+                  ) : (
+                    <select
+                      className={inputClass}
+                      value={formData.currentSiteId || ""}
+                      onChange={e => updateForm("currentSiteId", e.target.value)}
+                      required
+                    >
+                      <option value="">Select station…</option>
+                      {stations.map(s => (
+                        <option key={s.id} value={s.id}>{s.code} — {s.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </FormField>
                 <FormField label="Vehicle Name"><input className={inputClass} value={formData.vehicleName || ""} onChange={e => updateForm("vehicleName", e.target.value)} placeholder="Vehicle Name" /></FormField>
                 <FormField label="Year"><input className={inputClass} value={formData.year || ""} onChange={e => updateForm("year", e.target.value)} placeholder="2024" /></FormField>
                 <FormField label="Make"><input className={inputClass} value={formData.make || ""} onChange={e => updateForm("make", e.target.value)} placeholder="Ford" /></FormField>

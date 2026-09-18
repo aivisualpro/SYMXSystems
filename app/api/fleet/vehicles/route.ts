@@ -1,7 +1,7 @@
 import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
-import { getRequestScope, siteFilter, canAccessRecord } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, canAccessRecord, resolveWriteSiteId } from "@/lib/scoped-query";
 import Vehicle from "@/lib/models/Vehicle";
 import DailyInspection from "@/lib/models/DailyInspection";
 import { authorizeAction } from "@/lib/rbac";
@@ -92,6 +92,27 @@ export async function POST(req: NextRequest) {
         if (data[key] === "") data[key] = null;
       }
     }
+
+    // ── Which station does this van belong to? ──
+    // The add-vehicle form never asked, and Vehicle.create(data) never set
+    // currentSiteId itself — so every van created this way landed with NO
+    // station at all. siteFilter's "unassigned" shim only surfaces those to
+    // whoever is viewing the DEFAULT station, so from DXC8 (or any
+    // non-default station) the van you just added simply never appeared:
+    // it wasn't broken, it was invisible. resolveWriteSiteId honors an
+    // explicit station picked in the form, or falls back to the single
+    // station currently in view; it returns null when that's ambiguous
+    // (0 or 2+ active stations and no explicit pick), which we now refuse
+    // outright rather than silently repeating the bug.
+    const createScope = await getRequestScope();
+    const writeSiteId = resolveWriteSiteId(createScope, data.currentSiteId ?? null);
+    if (!writeSiteId) {
+      return NextResponse.json(
+        { error: "Select which station this vehicle belongs to." },
+        { status: 400 }
+      );
+    }
+    data.currentSiteId = writeSiteId;
 
     const vehicle = await Vehicle.create(data);
     return NextResponse.json({ vehicle, message: "Vehicle created successfully" });
