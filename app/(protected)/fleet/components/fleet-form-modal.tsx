@@ -563,7 +563,20 @@ export default function FleetFormModal() {
           <h3 className="text-sm font-semibold text-foreground">{title}</h3>
           <button onClick={() => setModalOpen(false)} className="p-1 rounded-lg hover:bg-muted text-muted-foreground"><IconX size={16} /></button>
         </div>
-        <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          // Explicit check rather than the <select>'s native `required` —
+          // a browser's "please fill this field" bubble anchors to the
+          // invalid element, and inside this modal's scrolling field list
+          // that bubble can render off-screen or get clipped, so clicking
+          // Save looked like it silently did nothing. A real error the
+          // user can actually see, every time.
+          if (modalType === "vehicle" && !editId && !formData.currentSiteId) {
+            notify.error("Select which station this vehicle belongs to.");
+            return;
+          }
+          handleSave();
+        }}>
           <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
 
             {modalType === "vehicle" && (<>
@@ -583,7 +596,6 @@ export default function FleetFormModal() {
                       className={inputClass}
                       value={formData.currentSiteId || ""}
                       onChange={e => updateForm("currentSiteId", e.target.value)}
-                      required
                     >
                       <option value="">Select station…</option>
                       {stations.map(s => (

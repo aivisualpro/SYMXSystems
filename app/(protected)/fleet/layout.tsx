@@ -241,9 +241,22 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (res.ok) { setModalOpen(false); fetchData(); }
+      if (res.ok) {
+        setModalOpen(false);
+        fetchData();
+      } else {
+        // Previously: nothing. Every failure here — a validation error,
+        // the new "select a station" check on vehicles, a permission
+        // check, a 500 — was swallowed silently, so clicking Save just
+        // looked like it did nothing at all no matter which of the five
+        // fleet record types (vehicle/repair/activity/inspection/rental)
+        // or which reason actually failed.
+        const data = await res.json().catch(() => ({}));
+        notify.error(data?.error || "Failed to save. Please check the form and try again.");
+      }
     } catch (err) {
       console.error("Save error:", err);
+      notify.error("Failed to save — check your connection and try again.");
     } finally {
       setSaving(false);
     }
