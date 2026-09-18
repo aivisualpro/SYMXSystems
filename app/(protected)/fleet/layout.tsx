@@ -242,8 +242,13 @@ export default function FleetLayout({ children }: { children: ReactNode }) {
         body: JSON.stringify(body),
       });
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         setModalOpen(false);
         fetchData();
+        // A reactivated Returned van isn't a new record — worth saying so
+        // explicitly rather than a generic "created", since its whole
+        // repair/inspection history came along with it under the hood.
+        if (data?.reactivated) notify.success(data.message || "Vehicle reactivated.");
       } else {
         // Previously: nothing. Every failure here — a validation error,
         // the new "select a station" check on vehicles, a permission

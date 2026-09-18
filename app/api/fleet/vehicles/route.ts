@@ -5,8 +5,33 @@ import { getRequestScope, siteFilter, canAccessRecord, resolveWriteSiteId, orgWi
 import Vehicle from "@/lib/models/Vehicle";
 import DailyInspection from "@/lib/models/DailyInspection";
 import Site from "@/lib/models/Site";
+import VehicleActivityLog from "@/lib/models/VehicleActivityLog";
+import { moveVehicleRecords } from "@/lib/fleet/transfer-vehicle";
 import { authorizeAction } from "@/lib/rbac";
 import { getSession } from "@/lib/auth";
+
+/**
+ * A human-readable explanation of where a duplicate-VIN vehicle actually
+ * lives, for the case where it's a genuine live duplicate (not a Returned
+ * van being reactivated — that path never reaches this function).
+ */
+async function describeDuplicateVin(vin: string, dup: any): Promise<string> {
+  let stationLabel = "no station (unassigned)";
+  if (dup.currentSiteId) {
+    try {
+      const site: any = await Site.findById(dup.currentSiteId).lean();
+      stationLabel = site ? `${site.code} — ${site.name}` : "an unknown station";
+    } catch { /* fall back to the generic label above */ }
+  }
+  return (
+    `A vehicle with VIN ${vin} already exists` +
+    (dup.vehicleName ? ` (${dup.vehicleName})` : "") +
+    ` at ${stationLabel}, status "${dup.status || "Active"}". ` +
+    (dup.status === "Returned"
+      ? "It's marked Returned — toggle \"Returned\" on in the vehicle list to find it, or try adding it again to reactivate it."
+      : "Search for it directly, or use Transfer on its page if it belongs at a different station.")
+  );
+}
 
 export async function GET(req: NextRequest) {
   try { await requirePermission("Fleet", "view"); } catch (e: any) {
@@ -116,6 +141,84 @@ export async function POST(req: NextRequest) {
     }
     data.currentSiteId = writeSiteId;
 
+    // ── A van that left as "Returned" and is now coming back ──
+    // Vans get returned to the leasing company and picked up again later
+    // in the season — sometimes by a different station than the one that
+    // returned it. Checked org-wide (a Returned van is invisible in the
+    // normal list unless that toggle is on, and might be sitting at a
+    // DIFFERENT station than the one adding it back). Reactivating in
+    // place instead of erroring means the van keeps its _id, and with it
+    // its whole repair/inspection/rental history — recreating it fresh
+    // would orphan all of that under a new, disconnected record.
+    if (data.vin) {
+      const existingByVin: any = await orgWide(
+        Vehicle.findOne({ vin: data.vin }),
+        "checking whether this VIN already exists anywhere in the org, so a returned van can be reactivated instead of blocked as a duplicate"
+      );
+      if (existingByVin) {
+        if (String(existingByVin.status || "").trim() !== "Returned") {
+          // A live duplicate — not ours to silently merge. Same
+          // find-and-explain path as the race-condition catch below.
+          return NextResponse.json(
+            { error: await describeDuplicateVin(data.vin, existingByVin) },
+            { status: 409 }
+          );
+        }
+
+        // Only apply fields the form actually provided — someone re-adding
+        // a van by typing just the essentials shouldn't blank out year,
+        // make, dashcam, etc. that are still sitting on the old record.
+        const updateFields: Record<string, any> = {};
+        for (const [k, v] of Object.entries(data)) {
+          if (k === "vin" || v === null || v === undefined) continue;
+          updateFields[k] = v;
+        }
+        updateFields.currentSiteId = writeSiteId;
+        updateFields.status = data.status || "Active";
+
+        const previousSiteId = existingByVin.currentSiteId ? String(existingByVin.currentSiteId) : null;
+        const reactivated = await Vehicle.findByIdAndUpdate(
+          existingByVin._id,
+          { $set: updateFields },
+          { new: true }
+        );
+
+        let historyMoved = 0;
+        const movedStation = previousSiteId && previousSiteId !== String(writeSiteId);
+        if (movedStation) {
+          const counts = await moveVehicleRecords({ _id: existingByVin._id, vin: existingByVin.vin }, String(writeSiteId));
+          historyMoved = Object.values(counts).reduce((a: number, b: number) => a + b, 0);
+        }
+
+        const session = await getSession();
+        let stationCode = "";
+        try {
+          const site: any = await Site.findById(writeSiteId).lean();
+          stationCode = site?.code || "";
+        } catch { /* best-effort label only */ }
+
+        await VehicleActivityLog.create({
+          vehicleId: existingByVin._id,
+          vin: existingByVin.vin || "",
+          serviceType: "Reactivated",
+          startDate: new Date(),
+          notes:
+            `Reactivated from Returned status${movedStation ? ` and moved to ${stationCode || "a new station"}` : ""}` +
+            ` by ${session?.email || "unknown"}`,
+          siteId: writeSiteId,
+        }).catch((e) => console.error("Fleet Vehicles: reactivation audit log failed:", e?.message));
+
+        return NextResponse.json({
+          vehicle: reactivated,
+          reactivated: true,
+          message:
+            `Reactivated returned vehicle (VIN ${data.vin})` +
+            (movedStation ? ` and moved it to ${stationCode || "the new station"}` : "") +
+            (historyMoved ? ` — ${historyMoved} history record(s) came with it.` : "."),
+        });
+      }
+    }
+
     const vehicle = await Vehicle.create(data);
     return NextResponse.json({ vehicle, message: "Vehicle created successfully" });
   } catch (error: any) {
@@ -132,6 +235,10 @@ export async function POST(req: NextRequest) {
     // which station is active — so the admin can actually go find it, at
     // whatever station or status it's really sitting in.
     if (error.code === 11000) {
+      // Belt-and-suspenders: the pre-check above handles the normal case,
+      // this only fires on a genuine race (two people adding the same VIN
+      // at once) where the pre-check saw nothing but the insert still
+      // collided.
       const vin = data?.vin;
       if (vin) {
         try {
@@ -140,23 +247,7 @@ export async function POST(req: NextRequest) {
             "reporting where a duplicate VIN already exists, regardless of which station is active — the admin needs to find it to resolve the conflict"
           ).lean();
           if (dup) {
-            let stationLabel = "no station (unassigned)";
-            if (dup.currentSiteId) {
-              const site: any = await Site.findById(dup.currentSiteId).lean();
-              stationLabel = site ? `${site.code} — ${site.name}` : "an unknown station";
-            }
-            return NextResponse.json(
-              {
-                error:
-                  `A vehicle with VIN ${vin} already exists` +
-                  (dup.vehicleName ? ` (${dup.vehicleName})` : "") +
-                  ` at ${stationLabel}, status "${dup.status || "Active"}". ` +
-                  (dup.status === "Returned"
-                    ? "It's marked Returned — toggle \"Returned\" on in the vehicle list to find and reactivate it, or transfer it if it belongs elsewhere."
-                    : "Search for it directly, or use Transfer on its page if it belongs at a different station."),
-              },
-              { status: 409 }
-            );
+            return NextResponse.json({ error: await describeDuplicateVin(vin, dup) }, { status: 409 });
           }
         } catch (lookupErr) {
           console.error("Fleet Vehicles duplicate-VIN lookup failed:", lookupErr);
