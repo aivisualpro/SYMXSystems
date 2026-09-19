@@ -1843,7 +1843,8 @@ function SchedulingPageContent() {
                                                 <div
                                                   className={cn(
                                                     "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
-                                                    "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                                                    "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]",
+                                                    isCellPopoverOpen && "ring-2 ring-primary ring-offset-1 ring-offset-background scale-[1.06] shadow-lg brightness-110 z-10"
                                                   )}
                                                   style={{ backgroundColor: chipColor, color: getContrastText(chipColor), borderColor: chipColor }}
                                                 >
@@ -1889,34 +1890,26 @@ function SchedulingPageContent() {
 
                                                   {/* Schedule Details */}
                                                   <div className="flex flex-col gap-2">
-                                                    {(resolvedRT?.routeStatus || day?.routeStatus) && (
-                                                      <div className="flex items-center gap-2">
-                                                        <span className="text-[11px] text-muted-foreground/70 font-medium w-[70px] shrink-0">Shift</span>
-                                                        <span className="text-[11px] font-bold text-emerald-500 uppercase tracking-wide">{resolvedRT?.routeStatus || day?.routeStatus}</span>
-                                                      </div>
-                                                    )}
-                                                    {displayValue && (
-                                                      <div className="flex items-center gap-2">
-                                                        <span className="text-[11px] text-muted-foreground/70 font-medium w-[70px] shrink-0">Type</span>
-                                                        <div
-                                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold"
-                                                          style={{ backgroundColor: chipColor, color: getContrastText(chipColor) }}
-                                                        >
-                                                          {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
-                                                          {displayValue}
-                                                        </div>
+                                                    {(displayValue || startTime) && (
+                                                      <div className="flex items-center justify-between gap-2">
+                                                        {displayValue ? (
+                                                          <div
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold"
+                                                            style={{ backgroundColor: chipColor, color: getContrastText(chipColor) }}
+                                                          >
+                                                            {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
+                                                            {displayValue}
+                                                          </div>
+                                                        ) : <span />}
+                                                        {startTime && (
+                                                          <span className="text-[11px] font-bold text-blue-400 font-mono tracking-wider">{startTime}</span>
+                                                        )}
                                                       </div>
                                                     )}
                                                     {status && (
                                                       <div className="flex items-center gap-2">
                                                         <span className="text-[11px] text-muted-foreground/70 font-medium w-[70px] shrink-0">Confirmation</span>
                                                         <span className="text-[11px] font-semibold text-foreground/90 uppercase tracking-wide">{status}</span>
-                                                      </div>
-                                                    )}
-                                                    {startTime && (
-                                                      <div className="flex items-center gap-2">
-                                                        <span className="text-[11px] text-muted-foreground/70 font-medium w-[70px] shrink-0">Start Time</span>
-                                                        <span className="text-[11px] font-bold text-blue-400 font-mono tracking-wider">{startTime}</span>
                                                       </div>
                                                     )}
                                                     {van && (
