@@ -23,13 +23,18 @@ export async function generateRoutesPDF(
     if (!res.ok) throw new Error("Failed to fetch route data");
     const data = await res.json();
 
-    // Filter by date and only "route" type (working drivers)
+    // Filter by date and to route types that put someone in a van with a
+    // pad/wave/staging assignment for the day. "Route" is the obvious one;
+    // "Training OTR" is a driver actually out on the road training (as
+    // opposed to "AMZ Training", which is classroom-only and has no
+    // van/pad/staging to print) — it belongs on the roster too.
+    const PRINTABLE_TYPES = new Set(["route", "training otr"]);
     const routes: RouteForPDF[] = (data.routes || [])
         .filter((r: any) => {
             const rDate = (r.date || "").split("T")[0];
             if (rDate !== date) return false;
             const type = (r.type || "").trim().toLowerCase();
-            return type === "route";
+            return PRINTABLE_TYPES.has(type);
         })
         .map((r: any) => {
             const emp = data.employees?.[r.transporterId];
