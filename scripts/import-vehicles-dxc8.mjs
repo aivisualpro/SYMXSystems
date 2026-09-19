@@ -24,10 +24,13 @@
  *   - Existing vehicle already at DXC8, not Returned -> SKIP, already
  *     present, nothing to do.
  *   - Existing vehicle ACTIVE at some OTHER station -> SKIP and flag for
- *     manual review. Silently relocating a van that's actively assigned
- *     somewhere else is a real business decision (is it actually at
- *     DXC8 now, or is this a VIN typo?) that a script shouldn't make on
- *     its own.
+ *     manual review, UNLESS its VIN is in CONFIRMED_TRANSFER_VINS below
+ *     (Rohan reviewed these 3 specifically and confirmed they belong at
+ *     DXC8 despite currently sitting Active at DFO2) — those are
+ *     TRANSFERRED: same as the app's own Transfer action, only
+ *     currentSiteId changes plus their history follows them. Their other
+ *     fields are left untouched, since they're active vans with presumably
+ *     current data already, not stale Returned records to refresh.
  *
  * Usage:
  *   node scripts/import-vehicles-dxc8.mjs --dry-run
@@ -69,6 +72,15 @@ const VEHICLES = [
   { vin: "1FTYE1C8XRKA69940", vehicleName: "16-DXC8", licensePlate: "3KU785", make: "Ford", vehicleModel: "Transit", year: "2024", status: "Active", vehicleProvider: "BUDGET", ownership: "Rented", startDate: "2026-09-10", state: "OK - Oklahoma", info: "Sub-model: 150 3dr LWB Medium Roof Cargo Van. Class: LARGE_CARGO_VAN. Program: Standard Parcel - Large Van. Type: Rental." },
 ];
 
+// Rohan reviewed the 3 VINs that conflict with an Active vehicle at another
+// station (each currently Active at DFO2) and confirmed on 2026-09-18 they
+// belong at DXC8 — transfer them rather than skip for manual review.
+const CONFIRMED_TRANSFER_VINS = new Set([
+  "3C6LRVDG0SE566586",
+  "3C6LRVDGXPE578249",
+  "1FTYE1C8XRKA69940",
+]);
+
 // Collections whose records follow a reactivated van to its new station —
 // mirrors lib/fleet/transfer-vehicle.ts exactly, so a reactivation done by
 // this script behaves identically to one done through the app.
@@ -100,7 +112,7 @@ async function main() {
     return s ? `${s.code} — ${s.name}` : "an unknown station";
   };
 
-  let created = 0, reactivated = 0, alreadyPresent = 0, conflicts = 0;
+  let created = 0, reactivated = 0, alreadyPresent = 0, conflicts = 0, transferred = 0;
 
   for (const v of VEHICLES) {
     const existing = await db.collection("vehicles").findOne({ vin: v.vin });
@@ -160,11 +172,38 @@ async function main() {
       continue;
     }
 
+    if (CONFIRMED_TRANSFER_VINS.has(v.vin)) {
+      const fromLabel = siteLabel(existing.currentSiteId);
+      console.log(`  TRANSFER ${v.vin}  moving from ${fromLabel} to ${STATION_CODE} (confirmed by Rohan) — other fields left as-is`);
+      if (!DRY_RUN) {
+        await db.collection("vehicles").updateOne({ _id: existing._id }, { $set: { currentSiteId: siteId, updatedAt: new Date() } });
+
+        const match = { $or: [{ vehicleId: existing._id }, { vin: existing.vin }] };
+        for (const { collection, label } of FOLLOWS_VEHICLE) {
+          const res = await db.collection(collection).updateMany(match, { $set: { siteId } });
+          if (res.modifiedCount > 0) console.log(`      moved ${res.modifiedCount} ${label}`);
+        }
+
+        await db.collection("vehiclesActivityLogs").insertOne({
+          vehicleId: existing._id,
+          vin: existing.vin || "",
+          serviceType: "Transferred",
+          startDate: new Date(),
+          notes: `Transferred from ${fromLabel} to ${STATION_CODE} via bulk import (confirmed manually — conflicted with an Active vehicle at another station)`,
+          siteId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+      transferred++;
+      continue;
+    }
+
     console.log(`  CONFLICT ${v.vin}  already exists at ${siteLabel(existing.currentSiteId)}, status "${status || "Active"}" — NOT moved. Review manually (Transfer if it really belongs at ${STATION_CODE}, or check for a VIN typo).`);
     conflicts++;
   }
 
-  console.log(`\n${created} created, ${reactivated} reactivated, ${alreadyPresent} already present, ${conflicts} conflict(s) needing manual review.`);
+  console.log(`\n${created} created, ${reactivated} reactivated, ${transferred} transferred, ${alreadyPresent} already present, ${conflicts} conflict(s) needing manual review.`);
   if (DRY_RUN) console.log("Re-run without --dry-run (with --target=production --i-know-this-is-production) to apply.");
 
   await mongo.close();
