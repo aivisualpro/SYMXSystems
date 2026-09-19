@@ -372,6 +372,14 @@ function SchedulingPageContent() {
   const [canViewKpi, setCanViewKpi] = useState(false);
   const kpiRowRef = useRef<HTMLTableRowElement>(null);
 
+  // Change-Type popover: only one cell's popover is open at a time, tracked
+  // by a "transporterId-dayIdx" key so the Popover can be made controlled —
+  // needed to auto-close it on selection and to reset the search filter
+  // when a different cell's popover opens.
+  const [openTypeCellKey, setOpenTypeCellKey] = useState<string | null>(null);
+  const [typeFilterQuery, setTypeFilterQuery] = useState("");
+  const typeFilterInputRef = useRef<HTMLInputElement>(null);
+
   const [costModal, setCostModal] = useState<{ open: boolean; date: string; type: "theory" | "actual" | "revenue" | "formula"; metricLabel?: string; theoryData: any[]; actualData: any[]; revenueData: any[] }>({
     open: false,
     date: "",
@@ -1819,9 +1827,18 @@ function SchedulingPageContent() {
                                         const chipColor = resolvedColor || matchedOpt?.colorHex || style.colorHex;
                                         const warning = consecutiveWarnings.get(dayIdx);
 
+                                        const cellKey = `${emp.transporterId}-${dayIdx}`;
+                                        const isCellPopoverOpen = openTypeCellKey === cellKey;
+
                                         return (
                                           <td key={dayIdx} className="text-center px-0.5 sm:px-1 py-0.5 sm:py-1">
-                                            <Popover>
+                                            <Popover
+                                              open={isCellPopoverOpen}
+                                              onOpenChange={(isOpen) => {
+                                                setOpenTypeCellKey(isOpen ? cellKey : null);
+                                                setTypeFilterQuery("");
+                                              }}
+                                            >
                                               <PopoverTrigger asChild>
                                                 <div
                                                   className={cn(
@@ -1851,7 +1868,10 @@ function SchedulingPageContent() {
                                                 avoidCollisions
                                                 collisionPadding={8}
                                                 className="w-[280px] p-0 overflow-hidden rounded-xl border-border/40 shadow-2xl bg-card/95 backdrop-blur-xl"
-                                                onOpenAutoFocus={e => e.preventDefault()}
+                                                onOpenAutoFocus={e => {
+                                                  e.preventDefault();
+                                                  typeFilterInputRef.current?.focus();
+                                                }}
                                               >
                                                 {/* ── Info Header ── */}
                                                 <div className="px-3.5 pt-3.5 pb-2.5">
@@ -1921,8 +1941,18 @@ function SchedulingPageContent() {
                                                 {/* ── Type Selector ── */}
                                                 <div className="px-3.5 py-2.5">
                                                   <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2">Change Type</p>
+                                                  <input
+                                                    ref={typeFilterInputRef}
+                                                    type="text"
+                                                    value={typeFilterQuery}
+                                                    onChange={e => setTypeFilterQuery(e.target.value)}
+                                                    placeholder="Type to filter…"
+                                                    className="w-full mb-2 px-2.5 py-1.5 rounded-lg text-[11px] bg-muted/40 border border-border/40 focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
+                                                  />
                                                   <div className="max-h-[200px] overflow-y-auto flex flex-col gap-0.5 pr-1 -mr-1">
-                                                    {dynamicTypeOptions.map(opt => {
+                                                    {dynamicTypeOptions
+                                                      .filter(opt => !typeFilterQuery.trim() || opt.label.toLowerCase().includes(typeFilterQuery.trim().toLowerCase()))
+                                                      .map(opt => {
                                                       const Icon = opt.icon;
                                                       const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();
                                                       const optBg = opt.colorHex || "#555";
@@ -1935,7 +1965,11 @@ function SchedulingPageContent() {
                                                               ? "ring-1 ring-primary/50 shadow-sm bg-accent/50"
                                                               : "hover:bg-muted/50 opacity-80 hover:opacity-100"
                                                           )}
-                                                          onClick={() => handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name)}
+                                                          onClick={() => {
+                                                            handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name);
+                                                            setOpenTypeCellKey(null);
+                                                            setTypeFilterQuery("");
+                                                          }}
                                                         >
                                                           <div
                                                             className="h-5 w-5 rounded flex items-center justify-center shrink-0"
