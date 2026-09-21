@@ -42,6 +42,7 @@ export interface EmployeeSchedule {
     ScheduleNotes?: string;
     hiredDate?: string | Date;
     profileImage?: string;
+    phoneNumber?: string;
   } | null;
   weekNote: string;
   /** Status of the "confirm next week's schedule" message sent to this employee, if any. */

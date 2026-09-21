@@ -1791,16 +1791,31 @@ function SchedulingPageContent() {
                                           )}
                                           {(() => {
                                             const confStatus = emp.weekScheduleConfirmation?.status;
-                                            return (
+                                            const phone = emp.employee?.phoneNumber || "";
+                                            const nameSpan = (
                                               <span
                                                 className={cn(
                                                   "text-[10px] sm:text-xs font-normal truncate flex-1 min-w-0",
-                                                  confStatus === "confirmed" && "text-emerald-500 font-semibold"
+                                                  confStatus === "confirmed" && "text-emerald-500 font-semibold",
+                                                  phone && "cursor-pointer hover:underline decoration-dotted underline-offset-2"
                                                 )}
-                                                title={emp.employee?.name || emp.transporterId}
+                                                title={!phone ? (emp.employee?.name || emp.transporterId) : undefined}
+                                                onClick={phone ? () => {
+                                                  navigator.clipboard.writeText(phone);
+                                                  notify.success(`Copied ${phone}`);
+                                                } : undefined}
                                               >
                                                 {emp.employee?.name || emp.transporterId}
                                               </span>
+                                            );
+                                            if (!phone) {
+                                              return nameSpan;
+                                            }
+                                            return (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>{nameSpan}</TooltipTrigger>
+                                                <TooltipContent>Click to copy: {phone}</TooltipContent>
+                                              </Tooltip>
                                             );
                                           })()}
                                           {isNewHire && (

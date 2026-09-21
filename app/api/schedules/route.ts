@@ -150,7 +150,7 @@ export async function GET(req: NextRequest) {
       orgWide(
         SymxEmployee.find(
           { transporterId: { $in: transporterIds } },
-          { _id: 1, transporterId: 1, firstName: 1, lastName: 1, type: 1, status: 1, ScheduleNotes: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1, hiredDate: 1, profileImage: 1, rate: 1 }
+          { _id: 1, transporterId: 1, firstName: 1, lastName: 1, type: 1, status: 1, ScheduleNotes: 1, sunday: 1, monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1, hiredDate: 1, profileImage: 1, rate: 1, phoneNumber: 1 }
         ),
         "resolving driver details for schedules already scoped to this station — a driver loaned in from another station must still show a name, not a blank row"
       ).lean(),
@@ -216,6 +216,7 @@ export async function GET(req: NextRequest) {
               ScheduleNotes: emp.ScheduleNotes || '',
               hiredDate: emp.hiredDate || null,
               profileImage: emp.profileImage || null,
+              phoneNumber: emp.phoneNumber || '',
             }
             : null,
           weekNote: '',
