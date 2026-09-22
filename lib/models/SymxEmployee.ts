@@ -32,6 +32,19 @@ export interface ISymxEmployee extends Document {
   motorVehicleReportDate?: Date;
   profileImage?: string;
 
+  // Manual mapping to this driver's ID in Netradyne (the fleet safety
+  // camera vendor) — Netradyne's alert webhook identifies drivers by its
+  // own driverId, which has no inherent relationship to our transporterId,
+  // so this has to be set explicitly per employee for reliable alert
+  // routing. Falls back to firstName+lastName matching when unset, which
+  // is fragile (name changes, duplicates) — this field is the fix.
+  netradyneDriverId?: string;
+  // Firebase Cloud Messaging token for the driver's phone, refreshed by the
+  // mobile app on login / token rotation. Used to push safety alerts and
+  // other near-real-time notifications to their device.
+  fcmToken?: string;
+  fcmTokenUpdatedAt?: Date;
+
   // Schedule availability (ObjectId ref to RouteType, null = OFF)
   sunday?: mongoose.Types.ObjectId;
   monday?: mongoose.Types.ObjectId;
@@ -127,6 +140,10 @@ const SymxEmployeeSchema: Schema = new Schema({
   motorVehicleReportDate: { type: Date },
   profileImage: { type: String },
 
+  netradyneDriverId: { type: String },
+  fcmToken: { type: String },
+  fcmTokenUpdatedAt: { type: Date },
+
   sunday: { type: Schema.Types.ObjectId, ref: 'RouteType', default: null },
   monday: { type: Schema.Types.ObjectId, ref: 'RouteType', default: null },
   tuesday: { type: Schema.Types.ObjectId, ref: 'RouteType', default: null },
@@ -172,6 +189,7 @@ const SymxEmployeeSchema: Schema = new Schema({
 SymxEmployeeSchema.index({ status: 1, phoneNumber: 1 });
 SymxEmployeeSchema.index({ email: 1 });
 SymxEmployeeSchema.index({ phoneNumber: 1 });
+SymxEmployeeSchema.index({ netradyneDriverId: 1 }, { sparse: true });
 
 // ── Multi-site ──
 // ORG-owned but assigned to a station, and transferable. Distinct

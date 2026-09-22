@@ -14,7 +14,7 @@ export default function PrivacyPolicyPage() {
     <div className="h-screen overflow-y-auto bg-white text-zinc-800">
       <div className="mx-auto max-w-2xl px-6 py-12">
         <h1 className="text-2xl font-bold text-zinc-900">SYMX Systems — Privacy Policy</h1>
-        <p className="mt-1 text-sm text-zinc-500">Last updated: August 2026</p>
+        <p className="mt-1 text-sm text-zinc-500">Last updated: September 2026</p>
 
         <p className="mt-6 leading-relaxed">
           SYMX Systems ("the App") is an internal operations tool used by employees and
@@ -36,21 +36,33 @@ export default function PrivacyPolicyPage() {
           <li>Time punches and related timekeeping data used for payroll</li>
           <li>Route, delivery, and vehicle assignment information relevant to your shift</li>
           <li>Employment documents you or HR upload (e.g. onboarding paperwork), where applicable</li>
+          <li>Photos you take within the App for vehicle inspections and end-of-day tasks</li>
+          <li>A device push-notification identifier, used only to deliver alerts to your phone</li>
         </ul>
+
+        <h2 className="mt-8 text-lg font-semibold text-zinc-900">Camera and photos</h2>
+        <p className="mt-2 leading-relaxed">
+          The App uses your device's camera to let you take photos as part of required
+          vehicle inspections and end-of-day tasks. These photos are uploaded to your
+          employer's systems as part of that inspection or task record. The App does not
+          access your existing photo library except to let you pick a photo you've already
+          taken as an alternative to using the camera directly.
+        </p>
 
         <h2 className="mt-8 text-lg font-semibold text-zinc-900">What we don't collect</h2>
         <p className="mt-2 leading-relaxed">
-          The App does not request or use your device's location, camera, microphone,
-          contacts, or photos. Its only device permission is network access, used to load
-          and sync your schedule and messages.
+          The App does not request or use your device's precise location, microphone, or
+          contacts.
         </p>
 
         <h2 className="mt-8 text-lg font-semibold text-zinc-900">How this information is used</h2>
         <p className="mt-2 leading-relaxed">
           Information in the App is used to schedule shifts, coordinate dispatch and
-          routes, process time and attendance for payroll, and send you shift-related
-          notifications (for example, by text message). It is used for these internal
-          business and employment purposes only.
+          routes, process time and attendance for payroll, record vehicle inspections and
+          end-of-day tasks, and send you shift-related and safety-related notifications
+          (for example, by text message or an in-app alert, including an audible alert
+          played on your device for safety events). It is used for these internal business
+          and employment purposes only.
         </p>
 
         <h2 className="mt-8 text-lg font-semibold text-zinc-900">Who can see it</h2>
@@ -65,9 +77,12 @@ export default function PrivacyPolicyPage() {
         <p className="mt-2 leading-relaxed">
           We do not sell your information or share it with advertisers. Limited data is
           shared with service providers strictly to make the App work — for example, a
-          text-messaging provider to deliver shift notifications, and delivery-platform
-          integrations needed to coordinate routes. These providers are only permitted to
-          use the data to provide that service.
+          text-messaging provider to deliver shift notifications, a push-notification
+          provider (Google Firebase Cloud Messaging) to deliver in-app alerts to your
+          device, delivery-platform integrations needed to coordinate routes, and a
+          fleet safety camera provider whose driving-safety event data is used to trigger
+          in-app coaching alerts. These providers are only permitted to use the data to
+          provide that service.
         </p>
 
         <h2 className="mt-8 text-lg font-semibold text-zinc-900">Data retention and security</h2>
