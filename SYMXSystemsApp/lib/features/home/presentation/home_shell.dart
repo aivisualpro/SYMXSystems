@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/api/api_client.dart';
+import '../../../core/notifications/push_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/data/auth_repository.dart';
 import 'welcome_overlay.dart';
@@ -59,6 +61,19 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> {
   final _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    // HomeShell only ever mounts once the driver is authenticated (both a
+    // fresh login and a cold-start-with-valid-session route here via
+    // SplashScreen) — a single spot to register/refresh this device's
+    // push token, rather than duplicating the call at every place that
+    // can land someone on this screen.
+    final dio = ref.read(dioProvider);
+    PushService.instance.registerToken(dio);
+    PushService.instance.listenForTokenRefresh(dio);
+  }
 
   @override
   void dispose() {

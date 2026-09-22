@@ -12,3 +12,8 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Firebase config — tied to the Firebase project, not secret in the same
+# way as the keystore, but still project-specific and not meant to be
+# committed. See app/google-services.json.example.
+app/google-services.json

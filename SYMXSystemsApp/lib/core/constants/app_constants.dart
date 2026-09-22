@@ -5,9 +5,21 @@
 library;
 
 /// Base URL for all API calls to the SYMX Systems backend.
-/// Empty string = relative URLs, so the app calls whatever host serves it
-/// (works for both local dev at localhost:9568 and production on Vercel).
-const String kApiBaseUrl = '';
+///
+/// Defaults to the production Vercel deployment — required for a native
+/// Android/iOS build, which has no "current page" to resolve a relative
+/// URL against the way a browser does. An empty default here would make
+/// every API call silently fail once the app is installed from Google
+/// Play (a real bug this default replaces — it worked only for the
+/// Flutter-web build served from the same origin as the API, and was
+/// never actually exercised as an installed APK).
+///
+/// Override for local development:
+///   flutter run --dart-define=API_BASE_URL=http://localhost:3000
+const String kApiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'https://symx-systems.vercel.app',
+);
 
 /// Human-readable application name used in titles and branding.
 const String kAppName = 'SYMX Systems';

@@ -1,9 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+ requires runtime permission to show notifications at
+         all — without this, push notifications (safety alerts) would be
+         silently suppressed on newer devices. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="SYMX Systems"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Default channel/icon/color for FCM notifications shown while
+             the app is backgrounded or killed — these are read by Google
+             Play services directly, not by our own Dart code, which is
+             why they have to live here rather than in push_service.dart. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="safety_alerts" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

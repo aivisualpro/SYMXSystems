@@ -1,0 +1,19 @@
+This is a placeholder, not a real config file.
+
+Get the real one from the Firebase console:
+  1. https://console.firebase.google.com → your SYMX Systems project
+  2. Project settings (gear icon) → your Android app
+    (package name: com.symxsystems.symx_systems_app)
+  3. Download google-services.json
+  4. Save it as android/app/google-services.json (same folder as this file,
+     but WITHOUT the .example suffix)
+
+It's gitignored — don't commit it. It's tied to your Firebase project but
+isn't a secret the way the release keystore or a service account key is
+(it's bundled inside the app itself and is visible to anyone who unzips
+the .apk), so losing it isn't catastrophic — you can always re-download it
+from the Firebase console.
+
+Once it's in place, push notifications (Netradyne safety alerts) work in
+release builds. Without it, the app still builds and runs fine — you just
+won't get push notifications.

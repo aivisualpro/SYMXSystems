@@ -21,6 +21,11 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.11.1" apply false
     id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    // Processes android/app/google-services.json (Firebase config) at
+    // build time — required for firebase_core/firebase_messaging to work.
+    // Rohan generates that file from the Firebase console; it's gitignored
+    // like key.properties since it's tied to the Firebase project.
+    id("com.google.gms.google-services") version "4.4.2" apply false
 }
 
 include(":app")
