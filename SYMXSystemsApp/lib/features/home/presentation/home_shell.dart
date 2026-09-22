@@ -38,10 +38,10 @@ const _kTabs = <_Tab>[
     title: 'Notices',
   ),
   _Tab(
-    icon: Icons.auto_awesome_outlined,
-    activeIcon: Icons.auto_awesome,
-    label: 'Coming Soon',
-    title: 'Coming Soon',
+    icon: Icons.checklist_rtl_outlined,
+    activeIcon: Icons.checklist_rtl_rounded,
+    label: 'End of Day',
+    title: 'End-of-Day Tasks',
   ),
 ];
 

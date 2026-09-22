@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
-import '../../features/coming_soon/presentation/coming_soon_screen.dart';
+import '../../features/end_of_day/presentation/end_of_day_screen.dart';
 import '../../features/home/presentation/home_shell.dart';
 import '../../features/inspections/presentation/inspections_screen.dart';
 import '../../features/notices/presentation/notices_screen.dart';
@@ -92,14 +92,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
 
-          // Tab 2 — Coming Soon
+          // Tab 2 — End of Day
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/coming-soon',
+                path: '/end-of-day',
                 pageBuilder: (context, state) => _fadeScalePage(
                   state: state,
-                  child: const ComingSoonScreen(),
+                  child: const EndOfDayScreen(),
                 ),
               ),
             ],
