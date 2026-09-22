@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Route, ListFilter, Settings, Plus, Wrench, Pencil } from "lucide-react";
+import { Route, ListFilter, Settings, Plus, Wrench, Pencil, ClipboardCheck } from "lucide-react";
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { AddRefContext } from "./_components/add-ref-context";
@@ -12,6 +12,7 @@ const SUB_TABS = [
     { id: "default-routes", label: "Default Routes", icon: Route },
     { id: "dropdowns", label: "Dropdowns", icon: ListFilter },
     { id: "wst", label: "WST", icon: Settings },
+    { id: "end-of-day-tasks", label: "End-of-Day Tasks", icon: ClipboardCheck },
 ];
 
 export default function GeneralSettingsLayout({ children }: { children: React.ReactNode }) {
@@ -72,6 +73,12 @@ export default function GeneralSettingsLayout({ children }: { children: React.Re
                         <Button size="sm" onClick={() => addRef.current?.()} className="gap-1.5 mb-1">
                             <Plus className="h-3.5 w-3.5" />
                             Add WST
+                        </Button>
+                    )}
+                    {activeTab === "end-of-day-tasks" && (
+                        <Button size="sm" onClick={() => addRef.current?.()} className="gap-1.5 mb-1">
+                            <Plus className="h-3.5 w-3.5" />
+                            Add Task
                         </Button>
                     )}
                 </div>
