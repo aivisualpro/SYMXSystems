@@ -1052,8 +1052,16 @@ export default function RoutesPage() {
                                                                             );
                                                                         })()}
                                                                         {(() => {
-                                                                            if (!row.dashcam || row.dashcam.toLowerCase() === "none") return null;
-                                                                            const camOpt = dropdowns.find((d: any) => d.type === "dashcam" && d.description.toLowerCase() === row.dashcam.toLowerCase());
+                                                                            // row.dashcam is a snapshot stamped onto the route record
+                                                                            // whenever the van was (re)assigned — if the van's dashcam
+                                                                            // gets changed later on the Fleet page, that edit never
+                                                                            // reaches routes already assigned to it. Read live off the
+                                                                            // current vehicle record instead so the icon always reflects
+                                                                            // what the van actually has right now.
+                                                                            const v = vehicles.find(v => v.vehicleName === row.van);
+                                                                            const liveDashcam = row.van ? (v ? (v.dashcam || "") : row.dashcam) : "";
+                                                                            if (!liveDashcam || liveDashcam.toLowerCase() === "none") return null;
+                                                                            const camOpt = dropdowns.find((d: any) => d.type === "dashcam" && d.description.toLowerCase() === liveDashcam.toLowerCase());
                                                                             const CamIcon = camOpt?.icon ? (LucideIcons as any)[camOpt.icon] : Video;
                                                                             const camColor = camOpt?.color || undefined;
                                                                             return (
@@ -1063,7 +1071,7 @@ export default function RoutesPage() {
                                                                                             <CamIcon className={cn("h-3 w-3 ml-0.5", !camColor && "text-muted-foreground")} style={{ color: camColor }} />
                                                                                         </div>
                                                                                     </TooltipTrigger>
-                                                                                    <TooltipContent>{row.dashcam}</TooltipContent>
+                                                                                    <TooltipContent>{liveDashcam}</TooltipContent>
                                                                                 </Tooltip>
                                                                             );
                                                                         })()}
