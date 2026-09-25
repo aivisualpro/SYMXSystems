@@ -91,7 +91,24 @@ export async function POST(req: NextRequest) {
 
     const session = await getSession();
 
+    // The create form never sends a siteId — it relies on whichever
+    // station is currently active. Without resolving and stamping it
+    // here, every new incident saved with no siteId at all, which
+    // siteFilter's includeUnassigned fallback then surfaces under
+    // whichever station happens to be the org default (DFO2) instead of
+    // the station it was actually reported for — so a DXC8 incident
+    // "disappeared" from DXC8 and showed up under DFO2 instead.
+    const scope = await getRequestScope();
+    const writeSiteId = resolveWriteSiteId(scope, body.siteId || null);
+    if (!writeSiteId) {
+      return NextResponse.json(
+        { error: "Select a single station before reporting an incident." },
+        { status: 400 }
+      );
+    }
+
     const incident = await SymxIncident.create({
+      siteId: writeSiteId,
       transporterId: String(body.transporterId).trim().toUpperCase(),
       employeeName: body.employeeName || "",
       employeeId: body.employeeId || undefined,
