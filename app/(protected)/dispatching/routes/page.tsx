@@ -1084,6 +1084,13 @@ export default function RoutesPage() {
                                                                     </DropdownMenuItem>
                                                                     {getAvailableVans(row.date, row.van).map(v => {
                                                                         const isInactive = v.status && v.status.toLowerCase() !== "active";
+                                                                        // Brand initial (Ford -> F, Ram -> R) + the size code off the
+                                                                        // tail of the service type ("SP XL" -> "XL"), so dispatchers
+                                                                        // can tell vans apart by more than just their number.
+                                                                        const makeInitial = (v.make || "").trim().charAt(0).toUpperCase();
+                                                                        const sizeParts = (v.serviceType || "").trim().split(/\s+/).filter(Boolean);
+                                                                        const sizeCode = sizeParts[sizeParts.length - 1] || "";
+                                                                        const vanSuffix = [makeInitial, sizeCode].filter(Boolean).join(" ");
                                                                         return (
                                                                             <DropdownMenuItem
                                                                                 key={v.vehicleName}
@@ -1091,7 +1098,12 @@ export default function RoutesPage() {
                                                                                 className="text-[13px] cursor-pointer font-medium"
                                                                             >
                                                                                 <div className="flex-1 flex items-center gap-1.5">
-                                                                                    <span className={cn(isInactive ? "text-red-500 font-bold" : "text-foreground")}>{v.vehicleName}</span>
+                                                                                    <span className={cn(isInactive ? "text-red-500 font-bold" : "text-foreground")}>
+                                                                                        {v.vehicleName}
+                                                                                        {vanSuffix && (
+                                                                                            <span className="text-muted-foreground/60 font-normal"> - {vanSuffix}</span>
+                                                                                        )}
+                                                                                    </span>
                                                                                     {isInactive && (
                                                                                         <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20">
                                                                                             <AlertCircle className="h-3 w-3 text-red-500" />
