@@ -53,19 +53,43 @@ async function main() {
     process.exit(1);
   }
 
+  // Widen by a day on each side and match by substring rather than exact
+  // string, in case the stored name is formatted differently (e.g. no
+  // middle name, different casing) or the date shifted across a UTC/local
+  // boundary.
   const dayStart = new Date(`${dateStr}T00:00:00.000Z`);
+  dayStart.setUTCDate(dayStart.getUTCDate() - 1);
   const dayEnd = new Date(`${dateStr}T23:59:59.999Z`);
+  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-  const matches = await db
+  const nameParts = employeeName.split(/\s+/).filter(Boolean);
+  const lastNameGuess = nameParts[nameParts.length - 1];
+
+  let matches = await db
     .collection("SymxIncidents")
     .find({
-      employeeName: { $regex: `^${employeeName}$`, $options: "i" },
+      employeeName: { $regex: employeeName.split(/\s+/).join(".*"), $options: "i" },
       incidentDate: { $gte: dayStart, $lte: dayEnd },
     })
     .toArray();
 
   if (matches.length === 0) {
-    console.log(`No incident found for "${employeeName}" on ${dateStr}.`);
+    console.log(`No incident found matching "${employeeName}" within a day of ${dateStr}.`);
+    console.log(`Showing the 8 most recent incidents so you can find the right one:\n`);
+    const recent = await db
+      .collection("SymxIncidents")
+      .find({})
+      .sort({ incidentDate: -1 })
+      .limit(8)
+      .toArray();
+    const sites = await db.collection("SYMXSites").find({}).project({ code: 1 }).toArray();
+    for (const inc of recent) {
+      const s = sites.find((x) => String(x._id) === String(inc.siteId));
+      console.log(
+        `  ${inc._id}  "${inc.employeeName}"  ${inc.incidentDate?.toISOString().slice(0, 10)}  ${inc.claimType}  currently at: ${s ? s.code : "unassigned"}`
+      );
+    }
+    console.log(`\n(Not finding it? Try re-running with just the last name: --employee="${lastNameGuess}")`);
     await mongo.close();
     return;
   }
