@@ -1099,6 +1099,14 @@ export default function RoutesPage() {
                                                                         const sizeParts = (v.serviceType || "").trim().split(/\s+/).filter(Boolean);
                                                                         const sizeCode = sizeParts[sizeParts.length - 1] || "";
                                                                         const vanSuffix = [makeInitial, sizeCode].filter(Boolean).join(" ");
+                                                                        const vanDashcam = v.dashcam || "";
+                                                                        const camOpt = vanDashcam && vanDashcam.toLowerCase() !== "none"
+                                                                            ? dropdowns.find((d: any) => d.type === "dashcam" && d.description.toLowerCase() === vanDashcam.toLowerCase())
+                                                                            : null;
+                                                                        const CamIcon = vanDashcam && vanDashcam.toLowerCase() !== "none"
+                                                                            ? (camOpt?.icon ? (LucideIcons as any)[camOpt.icon] : Video)
+                                                                            : null;
+                                                                        const camColor = camOpt?.color || undefined;
                                                                         return (
                                                                             <DropdownMenuItem
                                                                                 key={v.vehicleName}
@@ -1112,6 +1120,16 @@ export default function RoutesPage() {
                                                                                             <span className="text-muted-foreground/60 font-normal"> - {vanSuffix}</span>
                                                                                         )}
                                                                                     </span>
+                                                                                    {CamIcon && (
+                                                                                        <Tooltip>
+                                                                                            <TooltipTrigger asChild>
+                                                                                                <div className="shrink-0">
+                                                                                                    <CamIcon className={cn("h-3 w-3", !camColor && "text-muted-foreground")} style={{ color: camColor }} />
+                                                                                                </div>
+                                                                                            </TooltipTrigger>
+                                                                                            <TooltipContent>{vanDashcam}</TooltipContent>
+                                                                                        </Tooltip>
+                                                                                    )}
                                                                                     {isInactive && (
                                                                                         <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20">
                                                                                             <AlertCircle className="h-3 w-3 text-red-500" />
