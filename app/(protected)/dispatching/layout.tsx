@@ -21,6 +21,7 @@ import {
     Users,
     TableProperties,
     FileDown,
+    Wand2,
 } from "lucide-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { useSchedulingWeeks } from "@/lib/query/hooks/useSchedules";
@@ -187,6 +188,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const [showRoutesInfo, setShowRoutesInfo] = useState(false);
     const [globalEditMode, setGlobalEditMode] = useState(false);
     const [pdfLoading, setPdfLoading] = useState(false);
+    const [autoAssignLoading, setAutoAssignLoading] = useState(false);
     const [confirmationFilter, setConfirmationFilter] = useState("all");
     const currentWeek = useMemo(() => getCurrentYearWeek(), []);
 
@@ -606,6 +608,53 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                                         <FileDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                     )}
                                     PDF
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (!selectedDate) {
+                                            notify.error("No date selected");
+                                            return;
+                                        }
+                                        setAutoAssignLoading(true);
+                                        try {
+                                            const res = await fetch("/api/dispatching/routes/auto-assign-vans", {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ date: selectedDate }),
+                                            });
+                                            const data = await res.json();
+                                            if (!res.ok) throw new Error(data.error || "Failed to auto-assign vans");
+
+                                            if (data.assignedCount === 0 && data.flaggedCount === 0) {
+                                                notify.info("Nothing to assign — every route already has a van.");
+                                            } else if (data.flaggedCount > 0) {
+                                                const names = data.flagged.slice(0, 3).map((f: any) => f.employeeName).join(", ");
+                                                const extra = data.flagged.length > 3 ? ` +${data.flagged.length - 3} more` : "";
+                                                notify.warning(
+                                                    `Assigned ${data.assignedCount} van(s). ${data.flaggedCount} need a manual pick: ${names}${extra}`
+                                                );
+                                            } else {
+                                                notify.success(`Assigned ${data.assignedCount} van(s).`);
+                                            }
+                                            refreshRoutes();
+                                        } catch (err: any) {
+                                            notify.error(err.message || "Failed to auto-assign vans");
+                                        } finally {
+                                            setAutoAssignLoading(false);
+                                        }
+                                    }}
+                                    disabled={autoAssignLoading}
+                                    className={cn(
+                                        "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap select-none",
+                                        "bg-violet-600 text-white shadow-lg shadow-violet-600/25 hover:brightness-110 hover:shadow-xl hover:shadow-violet-600/30"
+                                    )}
+                                >
+                                    {autoAssignLoading ? (
+                                        <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
+                                    ) : (
+                                        <Wand2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                    )}
+                                    Auto-Assign Vans
                                 </button>
                                 <Select value={confirmationFilter} onValueChange={setConfirmationFilter}>
                                     <SelectTrigger className="h-8 sm:h-9 min-w-[130px] sm:min-w-[150px] bg-card text-[11px] sm:text-xs" suppressHydrationWarning>
