@@ -69,6 +69,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { notify } from "@/lib/notify";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
+import { useSiteContext } from "@/components/providers/site-context-provider";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -379,6 +380,21 @@ function SchedulingPageContent() {
   const [openTypeCellKey, setOpenTypeCellKey] = useState<string | null>(null);
   const [typeFilterQuery, setTypeFilterQuery] = useState("");
   const typeFilterInputRef = useRef<HTMLInputElement>(null);
+  // Cross-station shift picker — set when the "Other Stations" section of
+  // the Change Type popover is showing the Route/Open/Close sub-menu for
+  // one particular station instead of the normal type list.
+  const [crossStationPick, setCrossStationPick] = useState<{ id: string; code: string; name: string } | null>(null);
+  const [crossStationLoading, setCrossStationLoading] = useState(false);
+  const crossStationTypesCache = useRef<Record<string, any[]>>({});
+  const { sites: allSites, activeSiteIds } = useSiteContext();
+  const otherStations = useMemo(
+    () => allSites.filter(s => !activeSiteIds.includes(s.id)),
+    [allSites, activeSiteIds]
+  );
+  const siteCodeById = useMemo(
+    () => new Map(allSites.map(s => [s.id, s.code])),
+    [allSites]
+  );
 
   const [costModal, setCostModal] = useState<{ open: boolean; date: string; type: "theory" | "actual" | "revenue" | "formula"; metricLabel?: string; theoryData: any[]; actualData: any[]; revenueData: any[] }>({
     open: false,
@@ -995,6 +1011,10 @@ function SchedulingPageContent() {
       transporterId,
       dayIdx,
       yearWeek: selectedWeek,
+      // A normal, same-station type pick always clears any stale
+      // "loaned to another station" label left over from a previous
+      // cross-station pick on this cell.
+      crossStationSiteId: null,
       ...(matchedRT?._id ? { typeId: String(matchedRT._id) } : {}),
     };
 
@@ -1028,6 +1048,81 @@ function SchedulingPageContent() {
     });
 
   }, [selectedWeek, weekData, updateSchedule, routeTypeConfigs, storeRouteTypes, routeTypesList]);
+
+  // Handle picking "this driver is doing Route/Open/Close at ANOTHER
+  // station today" — resolves that station's OWN start time for the
+  // chosen type (never this station's), and stamps crossStationSiteId so
+  // the cell renders as a "{CODE} - Type" label. The schedule row itself
+  // stays owned by the current station; nothing about site ownership
+  // changes — this is display + startTime only.
+  const handleCrossStationTypeChange = useCallback(async (
+    scheduleId: string | undefined,
+    site: { id: string; code: string; name: string },
+    subType: "Route" | "Open" | "Close",
+    transporterId: string,
+    dayIdx: number,
+    employeeName?: string
+  ) => {
+    setCrossStationLoading(true);
+    try {
+      let otherTypes = crossStationTypesCache.current[site.id];
+      if (!otherTypes) {
+        const res = await fetch(`/api/admin/settings/route-types?siteId=${site.id}`);
+        if (!res.ok) throw new Error("Failed to load that station's schedule types");
+        otherTypes = await res.json();
+        crossStationTypesCache.current[site.id] = otherTypes;
+      }
+
+      const matchedRT = (otherTypes || []).find(
+        (rt: any) => rt.name?.trim().toLowerCase() === subType.toLowerCase()
+      );
+      if (!matchedRT) {
+        notify.error(`${site.code} has no "${subType}" schedule type configured`);
+        return;
+      }
+      if (!matchedRT.startTime) {
+        notify.warning(`${site.code}'s "${subType}" has no start time set — set one on Default Routes first`);
+      }
+
+      const payload: Record<string, any> = {
+        type: `${site.code} - ${matchedRT.name}`,
+        status: matchedRT.routeStatus || "Scheduled",
+        typeId: String(matchedRT._id),
+        startTime: matchedRT.startTime || "",
+        crossStationSiteId: site.id,
+        transporterId,
+        dayIdx,
+        yearWeek: selectedWeek,
+      };
+      if (employeeName) payload.employeeName = employeeName;
+      if (scheduleId) {
+        payload.scheduleId = scheduleId;
+      } else {
+        const dateStr = weekData?.dates?.[dayIdx];
+        if (!dateStr || !selectedWeek) {
+          notify.error("Cannot determine date for this day");
+          return;
+        }
+        payload.date = dateStr;
+        payload.weekDay = FULL_DAY_NAMES[dayIdx];
+      }
+
+      updateSchedule({ payload }, {
+        onSuccess: () => {
+          notify.success(`Type updated to ${site.code} - ${matchedRT.name} (${matchedRT.startTime || "no start time"})`);
+          setMessagingRefreshKey(prev => prev + 1);
+          setAuditCounts(prev => ({ ...prev, [transporterId]: (prev[transporterId] || 0) + 1 }));
+        },
+        onError: (err) => {
+          notify.error(err.message || "Failed to update type");
+        },
+      });
+    } catch (err: any) {
+      notify.error(err.message || "Failed to load that station's schedule types");
+    } finally {
+      setCrossStationLoading(false);
+    }
+  }, [selectedWeek, weekData, updateSchedule]);
 
   // Handle note save — optimistic update
   const handleNoteSaved = useCallback((transporterId: string, newNote: string, employeeName?: string, oldNote?: string) => {
@@ -1842,6 +1937,12 @@ function SchedulingPageContent() {
                                         const chipColor = resolvedColor || matchedOpt?.colorHex || style.colorHex;
                                         const warning = consecutiveWarnings.get(dayIdx);
 
+                                        // A cross-station shift ("DFO2 - Route") — the schedule row still
+                                        // belongs to this station; only the label + startTime reflect the
+                                        // other one.
+                                        const crossStationCode = day?.crossStationSiteId ? siteCodeById.get(day.crossStationSiteId) : null;
+                                        const chipLabel = crossStationCode ? `${crossStationCode} - ${displayValue}` : displayValue;
+
                                         const cellKey = `${emp.transporterId}-${dayIdx}`;
                                         const isCellPopoverOpen = openTypeCellKey === cellKey;
 
@@ -1852,6 +1953,7 @@ function SchedulingPageContent() {
                                               onOpenChange={(isOpen) => {
                                                 setOpenTypeCellKey(isOpen ? cellKey : null);
                                                 setTypeFilterQuery("");
+                                                setCrossStationPick(null);
                                               }}
                                             >
                                               <PopoverTrigger asChild>
@@ -1859,12 +1961,13 @@ function SchedulingPageContent() {
                                                   className={cn(
                                                     "relative flex items-center justify-center gap-0.5 sm:gap-1 h-6 sm:h-7 rounded-md text-[9px] sm:text-[11px] font-semibold transition-all border cursor-pointer select-none px-1 sm:px-1.5",
                                                     "hover:brightness-110 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]",
+                                                    crossStationCode && "border-dashed border-2",
                                                     isCellPopoverOpen && "ring-2 ring-primary ring-offset-1 ring-offset-background scale-[1.06] shadow-lg brightness-110 z-10"
                                                   )}
                                                   style={{ backgroundColor: chipColor, color: getContrastText(chipColor), borderColor: chipColor }}
                                                 >
                                                   {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
-                                                  <span className="truncate">{displayValue || <Minus className="h-3 w-3 opacity-40" />}</span>
+                                                  <span className="truncate">{chipLabel || <Minus className="h-3 w-3 opacity-40" />}</span>
                                                   {warning && (
                                                     <span className={cn(
                                                       "flex items-center justify-center h-4 min-w-[16px] rounded-full text-[9px] font-bold text-white leading-none px-1 ml-0.5 shrink-0",
@@ -1913,7 +2016,7 @@ function SchedulingPageContent() {
                                                             style={{ backgroundColor: chipColor, color: getContrastText(chipColor) }}
                                                           >
                                                             {CellIcon && <CellIcon className="h-3 w-3 shrink-0" />}
-                                                            {displayValue}
+                                                            {chipLabel}
                                                           </div>
                                                         ) : <span />}
                                                         {startTime && (
@@ -1947,6 +2050,41 @@ function SchedulingPageContent() {
                                                 <div className="h-px bg-border/40 mx-3.5" />
 
                                                 {/* ── Type Selector ── */}
+                                                {isCellPopoverOpen && crossStationPick ? (
+                                                  <div className="px-3.5 py-2.5">
+                                                    <button
+                                                      onClick={() => setCrossStationPick(null)}
+                                                      className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground/70 hover:text-foreground mb-2 uppercase tracking-widest"
+                                                    >
+                                                      <ChevronLeft className="h-3 w-3" /> Back
+                                                    </button>
+                                                    <p className="text-[11px] font-bold text-foreground mb-2">
+                                                      What are they doing at {crossStationPick.code}?
+                                                    </p>
+                                                    <div className="flex flex-col gap-1">
+                                                      {(["Route", "Open", "Close"] as const).map(subType => (
+                                                        <button
+                                                          key={subType}
+                                                          disabled={crossStationLoading}
+                                                          onClick={() => {
+                                                            handleCrossStationTypeChange(day?._id, crossStationPick, subType, emp.transporterId, dayIdx, emp.employee?.name);
+                                                            setOpenTypeCellKey(null);
+                                                            setCrossStationPick(null);
+                                                          }}
+                                                          className={cn(
+                                                            "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:bg-muted/50",
+                                                            subType === "Route" && "ring-1 ring-primary/30 bg-accent/30"
+                                                          )}
+                                                        >
+                                                          <span>{subType}</span>
+                                                          {subType === "Route" && (
+                                                            <span className="text-[9px] font-bold text-muted-foreground/50 uppercase">Default</span>
+                                                          )}
+                                                        </button>
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                ) : (
                                                 <div className="px-3.5 py-2.5">
                                                   <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2">Change Type</p>
                                                   <input
@@ -1962,7 +2100,7 @@ function SchedulingPageContent() {
                                                       .filter(opt => !typeFilterQuery.trim() || opt.label.toLowerCase().includes(typeFilterQuery.trim().toLowerCase()))
                                                       .map(opt => {
                                                       const Icon = opt.icon;
-                                                      const isActive = displayValue.toLowerCase() === opt.label.toLowerCase();
+                                                      const isActive = !crossStationCode && displayValue.toLowerCase() === opt.label.toLowerCase();
                                                       const optBg = opt.colorHex || "#555";
                                                       return (
                                                         <button
@@ -1991,7 +2129,30 @@ function SchedulingPageContent() {
                                                       );
                                                     })}
                                                   </div>
+
+                                                  {otherStations.length > 0 && (
+                                                    <>
+                                                      <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mt-3 mb-1.5">Other Stations</p>
+                                                      <div className="flex flex-wrap gap-1.5">
+                                                        {otherStations.map(site => (
+                                                          <button
+                                                            key={site.id}
+                                                            onClick={() => setCrossStationPick(site)}
+                                                            className={cn(
+                                                              "flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-dashed transition-all",
+                                                              crossStationCode === site.code
+                                                                ? "border-primary/50 bg-accent/40 text-foreground"
+                                                                : "border-border/50 text-muted-foreground/80 hover:bg-muted/50 hover:text-foreground"
+                                                            )}
+                                                          >
+                                                            {site.code}
+                                                          </button>
+                                                        ))}
+                                                      </div>
+                                                    </>
+                                                  )}
                                                 </div>
+                                                )}
                                               </PopoverContent>
                                             </Popover>
                                           </td>

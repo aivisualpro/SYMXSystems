@@ -13,19 +13,28 @@ function isOffStatus(routeStatus: string | undefined | null): boolean {
 }
 
 // GET — list all route types
-export async function GET() {
+// ?siteId= resolves start times for a SPECIFIC station instead of whichever
+// one is currently active — used by the Scheduling page's cross-station
+// picker to look up "what does Route/Open/Close start at DFO2" while DXC8
+// is the station actually in view. Still gated to stations the caller can
+// reach (resolveWriteSiteId returns null for anything outside
+// allowedSiteIds), so this can't be used to probe an org's other stations.
+export async function GET(req: NextRequest) {
     try {
         const session = await getSession();
         if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         await connectToDatabase();
         const scope = await getRequestScope();
-        // Exactly one station in view → show ITS start time/theory hours
-        // (its stations[] override, falling back to the shared default),
-        // not the raw shared field. Viewing "All Stations" (0 or 2+ active)
+        const { searchParams } = new URL(req.url);
+        const requestedSiteId = searchParams.get("siteId");
+        // Exactly one station in view (or an explicit, allowed ?siteId=) →
+        // show ITS start time/theory hours (its stations[] override,
+        // falling back to the shared default), not the raw shared field.
+        // Viewing "All Stations" (0 or 2+ active) with no explicit siteId
         // has no single station to resolve for, so the shared field itself
         // is shown — that is genuinely what's being edited in that view.
-        const writeSiteId = resolveWriteSiteId(scope, null);
+        const writeSiteId = resolveWriteSiteId(scope, requestedSiteId);
         const routes = await RouteType.find({}).sort({ sortOrder: 1, name: 1 }).lean();
         const resolved = (routes as any[]).map((r) => ({
             ...r,

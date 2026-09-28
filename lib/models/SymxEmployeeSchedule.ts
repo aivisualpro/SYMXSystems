@@ -37,6 +37,12 @@ export interface ISymxEmployeeSchedule extends Document {
   yearWeek: string; // Format: yyyy-Wxx
   date: Date;
   typeId?: string;          // ObjectId string of the RouteType — source of truth
+  /** Set when this shift is really a Route/Open/Close at ANOTHER station,
+   *  displayed as a label ("DFO2 - Route") on this employee's own,
+   *  unmoved schedule row — see the cross-station picker on the
+   *  Scheduling page. typeId/startTime above still carry that other
+   *  station's resolved values; this field only says whose they are. */
+  crossStationSiteId?: string;
   startTime?: string;
   dayBeforeConfirmation?: string;
   dayOfConfirmation?: string;
@@ -57,6 +63,7 @@ const SymxEmployeeScheduleSchema: Schema = new Schema({
   yearWeek: { type: String, required: true },
   date: { type: Date, required: true },
   typeId: { type: String },
+  crossStationSiteId: { type: String, default: '' },
   startTime: { type: String, default: '' },
   dayBeforeConfirmation: { type: String, default: '' },
   dayOfConfirmation: { type: String, default: '' },

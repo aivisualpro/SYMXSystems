@@ -39,6 +39,12 @@ const updateScheduleSchema = z.object({
   yearWeek: z.string().optional(),
   weekDay: z.string().optional(),
   dayIdx: z.number().optional(),
+  // Set when this shift is a same-station LABEL for a shift actually run
+  // under another station's Route/Open/Close start time (e.g. "DFO2 -
+  // Route" on a DXC8 driver's own schedule) — see the cross-station
+  // picker in the Scheduling page. null/"" clears it. The schedule row
+  // itself never changes ownership; only the display + startTime do.
+  crossStationSiteId: z.string().nullable().optional(),
 });
 
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -117,7 +123,7 @@ export async function GET(req: NextRequest) {
     // Fetch all schedule entries for this week
     const schedules = await SymxEmployeeSchedule.find(
       { yearWeek, ...S },
-      { transporterId: 1, date: 1, weekDay: 1, status: 1, routeStatus: 1, type: 1, typeId: 1, subType: 1, trainingDay: 1, startTime: 1, dayBeforeConfirmation: 1, dayOfConfirmation: 1, weekConfirmation: 1, van: 1, note: 1 }
+      { transporterId: 1, date: 1, weekDay: 1, status: 1, routeStatus: 1, type: 1, typeId: 1, subType: 1, trainingDay: 1, startTime: 1, dayBeforeConfirmation: 1, dayOfConfirmation: 1, weekConfirmation: 1, van: 1, note: 1, crossStationSiteId: 1 }
     )
       .sort({ date: 1 })
       .lean();
@@ -242,6 +248,7 @@ export async function GET(req: NextRequest) {
         weekConfirmation: s.weekConfirmation,
         van: s.van,
         note: s.note,
+        crossStationSiteId: s.crossStationSiteId || "",
       };
       if (s.note && !grouped[s.transporterId].weekNote) {
         grouped[s.transporterId].weekNote = s.note;
@@ -601,7 +608,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const body = validation.data;
-    const { scheduleId, type, employeeId, note, startTime, status, typeId } = body;
+    const { scheduleId, type, employeeId, note, startTime, status, typeId, crossStationSiteId } = body;
 
     // Update employee global note (ScheduleNotes)
     if (employeeId && note !== undefined) {
@@ -676,6 +683,13 @@ export async function PATCH(req: NextRequest) {
         updateFields.routeStatus = resolvedStatus;
       }
       if (startTime !== undefined) updateFields.startTime = startTime;
+      // Present (even as null/"") whenever the client sends the key at all —
+      // a normal same-station type change sends null to clear any stale
+      // "loaned to another station" label; the cross-station picker sends
+      // the actual site id. Absent entirely only for unrelated PUTs (e.g.
+      // a bare note save) that never touch type/startTime in the first
+      // place, which should leave an existing label untouched.
+      if (crossStationSiteId !== undefined) updateFields.crossStationSiteId = crossStationSiteId || "";
 
       const dbSession = await mongoose.startSession();
       let updated: any = null;

@@ -16,6 +16,10 @@ export interface DayData {
   date: string;
   weekDay: string;
   typeId?: string;
+  /** Set when this shift is labeled as a Route/Open/Close at ANOTHER
+   *  station (a cross-station shift picked on the Scheduling page) —
+   *  the ObjectId string of that other Site. */
+  crossStationSiteId?: string;
   // Legacy fields — kept for read-back compatibility with old records
   type?: string;
   status?: string;
