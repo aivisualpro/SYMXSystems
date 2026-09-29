@@ -17,6 +17,7 @@ import * as LucideIcons from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 
 import { ISymxEmployee } from "@/lib/models/SymxEmployee";
@@ -59,6 +60,77 @@ function isLightColor(hex: string): boolean {
   const b = parseInt(hex.slice(5, 7), 16);
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return luminance > 0.6;
+}
+
+const FULL_DAY_LABELS: Record<string, string> = {
+  sunday: "Sunday", monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday",
+  thursday: "Thursday", friday: "Friday", saturday: "Saturday",
+};
+
+// Per-day header: how many of the currently-listed employees have an
+// actual working shift set for that day, for headcount planning at a
+// glance — with a hover breakdown by type, plus Off and still-unset
+// counts, since "12" alone doesn't say whether the rest are off or just
+// never got a schedule assigned.
+function DayHeaderCell({ day, shortLabel, data, routeTypeIdMap }: { day: string; shortLabel: string; data: any[]; routeTypeIdMap: Map<string, any> }) {
+  const stats = useMemo(() => {
+    let working = 0, off = 0, unassigned = 0;
+    const byType = new Map<string, number>();
+    for (const emp of data) {
+      const rawVal = (emp as any)[day];
+      const rtId = rawVal ? String(rawVal) : null;
+      const matched = rtId ? routeTypeIdMap.get(rtId) : null;
+      if (!matched) {
+        unassigned++;
+        continue;
+      }
+      const isOff = (matched.routeStatus || "").trim().toLowerCase() === "off" || (matched.name || "").trim().toLowerCase() === "off";
+      if (isOff) {
+        off++;
+        continue;
+      }
+      working++;
+      const name = matched.name || "Other";
+      byType.set(name, (byType.get(name) || 0) + 1);
+    }
+    const byTypeSorted = [...byType.entries()].sort((a, b) => b[1] - a[1]);
+    return { working, off, unassigned, total: data.length, byTypeSorted };
+  }, [data, day, routeTypeIdMap]);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex flex-col items-center gap-0.5 cursor-default select-none">
+          <span>{shortLabel}</span>
+          <span className={cn(
+            "text-[10px] font-bold leading-none px-1.5 py-0.5 rounded-full",
+            stats.working > 0 ? "bg-emerald-500/15 text-emerald-500" : "bg-muted text-muted-foreground/50"
+          )}>
+            {stats.working}
+          </span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="text-xs">
+        <div className="font-semibold mb-1">{FULL_DAY_LABELS[day] || day} — {stats.working} shift{stats.working === 1 ? "" : "s"} set</div>
+        <div className="space-y-0.5">
+          {stats.byTypeSorted.map(([name, count]) => (
+            <div key={name} className="flex justify-between gap-4">
+              <span>{name}</span><span className="font-semibold">{count}</span>
+            </div>
+          ))}
+          <div className="flex justify-between gap-4 pt-1 mt-1 border-t border-border/40">
+            <span>Off</span><span className="font-semibold">{stats.off}</span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span>Not yet assigned</span><span className="font-semibold">{stats.unassigned}</span>
+          </div>
+          <div className="flex justify-between gap-4 text-muted-foreground/70 pt-1 mt-1 border-t border-border/40">
+            <span>Total employees</span><span className="font-semibold">{stats.total}</span>
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function EmployeesPageContent() {
@@ -344,7 +416,14 @@ function EmployeesPageContent() {
     // Availability — colored chip dropdowns from schedule type dropdown options
     ...(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const).map(day => ({
       accessorKey: day,
-      header: day.charAt(0).toUpperCase() + day.slice(1, 3),
+      header: () => (
+        <DayHeaderCell
+          day={day}
+          shortLabel={day.charAt(0).toUpperCase() + day.slice(1, 3)}
+          data={data}
+          routeTypeIdMap={routeTypeIdMap}
+        />
+      ),
       cell: ({ row }: any) => {
         const rawVal = row.original[day];
         const rtId = rawVal ? String(rawVal) : null;
