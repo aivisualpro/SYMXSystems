@@ -692,9 +692,13 @@ export default function RoutesPage() {
             if (typeof aVal === "number" && typeof bVal === "number") {
                 return sortDir === "asc" ? aVal - bVal : bVal - aVal;
             }
+            // numeric: true so van names ("2", "11", "Electric") sort in
+            // human order (2, 11, Electric) instead of plain lexicographic
+            // ("11" before "2") — same option already used for the van
+            // dropdown lists elsewhere on this page.
             return sortDir === "asc"
-                ? String(aVal).localeCompare(String(bVal))
-                : String(bVal).localeCompare(String(aVal));
+                ? String(aVal).localeCompare(String(bVal), undefined, { numeric: true, sensitivity: "base" })
+                : String(bVal).localeCompare(String(aVal), undefined, { numeric: true, sensitivity: "base" });
         });
 
         const typeGroups: Record<string, RouteRow[]> = {};
