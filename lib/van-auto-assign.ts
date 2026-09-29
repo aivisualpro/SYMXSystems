@@ -10,20 +10,31 @@
  *   - Only ever touches the ONE station currently in view (never pools
  *     vans across stations) and only fills in blank van fields — an
  *     already-assigned row is never touched or re-shuffled.
- *   - Hard match: a route whose WST is a specific size (e.g. "SP XL")
- *     can only get a van whose serviceType is that exact size. "Nursery
- *     1/2/3" (and anything with no WST at all) can take any van, and
- *     among the leftover vans we prefer the smaller ones first so the
- *     scarce XL vans stay free for routes that actually need XL.
+ *   - Only rows whose type is "Route" or "Training OTR" need a van at
+ *     all — Crash, Fleet, Pending ECP, Close, Open, TCO, etc. are left
+ *     alone regardless of whether their van is blank.
+ *   - "Route" rows are a hard size match: a route whose WST is a
+ *     specific size (e.g. "SP XL") can only get a van whose serviceType
+ *     is that exact size. "Training OTR" rows (typically Nursery WSTs)
+ *     can take any van, and among the leftover vans we prefer the
+ *     smaller ones first so scarce XL vans stay free for routes that
+ *     actually need XL.
  *   - Never assigns a Grounded (or Maintenance/Inactive/Decommissioned)
  *     van, and never a van already running another route at this
  *     station today.
- *   - Prefers giving a driver the van they drove in the last 7 days at
- *     this station, if that van still qualifies (right size, available,
- *     not grounded) — familiarity over a cold-assigned van.
- *   - For drivers hired within the last 90 days, prefers a dashcam-
- *     equipped van among whatever otherwise-qualifying candidates are
- *     left; experienced drivers have no dashcam preference either way.
+ *   - For each driver, tries their own Default Vans first, in order —
+ *     Primary, then Backup 1, then Backup 2 (set on their HR profile) —
+ *     before anything else, as long as the van still qualifies (right
+ *     size for a Route row, available, not grounded). Only when none of
+ *     the three apply does it fall back to the van they drove most
+ *     recently, then to the general pool.
+ *   - Training OTR rows always prefer a dashcam-equipped van among the
+ *     otherwise-qualifying candidates (these are the newer/training
+ *     drivers by nature of the row type). Route rows additionally
+ *     prefer dashcam for drivers hired within the last 90 days.
+ *   - Processes drivers senior-first (earliest hiredDate) so that if two
+ *     drivers' preferences ever collide over the same van, the
+ *     longest-tenured driver's preference wins.
  *   - If nothing qualifies for a route, the row is left blank and
  *     flagged with a reason rather than force-assigning a wrong size or
  *     a grounded van.
@@ -37,6 +48,12 @@ import { toPacificDate } from "@/app/(protected)/dispatching/routes/_components/
 
 const NEW_HIRE_WINDOW_DAYS = 90;
 const RECENT_VAN_WINDOW_DAYS = 7;
+
+// The only two schedule types a van actually needs to be assigned for.
+// Everything else (Crash, Fleet, Pending ECP, Close, Open, TCO, Trainer,
+// Suspension, Modified Duty, Stand by, Rescue, Assign Schedule...) is left
+// alone even if its van field happens to be blank.
+const VAN_ELIGIBLE_TYPE_NAMES = new Set(["route", "training otr"]);
 
 // Common size tokens, roughly small -> large. Anything not recognized
 // (a station's own custom service-type label) falls back to a middle
@@ -56,11 +73,6 @@ function sizeToken(serviceType: string): string {
 
 function sizeRank(serviceType: string): number {
   return SIZE_RANK[sizeToken(serviceType)] ?? 3;
-}
-
-function isNurseryOrFlexible(wst: string): boolean {
-  const t = (wst || "").trim();
-  return t === "" || /nursery/i.test(t);
 }
 
 function hasDashcam(v: { dashcam?: string }): boolean {
@@ -87,14 +99,14 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
   const rangeEnd = new Date(`${dateStr}T23:59:59.999Z`);
   rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 1);
 
-  // Eligible route types — same "not turned off" definition the weekly
-  // auto-assigner and the routes page itself use, so Close / Pending ECP
-  // / AMZ Training rows never get a van pushed onto them.
-  const eligibleRouteTypes = await RouteType.find(
-    { routeStatus: { $nin: ["off", "Off", "OFF"] }, isActive: { $ne: false } },
-    { _id: 1 }
-  ).lean() as any[];
-  const eligibleTypeIds = eligibleRouteTypes.map((rt: any) => String(rt._id));
+  // Eligible route types — ONLY "Route" and "Training OTR" need a van at
+  // all. Everything else keeps whatever van field it has (usually blank)
+  // untouched, even by this bulk tool.
+  const allRouteTypes = await RouteType.find({}, { _id: 1, name: 1 }).lean() as any[];
+  const typeIdToName = new Map(allRouteTypes.map((rt: any) => [String(rt._id), (rt.name || "").trim()]));
+  const eligibleTypeIds = allRouteTypes
+    .filter((rt: any) => VAN_ELIGIBLE_TYPE_NAMES.has((rt.name || "").trim().toLowerCase()))
+    .map((rt: any) => String(rt._id));
 
   // All of this station's routes in the loose window — filtered down to
   // the exact day, and to this station, in JS.
@@ -124,16 +136,17 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
   ).lean() as any[];
   const vehicleByName = new Map(vehicles.map((v) => [v.vehicleName, v]));
 
-  // Employee lookup for hiredDate (new-hire dashcam preference).
+  // Employee lookup — hiredDate (new-hire dashcam preference + seniority
+  // ordering) and each driver's own Default Vans (Primary/Backup 1/2).
   const transporterIds = [...new Set(unassigned.map((r) => r.transporterId))];
   const employees = await SymxEmployee.find(
     { transporterId: { $in: transporterIds } },
-    { transporterId: 1, hiredDate: 1, firstName: 1, lastName: 1 }
+    { transporterId: 1, hiredDate: 1, firstName: 1, lastName: 1, defaultVan1: 1, defaultVan2: 1, defaultVan3: 1 }
   ).lean() as any[];
   const empByTid = new Map(employees.map((e) => [e.transporterId, e]));
 
   // Each driver's most recent van at THIS station in the last N days
-  // (excluding today), for the "give them the van they know" preference.
+  // (excluding today), used only when none of their Default Vans apply.
   const recentStart = new Date(rangeStart);
   recentStart.setUTCDate(recentStart.getUTCDate() - RECENT_VAN_WINDOW_DAYS - 1);
   const recentRoutesRaw = await SYMXRoute.find({
@@ -160,12 +173,38 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
     return r.employeeName || (emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() : r.transporterId);
   };
 
-  // Non-Nursery (exact-size) routes get first crack at size-specific
-  // vans; Nursery/flexible routes are processed after, from whatever's
-  // left. Senior-first within each group, matching the existing weekly
-  // assigner's convention.
-  const nonFlexible = unassigned.filter((r) => !isNurseryOrFlexible(r.wst));
-  const flexible = unassigned.filter((r) => isNurseryOrFlexible(r.wst));
+  // A van qualifies for a route if it's in this station's active fleet,
+  // not already used today, and — for an exact-size ("Route") row — its
+  // serviceType matches the WST exactly. Flexible ("Training OTR") rows
+  // have no size requirement.
+  const qualifies = (vanName: string | undefined, requiredType: string | null): any | null => {
+    if (!vanName) return null;
+    const v = vehicleByName.get(vanName);
+    if (!v || usedToday.has(v.vehicleName)) return null;
+    if (requiredType && (v.serviceType || "").trim().toLowerCase() !== requiredType) return null;
+    return v;
+  };
+
+  // Primary -> Backup 1 -> Backup 2, in that order — a driver's own
+  // assigned vans always come before their recent-van history or the
+  // general pool.
+  const preferredDefaultVan = (transporterId: string, requiredType: string | null): any | null => {
+    const emp = empByTid.get(transporterId);
+    if (!emp) return null;
+    return (
+      qualifies(emp.defaultVan1, requiredType) ||
+      qualifies(emp.defaultVan2, requiredType) ||
+      qualifies(emp.defaultVan3, requiredType) ||
+      null
+    );
+  };
+
+  // "Route" rows are exact-size; "Training OTR" rows are flexible
+  // (usually Nursery WSTs) regardless of what their WST string says.
+  // Senior-first (earliest hiredDate) within each group so a
+  // longer-tenured driver's Default Van / recent van wins any contention.
+  const nonFlexible = unassigned.filter((r) => (typeIdToName.get(String(r.typeId || "")) || "").toLowerCase() !== "training otr");
+  const flexible = unassigned.filter((r) => (typeIdToName.get(String(r.typeId || "")) || "").toLowerCase() === "training otr");
 
   const byHiredDateAsc = (a: any, b: any) => {
     const ah = empByTid.get(a.transporterId)?.hiredDate;
@@ -197,17 +236,19 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
     });
   };
 
-  // ── Exact-size WST routes ──
+  // ── "Route" rows — exact-size WST match ──
   for (const route of nonFlexible) {
     const requiredType = (route.wst || "").trim().toLowerCase();
 
+    const defaultVan = preferredDefaultVan(route.transporterId, requiredType);
+    if (defaultVan) {
+      tryAssign(route, defaultVan);
+      continue;
+    }
+
     const recentVanName = recentVanByTid.get(route.transporterId);
-    const recentVan = recentVanName ? vehicleByName.get(recentVanName) : null;
-    if (
-      recentVan &&
-      !usedToday.has(recentVan.vehicleName) &&
-      (recentVan.serviceType || "").trim().toLowerCase() === requiredType
-    ) {
+    const recentVan = qualifies(recentVanName, requiredType);
+    if (recentVan) {
       tryAssign(route, recentVan);
       continue;
     }
@@ -235,11 +276,17 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
     tryAssign(route, candidates[0]);
   }
 
-  // ── Nursery / no-WST routes — take what's left, smaller vans first ──
+  // ── "Training OTR" rows — flexible, smaller vans + dashcam first ──
   for (const route of flexible) {
+    const defaultVan = preferredDefaultVan(route.transporterId, null);
+    if (defaultVan) {
+      tryAssign(route, defaultVan);
+      continue;
+    }
+
     const recentVanName = recentVanByTid.get(route.transporterId);
-    const recentVan = recentVanName ? vehicleByName.get(recentVanName) : null;
-    if (recentVan && !usedToday.has(recentVan.vehicleName)) {
+    const recentVan = qualifies(recentVanName, null);
+    if (recentVan) {
       tryAssign(route, recentVan);
       continue;
     }
@@ -259,13 +306,13 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
       continue;
     }
 
-    if (isNewHire(route.transporterId)) {
-      const smallestRank = sizeRank(candidates[0].serviceType);
-      const smallestTier = candidates.filter((v) => sizeRank(v.serviceType) === smallestRank);
-      const withDashcam = smallestTier.filter(hasDashcam);
-      if (withDashcam.length > 0) candidates = withDashcam;
-      else candidates = smallestTier;
-    }
+    // Training OTR drivers are new by nature of the row — always prefer
+    // dashcam among the smallest available tier, not just for hires
+    // under the 90-day cutoff.
+    const smallestRank = sizeRank(candidates[0].serviceType);
+    const smallestTier = candidates.filter((v) => sizeRank(v.serviceType) === smallestRank);
+    const withDashcam = smallestTier.filter(hasDashcam);
+    candidates = withDashcam.length > 0 ? withDashcam : smallestTier;
 
     tryAssign(route, candidates[0]);
   }
