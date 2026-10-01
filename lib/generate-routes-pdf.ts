@@ -27,8 +27,10 @@ export async function generateRoutesPDF(
     // pad/wave/staging assignment for the day. "Route" is the obvious one;
     // "Training OTR" is a driver actually out on the road training (as
     // opposed to "AMZ Training", which is classroom-only and has no
-    // van/pad/staging to print) — it belongs on the roster too.
-    const PRINTABLE_TYPES = new Set(["route", "training otr"]);
+    // van/pad/staging to print) — it belongs on the roster too. "Flight
+    // Risk" has all the same characteristics as Route (it's just a flag
+    // that the person might not show tomorrow), so it prints the same way.
+    const PRINTABLE_TYPES = new Set(["route", "training otr", "flight risk"]);
     const routes: RouteForPDF[] = (data.routes || [])
         .filter((r: any) => {
             const rDate = (r.date || "").split("T")[0];

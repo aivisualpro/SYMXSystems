@@ -53,7 +53,7 @@ const RECENT_VAN_WINDOW_DAYS = 7;
 // Everything else (Crash, Fleet, Pending ECP, Close, Open, TCO, Trainer,
 // Suspension, Modified Duty, Stand by, Rescue, Assign Schedule...) is left
 // alone even if its van field happens to be blank.
-const VAN_ELIGIBLE_TYPE_NAMES = new Set(["route", "training otr"]);
+const VAN_ELIGIBLE_TYPE_NAMES = new Set(["route", "training otr", "flight risk"]);
 
 // Common size tokens, roughly small -> large. Anything not recognized
 // (a station's own custom service-type label) falls back to a middle
