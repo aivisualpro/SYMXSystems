@@ -203,8 +203,17 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
   // (usually Nursery WSTs) regardless of what their WST string says.
   // Senior-first (earliest hiredDate) within each group so a
   // longer-tenured driver's Default Van / recent van wins any contention.
-  const nonFlexible = unassigned.filter((r) => (typeIdToName.get(String(r.typeId || "")) || "").toLowerCase() !== "training otr");
-  const flexible = unassigned.filter((r) => (typeIdToName.get(String(r.typeId || "")) || "").toLowerCase() === "training otr");
+  // Flexible = Training OTR rows, OR any row whose WST is a Nursery level
+  // (or blank) — a "Route" row with WST "Nursery 3" has no size-specific
+  // van to match against (no van's serviceType is "Nursery 3"), so the
+  // exact-match path below would flag it as having no available van.
+  const isFlexibleRow = (r: any): boolean => {
+    const typeName = (typeIdToName.get(String(r.typeId || "")) || "").toLowerCase();
+    const wst = (r.wst || "").trim();
+    return typeName === "training otr" || wst === "" || /nursery/i.test(wst);
+  };
+  const nonFlexible = unassigned.filter((r) => !isFlexibleRow(r));
+  const flexible = unassigned.filter(isFlexibleRow);
 
   const byHiredDateAsc = (a: any, b: any) => {
     const ah = empByTid.get(a.transporterId)?.hiredDate;
@@ -306,13 +315,13 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
       continue;
     }
 
-    // Training OTR drivers are new by nature of the row — always prefer
-    // dashcam among the smallest available tier, not just for hires
-    // under the 90-day cutoff.
-    const smallestRank = sizeRank(candidates[0].serviceType);
-    const smallestTier = candidates.filter((v) => sizeRank(v.serviceType) === smallestRank);
-    const withDashcam = smallestTier.filter(hasDashcam);
-    candidates = withDashcam.length > 0 ? withDashcam : smallestTier;
+    // Nursery / Training OTR drivers are new by nature of the row —
+    // always prefer a dashcam (Netradyne) van first, then the smallest
+    // size among those; if no dashcam van is free, smallest overall.
+    const dashcamPool = candidates.filter(hasDashcam);
+    const pool = dashcamPool.length > 0 ? dashcamPool : candidates;
+    const smallestRank = sizeRank(pool[0].serviceType);
+    candidates = pool.filter((v) => sizeRank(v.serviceType) === smallestRank);
 
     tryAssign(route, candidates[0]);
   }
