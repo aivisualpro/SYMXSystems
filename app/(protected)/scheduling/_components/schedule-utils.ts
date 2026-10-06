@@ -69,6 +69,8 @@ export interface WeekData {
    */
   hasSchedule?: boolean;
   prevWeekTrailing?: Record<string, number>;
+  /** Last week's shift per driver per weekday (0=Sun) — powers the "last week" overlay. */
+  prevWeekTypes?: Record<string, Record<number, { typeId: string; startTime: string; crossStationSiteId: string }>>;
   auditCounts?: Record<string, number>;
   everydayRecords?: Record<string, any>;
   dailyLaborActualCost?: Record<string, number>;

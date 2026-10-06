@@ -38,6 +38,7 @@ import {
   RefreshCw,
   Plus,
   History,
+  Copy,
   FileText,
   ArrowRight,
   UserPlus,
@@ -369,6 +370,10 @@ function SchedulingPageContent() {
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [deletingWeek, setDeletingWeek] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // "Last week" overlay + copy-from-last-week
+  const [showPrevWeek, setShowPrevWeek] = useState(false);
+  const [copyingWeek, setCopyingWeek] = useState(false);
+  const [showCopyConfirm, setShowCopyConfirm] = useState(false);
   const [kpiOpen, setKpiOpen] = useState(false);
   const [canViewKpi, setCanViewKpi] = useState(false);
   const kpiRowRef = useRef<HTMLTableRowElement>(null);
@@ -876,6 +881,32 @@ function SchedulingPageContent() {
             className="pl-8 h-8 w-[120px] sm:w-[200px] text-sm"
           />
         </div>
+        {/* Scheduling-only: last-week overlay toggle + copy-from-last-week */}
+        {activeMainTab === "scheduling" && weeks.length > 0 && (
+          <>
+            <Button
+              variant={showPrevWeek ? "default" : "outline"}
+              size="sm"
+              className="h-8 gap-1.5 text-xs font-semibold"
+              onClick={() => setShowPrevWeek(v => !v)}
+              title="Show each driver's shift from the same day last week inside every cell"
+            >
+              <History className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">Last week</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs font-semibold"
+              onClick={() => setShowCopyConfirm(true)}
+              disabled={copyingWeek}
+              title="Copy last week's shifts onto this week"
+            >
+              {copyingWeek ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+              <span className="hidden lg:inline">Copy last week</span>
+            </Button>
+          </>
+        )}
         {/* Messaging-only: eligible count + refresh */}
         {activeMainTab === "messaging" && activeTabInfo && (
           <>
@@ -989,7 +1020,30 @@ function SchedulingPageContent() {
       </div>
     );
     return () => setRightContent(null);
-  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek, weekData?.totalEmployees, workingEmps, warningCounts, averageDays, currentUserEmail, deletingWeek, showDeleteConfirm]);
+  }, [setRightContent, searchQuery, activeMainTab, activeTabInfo, weeks, selectedWeek, generatingWeek, generateWeek, weekData?.totalEmployees, workingEmps, warningCounts, averageDays, currentUserEmail, deletingWeek, showDeleteConfirm, showPrevWeek, copyingWeek]);
+
+  // Copy last week's shift types onto the selected week for this station.
+  const handleCopyPreviousWeek = useCallback(async () => {
+    if (!selectedWeek) return;
+    setCopyingWeek(true);
+    try {
+      const res = await fetch("/api/schedules/copy-previous-week", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yearWeek: selectedWeek }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to copy last week");
+      notify.success(data.updated > 0 ? `Copied ${data.updated} shift(s) from ${data.from}` : `Already matches ${data.from} — nothing to change`);
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dispatching"] });
+      refetchWeekData();
+    } catch (err: any) {
+      notify.error(err.message || "Failed to copy last week");
+    } finally {
+      setCopyingWeek(false);
+    }
+  }, [selectedWeek, queryClient, refetchWeekData]);
 
   // Handle type change via dropdown
   const handleTypeChange = useCallback((
@@ -1980,6 +2034,26 @@ function SchedulingPageContent() {
                                                   )}
                                                 </div>
                                               </PopoverTrigger>
+                                              {showPrevWeek && (() => {
+                                                // Same weekday, last week — muted so it reads as reference,
+                                                // amber when it differs from what's set this week.
+                                                const prevDay = weekData?.prevWeekTypes?.[emp.transporterId]?.[dayIdx];
+                                                const prevRT = prevDay ? routeTypeIdMap.get(String(prevDay.typeId)) : null;
+                                                const prevCode = prevDay?.crossStationSiteId ? siteCodeById.get(prevDay.crossStationSiteId) : null;
+                                                const differs = (prevDay?.typeId || "") !== String(day?.typeId || "") || (prevDay?.crossStationSiteId || "") !== (day?.crossStationSiteId || "");
+                                                return (
+                                                  <div
+                                                    className={cn(
+                                                      "mt-0.5 flex items-center justify-center gap-1 text-[9px] font-medium leading-none truncate",
+                                                      differs ? "text-amber-400" : "text-muted-foreground/60"
+                                                    )}
+                                                    title={prevRT ? `Last week: ${prevCode ? prevCode + " - " : ""}${prevRT.name}${prevDay?.startTime ? " (" + prevDay.startTime + ")" : ""}` : "Last week: nothing set"}
+                                                  >
+                                                    <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: prevRT?.color || "#6B7280" }} />
+                                                    <span className="truncate">{prevRT ? `${prevCode ? prevCode + " - " : ""}${prevRT.name}` : "—"}</span>
+                                                  </div>
+                                                );
+                                              })()}
                                               <PopoverContent
                                                 side="bottom"
                                                 align="center"
@@ -2766,6 +2840,22 @@ function SchedulingPageContent() {
         employee={notesEmployee}
         onNoteAdded={(tid) => setNoteCounts(prev => ({ ...prev, [tid]: (prev[tid] || 0) + 1 }))}
       />
+      {/* ── Copy Last Week Confirmation Dialog ── */}
+      <AlertDialog open={showCopyConfirm} onOpenChange={setShowCopyConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Copy last week onto {selectedWeek}?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">Every driver&apos;s shift type for each day will be replaced with what they had on the same day last week (start times re-pulled from this station&apos;s Default Routes).</span>
+              <span className="block text-xs text-muted-foreground">Days that were blank last week are left alone. Every change is recorded in the audit log.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCopyPreviousWeek}>Copy last week</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* ── Delete Week Confirmation Dialog ── */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>

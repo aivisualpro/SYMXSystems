@@ -160,11 +160,12 @@ export async function GET(req: NextRequest) {
         ),
         "resolving driver details for schedules already scoped to this station — a driver loaned in from another station must still show a name, not a blank row"
       ).lean(),
-      // Previous week schedules (only need date, transporterId, status)
+      // Previous week schedules (date/status for the trailing-days check,
+      // plus type/start time for the "show last week" overlay)
       prevYearWeek
         ? SymxEmployeeSchedule.find(
           { yearWeek: prevYearWeek, transporterId: { $in: transporterIds }, ...S },
-          { transporterId: 1, date: 1, status: 1 }
+          { transporterId: 1, date: 1, status: 1, typeId: 1, startTime: 1, crossStationSiteId: 1 }
         ).lean()
         : Promise.resolve([]),
       // Audit counts
@@ -335,6 +336,19 @@ export async function GET(req: NextRequest) {
         if (count > 0) prevWeekTrailing[tid] = count;
       }
     }
+
+    // Last week's shift per driver per weekday, for the Scheduling page's
+    // "show last week" overlay and copy-from-last-week preview.
+    const prevWeekTypes: Record<string, Record<number, { typeId: string; startTime: string; crossStationSiteId: string }>> = {};
+    (prevSchedules as any[]).forEach((s) => {
+      if (!s.typeId) return;
+      if (!prevWeekTypes[s.transporterId]) prevWeekTypes[s.transporterId] = {};
+      prevWeekTypes[s.transporterId][new Date(s.date).getUTCDay()] = {
+        typeId: String(s.typeId),
+        startTime: s.startTime || "",
+        crossStationSiteId: s.crossStationSiteId || "",
+      };
+    });
 
     // Build audit counts map
     const auditCounts: Record<string, number> = {};
@@ -556,6 +570,7 @@ export async function GET(req: NextRequest) {
       employees: Object.values(activeGrouped),
       totalEmployees: Object.keys(activeGrouped).length,
       prevWeekTrailing,
+      prevWeekTypes,
       auditCounts,
       everydayRecords,
       dailyRevenue,
