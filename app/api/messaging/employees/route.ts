@@ -8,6 +8,7 @@ import SYMXRoute from "@/lib/models/SYMXRoute";
 
 import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
 import RouteType from "@/lib/models/RouteType";
+import Site from "@/lib/models/Site";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 
 export const dynamic = "force-dynamic";
@@ -95,7 +96,7 @@ export async function GET(req: NextRequest) {
     let adjacentWeeks: string[] = [];
     if (yearWeek) {
       let checkDate = date || "";
-      if (!checkDate && (filter === "future-shift" || filter === "off-tomorrow")) {
+      if (!checkDate && (filter === "future-shift" || filter === "off-tomorrow" || filter === "training-reminder")) {
         checkDate = getTomorrowPacific();
       } else if (!checkDate && (filter === "shift" || filter === "route-itinerary")) {
         checkDate = getTodayPacific();
@@ -155,7 +156,7 @@ export async function GET(req: NextRequest) {
     const schedulePromise = scheduleQuery
       ? SymxEmployeeSchedule.find(
         { ...scheduleQuery, ...S },
-        { transporterId: 1, date: 1, weekDay: 1, type: 1, typeId: 1, subType: 1, status: 1, routeStatus: 1, startTime: 1, van: 1, shiftNotification: 1, futureShift: 1, routeItinerary: 1 }
+        { transporterId: 1, date: 1, weekDay: 1, type: 1, typeId: 1, subType: 1, status: 1, routeStatus: 1, startTime: 1, van: 1, shiftNotification: 1, futureShift: 1, routeItinerary: 1, trainingReminder: 1, siteId: 1 }
       )
         .sort({ date: 1 })
         .lean()
@@ -228,6 +229,23 @@ export async function GET(req: NextRequest) {
       if (!meta) return false;
       return meta.partOf.includes("Route Itinerary");
     };
+
+    // isTrainingType: RouteType must have "Training Reminder" in partOf
+    const isTrainingType = (s: any): boolean => {
+      const meta = resolveRTMeta(s);
+      if (!meta) return false;
+      return meta.partOf.includes("Training Reminder");
+    };
+
+    // Per-station training address (a driver's row knows which station it belongs to)
+    const trainingAddressBySite = new Map<string, string>();
+    if (filter === "training-reminder") {
+      const siteIds = Array.from(new Set((schedules || []).map((s: any) => s.siteId ? String(s.siteId) : "").filter(Boolean)));
+      if (siteIds.length > 0) {
+        const siteDocs = await Site.find({ _id: { $in: siteIds } }, { trainingAddress: 1 }).lean() as any[];
+        for (const sd of siteDocs) trainingAddressBySite.set(String(sd._id), sd.trainingAddress || "");
+      }
+    }
 
     // isWeekScheduleType: RouteType must have "Week Schedule" in partOf
     const isWeekScheduleType = (s: any): boolean => {
@@ -446,6 +464,20 @@ export async function GET(req: NextRequest) {
           (s: any) => toPacificDate(s.date) === targetDate && isNonOff(s) && isRouteItineraryType(s)
         )
       );
+    } else if (filter === "training-reminder") {
+      // Employees whose schedule on the target day (default: tomorrow) is a non-Off
+      // RouteType tagged "Training Reminder". `date` is the training day itself.
+      const targetDate = date || getTomorrowPacific();
+      filtered = enrichedEmployees
+        .filter((emp: any) =>
+          emp.schedules.some(
+            (s: any) => toPacificDate(s.date) === targetDate && isNonOff(s) && isTrainingType(s)
+          )
+        )
+        .map((emp: any) => {
+          const sched = (scheduleMap[emp.transporterId] || []).find((s: any) => toPacificDate(s.date) === targetDate);
+          return { ...emp, trainingAddress: trainingAddressBySite.get(String(sched?.siteId || "")) || "" };
+        });
     } else if (filter === "flyer") {
       // All active employees — no schedule filter
       filtered = enrichedEmployees;

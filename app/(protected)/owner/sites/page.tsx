@@ -27,6 +27,7 @@ interface SiteRow {
   slug: string;
   siteType: "permanent" | "seasonal";
   address: string;
+  trainingAddress?: string;
   messaging?: { quoPhoneNumberId?: string; quoPhoneNumber?: string };
   amazon?: { serviceAreaId?: string };
   status: "active" | "inactive";
@@ -60,6 +61,7 @@ export default function SitesPage() {
   const [editForm, setEditForm] = useState({
     name: "",
     address: "",
+    trainingAddress: "",
     siteType: "permanent",
     status: "active",
     quoPhoneNumberId: "",
@@ -132,6 +134,7 @@ export default function SitesPage() {
     setEditForm({
       name: s.name,
       address: s.address,
+      trainingAddress: s.trainingAddress || "",
       siteType: s.siteType,
       status: s.status,
       quoPhoneNumberId: s.messaging?.quoPhoneNumberId || "",
@@ -331,6 +334,14 @@ export default function SitesPage() {
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">Address</Label>
                 <Input value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Training Address</Label>
+                <Input
+                  value={editForm.trainingAddress}
+                  placeholder="Where training is held (used in Training Reminder messages)"
+                  onChange={(e) => setEditForm({ ...editForm, trainingAddress: e.target.value })}
+                />
               </div>
 
               {/* ── Messaging (Quo / OpenPhone) ──

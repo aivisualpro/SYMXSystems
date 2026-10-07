@@ -34,7 +34,7 @@ interface RouteTypeRow {
     isEditing?: boolean;
 }
 
-const PART_OF_OPTIONS = ["Dispatching", "Shift", "Route Itinerary", "Week Schedule"];
+const PART_OF_OPTIONS = ["Dispatching", "Shift", "Route Itinerary", "Week Schedule", "Training Reminder"];
 
 export default function DefaultRoutesPage() {
     const { addRef } = useAddRef();

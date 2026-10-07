@@ -54,6 +54,7 @@ export interface ISymxEmployeeSchedule extends Document {
   futureShift: IMessageStatusEntry[];       // future-shift + off-tomorrow (merged)
   shiftNotification: IMessageStatusEntry[]; // shift
   routeItinerary: IMessageStatusEntry[];    // route-itinerary
+  trainingReminder: IMessageStatusEntry[];  // training-reminder
 }
 
 const SymxEmployeeScheduleSchema: Schema = new Schema({
@@ -75,6 +76,7 @@ const SymxEmployeeScheduleSchema: Schema = new Schema({
   futureShift: { type: [MessageStatusEntrySchema], default: [] },       // future-shift + off-tomorrow
   shiftNotification: { type: [MessageStatusEntrySchema], default: [] }, // shift
   routeItinerary: { type: [MessageStatusEntrySchema], default: [] },    // route-itinerary
+  trainingReminder: { type: [MessageStatusEntrySchema], default: [] },  // training-reminder
 }, { timestamps: { createdAt: true, updatedAt: false }, collection: 'SYMXEmployeeSchedules' });
 
 // ── Unique PER STATION, not globally ──────────────────────────────────

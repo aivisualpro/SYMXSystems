@@ -27,6 +27,7 @@ export interface ISite extends Document {
   code: string;
   siteType: SiteType;
   address: string;
+  trainingAddress?: string;
   status: "active" | "inactive";
   isDefault: boolean;
   messaging?: {
@@ -59,6 +60,9 @@ const SiteSchema: Schema = new Schema(
     // so its history stays queryable and its records keep their ownership.
     siteType: { type: String, enum: ["permanent", "seasonal"], default: "permanent", index: true },
     address: { type: String, default: "" },
+    // Where new-hire training is held for this station. Used by the
+    // "Training Reminder" message ({trainingAddress}).
+    trainingAddress: { type: String, default: "" },
     status: { type: String, enum: ["active", "inactive"], default: "active", index: true },
     // Exactly one site carries isDefault. During the migration it is the
     // site every pre-existing record is backfilled to, and the fallback

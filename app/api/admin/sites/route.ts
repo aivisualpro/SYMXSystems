@@ -51,6 +51,7 @@ export async function GET() {
       slug: s.slug,
       siteType: s.siteType,
       address: s.address || "",
+      trainingAddress: s.trainingAddress || "",
       messaging: {
         quoPhoneNumberId: s.messaging?.quoPhoneNumberId || "",
         quoPhoneNumber: s.messaging?.quoPhoneNumber || "",
@@ -127,6 +128,7 @@ export async function PUT(req: NextRequest) {
   const updates: any = {};
   if (body.name !== undefined) updates.name = String(body.name).trim();
   if (body.address !== undefined) updates.address = String(body.address);
+  if (body.trainingAddress !== undefined) updates.trainingAddress = String(body.trainingAddress).trim();
   if (body.siteType !== undefined) updates.siteType = body.siteType === "seasonal" ? "seasonal" : "permanent";
   // Per-station Quo number. Both forms are stored because the two sides of
   // the integration speak different ones: the API wants OpenPhone's PNxxxx

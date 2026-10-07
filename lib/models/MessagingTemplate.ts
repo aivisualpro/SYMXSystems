@@ -14,7 +14,7 @@ const MessagingTemplateSchema = new Schema<IMessagingTemplate>(
       type: String,
       required: true,
       unique: true,
-      enum: ["future-shift", "shift", "off-tomorrow", "week-schedule", "route-itinerary", "flyer"],
+      enum: ["future-shift", "shift", "off-tomorrow", "week-schedule", "route-itinerary", "flyer", "training-reminder"],
     },
     template: {
       type: String,

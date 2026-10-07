@@ -77,6 +77,8 @@ interface EmployeeRecipient {
   phoneNumber: string;
   type: string;
   email: string;
+  /** Station training location (training-reminder tab only). */
+  trainingAddress?: string;
   messagingStatus?: Record<string, { status: string; createdAt: string } | null>;
   schedules?: {
     date: string;
@@ -232,7 +234,7 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
 
   // For future-shift/off-tomorrow, the actual shift day is tomorrow (selectedDate + 1)
   const baseDate = selectedDate || getTodayPacific();
-  const targetDate = (tabId === "future-shift" || tabId === "off-tomorrow")
+  const targetDate = (tabId === "future-shift" || tabId === "off-tomorrow" || tabId === "training-reminder")
     ? getNextDay(baseDate)
     : baseDate;
 
@@ -250,7 +252,7 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
   } else if (tabId === "future-shift") {
     const dayShift = emp.schedules?.find((s) => matchDate(s, targetDate));
     if (dayShift) targetShift = dayShift;
-  } else if (tabId === "off-tomorrow") {
+  } else if (tabId === "off-tomorrow" || tabId === "training-reminder") {
     const dayShift = emp.schedules?.find((s) => matchDate(s, targetDate));
     if (dayShift) targetShift = dayShift;
   }
@@ -328,7 +330,8 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
     .replace(/\{routeNumber\}/gi, routeNumber)
     .replace(/\{stagingLocation\}/gi, stagingLocation)
     .replace(/\{pad\}/gi, pad)
-    .replace(/\{waveTime\}/gi, waveTime);
+    .replace(/\{waveTime\}/gi, waveTime)
+    .replace(/\{trainingAddress\}/gi, emp.trainingAddress || "(training address not set)");
 }
 
 // ── Sub Tab Config ──
@@ -393,6 +396,18 @@ const SUB_TABS: SubTab[] = [
     defaultMessage:
       "Hi {name}\n\nHere is your schedule for next week {yearWeek}\n----------------------\n\n{weekSchedule}\n\n----------------------\nPlease confirm here: {confirmationLink}\n\nPlease check your start times!",
     variables: ["name", "yearWeek", "weekSchedule", "confirmationLink"],
+  },
+  {
+    id: "training-reminder",
+    label: "Training Reminder",
+    icon: GraduationCap,
+    description: "Remind employees who have training tomorrow (8:00 AM at the station's training address)",
+    gradient: "from-sky-500/15 to-indigo-500/15",
+    iconColor: "text-sky-500",
+    borderColor: "border-sky-500/30",
+    defaultMessage:
+      "Hello {name}\n\nTraining Reminder\n\n{dayOfWeek} {date}\n\nYou have training tomorrow. Training starts at 8:00 AM.\n\nLocation: {trainingAddress}\n\nPlease arrive on time. Thank you!",
+    variables: ["name", "dayOfWeek", "date", "trainingAddress"],
   },
   {
     id: "flyer",
@@ -1114,7 +1129,7 @@ function MessagingSubTab({
     const NON_WORKING = ["off", "close", "request off", ""];
     // For future-shift/off-tomorrow, the actual shift day is tomorrow (selectedDate + 1)
     const baseDateForSend = selectedDate || getTodayPacific();
-    const targetDateForSend = (tab.id === "future-shift" || tab.id === "off-tomorrow")
+    const targetDateForSend = (tab.id === "future-shift" || tab.id === "off-tomorrow" || tab.id === "training-reminder")
       ? getNextDay(baseDateForSend)
       : baseDateForSend;
 
@@ -1122,11 +1137,14 @@ function MessagingSubTab({
       // scheduleDate for the API = the date of the SCHEDULE DOCUMENT (not the shift day)
       // For future-shift, the schedule doc date = selectedDate (today),
       // even though the shift being notified is tomorrow (targetDateForSend)
-      let targetScheduleDate: string | undefined = selectedDate || undefined;
+      // training-reminder records its status on the TRAINING day's row (tomorrow),
+      // which is what the recipient list reads back.
+      const scheduleDocDate = tab.id === "training-reminder" ? targetDateForSend : selectedDate;
+      let targetScheduleDate: string | undefined = scheduleDocDate || undefined;
 
       // Try to find the matching schedule document using selectedDate
-      const matchingShift = selectedDate
-        ? emp.schedules?.find((s) => toPacificDate(s.date) === selectedDate)
+      const matchingShift = scheduleDocDate
+        ? emp.schedules?.find((s) => toPacificDate(s.date) === scheduleDocDate)
         : emp.schedules?.find(
             (s) => s.type && !NON_WORKING.includes(s.type.toLowerCase().trim())
           );
@@ -1296,7 +1314,7 @@ function MessagingSubTab({
                 // We use both toPacificDate and raw string comparison to handle
                 // any timezone storage edge cases in the DB date field
                 const baseDisplayDate = selectedDate || getTodayPacific();
-                const displayDate = (tab.id === "future-shift" || tab.id === "off-tomorrow")
+                const displayDate = (tab.id === "future-shift" || tab.id === "off-tomorrow" || tab.id === "training-reminder")
                   ? getNextDay(baseDisplayDate)
                   : baseDisplayDate;
                 const nextShift = emp.schedules?.find((s) => {
@@ -2095,7 +2113,7 @@ export default function MessagingPanel({
       if (date && tabId !== "week-schedule") {
         // future-shift: pass tomorrow (the work day) as the date
         // off-tomorrow: pass today (API computes tomorrow = today + 1 server-side)
-        const apiDate = tabId === "future-shift"
+        const apiDate = (tabId === "future-shift" || tabId === "training-reminder")
           ? getNextDay(date)
           : date;
         params.append("date", apiDate);
