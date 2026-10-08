@@ -43,6 +43,14 @@
         if (
           this._symxUrl &&
           typeof this._symxUrl === "string" &&
+          /\/execution\/api\/summaries\?/.test(this._symxUrl)
+        ) {
+          extractApiParams(this._symxUrl);
+          processSlimSummaries(JSON.parse(this.responseText));
+        }
+        if (
+          this._symxUrl &&
+          typeof this._symxUrl === "string" &&
           this._symxUrl.includes("/execution/api/itineraries/")
         ) {
           const data = JSON.parse(this.responseText);
@@ -68,6 +76,10 @@
         const cloned = response.clone();
         const data = await cloned.json();
         processRouteSummariesResponse(data);
+      }
+      if (/\/execution\/api\/summaries\?/.test(url)) {
+        extractApiParams(url);
+        processSlimSummaries(await response.clone().json());
       }
       if (url.includes("/execution/api/itineraries/")) {
         const cloned = response.clone();
@@ -398,6 +410,50 @@
         (conflictCount ? `, ${conflictCount} conflict${conflictCount === 1 ? "" : "s"} to review` : "");
     }
   });
+
+  // ── Slim summaries (/api/summaries) ──
+  // Before a route departs, Cortex's route-summaries response carries zero
+  // stop counts and no driver. This lighter endpoint, which the page polls
+  // constantly, has the real planned totals and the assigned driver, so it
+  // fills those gaps (and supplies the route itself when route-summaries
+  // hasn't listed it yet). It never overwrites richer data already captured.
+  function processSlimSummaries(data) {
+    if (!data) return;
+    const slim = Array.isArray(data.routeSummaries) ? data.routeSummaries : [];
+    if (slim.length === 0) return;
+    let touched = false;
+    slim.forEach((r) => {
+      const code = r.routeCode || r.routeId;
+      if (!code) return;
+      const totalStops = (r.stopProgress && r.stopProgress.total) || r.totalStops || 0;
+      const totalTasks = r.totalTasks || 0;
+      const tid = r.transporterIdFromRms || r.transporterId || "";
+      const base = capturedRoutes.get(code);
+      if (!base) {
+        capturedRoutes.set(code, {
+          routeId: r.routeId, routeCode: r.routeCode, serviceAreaId: lastCapturedServiceArea,
+          transporterIdFromRms: tid, serviceTypeName: r.serviceTypeName,
+          routeDuration: r.routeDuration, plannedDepartureTime: r.plannedDepartureTime,
+          routeStatus: r.status, progressStatus: r.executionStatus,
+          routeDeliveryProgress: { totalStops, totalDeliveries: totalTasks },
+        });
+        touched = true;
+        return;
+      }
+      const rdp = base.routeDeliveryProgress || {};
+      if (!rdp.totalStops && totalStops) {
+        base.routeDeliveryProgress = { ...rdp, totalStops, totalDeliveries: rdp.totalDeliveries || totalTasks };
+        touched = true;
+      }
+      if (!base.transporterIdFromRms && tid) { base.transporterIdFromRms = tid; touched = true; }
+      if (!base.routeDuration && r.routeDuration) { base.routeDuration = r.routeDuration; touched = true; }
+    });
+    if (touched) {
+      lastCaptureTime = Date.now();
+      clearTimeout(window._symxDebounce);
+      window._symxDebounce = setTimeout(() => { sendCapturedRoutes(); }, 2000);
+    }
+  }
 
   // ── Process route summaries from Amazon API ──
   function processRouteSummariesResponse(data) {
