@@ -14,6 +14,7 @@ const publicPaths = [
   "/api/public/",
   "/api/mobile/",
   "/api/messaging/webhook",
+  "/driver-performance/",
   "/c/",
   "/confirm/",
   "/submit-ticket",
@@ -46,6 +47,10 @@ function isStaticAsset(path: string) {
 
 export default async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
+
+  if (path.startsWith("/driver-performance/") && process.env.DRIVER_PERFORMANCE_PUBLIC_ENABLED?.trim().toLowerCase() !== "true") {
+    return new NextResponse("Not Found", { status: 404 });
+  }
 
   // Skip static assets
   if (isStaticAsset(path)) {

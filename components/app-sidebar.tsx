@@ -204,6 +204,12 @@ const data = {
       icon: IconTarget,
       subModules: []
     },
+    {
+      name: "Driver Rankings",
+      url: "/driver-rankings",
+      icon: IconChartBar,
+      subModules: []
+    },
   ],
 };
 

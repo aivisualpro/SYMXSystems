@@ -1,8 +1,10 @@
 
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import { siteOwned } from "./plugins/site-owned";
+import { importProvenance } from "./plugins/import-provenance";
 
 export interface ISymxDeliveryExcellence extends Document {
+  sourceImportIds?: mongoose.Types.ObjectId[];
   /** Owning station. Added by the siteOwned plugin; optional until
    *  siteId becomes required at the Phase 5 contract step. */
   siteId?: mongoose.Types.ObjectId;
@@ -45,6 +47,11 @@ export interface ISymxDeliveryExcellence extends Document {
   ced?: number;
   cedTier?: string;
   cedScore?: number;
+
+  dcDpmo?: number;
+  dcDpmoTier?: string;
+  dcDpmoScore?: number;
+  dcDpmoWeightApplied?: number;
   
   dcr?: string; // e.g. "100.00%"
   dcrTier?: string;
@@ -120,6 +127,11 @@ const SymxDeliveryExcellenceSchema: Schema = new Schema({
   cedTier: { type: String },
   cedScore: { type: Number },
 
+  dcDpmo: { type: Number },
+  dcDpmoTier: { type: String },
+  dcDpmoScore: { type: Number },
+  dcDpmoWeightApplied: { type: Number },
+
   dcr: { type: String }, // Keep as string for percentage formatting or parse? Sample shows "100.00%"
   dcrTier: { type: String },
   dcrScore: { type: Number },
@@ -160,6 +172,7 @@ SymxDeliveryExcellenceSchema.index({ week: 1, transporterId: 1 }, { unique: true
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
+SymxDeliveryExcellenceSchema.plugin(importProvenance);
 SymxDeliveryExcellenceSchema.plugin(siteOwned, { sortField: "week", modelName: "SymxDeliveryExcellence" });
 
 const SymxDeliveryExcellence: Model<ISymxDeliveryExcellence> = mongoose.models.SymxDeliveryExcellence || mongoose.model<ISymxDeliveryExcellence>('SymxDeliveryExcellence', SymxDeliveryExcellenceSchema);
