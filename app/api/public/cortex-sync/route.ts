@@ -81,8 +81,17 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
         ? (realStops.find((s: any) => s.sequenceNumber === totalStops) || realStops[realStops.length - 1] || null)
         : (realStops[realStops.length - 1] || null);
 
-    const firstTaskActual = firstStop?.tasks?.find((t: any) => t?.actualExecutionTime)?.actualExecutionTime;
-    const lastTaskActual = lastStop?.tasks?.find((t: any) => t?.actualExecutionTime)?.actualExecutionTime;
+    // A stop can hold many tasks (one per package). Use the earliest execution
+    // time for the first stop and the latest for the last, not whichever task
+    // happens to be listed first.
+    const execTimes = (stop: any): number[] =>
+        (Array.isArray(stop?.tasks) ? stop.tasks : [])
+            .map((t: any) => Number(t?.actualExecutionTime))
+            .filter((n: number) => Number.isFinite(n) && n > 0);
+    const firstTimes = execTimes(firstStop);
+    const lastTimes = execTimes(lastStop);
+    const firstTaskActual = firstTimes.length ? Math.min(...firstTimes) : undefined;
+    const lastTaskActual = lastTimes.length ? Math.max(...lastTimes) : undefined;
 
     const plannedFirst = epochToClockTime(firstStop?.expectedStartTime);
     if (plannedFirst) fields.plannedFirstStop = plannedFirst;
