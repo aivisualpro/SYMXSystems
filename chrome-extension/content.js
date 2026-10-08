@@ -189,8 +189,13 @@
     if (!data) return;
     try {
       const u = new URL(url, window.location.origin);
-      const itineraryId = u.searchParams.get("itineraryId") || "";
-      const serviceAreaId = u.searchParams.get("serviceAreaId") || "";
+      // The id may be a query param OR a path segment (the request is named
+      // after it), so take it from the response body and confirm it appears
+      // in the URL — that's what lets us swap in other drivers' ids.
+      let itineraryId = u.searchParams.get("itineraryId") || "";
+      const bodyId = data && data.itineraryDetails && data.itineraryDetails.itineraryId;
+      if (!itineraryId && bodyId && url.indexOf(bodyId) !== -1) itineraryId = bodyId;
+      const serviceAreaId = u.searchParams.get("serviceAreaId") || (data && data.itineraryDetails && data.itineraryDetails.serviceAreaId) || "";
       if (itineraryId) itineraryTemplate = { url, itineraryId };
       capturedItinerary = { data, url, itineraryId, serviceAreaId, capturedAt: Date.now() };
       showCortexSyncButton();
