@@ -1,10 +1,15 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import { siteOwned } from "./plugins/site-owned";
+import { importProvenance } from "./plugins/import-provenance";
 
 export interface IScoreCardCDFNegative extends Document {
+  sourceImportIds?: mongoose.Types.ObjectId[];
   /** Owning station. Added by the siteOwned plugin; optional until
    *  siteId becomes required at the Phase 5 contract step. */
   siteId?: mongoose.Types.ObjectId;
+  impactsScorecard?: string;
+  disputeStatus?: string;
+  action?: string;
   week: string;
   deliveryGroupId: string;
   deliveryAssociate: string;
@@ -23,6 +28,9 @@ export interface IScoreCardCDFNegative extends Document {
 }
 
 const ScoreCardCDFNegativeSchema: Schema = new Schema({
+  impactsScorecard: { type: String },
+  disputeStatus: { type: String },
+  action: { type: String },
   week: { type: String, required: true, index: true },
   deliveryGroupId: { type: String },
   deliveryAssociate: { type: String, index: true },
@@ -46,6 +54,7 @@ ScoreCardCDFNegativeSchema.index({ week: 1, deliveryAssociate: 1, trackingId: 1 
 // Station that owns these records. Immutable: a later transfer does
 // not move history. Optional during the migration window; required
 // after the Phase 5 contract step.
+ScoreCardCDFNegativeSchema.plugin(importProvenance);
 ScoreCardCDFNegativeSchema.plugin(siteOwned, { sortField: "week", modelName: "ScoreCardCDFNegative" });
 
 const ScoreCardCDFNegative: Model<IScoreCardCDFNegative> =
