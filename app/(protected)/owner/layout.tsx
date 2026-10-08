@@ -1,31 +1,13 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from "react";
+import React, { useEffect, useRef, useState, useCallback, ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { IconUsers, IconSearch, IconPlus, IconShield, IconBuildingWarehouse } from "@tabler/icons-react";
+import { OwnerContext } from "./owner-context";
 
 // ── Owner Context ─────────────────────────────────────────────────────
-interface OwnerContextType {
-    users: any[];
-    loadingUsers: boolean;
-    search: string;
-    setSearch: (s: string) => void;
-    fetchUsers: () => void;
-    openAddUser: () => void;
-    addUserOpen: boolean;
-    setAddUserOpen: (open: boolean) => void;
-}
-
-const OwnerContext = createContext<OwnerContextType | null>(null);
-
-export function useOwner() {
-    const ctx = useContext(OwnerContext);
-    if (!ctx) throw new Error("useOwner must be used within OwnerLayout");
-    return ctx;
-}
-
 // ── Tabs config ───────────────────────────────────────────────────────
 const tabs = [
     { id: "app-users", label: "App Users", icon: IconUsers, href: "/owner/app-users" },

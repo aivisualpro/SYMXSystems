@@ -2,14 +2,7 @@ import { getSession } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 
-// Increase Next.js body size limit — default 4MB is too small for document uploads (PDFs, license scans)
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "20mb",
-    },
-  },
-};
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
 // Configure Cloudinary
 cloudinary.config({
@@ -48,6 +41,9 @@ export async function POST(req: NextRequest) {
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      return NextResponse.json({ error: "File is too large (20MB max)" }, { status: 400 });
     }
 
     // 3. Convert file to buffer for stream

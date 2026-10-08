@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { DriverRankingResult, DriverRankingRow } from "@/lib/driver-ranking/driver-ranking-data";
+import { WeeklyScorecardImport } from "@/components/driver-ranking/weekly-scorecard-import";
 
 const shown = (value: number | null | undefined, suffix = "") => value === null || value === undefined ? "N/A" : `${Math.round(value * 100) / 100}${suffix}`;
 
@@ -17,6 +18,7 @@ export default function DriverRankingsPage() {
   const [error, setError] = useState("");
   const [copying, setCopying] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -35,7 +37,7 @@ export default function DriverRankingsPage() {
       .catch(reason => { if (reason.name !== "AbortError") setError(reason.message); })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [week]);
+  }, [week, refreshKey]);
 
   const drivers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -71,6 +73,7 @@ export default function DriverRankingsPage() {
           <p className="text-sm text-muted-foreground">Weekly performance and private driver scorecard links.</p>
         </div>
         <div className="flex items-center gap-3">
+          <WeeklyScorecardImport enabled={Boolean(data?.canEdit)} onImported={importedWeek => { setWeek(importedWeek); setRefreshKey(value => value + 1); }} />
           <Select value={week} onValueChange={setWeek}>
             <SelectTrigger className="w-36" aria-label="Selected week"><SelectValue placeholder="Week" /></SelectTrigger>
             <SelectContent>{(data?.availableWeeks || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent>

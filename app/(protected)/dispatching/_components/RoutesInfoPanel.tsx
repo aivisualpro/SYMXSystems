@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
-import { useDispatching } from "../layout";
+import { useDispatching } from "./dispatching-context";
 import { Trash2, ArrowUpDown } from "lucide-react";
 
 // ── Column definitions for the spreadsheet ──

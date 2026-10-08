@@ -82,7 +82,7 @@ import {
   getStatusColors,
   getStatusIcon,
   getRatingStars,
-} from "../interviews/page";
+} from "../interviews/_components/interviews-page";
 
 const CHUNK_SIZE = 500;
 

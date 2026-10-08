@@ -7,6 +7,11 @@
     "app/api/driver-rankings/**/*.ts",
     "components/driver-ranking/**/*.tsx",
     "lib/driver-ranking/**/*.ts",
+    "lib/imports/weekly-scorecard.ts",
+    "components/driver-ranking/weekly-scorecard-import.tsx",
+    "app/api/driver-rankings/weekly-scorecard-import/route.ts",
+    "lib/models/AmazonReportImport.ts",
+    "lib/models/SymxDeliveryExcellence.ts",
     "lib/models/DriverPerformanceScoreConfig.ts"
   ],
   "exclude": ["node_modules", ".next"]

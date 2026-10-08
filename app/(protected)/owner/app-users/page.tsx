@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import { useState, useMemo, useCallback } from "react";
-import { useOwner } from "../layout";
+import { useOwner } from "../owner-context";
 import { UserForm } from "@/components/admin/user-form";
 import {
   Dialog,
