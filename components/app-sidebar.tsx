@@ -200,14 +200,8 @@ const data = {
     },
     {
       name: "Scorecard",
-      url: "/scorecard",
-      icon: IconTarget,
-      subModules: []
-    },
-    {
-      name: "Driver Rankings",
       url: "/driver-rankings",
-      icon: IconChartBar,
+      icon: IconTarget,
       subModules: []
     },
   ],

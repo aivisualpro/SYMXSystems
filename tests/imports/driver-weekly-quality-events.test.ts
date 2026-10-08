@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { buildDriverWeeklyQualityDetails, loadDriverWeeklyQualityDetails } from "@/lib/driver-ranking/driver-weekly-quality-events";
 import AmazonReportImport from "@/lib/models/AmazonReportImport";
 import ScoreCardCDFNegative from "@/lib/models/ScoreCardCDFNegative";
@@ -61,4 +62,13 @@ describe("driver weekly CDF and DSB quality details", () => {
     expect(details.dsb.totalMisses).toBe(1);
   });
 
+  it("distinguishes unavailable imported detail from a clean quality week and keeps scoring collapsed", () => {
+    const panel = readFileSync("components/driver-ranking/driver-history-review-panel.tsx", "utf8");
+    const page = readFileSync("app/(protected)/driver-rankings/page.tsx", "utf8");
+    expect(panel).toContain('"Detailed quality data unavailable"');
+    expect(panel).toContain('"No quality details this week"');
+    expect(panel.indexOf("Metric Rankings &amp; Streaks")).toBeLessThan(panel.indexOf("Quality Details"));
+    expect(page).toContain('<details className="border-t pt-3"><summary className="cursor-pointer text-sm font-medium">View Detailed Scoring</summary>');
+    expect(page.indexOf("View Detailed Scoring")).toBeLessThan(page.indexOf("ScoreBreakdown driver={activeDriver}"));
+  });
 });
