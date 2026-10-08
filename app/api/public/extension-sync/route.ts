@@ -7,6 +7,8 @@ import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import DropdownOption from "@/lib/models/DropdownOption";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
+import { epochToClockTime } from "@/lib/cortex-time";
+import { mergeCortexFields } from "@/lib/cortex-merge";
 
 /**
  * ══════════════════════════════════════════════════════════════
@@ -347,6 +349,7 @@ export async function POST(req: NextRequest) {
         let matched = 0;
         const ops: any[] = [];
         const syncOps: any[] = [];
+        const autoCandidates: { transporterId: string; siteId: any; computed: Record<string, string | number> }[] = [];
 
         routes.forEach((route: any, index: number) => {
             const routeSite = routeSites[index];
@@ -572,13 +575,38 @@ export async function POST(req: NextRequest) {
 
                 // Add time fields if available
                 if (matchedWaveTime) syncFields.waveTime = matchedWaveTime;
-                if (route.departureTime) syncFields.actualDepartureTime = parseAmazonTime(route.departureTime);
+                // NOTE: route.departureTime is Amazon's PLANNED departure, so it must
+                // never feed actualDepartureTime. The real value comes from
+                // transporters[0].actualRouteDepartureTime (see autoCandidates below).
                 if (route.firstStopTime) syncFields.actualFirstStop = parseAmazonTime(route.firstStopTime);
                 if (route.lastStopTime) syncFields.actualLastStop = parseAmazonTime(route.lastStopTime);
                 if (route.completionTime) syncFields.deliveryCompletionTime = parseAmazonTime(route.completionTime);
                 if (route.outboundStem) syncFields.actualOutboundStem = parseAmazonTime(route.outboundStem);
                 if (route.stopsPerHour) syncFields.stopsPerHour = parseFloat(route.stopsPerHour) || 0;
-                if (resolvedPlannedFirstStop) syncFields.plannedFirstStop = resolvedPlannedFirstStop;
+                // plannedFirstStop is intentionally NOT written here: the old source
+                // (plannedBreaks[0].plannedStart) is the first planned REST BREAK,
+                // not the first stop. The itinerary sync supplies the real value.
+
+                // ── Efficiency fields derivable from the summary itself ──
+                // Merged later through the shared "don't overwrite a dispatcher's
+                // value" logic rather than blindly $set.
+                const tr = (raw.transporters || [])[0] || {};
+                const computedAuto: Record<string, string | number> = {};
+                const actDep = epochToClockTime(tr.actualRouteDepartureTime);
+                if (actDep) computedAuto.actualDepartureTime = actDep;
+                const mealBreak = (Array.isArray(tr.breaks) ? tr.breaks : []).find(
+                    (b: any) => b?.type === "MEAL" && b?.timeStampOn && b?.timeStampOff && b?.state === "OFF"
+                );
+                if (mealBreak) {
+                    const out = epochToClockTime(mealBreak.timeStampOn);
+                    const inn = epochToClockTime(mealBreak.timeStampOff);
+                    if (out) computedAuto.amazonOutLunch = out;
+                    if (inn) computedAuto.amazonInLunch = inn;
+                }
+                if (Array.isArray(tr.rescueActions)) computedAuto.stopsRescued = tr.rescueActions.length;
+                if (Object.keys(computedAuto).length > 0) {
+                    autoCandidates.push({ transporterId, siteId, computed: computedAuto });
+                }
 
                 if (row.wst) syncFields.wst = row.wst;
                 if (row.wstDuration) syncFields.wstDuration = Number(row.wstDuration) || 0;
@@ -611,6 +639,34 @@ export async function POST(req: NextRequest) {
                 synced = result.modifiedCount;
             } catch (e) {
                 console.error("[Extension Sync] Error syncing to SYMXRoutes:", e);
+            }
+        }
+
+        // Merge Amazon-derived Efficiency fields without clobbering manual entries.
+        let autoUpdated = 0;
+        let autoConflicts = 0;
+        if (autoCandidates.length > 0) {
+            try {
+                const existingDocs = await SYMXRoute.find({
+                    date: dateObj,
+                    siteId: { $in: siteIds },
+                    transporterId: { $in: autoCandidates.map((c) => c.transporterId) },
+                }).lean() as any[];
+                const docByKey = new Map<string, any>(
+                    existingDocs.map((d) => [`${String(d.siteId)}|${d.transporterId}`, d])
+                );
+                const mergeOps: any[] = [];
+                for (const cand of autoCandidates) {
+                    const doc = docByKey.get(`${String(cand.siteId)}|${cand.transporterId}`);
+                    if (!doc) continue;
+                    const { setOps, updated, conflicts } = mergeCortexFields(doc, cand.computed, Object.keys(cand.computed));
+                    autoUpdated += updated.length;
+                    autoConflicts += conflicts.length;
+                    mergeOps.push({ updateOne: { filter: { _id: doc._id }, update: { $set: setOps } } });
+                }
+                if (mergeOps.length > 0) await SYMXRoute.bulkWrite(mergeOps, { ordered: false });
+            } catch (e) {
+                console.error("[Extension Sync] Error merging Amazon-derived fields:", e);
             }
         }
 
@@ -652,6 +708,8 @@ export async function POST(req: NextRequest) {
             saved,
             synced,
             matched,
+            autoFieldsUpdated: autoUpdated,
+            autoFieldConflicts: autoConflicts,
             total: routes.length,
             // Silence about dropped routes is what lets a misconfigured
             // service area go unnoticed for a week, so the count and the

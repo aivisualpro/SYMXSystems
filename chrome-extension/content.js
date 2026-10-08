@@ -18,6 +18,7 @@
   let lastCaptureTime = 0;
   let lastCapturedApiDate = "";    // date extracted from the API URL
   let lastCapturedServiceArea = ""; // serviceAreaId from API URL
+  let lastSummariesUrl = "";        // for periodic automatic refetch
 
   XMLHttpRequest.prototype.open = function (method, url, ...rest) {
     this._symxUrl = url;
@@ -35,6 +36,7 @@
         ) {
           // Extract date + serviceAreaId from the API URL itself
           extractApiParams(this._symxUrl);
+          lastSummariesUrl = this._symxUrl;
           const data = JSON.parse(this.responseText);
           processRouteSummariesResponse(data);
         }
@@ -62,6 +64,7 @@
       const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
       if (url.includes("route-summaries")) {
         extractApiParams(url);
+        lastSummariesUrl = url;
         const cloned = response.clone();
         const data = await cloned.json();
         processRouteSummariesResponse(data);
@@ -117,12 +120,78 @@
   let cortexSyncInterval = null;
   const CORTEX_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+  // ── Automatic mode ──
+  // When on (default), route summaries are re-fetched and synced every few
+  // minutes, and every driver's itinerary is fetched and synced too — no one
+  // has to open each driver's page. The itinerary URL is learned from the
+  // first itinerary the page loads (we only know its shape, not a fixed
+  // address), then reused with each route's own itineraryId swapped in.
+  const AUTO_KEY = "symx_auto_sync";
+  const isAutoOn = () => localStorage.getItem(AUTO_KEY) !== "off";
+  let itineraryTemplate = null; // { url, itineraryId }
+  const syncedItineraries = new Map(); // itineraryId -> lastDriverEventTime stamp
+  let batchRunning = false;
+
+  async function runItineraryBatch() {
+    if (!isAutoOn() || !itineraryTemplate || batchRunning || capturedRoutes.size === 0) return;
+    batchRunning = true;
+    try {
+      const date = lastCapturedApiDate || businessDateString();
+      const jobs = [];
+      capturedRoutes.forEach((route) => {
+        const t = (route.transporters || [])[0];
+        if (!t || !t.itineraryId) return;
+        const stamp = `${t.itineraryStatus}|${t.lastDriverEventTime || ""}|${t.itineraryStartTime || ""}`;
+        if (syncedItineraries.get(t.itineraryId) === stamp) return; // unchanged since last sync
+        jobs.push({ id: t.itineraryId, stamp, serviceAreaId: route.serviceAreaId || lastCapturedServiceArea });
+      });
+
+      const worker = async () => {
+        while (jobs.length) {
+          const job = jobs.shift();
+          try {
+            const url = itineraryTemplate.url.split(itineraryTemplate.itineraryId).join(job.id);
+            const res = await originalFetch(url, { credentials: "include" });
+            if (!res.ok) continue;
+            const payload = extractItineraryPayload(await res.json());
+            if (!payload) continue;
+            syncedItineraries.set(job.id, job.stamp);
+            window.postMessage({
+              source: "SYMX_CONTENT",
+              type: "ITINERARY_SYNC_REQUEST",
+              payload: {
+                serviceAreaId: job.serviceAreaId || payload.itineraryDetails.serviceAreaId || "",
+                date,
+                itineraryDetails: payload.itineraryDetails,
+                stops: payload.stops,
+              },
+            }, "*");
+          } catch (e) { /* skip this driver, try again next cycle */ }
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]); // 3 at a time, polite to Amazon
+    } finally {
+      batchRunning = false;
+    }
+  }
+
+  async function autoRefreshCycle() {
+    if (!isAutoOn() || !lastSummariesUrl) return;
+    try {
+      const res = await originalFetch(lastSummariesUrl, { credentials: "include" });
+      processRouteSummariesResponse(await res.json());
+    } catch (e) { /* page's own requests will refresh us */ }
+    setTimeout(runItineraryBatch, 4000); // after summaries have synced
+  }
+  setInterval(autoRefreshCycle, 5 * 60 * 1000);
+
   function processItineraryResponse(data, url) {
     if (!data) return;
     try {
       const u = new URL(url, window.location.origin);
       const itineraryId = u.searchParams.get("itineraryId") || "";
       const serviceAreaId = u.searchParams.get("serviceAreaId") || "";
+      if (itineraryId) itineraryTemplate = { url, itineraryId };
       capturedItinerary = { data, url, itineraryId, serviceAreaId, capturedAt: Date.now() };
       showCortexSyncButton();
     } catch (e) {
@@ -160,7 +229,7 @@
         type: "ITINERARY_SYNC_REQUEST",
         payload: {
           serviceAreaId: capturedItinerary.serviceAreaId || payload.itineraryDetails.serviceAreaId || "",
-          date: businessDateString(),
+          date: lastCapturedApiDate || businessDateString(),
           itineraryDetails: payload.itineraryDetails,
           stops: payload.stops,
         },
@@ -427,6 +496,7 @@
           routes,
           selectedDate: selectedDay,
           serviceAreaId: serviceAreaId,
+          auto: isAutoOn(),
         },
       },
       "*"
@@ -435,6 +505,11 @@
     // Store in window for easy access
     window._symxCapturedRoutes = routes;
     window._symxCapturedDate = selectedDay;
+
+    // Automatic mode: fetch + sync every driver's itinerary shortly after
+    // the summaries go out.
+    clearTimeout(window._symxBatchTimer);
+    window._symxBatchTimer = setTimeout(runItineraryBatch, 4000);
   }
 
   // ── Deep search: find a numeric value by searching all keys recursively ──
@@ -689,6 +764,24 @@
       ">0</span>
     </div>
   `;
+
+  // Click the badge to switch automatic sync on/off (green = auto, grey = manual).
+  function paintBadge() {
+    const inner = badge.firstElementChild;
+    if (!inner) return;
+    inner.style.background = isAutoOn()
+      ? "linear-gradient(135deg, #16a34a, #15803d)"
+      : "linear-gradient(135deg, #6b7280, #4b5563)";
+    inner.title = isAutoOn()
+      ? "SYMX auto-sync ON — click to turn off"
+      : "SYMX auto-sync OFF — click to turn on";
+  }
+  badge.addEventListener("click", () => {
+    localStorage.setItem(AUTO_KEY, isAutoOn() ? "off" : "on");
+    paintBadge();
+    if (isAutoOn()) autoRefreshCycle();
+  });
+  paintBadge();
 
   // Wait for body to be available
   function injectBadge() {

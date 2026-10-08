@@ -3,6 +3,7 @@ import connectToDatabase from "@/lib/db";
 import Site from "@/lib/models/Site";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import { epochToClockTime, durationMsToHMM } from "@/lib/cortex-time";
+import { mergeCortexFields } from "@/lib/cortex-merge";
 
 /**
  * ══════════════════════════════════════════════════════════════
@@ -155,45 +156,8 @@ export async function POST(req: NextRequest) {
         }
 
         const computed = computeCortexFields(itineraryDetails, stops || []);
-        const cortexOwned = new Set<string>(Array.isArray(existing.cortexSyncedFields) ? existing.cortexSyncedFields : []);
-        const existingConflicts: any[] = Array.isArray(existing.cortexConflicts) ? existing.cortexConflicts : [];
-        const conflictsByField = new Map<string, any>(existingConflicts.map((c: any) => [c.field, c]));
-
-        const setOps: Record<string, any> = {};
-        const updatedFields: string[] = [];
-        const newConflictFields: string[] = [];
-
-        for (const field of AUTO_FIELDS) {
-            if (!(field in computed)) continue;
-            const cortexValue = computed[field];
-            const currentValue = existing[field];
-            const isEmpty = currentValue === "" || currentValue === undefined || currentValue === null ||
-                (typeof currentValue === "number" && currentValue === 0);
-            const sameAsCortex = String(currentValue) === String(cortexValue);
-
-            if (sameAsCortex) {
-                conflictsByField.delete(field);
-                continue;
-            }
-
-            if (isEmpty || cortexOwned.has(field)) {
-                setOps[field] = cortexValue;
-                cortexOwned.add(field);
-                conflictsByField.delete(field);
-                updatedFields.push(field);
-            } else {
-                conflictsByField.set(field, {
-                    field,
-                    cortexValue: String(cortexValue),
-                    currentValue: String(currentValue),
-                    detectedAt: new Date(),
-                });
-                newConflictFields.push(field);
-            }
-        }
-
-        setOps.cortexSyncedFields = Array.from(cortexOwned);
-        setOps.cortexConflicts = Array.from(conflictsByField.values());
+        const { setOps, updated: updatedFields, conflicts: newConflictFields } =
+            mergeCortexFields(existing, computed, AUTO_FIELDS);
 
         await SYMXRoute.updateOne({ _id: existing._id }, { $set: setOps });
 

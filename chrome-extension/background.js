@@ -5,6 +5,9 @@
 const SYMX_API_BASE = "https://symx-systems.vercel.app";
 const SYMX_API_KEY = "symx-ext-route-sync-2026";
 
+const AUTO_MIN_GAP_MS = 90 * 1000;
+const autoLastSync = {};
+
 // Listen for messages from content script and popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "ROUTES_SCRAPED") {
@@ -18,6 +21,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // Notify popup if open (ignore error if popup is closed)
     chrome.runtime.sendMessage({ type: "SCRAPE_COMPLETE", data: message.data }).catch(() => {});
+
+    // Automatic mode: push to SYMX without anyone pressing Sync. Throttled
+    // per date + station so Amazon's chatty refreshes don't hammer the API.
+    if (message.auto && Array.isArray(message.data) && message.data.length && message.selectedDate) {
+      const key = `${message.selectedDate}|${message.serviceAreaId || ""}`;
+      const now = Date.now();
+      if (!autoLastSync[key] || now - autoLastSync[key] > AUTO_MIN_GAP_MS) {
+        autoLastSync[key] = now;
+        syncToSYMX(message.data, message.selectedDate)
+          .then(() => chrome.storage.local.set({ lastSync: new Date().toISOString() }))
+          .catch((err) => {
+            delete autoLastSync[key]; // allow a retry on the next capture
+            console.warn("[SYMX] Auto-sync failed:", err.message);
+          });
+      }
+    }
     sendResponse({ ok: true });
   }
 

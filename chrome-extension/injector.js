@@ -33,6 +33,7 @@ window.addEventListener("message", (event) => {
         data: payload.routes,
         selectedDate: payload.selectedDate,
         serviceAreaId: payload.serviceAreaId,
+        auto: !!payload.auto,
       });
     } catch (err) {
       console.warn("[SYMX Extension] Could not send message to extension (context invalidated). Please refresh the page.", err);
