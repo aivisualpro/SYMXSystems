@@ -37,6 +37,8 @@ export interface ISYMXRoute extends Document {
 
     // ── Departure & stems ──
     departureDelay: string;             // duration
+    appSignIn: string;                  // time (Cortex)
+    plannedEndTime: string;             // time (Cortex)
     actualDepartureTime: string;        // duration
     plannedOutboundStem: string;        // time
     actualOutboundStem: string;         // time
@@ -137,6 +139,8 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
 
         // Departure & stems
         departureDelay: { type: String, default: "" },
+        appSignIn: { type: String, default: "" },
+        plannedEndTime: { type: String, default: "" },
         actualDepartureTime: { type: String, default: "" },
         plannedOutboundStem: { type: String, default: "" },
         actualOutboundStem: { type: String, default: "" },

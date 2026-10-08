@@ -78,6 +78,7 @@ const COLUMNS = [
     { key: "stopCount", label: "Stops", width: "w-[70px] shrink-0" },
     { key: "routeDuration", label: "Duration", width: "w-[80px] shrink-0" },
     { key: "waveTime", label: "Wave", width: "w-[75px] shrink-0" },
+    { key: "appSignIn", label: "App In", width: "w-[70px] shrink-0" },
     { key: "actualDepartureTime", label: "Act Dep", width: "w-[75px] shrink-0" },
     { key: "departureDelay", label: "Dep Delay", width: "w-[80px] shrink-0" },
     { key: "plannedOutboundStem", label: "Pln OB", width: "w-[70px] shrink-0" },
@@ -89,6 +90,7 @@ const COLUMNS = [
     { key: "plannedLastStop", label: "Pln Last", width: "w-[75px] shrink-0" },
     { key: "actualLastStop", label: "Act Last", width: "w-[75px] shrink-0" },
     { key: "lastStopDelay", label: "Last Delay", width: "w-[80px] shrink-0" },
+    { key: "plannedEndTime", label: "Pln End", width: "w-[70px] shrink-0" },
     { key: "plannedRTSTime", label: "Pln RTS", width: "w-[75px] shrink-0" },
     { key: "estimatedRTSTime", label: "Est RTS", width: "w-[75px] shrink-0" },
     { key: "plannedInboundStem", label: "Pln IB", width: "w-[70px] shrink-0" },
@@ -104,6 +106,7 @@ const COLUMNS = [
 
 // ── Editable fields (raw inputs only — computed fields are read-only) ──
 const EDITABLE_FIELDS = new Set([
+    "appSignIn", "plannedEndTime",
     "actualDepartureTime",
     "plannedOutboundStem", "actualOutboundStem",
     "plannedFirstStop", "actualFirstStop",
@@ -135,6 +138,8 @@ interface RouteRow {
     stopCount: number;
     routeDuration: string;
     waveTime: string;
+    appSignIn: string;
+    plannedEndTime: string;
     actualDepartureTime: string;
     departureDelay: string;
     plannedOutboundStem: string;
@@ -283,6 +288,8 @@ export default function EfficiencyPage() {
                 stopCount,
                 routeDuration: rec.routeDuration || "",
                 waveTime: rec.waveTime || "",
+                appSignIn: rec.appSignIn || "",
+                plannedEndTime: rec.plannedEndTime || "",
                 actualDepartureTime: rec.actualDepartureTime || "",
                 departureDelay,
                 plannedOutboundStem: rec.plannedOutboundStem || "",
@@ -696,6 +703,7 @@ export default function EfficiencyPage() {
                                     <div className="w-[70px] shrink-0">{renderCell(row, "stopCount", row.stopCount)}</div>
                                     <div className="w-[80px] shrink-0">{renderCell(row, "routeDuration", row.routeDuration)}</div>
                                     <div className="w-[75px] shrink-0">{renderCell(row, "waveTime", row.waveTime)}</div>
+                                    <div className="w-[70px] shrink-0">{renderCell(row, "appSignIn", row.appSignIn)}</div>
                                     <div className="w-[75px] shrink-0">{renderCell(row, "actualDepartureTime", row.actualDepartureTime)}</div>
                                     <div className="w-[80px] shrink-0">{renderCell(row, "departureDelay", row.departureDelay)}</div>
                                     <div className="w-[70px] shrink-0">{renderCell(row, "plannedOutboundStem", row.plannedOutboundStem)}</div>
@@ -707,6 +715,7 @@ export default function EfficiencyPage() {
                                     <div className="w-[75px] shrink-0">{renderCell(row, "plannedLastStop", row.plannedLastStop)}</div>
                                     <div className="w-[75px] shrink-0">{renderCell(row, "actualLastStop", row.actualLastStop)}</div>
                                     <div className="w-[80px] shrink-0">{renderCell(row, "lastStopDelay", row.lastStopDelay)}</div>
+                                    <div className="w-[70px] shrink-0">{renderCell(row, "plannedEndTime", row.plannedEndTime)}</div>
                                     <div className="w-[75px] shrink-0">{renderCell(row, "plannedRTSTime", row.plannedRTSTime)}</div>
                                     <div className="w-[75px] shrink-0">{renderCell(row, "estimatedRTSTime", row.estimatedRTSTime)}</div>
                                     <div className="w-[70px] shrink-0">{renderCell(row, "plannedInboundStem", row.plannedInboundStem)}</div>
@@ -769,6 +778,8 @@ export default function EfficiencyPage() {
                             <div className="gap-5 flex flex-col">
                                 {[{
                                     title: "Departure", color: "text-blue-500", fields: [
+                                        { key: "appSignIn", label: "App Sign In" },
+                                        { key: "plannedEndTime", label: "Planned End" },
                                         { key: "actualDepartureTime", label: "Act Dep" },
                                     ]
                                 },
