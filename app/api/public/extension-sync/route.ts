@@ -349,7 +349,7 @@ export async function POST(req: NextRequest) {
         let matched = 0;
         const ops: any[] = [];
         const syncOps: any[] = [];
-        const autoCandidates: { transporterId: string; siteId: any; computed: Record<string, string | number> }[] = [];
+        const autoCandidates: { transporterId: string; siteId: any; plannedDeparture: string; computed: Record<string, string | number> }[] = [];
 
         routes.forEach((route: any, index: number) => {
             const routeSite = routeSites[index];
@@ -605,7 +605,7 @@ export async function POST(req: NextRequest) {
                 }
                 if (Array.isArray(tr.rescueActions)) computedAuto.stopsRescued = tr.rescueActions.length;
                 if (Object.keys(computedAuto).length > 0) {
-                    autoCandidates.push({ transporterId, siteId, computed: computedAuto });
+                    autoCandidates.push({ transporterId, siteId, plannedDeparture: epochToClockTime(raw.plannedDepartureTime), computed: computedAuto });
                 }
 
                 if (row.wst) syncFields.wst = row.wst;
@@ -659,7 +659,19 @@ export async function POST(req: NextRequest) {
                 for (const cand of autoCandidates) {
                     const doc = docByKey.get(`${String(cand.siteId)}|${cand.transporterId}`);
                     if (!doc) continue;
-                    const { setOps, updated, conflicts } = mergeCortexFields(doc, cand.computed, Object.keys(cand.computed));
+                    // Older syncs wrote Amazon's PLANNED departure into Act Dep. If the
+                    // stored value is exactly that planned time and was never typed or
+                    // synced as real data, treat it as empty so the true value replaces it.
+                    const owned = Array.isArray(doc.cortexSyncedFields) ? doc.cortexSyncedFields : [];
+                    const effective = { ...doc };
+                    if (
+                        cand.plannedDeparture &&
+                        doc.actualDepartureTime === cand.plannedDeparture &&
+                        !owned.includes("actualDepartureTime")
+                    ) {
+                        effective.actualDepartureTime = "";
+                    }
+                    const { setOps, updated, conflicts } = mergeCortexFields(effective, cand.computed, Object.keys(cand.computed));
                     autoUpdated += updated.length;
                     autoConflicts += conflicts.length;
                     mergeOps.push({ updateOne: { filter: { _id: doc._id }, update: { $set: setOps } } });
