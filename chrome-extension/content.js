@@ -206,6 +206,10 @@
 
   // Business-day (Pacific time) date string, matching the server's convention.
   function businessDateString() {
+    // Prefer the page's own selectedDay (e.g. ...?selectedDay=2026-10-07) so
+    // viewing a past/future day syncs to that day, not "today".
+    const sd = new URLSearchParams(window.location.search).get("selectedDay");
+    if (sd && /^\d{4}-\d{2}-\d{2}$/.test(sd)) return sd;
     return new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
   }
 
