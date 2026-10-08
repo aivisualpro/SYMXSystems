@@ -12,7 +12,7 @@ import {
     IconMessageCircle, IconId, IconAlertTriangle,
 } from "@tabler/icons-react";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { useFleet } from "../../layout";
+import { useFleet } from "../../components/fleet-context";
 import FleetFormModal from "../../components/fleet-form-modal";
 import { PhotoCompareTile, CompareModeToggle, CompareMode } from "../../components/photo-compare";
 

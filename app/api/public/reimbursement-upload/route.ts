@@ -4,14 +4,6 @@ import connectToDatabase from "@/lib/db";
 import { orgWide } from "@/lib/scoped-query";
 import SymxPublicUploadLog from "@/lib/models/SymxPublicUploadLog";
 
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "10mb",
-    },
-  },
-};
-
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,

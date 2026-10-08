@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import * as LucideIcons from "lucide-react";
 import { IconX, IconLoader2, IconUpload, IconPhoto, IconCheck, IconSearch, IconChevronDown, IconTrash, IconDownload } from "@tabler/icons-react";
 import { notify } from "@/lib/notify";
-import { useFleet } from "../layout";
+import { useFleet } from "./fleet-context";
 import { VinScannerButton } from "@/components/fleet/vin-scanner";
 
 const inputClass = "w-full px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors";

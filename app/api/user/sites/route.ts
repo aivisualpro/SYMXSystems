@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { resolveUserSiteAccess, getActiveSites } from "@/lib/sites";
-import { SITE_CONTEXT_COOKIE, parseSiteContextCookie, serializeSiteContext, resolveActiveContext } from "@/lib/site-context";
+import { SITE_CONTEXT_COOKIE, serializeSiteContext, resolveActiveContext } from "@/lib/site-context";
 
 // GET /api/user/sites
 // Which sites may the current user reach, and which are currently selected.
@@ -98,5 +98,3 @@ export async function PUT(req: NextRequest) {
   });
   return res;
 }
-
-export { parseSiteContextCookie };

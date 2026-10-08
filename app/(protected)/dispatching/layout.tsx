@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo, createContext, useContext } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -39,9 +39,10 @@ import { notify } from "@/lib/notify";
 import RoutesInfoPanel from "./_components/RoutesInfoPanel";
 import { useQueryClient } from "@tanstack/react-query";
 import { generateRoutesPDF } from "@/lib/generate-routes-pdf";
+import { DispatchingContext, type DispatchingStats } from "./_components/dispatching-context";
 
 // ── Shared Tab Definitions ──
-export const DISPATCHING_TABS = [
+const DISPATCHING_TABS = [
     { id: "routes", label: "Routes", href: "/dispatching/routes", icon: MapPin, gradient: "from-orange-500 to-red-500", description: "Route details, roster, and delivery tracking" },
     { id: "attendance", label: "Attendance", href: "/dispatching/attendance", icon: UserCheck, gradient: "from-violet-500 to-purple-500", description: "Driver attendance tracking and check-ins" },
     { id: "time", label: "Time", href: "/dispatching/time", icon: Clock, gradient: "from-rose-500 to-pink-500", description: "Time tracking and shift management" },
@@ -53,62 +54,6 @@ export const DISPATCHING_TABS = [
 const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // ── Stats type for child pages to push up ──
-export interface DispatchingStats {
-    employeeCount?: number;
-    groupCount?: number;
-    filteredFrom?: number;
-}
-
-// ── Context to share state with child pages ──
-interface DispatchingContextType {
-    selectedWeek: string;
-    selectedDate: string;
-    setSelectedDate: (date: string) => void;
-    weekDates: string[];
-    availableWeeks: string[];
-    searchQuery: string;
-    routesGenerated: boolean;
-    routesLoading: boolean;
-    refreshRoutes: () => void;
-    refreshKey: number;
-    setStats: (stats: DispatchingStats) => void;
-    showRoutesInfo: boolean;
-    setShowRoutesInfo: (show: boolean) => void;
-    globalEditMode: boolean;
-    setGlobalEditMode: (mode: boolean) => void;
-    confirmationFilter: string;
-    setConfirmationFilter: (filter: string) => void;
-    /** Shared raw route data for the selected week — fetched once by layout, consumed by all tabs */
-    rawRouteData: any;
-    rawRouteDataLoading: boolean;
-}
-
-const DispatchingContext = createContext<DispatchingContextType>({
-    selectedWeek: "",
-    selectedDate: "",
-    setSelectedDate: () => { },
-    weekDates: [],
-    availableWeeks: [],
-    searchQuery: "",
-    routesGenerated: false,
-    routesLoading: false,
-    refreshRoutes: () => { },
-    refreshKey: 0,
-    setStats: () => { },
-    showRoutesInfo: false,
-    setShowRoutesInfo: () => { },
-    globalEditMode: false,
-    setGlobalEditMode: () => { },
-    confirmationFilter: "all",
-    setConfirmationFilter: () => { },
-    rawRouteData: null,
-    rawRouteDataLoading: false,
-});
-
-export function useDispatching() {
-    return useContext(DispatchingContext);
-}
-
 // ── Week helpers ──
 function formatWeekLabel(week: string) {
     const match = week.match(/(\d{4})-W(\d{2})/);

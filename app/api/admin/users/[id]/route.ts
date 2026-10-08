@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import SymxUser from "@/lib/models/SymxUser";
 import bcrypt from "bcrypt";
-import { userSchema } from "../route";
+import { userSchema } from "@/lib/validations/user-schema";
 import { validateBody } from "@/lib/validations";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

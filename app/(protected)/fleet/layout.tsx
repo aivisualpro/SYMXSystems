@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from "react";
+import React, { useEffect, useRef, useState, useCallback, ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { notify } from "@/lib/notify";
@@ -11,6 +11,7 @@ import {
   IconChartDonut, IconCar, IconTool, IconClipboardCheck,
   IconFileInvoice, IconSearch, IconPlus, IconRotate2, IconCheck,
 } from "@tabler/icons-react";
+import { FleetContext } from "./components/fleet-context";
 
 // ── Fleet Context ─────────────────────────────────────────────────────
 interface FleetData {
@@ -23,42 +24,6 @@ interface SeedPage {
   hasMore: boolean;
   fetchedAt: number; // timestamp for cache freshness
 }
-interface FleetContextType {
-  data: FleetData | null;
-  loading: boolean;
-  search: string;
-  setSearch: (s: string) => void;
-  fetchData: () => void;
-  openCreateModal: (type: string) => void;
-  openEditModal: (type: string, item: any) => void;
-  handleDelete: (type: string, id: string) => void;
-  modalOpen: boolean;
-  setModalOpen: (open: boolean) => void;
-  modalType: string;
-  formData: any;
-  updateForm: (key: string, value: any) => void;
-  handleSave: () => void;
-  saving: boolean;
-  editId: string | null;
-  repairsSeed: SeedPage | null;
-  inspectionsSeed: SeedPage | null;
-  rentalsSeed: any[] | null;
-  showReturned: boolean;
-  setShowReturned: (v: boolean) => void;
-  showCompleted: boolean;
-  setShowCompleted: (v: boolean) => void;
-  showStandardOnly: boolean;
-  setShowStandardOnly: (v: boolean) => void;
-}
-
-const FleetContext = createContext<FleetContextType | null>(null);
-
-export function useFleet() {
-  const ctx = useContext(FleetContext);
-  if (!ctx) throw new Error("useFleet must be used within FleetLayout");
-  return ctx;
-}
-
 // ── Tabs config ───────────────────────────────────────────────────────
 const tabs = [
   { id: "overview", label: "Overview", permModule: "Overview", icon: IconChartDonut, href: "/fleet" },

@@ -7,26 +7,8 @@ import UserSiteAssignment from "@/lib/models/UserSiteAssignment";
 import { getDefaultSite } from "@/lib/sites";
 import { getSession } from "@/lib/auth";
 import bcrypt from "bcrypt";
-import { z } from "zod";
 import { validateBody } from "@/lib/validations";
-
-export const userSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().optional(),
-  phone: z.string().optional(),
-  AppRole: z.string().optional(),
-  designation: z.string().optional(),
-  isActive: z.boolean().optional(),
-  serialNo: z.string().optional(),
-  profilePicture: z.string().optional(),
-  location: z.string().optional(),
-  // Stations this user may reach. Optional so existing API callers keep
-  // working; omitting it falls back to the default station rather than
-  // creating an account with no access at all.
-  siteIds: z.array(z.string()).optional(),
-  primarySiteId: z.string().optional(),
-}).passthrough();
+import { userSchema } from "@/lib/validations/user-schema";
 
 export async function GET(req: NextRequest) {
   try {

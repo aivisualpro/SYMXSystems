@@ -5,6 +5,8 @@ import path from "path";
 import os from "os";
 import { execSync } from "child_process";
 
+export const runtime = "nodejs";
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,

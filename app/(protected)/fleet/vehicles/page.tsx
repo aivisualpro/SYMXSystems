@@ -7,7 +7,7 @@ import {
   IconPhoto, IconQrcode, IconX,
 } from "@tabler/icons-react";
 import QRCode from "qrcode";
-import { useFleet } from "../layout";
+import { useFleet } from "../components/fleet-context";
 import { StatusBadge } from "../components/fleet-ui";
 import FleetFormModal from "../components/fleet-form-modal";
 
