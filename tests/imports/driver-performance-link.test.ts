@@ -119,4 +119,15 @@ describe("private driver performance links", () => {
     expect(page).toContain("overflow-x-hidden");
     expect(page).toContain("min-h-10");
   });
+
+  it("keeps the public scorecard scrollable when a Radix scroll lock is present", () => {
+    const layout = readFileSync("app/driver-performance/layout.tsx", "utf8");
+    const styles = readFileSync("app/driver-performance/driver-performance.css", "utf8");
+    expect(layout).toContain("data-public-driver-performance-root");
+    expect(styles).toContain("html body:has([data-public-driver-performance-root])");
+    expect(styles).toContain("overflow-y: auto !important");
+    expect(styles).toContain("overflow-x: hidden !important");
+    expect(styles).toContain("height: auto !important");
+    expect(styles).toContain("touch-action: pan-y");
+  });
 });
