@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import Site from "@/lib/models/Site";
 import SYMXRoute from "@/lib/models/SYMXRoute";
-import { epochToClockTime, durationMsToHMM } from "@/lib/cortex-time";
+import { epochToClockTime, epochToDate, durationMsToHMM } from "@/lib/cortex-time";
 import { mergeCortexFields } from "@/lib/cortex-merge";
 
 /**
@@ -47,6 +47,12 @@ const AUTO_FIELDS = [
     "plannedLastStop",
     "actualLastStop",
     "stopsRescued",
+    "plannedRTSTime",
+    "estimatedRTSTime",
+    "plannedDuration1stToLast",
+    "actualDuration1stToLast",
+    "stopsPerHour",
+    "amazonAppLogout",
 ] as const;
 
 function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string, string | number> {
@@ -93,6 +99,41 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
 
     if (Array.isArray(itineraryDetails?.rescueActions)) {
         fields.stopsRescued = itineraryDetails.rescueActions.length;
+    }
+
+    // ── Return to station ──
+    // plannedRtsTime / projectedCompletionTime live in transporterTimeAttributes
+    // (confirmed names; units vary, which epochToClockTime handles by magnitude).
+    // Fall back to the itinerary-level projectedCompletionTime.
+    const plannedRts = epochToClockTime(td.plannedRtsTime);
+    if (plannedRts) fields.plannedRTSTime = plannedRts;
+    const estRts = epochToClockTime(td.projectedCompletionTime ?? itineraryDetails?.projectedCompletionTime);
+    if (estRts) fields.estimatedRTSTime = estRts;
+
+    // ── First-to-last durations and stops/hour ──
+    const plannedFirstD = epochToDate(firstStop?.expectedStartTime);
+    const plannedLastD = epochToDate(lastStop?.expectedStartTime);
+    if (plannedFirstD && plannedLastD && plannedLastD > plannedFirstD) {
+        const d = durationMsToHMM(plannedLastD.getTime() - plannedFirstD.getTime());
+        if (d) fields.plannedDuration1stToLast = d;
+    }
+    const actualFirstD = epochToDate(firstTaskActual);
+    const actualLastD = epochToDate(lastTaskActual);
+    if (actualFirstD && actualLastD && actualLastD > actualFirstD) {
+        const ms = actualLastD.getTime() - actualFirstD.getTime();
+        const d = durationMsToHMM(ms);
+        if (d) fields.actualDuration1stToLast = d;
+        // Only meaningful once the route is actually finished.
+        const done = itineraryDetails?.executionStatus === "COMPLETE" || itineraryDetails?.progressStatus === "COMPLETE";
+        if (done && totalStops > 0) {
+            fields.stopsPerHour = Math.round((totalStops / (ms / 3600000)) * 10) / 10;
+        }
+    }
+
+    // ── Real app logout (not the planned schedule end) ──
+    if (itineraryDetails?.driverSessionEnded) {
+        const logout = epochToClockTime(td.sessionEndTime ?? itineraryDetails?.sessionEndTime);
+        if (logout) fields.amazonAppLogout = logout;
     }
 
     return fields;

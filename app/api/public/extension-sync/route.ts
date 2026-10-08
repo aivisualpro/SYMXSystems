@@ -612,8 +612,8 @@ export async function POST(req: NextRequest) {
                 if (row.wstDuration) syncFields.wstDuration = Number(row.wstDuration) || 0;
                 if (matchedPad) syncFields.pad = matchedPad;
 
-                const scheduleEnd = route.scheduleEndTime || raw.scheduleEndTime;
-                if (scheduleEnd) syncFields.amazonAppLogout = parseAmazonTime(scheduleEnd);
+                // amazonAppLogout is no longer taken from scheduleEndTime — that is
+                // the PLANNED end. The itinerary sync writes the real session end.
 
                 syncOps.push({
                     updateOne: {
