@@ -106,6 +106,7 @@
         (sa && lastCapturedServiceArea && sa !== lastCapturedServiceArea);
       if (isNewView) {
         capturedRoutes.clear();
+        captureLog.clear();
       }
 
       if (ld) lastCapturedApiDate = ld;
@@ -120,85 +121,121 @@
   let cortexSyncInterval = null;
   const CORTEX_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-  // ── Automatic mode ──
-  // When on (default), route summaries are re-fetched and synced every few
-  // minutes, and every driver's itinerary is fetched and synced too — no one
-  // has to open each driver's page. The itinerary URL is learned from the
-  // first itinerary the page loads (we only know its shape, not a fixed
-  // address), then reused with each route's own itineraryId swapped in.
+  // ── Auto-sync + capture tracker ──
+  // Cortex signs every request it makes, so the extension can't fetch other
+  // drivers' itineraries on its own. Instead it watches the itineraries the
+  // page loads as someone clicks through the driver list, syncs each one as
+  // it appears, and keeps a checklist of which routes are captured and which
+  // still need a click.
   const AUTO_KEY = "symx_auto_sync";
   const isAutoOn = () => localStorage.getItem(AUTO_KEY) !== "off";
-  let itineraryTemplate = null; // { url, itineraryId }
-  const syncedItineraries = new Map(); // itineraryId -> lastDriverEventTime stamp
-  let batchRunning = false;
+  // itineraryId -> { at, status: "synced"|"no-route"|"failed", note, name, codes, stamp }
+  const captureLog = new Map();
+  let lastSentItineraryId = "";
 
-  async function runItineraryBatch() {
-    if (!isAutoOn() || !itineraryTemplate || batchRunning || capturedRoutes.size === 0) return;
-    batchRunning = true;
-    try {
-      const date = lastCapturedApiDate || businessDateString();
-      const jobs = [];
-      capturedRoutes.forEach((route) => {
-        const t = (route.transporters || [])[0];
-        if (!t || !t.itineraryId) return;
-        const stamp = `${t.itineraryStatus}|${t.lastDriverEventTime || ""}|${t.itineraryStartTime || ""}`;
-        if (syncedItineraries.get(t.itineraryId) === stamp) return; // unchanged since last sync
-        jobs.push({ id: t.itineraryId, stamp, serviceAreaId: route.serviceAreaId || lastCapturedServiceArea });
-      });
+  function stampOf(t) {
+    return `${t.itineraryStatus || ""}|${t.lastDriverEventTime || ""}`;
+  }
 
-      const worker = async () => {
-        while (jobs.length) {
-          const job = jobs.shift();
-          try {
-            const url = itineraryTemplate.url.split(itineraryTemplate.itineraryId).join(job.id);
-            const res = await originalFetch(url, { credentials: "include" });
-            if (!res.ok) continue;
-            const payload = extractItineraryPayload(await res.json());
-            if (!payload) continue;
-            syncedItineraries.set(job.id, job.stamp);
-            window.postMessage({
-              source: "SYMX_CONTENT",
-              type: "ITINERARY_SYNC_REQUEST",
-              payload: {
-                serviceAreaId: job.serviceAreaId || payload.itineraryDetails.serviceAreaId || "",
-                date,
-                itineraryDetails: payload.itineraryDetails,
-                stops: payload.stops,
-              },
-            }, "*");
-          } catch (e) { /* skip this driver, try again next cycle */ }
-        }
-      };
-      await Promise.all([worker(), worker(), worker()]); // 3 at a time, polite to Amazon
-    } finally {
-      batchRunning = false;
+  // One entry per itinerary (a driver on two routes shares one itinerary).
+  function buildChecklist() {
+    const byIt = new Map();
+    capturedRoutes.forEach((route, code) => {
+      const t = (route.transporters || [])[0];
+      if (!t || !t.itineraryId) return;
+      const e = byIt.get(t.itineraryId) || { id: t.itineraryId, codes: [], stamp: stampOf(t), tid: t.transporterId || route.transporterIdFromRms || "" };
+      e.codes.push(route.routeCode || code);
+      byIt.set(t.itineraryId, e);
+    });
+    return Array.from(byIt.values()).map((e) => {
+      const rec = captureLog.get(e.id);
+      let state = "needed";
+      if (rec) {
+        if (rec.status === "failed") state = "failed";
+        else if (rec.status === "no-route") state = "no-route";
+        else state = (rec.stamp && rec.stamp !== e.stamp) ? "stale" : "done";
+      }
+      return { ...e, state, name: rec && rec.name };
+    }).sort((x, y) => x.codes[0].localeCompare(y.codes[0], undefined, { numeric: true }));
+  }
+
+  const STATE_UI = {
+    done:    { dot: "#16a34a", label: "captured" },
+    stale:   { dot: "#f59e0b", label: "changed — click again" },
+    needed:  { dot: "#dc2626", label: "click to capture" },
+    "no-route": { dot: "#6b7280", label: "not on SYMX schedule" },
+    failed:  { dot: "#dc2626", label: "sync failed — click again" },
+  };
+
+  let panelOpen = true;
+  function renderPanel() {
+    if (!document.body) return;
+    let panel = document.getElementById("symx-capture-panel");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "symx-capture-panel";
+      panel.style.cssText = "position:fixed;bottom:100px;right:20px;z-index:999998;width:250px;max-height:55vh;overflow:auto;background:#111827;color:#fff;font:12px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.4);";
+      document.body.appendChild(panel);
     }
+    const list = buildChecklist();
+    if (list.length === 0) { panel.style.display = "none"; return; }
+    panel.style.display = "block";
+    const done = list.filter((x) => x.state === "done").length;
+    panel.textContent = "";
+    const head = document.createElement("div");
+    head.style.cssText = "padding:8px 12px;font-weight:700;cursor:pointer;display:flex;justify-content:space-between;position:sticky;top:0;background:#111827;";
+    head.textContent = `SYMX capture: ${done}/${list.length}`;
+    const caret = document.createElement("span");
+    caret.textContent = panelOpen ? "▾" : "▸";
+    head.appendChild(caret);
+    head.addEventListener("click", () => { panelOpen = !panelOpen; renderPanel(); });
+    panel.appendChild(head);
+    if (!panelOpen) return;
+    list.forEach((x) => {
+      const ui = STATE_UI[x.state];
+      const row = document.createElement("div");
+      row.style.cssText = "padding:5px 12px;display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,.08);";
+      const dot = document.createElement("span");
+      dot.style.cssText = `width:9px;height:9px;border-radius:50%;flex:none;background:${ui.dot};`;
+      const txt = document.createElement("span");
+      txt.textContent = `${x.codes.join(", ")}${x.name ? " · " + x.name : ""}`;
+      txt.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+      const st = document.createElement("span");
+      st.textContent = ui.label;
+      st.style.cssText = "opacity:.65;font-size:10px;";
+      row.appendChild(dot); row.appendChild(txt); row.appendChild(st);
+      panel.appendChild(row);
+    });
   }
-
-  async function autoRefreshCycle() {
-    if (!isAutoOn() || !lastSummariesUrl) return;
-    try {
-      const res = await originalFetch(lastSummariesUrl, { credentials: "include" });
-      processRouteSummariesResponse(await res.json());
-    } catch (e) { /* page's own requests will refresh us */ }
-    setTimeout(runItineraryBatch, 4000); // after summaries have synced
-  }
-  setInterval(autoRefreshCycle, 5 * 60 * 1000);
+  setInterval(renderPanel, 2000);
 
   function processItineraryResponse(data, url) {
     if (!data) return;
     try {
       const u = new URL(url, window.location.origin);
-      // The id may be a query param OR a path segment (the request is named
-      // after it), so take it from the response body and confirm it appears
-      // in the URL — that's what lets us swap in other drivers' ids.
-      let itineraryId = u.searchParams.get("itineraryId") || "";
-      const bodyId = data && data.itineraryDetails && data.itineraryDetails.itineraryId;
-      if (!itineraryId && bodyId && url.indexOf(bodyId) !== -1) itineraryId = bodyId;
-      const serviceAreaId = u.searchParams.get("serviceAreaId") || (data && data.itineraryDetails && data.itineraryDetails.serviceAreaId) || "";
-      if (itineraryId) itineraryTemplate = { url, itineraryId };
+      const det = data.itineraryDetails || {};
+      let itineraryId = u.searchParams.get("itineraryId") || det.itineraryId || "";
+      const serviceAreaId = u.searchParams.get("serviceAreaId") || det.serviceAreaId || "";
       capturedItinerary = { data, url, itineraryId, serviceAreaId, capturedAt: Date.now() };
       showCortexSyncButton();
+
+      // Remember it (with the stamp from the route list, so we can tell later
+      // whether the driver's data has changed since) and sync right away.
+      const tr = Array.isArray(data.transporters) && data.transporters[0];
+      let stamp = "";
+      capturedRoutes.forEach((route) => {
+        const t = (route.transporters || [])[0];
+        if (t && t.itineraryId === itineraryId) stamp = stampOf(t);
+      });
+      captureLog.set(itineraryId, {
+        at: Date.now(), status: "synced", stamp,
+        name: tr ? [tr.firstName, tr.lastName].filter(Boolean).join(" ") : "",
+      });
+      if (isAutoOn()) {
+        lastSentItineraryId = itineraryId;
+        setTimeout(sendCortexSync, 800);
+      }
+      renderPanel();
     } catch (e) {
       // Silently ignore
     }
@@ -334,6 +371,17 @@
     if (event.source !== window) return;
     if (!event.data || event.data.source !== "SYMX_CONTENT") return;
     if (event.data.type !== "ITINERARY_SYNC_RESULT") return;
+
+    {
+      const res0 = event.data.payload || {};
+      const rec = captureLog.get(lastSentItineraryId);
+      if (rec) {
+        if (!res0.ok && !res0.skipped) { rec.status = "failed"; rec.note = res0.error || ""; }
+        else if (res0.skipped) { rec.status = "no-route"; rec.note = res0.reason || ""; }
+        else rec.status = "synced";
+        renderPanel();
+      }
+    }
 
     const btn = document.getElementById("symx-cortex-sync-btn");
     if (!btn) return;
@@ -515,10 +563,7 @@
     window._symxCapturedRoutes = routes;
     window._symxCapturedDate = selectedDay;
 
-    // Automatic mode: fetch + sync every driver's itinerary shortly after
-    // the summaries go out.
-    clearTimeout(window._symxBatchTimer);
-    window._symxBatchTimer = setTimeout(runItineraryBatch, 4000);
+    renderPanel();
   }
 
   // ── Deep search: find a numeric value by searching all keys recursively ──
@@ -788,7 +833,6 @@
   badge.addEventListener("click", () => {
     localStorage.setItem(AUTO_KEY, isAutoOn() ? "off" : "on");
     paintBadge();
-    if (isAutoOn()) autoRefreshCycle();
   });
   paintBadge();
 
