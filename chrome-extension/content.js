@@ -213,7 +213,8 @@
       txt.textContent = `${x.codes.join(", ")}${x.name ? " · " + x.name : ""}`;
       txt.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
       const st = document.createElement("span");
-      st.textContent = ui.label;
+      const rec2 = captureLog.get(x.id);
+      st.textContent = (x.state === "done" && rec2 && rec2.note) ? rec2.note : (x.state === "failed" || x.state === "no-route") && rec2 && rec2.note ? rec2.note.slice(0, 40) : ui.label;
       st.style.cssText = "opacity:.65;font-size:10px;";
       row.appendChild(dot); row.appendChild(txt); row.appendChild(st);
       panel.appendChild(row);
@@ -391,7 +392,12 @@
       if (rec) {
         if (!res0.ok && !res0.skipped) { rec.status = "failed"; rec.note = res0.error || ""; }
         else if (res0.skipped) { rec.status = "no-route"; rec.note = res0.reason || ""; }
-        else rec.status = "synced";
+        else {
+          rec.status = "synced";
+          const u = (res0.updated || []).length, c = (res0.conflicts || []).length;
+          rec.note = `${u} updated` + (c ? `, ${c} conflict${c === 1 ? "" : "s"}` : "");
+        }
+        console.log("[SYMX capture] sync result", rec.name || lastSentItineraryId, res0);
         renderPanel();
       }
     }
