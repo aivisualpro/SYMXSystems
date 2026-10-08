@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "incremental": false },
+  "include": [
+    "next-env.d.ts",
+    "app/(protected)/driver-rankings/**/*.tsx",
+    "app/api/driver-rankings/**/*.ts",
+    "components/driver-ranking/**/*.tsx",
+    "lib/driver-ranking/**/*.ts",
+    "lib/models/DriverPerformanceScoreConfig.ts"
+  ],
+  "exclude": ["node_modules", ".next"]
+}
