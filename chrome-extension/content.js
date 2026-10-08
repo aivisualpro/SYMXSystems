@@ -253,7 +253,8 @@
   function extractItineraryPayload(raw) {
     // Confirmed real shape: { itineraryDetails: {...}, stops: [...], addresses, transporters, companies }
     if (raw && raw.itineraryDetails) {
-      return { itineraryDetails: raw.itineraryDetails, stops: Array.isArray(raw.stops) ? raw.stops : [] };
+      const nested = Array.isArray(raw.itineraryDetails.stops) ? raw.itineraryDetails.stops : [];
+      return { itineraryDetails: raw.itineraryDetails, stops: Array.isArray(raw.stops) && raw.stops.length ? raw.stops : nested };
     }
     // Defensive fallback in case Amazon ever returns itineraryDetails unwrapped
     if (raw && raw.transporterId && raw.serviceAreaId) {

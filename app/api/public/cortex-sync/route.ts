@@ -182,9 +182,20 @@ export async function POST(req: NextRequest) {
             }, { headers: CORS_HEADERS });
         }
 
-        const computed = computeCortexFields(itineraryDetails, stops || []);
+        // Older extension builds sent an empty stops list; the real one is nested in itineraryDetails.
+        const stopList = Array.isArray(stops) && stops.length ? stops : (Array.isArray(itineraryDetails.stops) ? itineraryDetails.stops : []);
+        const computed = computeCortexFields(itineraryDetails, stopList);
+        // Legacy cleanup: earlier syncs wrote the first planned REST BREAK into
+        // "Pln 1st". If the stored value is exactly that and was never typed or
+        // synced as real data, treat it as empty so the true value replaces it.
+        const effectiveExisting: any = existing.toObject ? existing.toObject() : { ...existing };
+        const ownedFields: string[] = Array.isArray(existing.cortexSyncedFields) ? existing.cortexSyncedFields : [];
+        const legacyPlannedFirst = epochToClockTime(itineraryDetails?.plannedBreaks?.[0]?.plannedStart);
+        if (legacyPlannedFirst && effectiveExisting.plannedFirstStop === legacyPlannedFirst && !ownedFields.includes("plannedFirstStop")) {
+            effectiveExisting.plannedFirstStop = "";
+        }
         const { setOps, updated: updatedFields, conflicts: newConflictFields } =
-            mergeCortexFields(existing, computed, AUTO_FIELDS);
+            mergeCortexFields(effectiveExisting, computed, AUTO_FIELDS);
 
         await SYMXRoute.updateOne({ _id: existing._id }, { $set: setOps });
 

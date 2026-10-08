@@ -590,7 +590,10 @@ export async function POST(req: NextRequest) {
                 // ── Efficiency fields derivable from the summary itself ──
                 // Merged later through the shared "don't overwrite a dispatcher's
                 // value" logic rather than blindly $set.
-                const tr = (raw.transporters || [])[0] || {};
+                // A route handed between drivers lists several transporters; [0] may be the
+                // wrong person, so leave those to the per-driver itinerary sync.
+                const trList = Array.isArray(raw.transporters) ? raw.transporters : [];
+                const tr = trList.length === 1 ? trList[0] : {};
                 const computedAuto: Record<string, string | number> = {};
                 const actDep = epochToClockTime(tr.actualRouteDepartureTime);
                 if (actDep) computedAuto.actualDepartureTime = actDep;
