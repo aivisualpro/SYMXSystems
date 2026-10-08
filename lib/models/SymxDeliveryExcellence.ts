@@ -165,8 +165,12 @@ const SymxDeliveryExcellenceSchema: Schema = new Schema({
 
 }, { timestamps: true, collection: 'ScoreCard_DeliveryExcellence' });
 
-// Add compound index for Week + Transporter ID to ensure uniqueness logic is optimized for lookups
-SymxDeliveryExcellenceSchema.index({ week: 1, transporterId: 1 }, { unique: true });
+// Weekly scorecards are unique within a station. The same driver/week may
+// legitimately exist at another station.
+SymxDeliveryExcellenceSchema.index(
+  { siteId: 1, week: 1, transporterId: 1 },
+  { unique: true, name: "siteId_1_week_1_transporterId_1" }
+);
 
 // ── Multi-site ──
 // Station that owns these records. Immutable: a later transfer does

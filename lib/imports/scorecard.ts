@@ -25,6 +25,7 @@ import DailyInspection from "@/lib/models/DailyInspection";
 import VehicleRentalAgreement from "@/lib/models/VehicleRentalAgreement";
 import DropdownOption from "@/lib/models/DropdownOption";
 import { getISOWeek, getISOWeekYear, parseISO } from "date-fns";
+import { normalizeWeeklyScorecard } from "@/lib/imports/weekly-scorecard";
 
 const reimbursementHeaderMap: Record<string, string> = {
     // Current CSV headers (camelCase)
@@ -506,57 +507,27 @@ export async function processScorecard(
 ) {
   if (!siteId) throw new Error("processScorecard requires a siteId");
   if (type === 'delivery-excellence') {
-            // 1. Gather all Transporter IDs to fetch Employees
-            const transporterIds = data
-                .map((row: any) => row["Transporter ID"])
-                .filter((id: any) => id); // Filter out empty/null
+            const normalized = normalizeWeeklyScorecard(data, week);
+            if (normalized.errors.length) {
+                return NextResponse.json({ error: normalized.errors.join(" ") }, { status: 400 });
+            }
+            const transporterIds = normalized.transporterIds;
 
             // 2. Fetch Employees
             const employees = await SymxEmployee.find(
-                { transporterId: { $in: transporterIds } },
+                { primarySiteId: siteId, transporterId: { $in: transporterIds } },
                 { _id: 1, transporterId: 1 }
             ).lean();
 
-            const employeeMap = new Map(employees.map((emp: any) => [emp.transporterId, emp._id]));
+            const employeeMap = new Map(employees.map((emp: any) => [String(emp.transporterId).trim().toUpperCase(), emp._id]));
 
             // 3. Process Rows
-            const operations = data.map((row: any) => {
-                const transporterId = row["Transporter ID"];
-                const rowWeek = row["Week"]; // Use row week for this type
-
-                if (!transporterId || !rowWeek) return null; // Skip invalid rows
-
-                const processedData: any = {};
-
-                // Map CSV headers to Schema fields
-                Object.entries(row).forEach(([header, value]) => {
-                    const schemaKey = deliveryExcellenceHeaderMap[header.trim()];
-                    if (schemaKey) {
-                        if (
-                            schemaKey.endsWith('Score') ||
-                            schemaKey.endsWith('Rate') ||
-                            schemaKey.endsWith('Metric') ||
-                            schemaKey.endsWith('WeightApplied') ||
-                            schemaKey === 'overallScore' ||
-                            schemaKey === 'packagesDelivered' ||
-                            schemaKey === 'cdfDpmo' ||
-                            schemaKey === 'ced' ||
-                            schemaKey === 'dsb' ||
-                            schemaKey === 'psb'
-                        ) {
-                            processedData[schemaKey] = safeParseFloat(value);
-                        } else {
-                            // Strings (Tiers, IDs, etc)
-                            if (value !== undefined && value !== null && value !== "") {
-                                processedData[schemaKey] = value.toString().trim();
-                            }
-                        }
-                    }
-                });
+            const operations = normalized.rows.map((row: any) => {
+                const processedData: any = { ...row };
 
                 // Link Employee if found
-                if (employeeMap.has(transporterId)) {
-                    processedData.employeeId = employeeMap.get(transporterId);
+                if (employeeMap.has(processedData.transporterId)) {
+                    processedData.employeeId = employeeMap.get(processedData.transporterId);
                 }
 
                 // Construct Upsert Operation
