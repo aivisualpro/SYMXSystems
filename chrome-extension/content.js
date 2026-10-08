@@ -765,31 +765,9 @@
     if (type === "SCRAPE_NOW") {
       sendCapturedRoutes();
 
-      // If no intercepted data, try DOM scrape
-      if (capturedRoutes.size === 0) {
-        const domRoutes = scrapeFromDOM();
-        if (domRoutes.length > 0) {
-          window.postMessage(
-            {
-              source: "SYMX_CONTENT",
-              type: "ROUTES_SCRAPED",
-              payload: {
-                routes: domRoutes,
-                selectedDate:
-                  lastCapturedApiDate ||
-                  new URLSearchParams(window.location.search).get("localDate") ||
-                  new URLSearchParams(window.location.search).get("selectedDay") ||
-                  "",
-                serviceAreaId:
-                  lastCapturedServiceArea ||
-                  new URLSearchParams(window.location.search).get("serviceAreaId") ||
-                  "",
-              },
-            },
-            "*"
-          );
-        }
-      }
+      // No DOM/text-scrape fallback: route codes lifted off the page have no
+      // stop counts or station and used to overwrite good data with zeros.
+      // If nothing was intercepted, report 0 captured and let the user reload.
 
       window.postMessage(
         {

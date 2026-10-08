@@ -352,6 +352,11 @@ export async function POST(req: NextRequest) {
         const autoCandidates: { transporterId: string; siteId: any; plannedDeparture: string; computed: Record<string, string | number> }[] = [];
 
         routes.forEach((route: any, index: number) => {
+            // Routes lifted from page text (no real data) must never be written.
+            if (route?._source === "dom_scrape" || route?._source === "text_scrape") {
+                skipped++;
+                return;
+            }
             const routeSite = routeSites[index];
             if (!routeSite) {
                 // Unknown service area and no ?station= fallback. Skipped
