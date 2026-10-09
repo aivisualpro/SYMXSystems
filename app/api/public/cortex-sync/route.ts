@@ -52,6 +52,7 @@ const AUTO_FIELDS = [
     "amazonAppLogout",
     "amazonOutLunch",
     "amazonInLunch",
+    "actualReturnTime",
 ] as const;
 
 function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string, string | number> {
@@ -146,6 +147,18 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
     if (Array.isArray(itineraryDetails?.rescueActions)) {
         fields.stopsRescued = itineraryDetails.rescueActions.length;
     }
+
+    // ── Return to station ──
+    // Cortex fills returnToStationTime once the driver is back; the closing
+    // RETURN task on the last stop is the fallback when it is only in the stops.
+    let returnedAt = epochToClockTime(td.returnToStationTime);
+    if (!returnedAt) {
+        for (const s of realStops.slice().reverse()) {
+            const rt = (Array.isArray(s?.tasks) ? s.tasks : []).find((t: any) => /RETURN|BACK_TO_ORIGIN/i.test(String(t?.taskType || "")) && Number(t?.actualExecutionTime) > 0);
+            if (rt) { returnedAt = epochToClockTime(rt.actualExecutionTime); break; }
+        }
+    }
+    if (returnedAt) fields.actualReturnTime = returnedAt;
 
     // ── App sign-in and planned end of work block ──
     // itineraryStartTime = when the driver signed in to the app; scheduleEndTime

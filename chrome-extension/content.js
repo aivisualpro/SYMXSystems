@@ -12,7 +12,7 @@
   // Auto-visit tabs run in the background; make the page believe it is visible
   // so Cortex doesn't pause its data requests.
   try {
-    const isVisit = /[?&]symx_visit=1/.test(location.search) || sessionStorage.getItem("symx_visit") === "1";
+    const isVisit = /[?&]symx_(visit|run)=1/.test(location.search) || sessionStorage.getItem("symx_visit") === "1" || sessionStorage.getItem("symx_run") === "1";
     if (isVisit) {
       sessionStorage.setItem("symx_visit", "1");
       Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -157,7 +157,13 @@
   // it appears, and keeps a checklist of which routes are captured and which
   // still need a click.
   const AUTO_KEY = "symx_auto_sync";
-  const isAutoOn = () => localStorage.getItem(AUTO_KEY) !== "off";
+  const isRunTab = (() => {
+    try {
+      if (/[?&]symx_run=1/.test(location.search)) sessionStorage.setItem("symx_run", "1");
+      return sessionStorage.getItem("symx_run") === "1";
+    } catch (e) { return false; }
+  })();
+  const isAutoOn = () => isRunTab || localStorage.getItem(AUTO_KEY) !== "off";
   // itineraryId -> { at, status: "synced"|"no-route"|"failed", note, name, codes, stamp }
   const captureLog = new Map();
   let lastSentItineraryId = "";
@@ -309,6 +315,29 @@
     });
   }
   setInterval(renderPanel, 2000);
+
+  // ── Scheduled run: the background opened this tab to capture the whole
+  // station, then close it. Wait for the station summaries (every driver's
+  // basics sync automatically), visit any driver not yet fully captured, and
+  // tell the background we're done.
+  if (isRunTab) {
+    let started = false;
+    const t0 = Date.now();
+    const finish = (note) => window.postMessage({ source: "SYMX_CONTENT", type: "RUN_DONE", payload: { note } }, "*");
+    const timer = setInterval(async () => {
+      if (started) return;
+      if (bulkItins.size === 0) {
+        if (Date.now() - t0 > 90000) { started = true; clearInterval(timer); finish("no driver data (not signed in?)"); }
+        return;
+      }
+      started = true; clearInterval(timer);
+      await new Promise((r) => setTimeout(r, 8000)); // let the bulk syncs go out
+      const todo = buildChecklist().filter((x) => x.state !== "done" && x.state !== "no-route").map((x) => x.id);
+      try { await runInPageVisit(todo); } catch (e) {}
+      await new Promise((r) => setTimeout(r, 3000));
+      finish("ok");
+    }, 1000);
+  }
 
   function processItineraryResponse(data, url) {
     if (!data) return;

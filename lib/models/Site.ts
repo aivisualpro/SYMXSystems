@@ -28,6 +28,9 @@ export interface ISite extends Document {
   siteType: SiteType;
   address: string;
   trainingAddress?: string;
+  /** Slack incoming-webhook URL for this station's efficiency alerts. */
+  slackWebhookUrl?: string;
+  slackAlertsEnabled?: boolean;
   status: "active" | "inactive";
   isDefault: boolean;
   messaging?: {
@@ -63,6 +66,10 @@ const SiteSchema: Schema = new Schema(
     // Where new-hire training is held for this station. Used by the
     // "Training Reminder" message ({trainingAddress}).
     trainingAddress: { type: String, default: "" },
+    // Incoming webhook for this station's Slack channel. Efficiency alerts
+    // (late departures, behind pace, low efficiency, daily summary) post here.
+    slackWebhookUrl: { type: String, default: "" },
+    slackAlertsEnabled: { type: Boolean, default: true },
     status: { type: String, enum: ["active", "inactive"], default: "active", index: true },
     // Exactly one site carries isDefault. During the migration it is the
     // site every pre-existing record is backfilled to, and the fallback

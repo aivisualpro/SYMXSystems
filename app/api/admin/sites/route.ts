@@ -52,6 +52,8 @@ export async function GET() {
       siteType: s.siteType,
       address: s.address || "",
       trainingAddress: s.trainingAddress || "",
+      slackWebhookUrl: s.slackWebhookUrl || "",
+      slackAlertsEnabled: s.slackAlertsEnabled !== false,
       messaging: {
         quoPhoneNumberId: s.messaging?.quoPhoneNumberId || "",
         quoPhoneNumber: s.messaging?.quoPhoneNumber || "",
@@ -129,6 +131,14 @@ export async function PUT(req: NextRequest) {
   if (body.name !== undefined) updates.name = String(body.name).trim();
   if (body.address !== undefined) updates.address = String(body.address);
   if (body.trainingAddress !== undefined) updates.trainingAddress = String(body.trainingAddress).trim();
+  if (body.slackWebhookUrl !== undefined) {
+    const u = String(body.slackWebhookUrl).trim();
+    if (u && !/^https:\/\/hooks\.slack\.com\/services\//.test(u)) {
+      return NextResponse.json({ error: "Slack webhook must start with https://hooks.slack.com/services/" }, { status: 400 });
+    }
+    updates.slackWebhookUrl = u;
+  }
+  if (body.slackAlertsEnabled !== undefined) updates.slackAlertsEnabled = !!body.slackAlertsEnabled;
   if (body.siteType !== undefined) updates.siteType = body.siteType === "seasonal" ? "seasonal" : "permanent";
   // Per-station Quo number. Both forms are stored because the two sides of
   // the integration speak different ones: the API wants OpenPhone's PNxxxx

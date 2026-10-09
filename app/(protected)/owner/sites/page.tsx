@@ -28,6 +28,8 @@ interface SiteRow {
   siteType: "permanent" | "seasonal";
   address: string;
   trainingAddress?: string;
+  slackWebhookUrl?: string;
+  slackAlertsEnabled?: boolean;
   messaging?: { quoPhoneNumberId?: string; quoPhoneNumber?: string };
   amazon?: { serviceAreaId?: string };
   status: "active" | "inactive";
@@ -62,6 +64,8 @@ export default function SitesPage() {
     name: "",
     address: "",
     trainingAddress: "",
+    slackWebhookUrl: "",
+    slackAlertsEnabled: true,
     siteType: "permanent",
     status: "active",
     quoPhoneNumberId: "",
@@ -135,6 +139,8 @@ export default function SitesPage() {
       name: s.name,
       address: s.address,
       trainingAddress: s.trainingAddress || "",
+      slackWebhookUrl: s.slackWebhookUrl || "",
+      slackAlertsEnabled: s.slackAlertsEnabled !== false,
       siteType: s.siteType,
       status: s.status,
       quoPhoneNumberId: s.messaging?.quoPhoneNumberId || "",
@@ -342,6 +348,23 @@ export default function SitesPage() {
                   placeholder="Where training is held (used in Training Reminder messages)"
                   onChange={(e) => setEditForm({ ...editForm, trainingAddress: e.target.value })}
                 />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">Slack webhook (efficiency alerts)</Label>
+                <Input
+                  value={editForm.slackWebhookUrl}
+                  placeholder="https://hooks.slack.com/services/…  (this station's channel)"
+                  onChange={(e) => setEditForm({ ...editForm, slackWebhookUrl: e.target.value })}
+                />
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={editForm.slackAlertsEnabled}
+                    onChange={(e) => setEditForm({ ...editForm, slackAlertsEnabled: e.target.checked })}
+                  />
+                  Post late-departure, behind-pace, low-efficiency alerts and the daily summary
+                </label>
               </div>
 
               {/* ── Messaging (Quo / OpenPhone) ──

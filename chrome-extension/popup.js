@@ -670,3 +670,21 @@ function escapeHtml(str) {
 
 // ── Start ──
 init();
+
+
+// ── Scheduled runs ──
+(function () {
+  const cb = document.getElementById("schedEnabled");
+  const btn = document.getElementById("runNowBtn");
+  const txt = document.getElementById("lastRunText");
+  if (!cb || !btn) return;
+  chrome.storage.local.get(["schedEnabled", "lastRun"], (r) => {
+    cb.checked = !!r.schedEnabled;
+    if (r.lastRun) txt.textContent = `Last run ${new Date(r.lastRun.at).toLocaleTimeString()}: ${r.lastRun.log.join(" | ")}`;
+  });
+  cb.addEventListener("change", () => chrome.storage.local.set({ schedEnabled: cb.checked }));
+  btn.addEventListener("click", () => {
+    chrome.runtime.sendMessage({ type: "RUN_NOW", final: false });
+    txt.textContent = "Run started — windows will open and close by themselves…";
+  });
+})();

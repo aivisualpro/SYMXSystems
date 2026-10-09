@@ -101,6 +101,11 @@ export interface ISYMXRoute extends Document {
     // to tell "safe to auto-update on next sync" apart from "a human's
     // value — flag a conflict instead of overwriting."
     cortexSyncedFields: string[];
+    // Keys of Slack alerts already posted for this route, so a driver is
+    // alerted once per issue rather than on every scheduled run.
+    alertsSent: string[];
+    // When the driver actually got back to the station (from Cortex).
+    actualReturnTime: string;
     // Pending Cortex-vs-manual disagreements awaiting dispatcher review.
     cortexConflicts: { field: string; cortexValue: string; currentValue: string; detectedAt: Date }[];
 }
@@ -199,6 +204,8 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
 
         // Cortex sync tracking
         cortexSyncedFields: { type: [String], default: [] },
+        alertsSent: { type: [String], default: [] },
+        actualReturnTime: { type: String, default: "" },
         cortexConflicts: {
             type: [{
                 field: { type: String, required: true },

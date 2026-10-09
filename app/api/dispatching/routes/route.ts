@@ -48,7 +48,7 @@ const CORTEX_AUTO_FIELDS = new Set([
     "stopsRescued",
     "appSignIn",
     "plannedEndTime",
-    "amazonAppLogout",
+    "amazonAppLogout", "actualReturnTime",
 ]);
 
 const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

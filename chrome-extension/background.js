@@ -156,3 +156,89 @@ async function runVisit(originTabId, ids, date, serviceAreaId) {
   visit = null;
   chrome.tabs.sendMessage(originTabId, { type: "VISIT_PROGRESS", running: false, done, total, finished: true }).catch(() => {});
 }
+
+
+// ══════════════════════════════════════════════════════════════
+// Scheduled runs
+// At fixed station times, open each station's Cortex page (signed-in Chrome
+// required), capture every driver, close it, then ask SYMX to post any new
+// issues to that station's Slack channel. Meant for an always-on computer.
+// ══════════════════════════════════════════════════════════════
+const SCHEDULE_TIMES = ["12:30", "15:00", "18:00", "22:00", "22:30", "23:00"]; // Pacific; 22:00+ also checks returns/logouts; last = end of day
+const RUN_TIMEOUT_MS = 8 * 60 * 1000;
+let runWaiter = null;
+
+function pacificNow() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date());
+  const g = (t) => parts.find((p) => p.type === t).value;
+  return { date: `${g("year")}-${g("month")}-${g("day")}`, hm: `${g("hour") === "24" ? "00" : g("hour")}:${g("minute")}` };
+}
+
+chrome.alarms.create("symx-tick", { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== "symx-tick") return;
+  const { schedEnabled, schedDone = {} } = await chrome.storage.local.get(["schedEnabled", "schedDone"]);
+  if (!schedEnabled) return;
+  const { date, hm } = pacificNow();
+  if (!SCHEDULE_TIMES.includes(hm)) return;
+  const key = `${date}|${hm}`;
+  if (schedDone[key]) return;
+  schedDone[key] = true;
+  // keep only today's keys
+  Object.keys(schedDone).forEach((k) => { if (!k.startsWith(date)) delete schedDone[k]; });
+  await chrome.storage.local.set({ schedDone });
+  runScheduled(hm === SCHEDULE_TIMES[SCHEDULE_TIMES.length - 1], hm);
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "RUN_DONE" && runWaiter && sender.tab && sender.tab.id === runWaiter.tabId) {
+    runWaiter.resolve(message.note || "ok");
+  }
+  if (message.type === "RUN_NOW") {
+    runScheduled(!!message.final, pacificNow().hm);
+    sendResponse({ ok: true });
+  }
+});
+
+let running = false;
+async function runScheduled(final, slot) {
+  if (running) return;
+  running = true;
+  const { date } = pacificNow();
+  const log = [];
+  try {
+    const cfg = await fetch(`${SYMX_API_BASE}/api/public/extension-config`, { headers: { "x-extension-key": SYMX_API_KEY } }).then((r) => r.json());
+    for (const st of cfg.stations || []) {
+      let note = "timeout";
+      let win = null;
+      try {
+        const url = `https://logistics.amazon.com/operations/execution/itineraries?provider=ALL_DRIVERS&selectedDay=${date}&serviceAreaId=${encodeURIComponent(st.serviceAreaId)}&symx_run=1`;
+        win = await chrome.windows.create({ url, type: "normal", focused: false, width: 1280, height: 800 });
+        const tabId = win.tabs && win.tabs[0] && win.tabs[0].id;
+        note = await new Promise((resolve) => {
+          runWaiter = { tabId, resolve };
+          setTimeout(() => resolve("timeout"), RUN_TIMEOUT_MS);
+        });
+      } catch (e) { note = "error: " + e.message; }
+      runWaiter = null;
+      if (win) chrome.windows.remove(win.id).catch(() => {});
+      let alerts = "";
+      try {
+        const r = await fetch(`${SYMX_API_BASE}/api/public/cortex-alerts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-extension-key": SYMX_API_KEY },
+          body: JSON.stringify({ serviceAreaId: st.serviceAreaId, date, final, slot }),
+        }).then((x) => x.json());
+        alerts = r.skipped ? "no Slack" : `${r.posted || 0} alerts`;
+      } catch (e) { alerts = "alerts failed"; }
+      log.push(`${st.code}: ${note} · ${alerts}`);
+    }
+  } catch (e) {
+    log.push("failed: " + e.message);
+  }
+  await chrome.storage.local.set({ lastRun: { at: new Date().toISOString(), final, log } });
+  running = false;
+}

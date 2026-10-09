@@ -40,6 +40,12 @@ window.addEventListener("message", (event) => {
     }
   }
 
+  if (type === "RUN_DONE") {
+    if (!isExtensionContextValid()) return;
+    try { chrome.runtime.sendMessage({ type: "RUN_DONE", note: payload && payload.note }); } catch (e) {}
+    return;
+  }
+
   if (type === "VISIT_REQUEST" || type === "VISIT_CANCEL_REQUEST") {
     if (!isExtensionContextValid()) return;
     try {
