@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import Site from "@/lib/models/Site";
 import SYMXRoute from "@/lib/models/SYMXRoute";
-import { epochToClockTime, durationMsToHMM } from "@/lib/cortex-time";
+import { epochToClockTime, epochToHHMM, durationMsToHMM } from "@/lib/cortex-time";
 import { mergeCortexFields } from "@/lib/cortex-merge";
 
 /**
@@ -138,8 +138,8 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
         (b: any) => b?.type === "MEAL" && b?.state === "OFF" && b?.timeStampOn && b?.timeStampOff
     );
     if (meal) {
-        const outL = epochToClockTime(meal.timeStampOn);
-        const inL = epochToClockTime(meal.timeStampOff);
+        const outL = epochToHHMM(meal.timeStampOn);
+        const inL = epochToHHMM(meal.timeStampOff);
         if (outL) fields.amazonOutLunch = outL;
         if (inL) fields.amazonInLunch = inL;
     }
@@ -171,7 +171,7 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
 
     // ── Real app logout (not the planned schedule end) ──
     if (itineraryDetails?.driverSessionEnded) {
-        const logout = epochToClockTime(td.sessionEndTime ?? itineraryDetails?.sessionEndTime);
+        const logout = epochToHHMM(td.sessionEndTime ?? itineraryDetails?.sessionEndTime);
         if (logout) fields.amazonAppLogout = logout;
     }
 

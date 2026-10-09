@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { to24h } from "@/lib/cortex-time";
 import { cn } from "@/lib/utils";
 import { type ViolationSeverity } from "@/lib/payroll-audit";
 import {
@@ -170,6 +171,7 @@ function severityDot(severity: ViolationSeverity | null, hasRecord: boolean) {
 }
 
 function formatAmPm(timeStr?: string): string {
+  timeStr = to24h(timeStr);
   if (!timeStr || !timeStr.includes(":")) return "—";
   const [hStr, mStr] = timeStr.split(":");
   let h = parseInt(hStr, 10);

@@ -52,6 +52,32 @@ export function epochToClockTime(value: unknown): string {
     });
 }
 
+/**
+ * Epoch → 24-hour "HH:MM" in business timezone. This is the format the Time
+ * page, payroll audit and manual entry use for AMZ Out/In/Logout; the page
+ * adds AM/PM itself, so storing "3:00 PM" there showed "3:00 PM AM".
+ */
+export function epochToHHMM(value: unknown): string {
+    const d = epochToDate(value);
+    if (!d) return "";
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: BUSINESS_TZ, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(d);
+    const h = parts.find((p) => p.type === "hour")?.value || "00";
+    const m = parts.find((p) => p.type === "minute")?.value || "00";
+    return `${h === "24" ? "00" : h}:${m}`;
+}
+
+/** Normalize "3:00 PM" / "15:00" / "3:00" → "HH:MM" 24h (leaves unknown text alone). */
+export function to24h(t: string | undefined | null): string {
+    if (!t) return "";
+    const m = String(t).trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)?$/i);
+    if (!m) return String(t);
+    let h = parseInt(m[1], 10);
+    const ap = (m[3] || "").toLowerCase();
+    if (ap === "pm" && h < 12) h += 12;
+    if (ap === "am" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:${m[2]}`;
+}
+
 /** Duration in milliseconds → "H:MM". */
 export function durationMsToHMM(value: unknown): string {
     if (value === null || value === undefined || value === "") return "";

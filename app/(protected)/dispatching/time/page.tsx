@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { to24h } from "@/lib/cortex-time";
 import { useDispatching } from "../_components/dispatching-context";
 import { useDropdowns, useRouteTypes } from "@/lib/query/hooks/useShared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -206,12 +207,13 @@ const parseSmartTime = (val: string): string => {
 
 const timeToMins = (t: string | undefined | null) => {
     if (!t) return 0;
-    const parts = t.split(":");
+    const parts = to24h(t).split(":");
     if (parts.length < 2) return 0;
     return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 };
 
 const formatAmPm = (timeStr: string) => {
+    timeStr = to24h(timeStr);
     if (!timeStr || !timeStr.includes(':')) return timeStr;
     const [hStr, mStr] = timeStr.split(':');
     let h = parseInt(hStr, 10);
@@ -437,6 +439,24 @@ export default function TimePage() {
 
     // ── Punch Audit Report Import Modal State ──
     const [punchImportOpen, setPunchImportOpen] = useState(false);
+    const [droppedFile, setDroppedFile] = useState<File | null>(null);
+    const [dragOver, setDragOver] = useState(false);
+    useEffect(() => {
+        let depth = 0;
+        const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types || []).includes("Files");
+        const enter = (e: DragEvent) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; setDragOver(true); };
+        const over = (e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); };
+        const leave = (e: DragEvent) => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (depth === 0) setDragOver(false); };
+        const drop = (e: DragEvent) => {
+            if (!hasFiles(e)) return;
+            e.preventDefault(); depth = 0; setDragOver(false);
+            const f = e.dataTransfer?.files?.[0];
+            if (f && /\.xlsx?$/i.test(f.name)) { setDroppedFile(f); setPunchImportOpen(true); }
+        };
+        window.addEventListener("dragenter", enter); window.addEventListener("dragover", over);
+        window.addEventListener("dragleave", leave); window.addEventListener("drop", drop);
+        return () => { window.removeEventListener("dragenter", enter); window.removeEventListener("dragover", over); window.removeEventListener("dragleave", leave); window.removeEventListener("drop", drop); };
+    }, []);
 
     const [highlightSearch, setHighlightSearch] = useState<string | null>(null);
 
@@ -1142,9 +1162,17 @@ export default function TimePage() {
                     </SheetContent>
                 </Sheet>
 
+                {dragOver && (
+                    <div className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center bg-indigo-500/20 backdrop-blur-sm">
+                        <div className="rounded-2xl border-2 border-dashed border-indigo-400 bg-card/90 px-10 py-8 text-center text-lg font-semibold">
+                            Drop the Paycom Punch Audit Report to import punches
+                        </div>
+                    </div>
+                )}
                 <PunchImportModal
                     open={punchImportOpen}
-                    onClose={() => setPunchImportOpen(false)}
+                    initialFile={droppedFile}
+                    onClose={() => { setPunchImportOpen(false); setDroppedFile(null); }}
                     onImportComplete={() => queryClient.invalidateQueries({ queryKey: ["dispatching"], refetchType: "all" })}
                 />
             </div>

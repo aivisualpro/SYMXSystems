@@ -51,6 +51,7 @@
 //     would just give the same numbers a second, easier-to-miss home.
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { to24h } from "@/lib/cortex-time";
 import { useDispatching } from "../_components/dispatching-context";
 import { useDropdowns, useRouteTypes } from "@/lib/query/hooks/useShared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -235,7 +236,7 @@ const parseSmartTime = (val: string): string => {
 
 const timeToMins = (t: string | undefined | null) => {
     if (!t) return 0;
-    const parts = t.split(":");
+    const parts = to24h(t).split(":");
     if (parts.length < 2) return 0;
     return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 };
@@ -283,6 +284,7 @@ function parsePunchWithSequenceCheck(
 }
 
 const formatAmPm = (timeStr: string) => {
+    timeStr = to24h(timeStr);
     if (!timeStr || !timeStr.includes(':')) return timeStr;
     const [hStr, mStr] = timeStr.split(':');
     let h = parseInt(hStr, 10);

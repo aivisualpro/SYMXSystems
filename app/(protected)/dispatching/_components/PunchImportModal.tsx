@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 import {
@@ -43,6 +43,8 @@ interface PunchImportModalProps {
     open: boolean;
     onClose: () => void;
     onImportComplete?: () => void;
+    /** A file dropped on the Time page: parsed immediately, clean punches written automatically. */
+    initialFile?: File | null;
 }
 
 type Step = "upload" | "preview" | "committing" | "done";
@@ -74,7 +76,9 @@ interface ExceptionRecord {
     punches: { type: string; time: string }[];
 }
 
-export default function PunchImportModal({ open, onClose, onImportComplete }: PunchImportModalProps) {
+export default function PunchImportModal({ open, onClose, onImportComplete, initialFile }: PunchImportModalProps) {
+    const [skipped, setSkipped] = useState<Record<string, number>>({});
+    const [autoWritten, setAutoWritten] = useState(0);
     const [step, setStep] = useState<Step>("upload");
     const [isDragging, setIsDragging] = useState(false);
     const [file, setFile] = useState<File | null>(null);
@@ -84,6 +88,8 @@ export default function PunchImportModal({ open, onClose, onImportComplete }: Pu
     const [error, setError] = useState<string | null>(null);
     const [commitResult, setCommitResult] = useState<{ updated: number } | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
+    const autoRef = useRef(false);
+    const commitRef = useRef<(r: CleanRecord[]) => Promise<void>>(async () => {});
 
     const reset = useCallback(() => {
         setStep("upload");
@@ -121,7 +127,14 @@ export default function PunchImportModal({ open, onClose, onImportComplete }: Pu
 
             setClean(data.clean || []);
             setExceptions(data.exceptions || []);
+            setSkipped(data.skippedOtherStations || {});
             setStep("preview");
+            // Dropped on the Time page: write the clean records straight away so
+            // only the exceptions need a human.
+            if (autoRef.current && (data.clean || []).length > 0) {
+                autoRef.current = false;
+                await commitRef.current(data.clean);
+            }
         } catch (err: any) {
             setError(err.message || "Failed to parse punch report");
         } finally {
@@ -142,19 +155,20 @@ export default function PunchImportModal({ open, onClose, onImportComplete }: Pu
         e.target.value = "";
     }, [processFile]);
 
-    const handleCommit = useCallback(async () => {
-        if (clean.length === 0) return;
+    const commitRecords = useCallback(async (records: CleanRecord[]) => {
+        if (records.length === 0) return;
         setStep("committing");
         setError(null);
         try {
             const res = await fetch("/api/dispatching/time/punch-import/commit", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ records: clean }),
+                body: JSON.stringify({ records }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to write punch data");
             setCommitResult({ updated: data.updated || 0 });
+            setAutoWritten(records.length);
             setStep("done");
             notify.success(`Updated ${data.updated || 0} route${data.updated === 1 ? "" : "s"} with Paycom punch times`);
             onImportComplete?.();
@@ -163,7 +177,16 @@ export default function PunchImportModal({ open, onClose, onImportComplete }: Pu
             setStep("preview");
             notify.error(err.message || "Failed to write punch data");
         }
-    }, [clean, onImportComplete]);
+    }, [onImportComplete]);
+
+    commitRef.current = commitRecords;
+    const handleCommit = useCallback(() => commitRecords(clean), [commitRecords, clean]);
+
+    // File dropped on the Time page -> parse + auto-write immediately.
+    useEffect(() => {
+        if (open && initialFile) { autoRef.current = true; processFile(initialFile); }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, initialFile]);
 
     if (!open) return null;
 
@@ -255,10 +278,10 @@ export default function PunchImportModal({ open, onClose, onImportComplete }: Pu
                                 <div className="text-[11px] text-muted-foreground">
                                     Matched by <span className="font-semibold text-indigo-400">EE Code</span> against each employee's SYMX record.
                                     Safe to upload multiple times a day (morning, after lunch, evening) — partial days import fine, only
-                                    whatever punches exist get written, nothing else is touched. Punches are placed by time order, not the
-                                    button pressed — a punch mislabeled "In Lunch" that's actually someone's first punch of the day still
-                                    lands in In Day. Only too many punches, an unrecognized punch type, or an EE Code/route that doesn't
-                                    match get flagged for manual review.
+                                    whatever punches exist get written, nothing else is touched. Punches go where Paycom labeled them
+                                    (a day with no lunch punched stays blank for lunch), and repeated or edited punches keep the latest. If
+                                    the labels contradict the clock, time order is used instead. Only an EE Code or route that doesn't match
+                                    gets flagged for manual review. Tip: drop the file anywhere on the Time page to skip this window.
                                 </div>
                             </div>
                         </div>
@@ -280,6 +303,11 @@ export default function PunchImportModal({ open, onClose, onImportComplete }: Pu
                                 </button>
                             </div>
 
+                            {Object.keys(skipped).length > 0 && (
+                                <p className="text-[11px] text-muted-foreground">
+                                    Ignored punches from other stations: {Object.entries(skipped).map(([k, v]) => `${k} (${v})`).join(", ")} — import them while that station is selected.
+                                </p>
+                            )}
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="flex items-center gap-2 p-2.5 rounded-lg border bg-emerald-500/5 border-emerald-500/20">
                                     <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />

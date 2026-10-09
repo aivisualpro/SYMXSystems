@@ -4,6 +4,7 @@ import connectToDatabase from "@/lib/db";
 import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
+import Site from "@/lib/models/Site";
 import * as XLSX from "xlsx";
 
 // POST /api/dispatching/time/punch-import
@@ -86,6 +87,12 @@ export async function POST(req: NextRequest) {
             );
         }
 
+    // The Paycom report covers every station. Only rows worked at the station
+    // currently selected belong here; others are counted, not flagged as errors.
+    const siteDoc: any = await Site.findById(writeSiteId, { code: 1 }).lean();
+    const siteCode = String(siteDoc?.code || "").trim().toUpperCase();
+    const skippedOtherStations: Record<string, number> = {};
+
     // ── Group non-deleted punches by EE Code + Punch Date ──
     type PunchRow = { type: string; time: string; deleted: boolean; lastModified: string; modifiedBy: string };
     const groups = new Map<string, { eeCode: string; lastName: string; firstName: string; dateRaw: string; punches: PunchRow[] }>();
@@ -95,6 +102,11 @@ export async function POST(req: NextRequest) {
       const dateRaw = String(row["Punch Date"] || "").trim();
       const type = String(row["Punch Type"] || "").trim().toUpperCase();
       if (!eeCode || !dateRaw || !type) continue;
+      const rowStation = String(row["Dist Delivery Station Code Code"] || row["Delivery Station Code Code"] || "").trim().toUpperCase();
+      if (siteCode && rowStation && rowStation !== siteCode) {
+        skippedOtherStations[rowStation] = (skippedOtherStations[rowStation] || 0) + 1;
+        continue;
+      }
 
       const key = `${eeCode}__${dateRaw}`;
       if (!groups.has(key)) {
@@ -130,7 +142,10 @@ export async function POST(req: NextRequest) {
 
     for (const group of groups.values()) {
       const dateObj = parsePunchDate(group.dateRaw);
-      const activePunches = group.punches.filter((p) => !p.deleted);
+      // Paycom records an edit as a new row plus a deleted row, and some days
+      // carry non-clock entries (e.g. "HR" hours). Only the four clock punches count.
+      const activePunches = group.punches.filter((p) => !p.deleted && KNOWN_TYPES.has(p.type));
+      const ignoredNonClock = group.punches.filter((p) => !p.deleted && !KNOWN_TYPES.has(p.type)).length;
       const deletedCount = group.punches.length - activePunches.length;
       const employeeLabel = `${group.firstName} ${group.lastName}`.trim() || group.eeCode;
 
@@ -152,7 +167,7 @@ export async function POST(req: NextRequest) {
 
       // Unrecognized punch type (not ID/OL/IL/OD at all) — can't place this anywhere.
       const unknownTypes = Array.from(new Set(activePunches.filter((p) => !KNOWN_TYPES.has(p.type)).map((p) => p.type)));
-      if (unknownTypes.length > 0) {
+      if (unknownTypes.length > 0 && activePunches.every((p) => !KNOWN_TYPES.has(p.type))) {
         exceptions.push({
           eeCode: group.eeCode,
           employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
@@ -178,23 +193,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // More than 4 active punches in a day — unclear which are the "real" 4, needs a human.
-      if (activePunches.length > 4) {
-        exceptions.push({
-          eeCode: group.eeCode,
-          employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
-          transporterId: employee.transporterId,
-          dateRaw: group.dateRaw,
-          employeeStatus: employee.status || "Active",
-          reason: `${activePunches.length} punches recorded (expected at most 4) — unclear which are correct`,
-          punches: activePunches,
-        });
-        continue;
-      }
-
-      // Sort by actual punch TIME, not the type label. Paycom treats punches as
-      // sequential regardless of which button was pressed, so we do the same:
-      // 1st punch of the day -> In Day, 2nd -> Out Lunch, 3rd -> In Lunch, 4th -> Out Day.
+      // Parse times first.
       const withMinutes = activePunches.map((p) => ({ ...p, parsed: parsePaycomTime(p.time) }));
       if (withMinutes.some((p) => p.parsed === null)) {
         exceptions.push({
@@ -210,6 +209,41 @@ export async function POST(req: NextRequest) {
       }
       withMinutes.sort((a, b) => (a.parsed as any).minutes - (b.parsed as any).minutes);
 
+      // Placement. Trust the Paycom label (ID/OL/IL/OD) when it is consistent:
+      // a day with only In Day + Out Day (no lunch punched) must NOT push the
+      // Out Day time into the Out Lunch slot. If a type repeats, the latest
+      // punch of that type wins. When there is no In Day label at all, or the
+      // labels contradict the clock order, fall back to Paycom's own
+      // sequential reading (1st=In Day, 2nd=Out Lunch, 3rd=In Lunch, 4th=Out Day).
+      const byType = new Map<string, { type: string; time: string; parsed: { minutes: number; hhmm: string } }>();
+      for (const p of withMinutes) byType.set(p.type, p as any);
+      const ordered = POSITION_TYPES.filter((t) => byType.has(t)).map((t) => byType.get(t)!);
+      const labelsConsistent =
+        byType.has("ID") && ordered.every((p, i) => i === 0 || p.parsed.minutes >= ordered[i - 1].parsed.minutes);
+
+      const values: Record<string, string> = {};
+      const corrections: string[] = [];
+      const present: string[] = [];
+      if (labelsConsistent) {
+        POSITION_TYPES.forEach((t, idx) => {
+          const p = byType.get(t);
+          if (p) { values[POSITION_FIELDS[idx]] = p.parsed.hhmm; present.push(t); }
+        });
+        const dupes = withMinutes.length - ordered.length;
+        if (dupes > 0) corrections.push(`${dupes} repeated punch${dupes > 1 ? "es" : ""} — kept the latest of each type`);
+      } else {
+        const seq = withMinutes.slice(0, 4);
+        seq.forEach((p, idx) => {
+          values[POSITION_FIELDS[idx]] = (p.parsed as any).hhmm;
+          present.push(POSITION_TYPES[idx]);
+          if (p.type !== POSITION_TYPES[idx]) {
+            corrections.push(`labeled "${p.type}" at ${p.time}, treated as ${POSITION_TYPES[idx] === "ID" ? "In Day" : POSITION_TYPES[idx] === "OL" ? "Out Lunch" : POSITION_TYPES[idx] === "IL" ? "In Lunch" : "Out Day"} by time order`);
+          }
+        });
+        if (withMinutes.length > 4) corrections.push(`${withMinutes.length} punches recorded — used the first four by time; review`);
+      }
+      if (ignoredNonClock > 0) corrections.push(`${ignoredNonClock} non-clock entr${ignoredNonClock > 1 ? "ies" : "y"} (e.g. HR hours) ignored`);
+
       const route = await SYMXRoute.findOne({ transporterId: employee.transporterId, date: dateObj, ...S }, { _id: 1, paycomInDay: 1, paycomOutLunch: 1, paycomInLunch: 1, paycomOutDay: 1 }).lean();
       if (!route) {
         exceptions.push({
@@ -224,19 +258,6 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Only include fields for punch types actually present in this upload — a field
-      // left out here is left untouched on commit, never blanked out. Stored as 24-hour
-      // "HH:MM" (via parsePaycomTime) to match every other time field in SYMXRoute —
-      // the Time page's own render layer adds AM/PM formatting for display.
-      const values: Record<string, string> = {};
-      const corrections: string[] = [];
-      withMinutes.forEach((p, idx) => {
-        values[POSITION_FIELDS[idx]] = (p.parsed as any).hhmm;
-        if (p.type !== POSITION_TYPES[idx]) {
-          corrections.push(`labeled "${p.type}" at ${p.time}, treated as ${POSITION_TYPES[idx] === "ID" ? "In Day" : POSITION_TYPES[idx] === "OL" ? "Out Lunch" : POSITION_TYPES[idx] === "IL" ? "In Lunch" : "Out Day"} by time order`);
-        }
-      });
-
       clean.push({
         eeCode: group.eeCode,
         employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
@@ -245,8 +266,8 @@ export async function POST(req: NextRequest) {
         date: dateObj.toISOString(),
         dateRaw: group.dateRaw,
         ...values,
-        punchesPresent: POSITION_TYPES.slice(0, withMinutes.length),
-        complete: withMinutes.length === 4,
+        punchesPresent: present,
+        complete: present.length === 4,
         corrections,
         currentValues: {
           paycomInDay: (route as any).paycomInDay || "",
@@ -261,6 +282,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       totalEmployeeDays: groups.size,
+      skippedOtherStations,
       clean,
       exceptions,
       summary: {

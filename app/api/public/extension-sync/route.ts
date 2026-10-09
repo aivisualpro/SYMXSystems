@@ -7,7 +7,7 @@ import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import DropdownOption from "@/lib/models/DropdownOption";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
-import { epochToClockTime } from "@/lib/cortex-time";
+import { epochToClockTime, epochToHHMM } from "@/lib/cortex-time";
 import { mergeCortexFields } from "@/lib/cortex-merge";
 
 /**
@@ -606,8 +606,8 @@ export async function POST(req: NextRequest) {
                     (b: any) => b?.type === "MEAL" && b?.timeStampOn && b?.timeStampOff && b?.state === "OFF"
                 );
                 if (mealBreak) {
-                    const out = epochToClockTime(mealBreak.timeStampOn);
-                    const inn = epochToClockTime(mealBreak.timeStampOff);
+                    const out = epochToHHMM(mealBreak.timeStampOn);
+                    const inn = epochToHHMM(mealBreak.timeStampOff);
                     if (out) computedAuto.amazonOutLunch = out;
                     if (inn) computedAuto.amazonInLunch = inn;
                 }
