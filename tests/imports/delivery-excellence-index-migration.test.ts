@@ -11,7 +11,10 @@ describe("Delivery Excellence site index migration", () => {
   it("verifies site uniqueness before removing the legacy index and modifies no documents", () => {
     expect(source).toContain('const canonicalKey = { siteId: 1, week: 1, transporterId: 1 }');
     expect(source).toContain('const legacyKey = { week: 1, transporterId: 1 }');
+    expect(source).toContain('const legacyName = "week_1_transporterId_1"');
+    expect(source).toContain("index.name === legacyName");
     expect(source.indexOf("if (!verified)")).toBeLessThan(source.indexOf("dropIndex"));
+    expect(source).toContain("after.fingerprint !== before.fingerprint");
     expect(source).not.toMatch(/updateOne|updateMany|deleteOne|deleteMany|replaceOne|bulkWrite/);
   });
 });

@@ -58,6 +58,36 @@ export type NormalizedWeeklyScorecard = {
   rows: Record<string, unknown>[]; week: string; transporterIds: string[]; errors: string[];
 };
 
+export type WeeklyScorecardSite = { id: string; code: string };
+
+export function parseWeeklyScorecardFilenameSite(fileName: string): string | null {
+  const match = fileName.trim().match(/^DSP_Overview_Dashboard_SYMX_([A-Z0-9]+)_\d{4}-W\d{2}\.csv$/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+export function detectWeeklyScorecardSite(
+  fileName: string,
+  rows: WeeklyScorecardRow[],
+  sites: WeeklyScorecardSite[],
+): WeeklyScorecardSite | null {
+  const siteByCode = new Map(sites.map(site => [site.code.trim().toUpperCase(), site]));
+  const filenameSite = parseWeeklyScorecardFilenameSite(fileName);
+  if (filenameSite) return siteByCode.get(filenameSite) || null;
+  const firstRow = rows[0] || {};
+  for (const [header, value] of Object.entries(firstRow)) {
+    if (!["site", "station", "station code"].includes(normalizeWeeklyHeader(header))) continue;
+    const detected = siteByCode.get(clean(value).toUpperCase());
+    if (detected) return detected;
+  }
+
+  const tokens = fileName.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+  for (const token of tokens) {
+    const detected = siteByCode.get(token);
+    if (detected) return detected;
+  }
+  return null;
+}
+
 export function normalizeWeeklyScorecard(rows: WeeklyScorecardRow[], expectedWeek?: string): NormalizedWeeklyScorecard {
   const errors: string[] = [];
   if (!rows.length) return { rows: [], week: expectedWeek || "", transporterIds: [], errors: ["The file contains no data rows."] };
@@ -111,18 +141,31 @@ export async function previewWeeklyScorecard(siteId: string, rows: WeeklyScoreca
   };
 }
 
+export async function inspectWeeklyScorecardHistory(siteId: string, week: string, fileHash: string) {
+  const [exact, sameWeek] = await Promise.all([
+    AmazonReportImport.findOne({ siteId, fileHash, reportType: WEEKLY_SCORECARD_REPORT_TYPE, periodType: "Weekly", status: "success" }, { _id: 1 }).lean<any>(),
+    AmazonReportImport.findOne({ siteId, week, reportType: WEEKLY_SCORECARD_REPORT_TYPE, periodType: "Weekly", status: "success" }, { _id: 1, fileHash: 1 }).sort({ importedAt: -1 }).lean<any>(),
+  ]);
+  return {
+    exactDuplicate: !!exact,
+    sameWeekDifferentFile: !exact && !!sameWeek && sameWeek.fileHash !== fileHash,
+  };
+}
+
 export function weeklyScorecardFileHash(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
 
 export async function importWeeklyScorecard(input: {
   siteId: string; rows: WeeklyScorecardRow[]; week?: string; fileName: string; fileHash: string; importedBy: string; importedByName?: string;
+  confirmWeekUpdate?: boolean;
 }) {
   const preview = await previewWeeklyScorecard(input.siteId, input.rows, input.week);
   if (preview.errors.length) throw new Error(preview.errors.join(" "));
   if (!/^[a-f0-9]{64}$/.test(input.fileHash)) throw new Error("Invalid file fingerprint.");
-  const exact = await AmazonReportImport.findOne({ siteId: input.siteId, fileHash: input.fileHash, reportType: WEEKLY_SCORECARD_REPORT_TYPE, periodType: "Weekly", status: "success" }).lean<any>();
-  if (exact) return { outcome: "UNCHANGED" as const, importId: String(exact._id), ...preview };
+  const history = await inspectWeeklyScorecardHistory(input.siteId, preview.week, input.fileHash);
+  if (history.exactDuplicate) throw new Error("This scorecard has already been uploaded for this station and week.");
+  if (history.sameWeekDifferentFile && !input.confirmWeekUpdate) throw new Error("Confirm the updated scorecard before replacing this week.");
 
   const employees = await SymxEmployee.find({ primarySiteId: input.siteId, transporterId: { $in: preview.transporterIds } }, { _id: 1, transporterId: 1 }).lean<any[]>();
   const employeeMap = new Map(employees.map(row => [clean(row.transporterId).toUpperCase(), row._id]));

@@ -35,4 +35,15 @@ describe("Driver Rankings imports", () => {
     expect(weekly).toContain('requirePermission("Driver Dashboard", "edit")');
     expect(quality).toContain('requirePermission("Driver Dashboard", "edit")');
   });
+
+  it("requires explicit Weekly Scorecard station and replacement decisions", () => {
+    const component = readFileSync("components/driver-ranking/weekly-scorecard-import.tsx", "utf8");
+    const route = readFileSync("app/api/driver-rankings/weekly-scorecard-import/route.ts", "utf8");
+    expect(component).toContain("Wrong Station Detected");
+    expect(component).toContain("Duplicate File");
+    expect(component).toContain("Updated Scorecard Detected");
+    expect(component).toContain("confirmWeekUpdate");
+    expect(route).toContain("resolveWriteSiteId(scope, targetSiteId)");
+    expect(route).toContain("detectedSite.id !== writeSiteId");
+  });
 });

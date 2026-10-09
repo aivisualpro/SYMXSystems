@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 import AmazonReportImport from "@/lib/models/AmazonReportImport";
 import SymxDeliveryExcellence from "@/lib/models/SymxDeliveryExcellence";
 import SymxEmployee from "@/lib/models/SymxEmployee";
-import { importWeeklyScorecard, normalizeWeeklyScorecard } from "@/lib/imports/weekly-scorecard";
+import { detectWeeklyScorecardSite, importWeeklyScorecard, inspectWeeklyScorecardHistory, normalizeWeeklyScorecard, parseWeeklyScorecardFilenameSite } from "@/lib/imports/weekly-scorecard";
 import { processScorecard } from "@/lib/imports/scorecard";
 
 const siteId = "507f1f77bcf86cd799439011";
@@ -44,20 +44,56 @@ describe("Weekly Driver Scorecard import", () => {
     expect(result.errors).toContain("Row 3: duplicate Transporter ID for 2026-W38.");
   });
 
-  it("returns UNCHANGED for an already successful identical file without opening a transaction", async () => {
+  it("detects the station from row data or filename tokens", () => {
+    const sites = [{ id: siteId, code: "DFO2" }, { id: "507f1f77bcf86cd799439012", code: "DXC8" }];
+    expect(detectWeeklyScorecardSite("renamed.csv", [{ ...row, Station: "dxc8" }], sites)?.code).toBe("DXC8");
+    expect(detectWeeklyScorecardSite("DSP_Overview_SYMX_DFO2_2026-W40.csv", [row], sites)?.code).toBe("DFO2");
+  });
+
+  it("treats the exact Amazon filename station as authoritative", () => {
+    const sites = [{ id: siteId, code: "DXC8" }, { id: "507f1f77bcf86cd799439013", code: "DFO3" }];
+    const fileName = "DSP_Overview_Dashboard_SYMX_DFO3_2026-W40.csv";
+    expect(parseWeeklyScorecardFilenameSite(fileName)).toBe("DFO3");
+    expect(detectWeeklyScorecardSite(fileName, [row], sites)?.code).toBe("DFO3");
+  });
+
+  it("blocks an already successful identical file before opening a transaction", async () => {
     vi.spyOn(SymxEmployee, "find").mockReturnValue({ lean: async () => [{ _id: siteId, transporterId: "T1" }] } as any);
     vi.spyOn(SymxDeliveryExcellence, "find").mockReturnValue({ lean: async () => [{ transporterId: "T1" }] } as any);
-    vi.spyOn(AmazonReportImport, "findOne").mockReturnValue({ lean: async () => ({ _id: siteId }) } as any);
+    vi.spyOn(AmazonReportImport, "findOne")
+      .mockReturnValueOnce({ lean: async () => ({ _id: siteId }) } as any)
+      .mockReturnValueOnce({ sort: () => ({ lean: async () => ({ _id: siteId, fileHash: hash }) }) } as any);
     const start = vi.spyOn(mongoose, "startSession");
-    const result = await importWeeklyScorecard({ siteId, rows: [row], fileName: "weekly.csv", fileHash: hash, importedBy: "manager" });
-    expect(result.outcome).toBe("UNCHANGED");
+    await expect(importWeeklyScorecard({ siteId, rows: [row], fileName: "weekly.csv", fileHash: hash, importedBy: "manager" }))
+      .rejects.toThrow("already been uploaded");
     expect(start).not.toHaveBeenCalled();
+  });
+
+  it("requires confirmation before a different file updates an imported week", async () => {
+    vi.spyOn(SymxEmployee, "find").mockReturnValue({ lean: async () => [{ _id: siteId, transporterId: "T1" }] } as any);
+    vi.spyOn(SymxDeliveryExcellence, "find").mockReturnValue({ lean: async () => [{ transporterId: "T1" }] } as any);
+    vi.spyOn(AmazonReportImport, "findOne")
+      .mockReturnValueOnce({ lean: async () => null } as any)
+      .mockReturnValueOnce({ sort: () => ({ lean: async () => ({ _id: siteId, fileHash: "b".repeat(64) }) }) } as any);
+    const start = vi.spyOn(mongoose, "startSession");
+    await expect(importWeeklyScorecard({ siteId, rows: [row], fileName: "weekly.csv", fileHash: hash, importedBy: "manager" }))
+      .rejects.toThrow("Confirm the updated scorecard");
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("classifies new, duplicate, and changed-week history", async () => {
+    const findOne = vi.spyOn(AmazonReportImport, "findOne");
+    findOne.mockReturnValueOnce({ lean: async () => null } as any)
+      .mockReturnValueOnce({ sort: () => ({ lean: async () => null }) } as any);
+    await expect(inspectWeeklyScorecardHistory(siteId, "2026-W38", hash)).resolves.toEqual({ exactDuplicate: false, sameWeekDifferentFile: false });
   });
 
   it("keeps ledger and scorecard writes inside the same transaction", async () => {
     vi.spyOn(SymxEmployee, "find").mockReturnValue({ lean: async () => [{ _id: siteId, transporterId: "T1" }] } as any);
     vi.spyOn(SymxDeliveryExcellence, "find").mockReturnValue({ session: () => ({ lean: async () => [] }), lean: async () => [] } as any);
-    vi.spyOn(AmazonReportImport, "findOne").mockReturnValue({ lean: async () => null } as any);
+    vi.spyOn(AmazonReportImport, "findOne").mockImplementation((filter: any) => filter.fileHash
+      ? ({ lean: async () => null } as any)
+      : ({ sort: () => ({ lean: async () => null }) } as any));
     const bulk = vi.spyOn(SymxDeliveryExcellence, "bulkWrite").mockResolvedValue({ upsertedCount: 1, modifiedCount: 0 } as any);
     const ledger = vi.spyOn(AmazonReportImport, "create").mockResolvedValue([] as any);
     const mongoSession = { withTransaction: vi.fn(async callback => callback()), endSession: vi.fn() };
@@ -72,7 +108,9 @@ describe("Weekly Driver Scorecard import", () => {
   it("does not create a success ledger when scorecard persistence fails", async () => {
     vi.spyOn(SymxEmployee, "find").mockReturnValue({ lean: async () => [{ _id: siteId, transporterId: "T1" }] } as any);
     vi.spyOn(SymxDeliveryExcellence, "find").mockReturnValue({ session: () => ({ lean: async () => [] }), lean: async () => [] } as any);
-    vi.spyOn(AmazonReportImport, "findOne").mockReturnValue({ lean: async () => null } as any);
+    vi.spyOn(AmazonReportImport, "findOne").mockImplementation((filter: any) => filter.fileHash
+      ? ({ lean: async () => null } as any)
+      : ({ sort: () => ({ lean: async () => null }) } as any));
     vi.spyOn(SymxDeliveryExcellence, "bulkWrite").mockRejectedValue(new Error("simulated persistence failure"));
     const ledger = vi.spyOn(AmazonReportImport, "create");
     const mongoSession = { withTransaction: vi.fn(async callback => callback()), endSession: vi.fn() };
