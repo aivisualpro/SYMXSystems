@@ -119,6 +119,8 @@
       if (isNewView) {
         capturedRoutes.clear();
         captureLog.clear();
+        bulkItins.clear();
+        bulkSentStamp.clear();
       }
 
       if (ld) lastCapturedApiDate = ld;
@@ -146,37 +148,48 @@
   let lastSentItineraryId = "";
 
   function stampOf(t) {
-    return `${t.itineraryStatus || ""}|${t.lastDriverEventTime || ""}`;
+    return `${t.itineraryStatus || t.progressStatus || t.executionStatus || ""}|${t.lastDriverEventTime || ""}`;
   }
+
+  // itineraryId -> { id, codes, name, stamp } for EVERY driver, from the
+  // station-wide summaries response (no clicking needed).
+  const bulkItins = new Map();
+  const bulkSentStamp = new Map(); // itineraryId -> stamp already auto-synced
 
   // One entry per itinerary (a driver on two routes shares one itinerary).
   function buildChecklist() {
-    const byIt = new Map();
-    capturedRoutes.forEach((route, code) => {
-      const t = (route.transporters || [])[0];
-      if (!t || !t.itineraryId) return;
-      const e = byIt.get(t.itineraryId) || { id: t.itineraryId, codes: [], stamp: stampOf(t), tid: t.transporterId || route.transporterIdFromRms || "" };
-      e.codes.push(route.routeCode || code);
-      byIt.set(t.itineraryId, e);
-    });
-    return Array.from(byIt.values()).map((e) => {
+    let base = Array.from(bulkItins.values());
+    if (base.length === 0) {
+      const byIt = new Map();
+      capturedRoutes.forEach((route, code) => {
+        const t = (route.transporters || [])[0];
+        if (!t || !t.itineraryId) return;
+        const e = byIt.get(t.itineraryId) || { id: t.itineraryId, codes: [], stamp: stampOf(t), name: "" };
+        e.codes.push(route.routeCode || code);
+        byIt.set(t.itineraryId, e);
+      });
+      base = Array.from(byIt.values());
+    }
+    return base.map((e) => {
       const rec = captureLog.get(e.id);
       let state = "needed";
       if (rec) {
         if (rec.status === "failed") state = "failed";
         else if (rec.status === "no-route") state = "no-route";
+        else if (!rec.full) state = "partial";
         else state = (rec.stamp && rec.stamp !== e.stamp) ? "stale" : "done";
       }
-      return { ...e, state, name: rec && rec.name };
+      return { ...e, state, name: (rec && rec.name) || e.name };
     }).sort((x, y) => x.codes[0].localeCompare(y.codes[0], undefined, { numeric: true }));
   }
 
   const STATE_UI = {
-    done:    { dot: "#16a34a", label: "captured" },
+    done:    { dot: "#16a34a", label: "fully captured" },
+    partial: { dot: "#3b82f6", label: "auto-synced · click for 1st stop" },
     stale:   { dot: "#f59e0b", label: "changed — click again" },
-    needed:  { dot: "#dc2626", label: "click to capture" },
+    needed:  { dot: "#dc2626", label: "waiting to sync" },
     "no-route": { dot: "#6b7280", label: "not on SYMX schedule" },
-    failed:  { dot: "#dc2626", label: "sync failed — click again" },
+    failed:  { dot: "#dc2626", label: "sync failed" },
   };
 
   let panelOpen = true;
@@ -193,10 +206,11 @@
     if (list.length === 0) { panel.style.display = "none"; return; }
     panel.style.display = "block";
     const done = list.filter((x) => x.state === "done").length;
+    const auto = list.filter((x) => x.state === "partial" || x.state === "done" || x.state === "stale").length;
     panel.textContent = "";
     const head = document.createElement("div");
     head.style.cssText = "padding:8px 12px;font-weight:700;cursor:pointer;display:flex;justify-content:space-between;position:sticky;top:0;background:#111827;";
-    head.textContent = `SYMX capture: ${done}/${list.length}`;
+    head.textContent = `SYMX: ${auto}/${list.length} synced · ${done} full`;
     const caret = document.createElement("span");
     caret.textContent = panelOpen ? "▾" : "▸";
     head.appendChild(caret);
@@ -235,13 +249,15 @@
       // Remember it (with the stamp from the route list, so we can tell later
       // whether the driver's data has changed since) and sync right away.
       const tr = Array.isArray(data.transporters) && data.transporters[0];
-      let stamp = "";
-      capturedRoutes.forEach((route) => {
-        const t = (route.transporters || [])[0];
-        if (t && t.itineraryId === itineraryId) stamp = stampOf(t);
-      });
+      let stamp = (bulkItins.get(itineraryId) || {}).stamp || "";
+      if (!stamp) {
+        capturedRoutes.forEach((route) => {
+          const t = (route.transporters || [])[0];
+          if (t && t.itineraryId === itineraryId) stamp = stampOf(t);
+        });
+      }
       captureLog.set(itineraryId, {
-        at: Date.now(), status: "synced", stamp,
+        at: Date.now(), status: "synced", full: true, stamp,
         name: tr ? [tr.firstName, tr.lastName].filter(Boolean).join(" ") : "",
       });
       if (isAutoOn()) {
@@ -388,7 +404,7 @@
 
     {
       const res0 = event.data.payload || {};
-      const rec = captureLog.get(lastSentItineraryId);
+      const rec = captureLog.get(res0.itineraryId || lastSentItineraryId);
       if (rec) {
         if (!res0.ok && !res0.skipped) { rec.status = "failed"; rec.note = res0.error || ""; }
         else if (res0.skipped) { rec.status = "no-route"; rec.note = res0.reason || ""; }
@@ -417,6 +433,49 @@
     }
   });
 
+  // ── Station-wide itinerary summaries ──
+  // /api/summaries carries an itinerary summary for EVERY driver: departure,
+  // stems, sign-in/out, meal break, rescues and the last stop time. Sync them
+  // all automatically whenever a driver's numbers change. Only the first-stop
+  // fields need a driver's itinerary page to be opened.
+  function bulkSyncItinerarySummaries(data) {
+    const its = Array.isArray(data.itinerarySummaries) ? data.itinerarySummaries : [];
+    if (its.length === 0) return;
+    const names = new Map();
+    (Array.isArray(data.transporters) ? data.transporters : []).forEach((t) => {
+      names.set(t.transporterId, [t.firstName, t.lastName].filter(Boolean).join(" "));
+    });
+    const date = lastCapturedApiDate || businessDateString();
+    let delay = 0;
+    its.forEach((it) => {
+      if (!it || !it.itineraryId) return;
+      const stamp = stampOf(it);
+      const codes = Array.isArray(it.routeCodes) && it.routeCodes.length ? it.routeCodes : [it.routeCode];
+      bulkItins.set(it.itineraryId, { id: it.itineraryId, codes, name: names.get(it.transporterId) || "", stamp });
+      if (!isAutoOn() || bulkSentStamp.get(it.itineraryId) === stamp) return;
+      bulkSentStamp.set(it.itineraryId, stamp);
+      delay += 300; // stagger so SYMX isn't hit with 17 at once
+      setTimeout(() => {
+        if (!captureLog.has(it.itineraryId)) {
+          captureLog.set(it.itineraryId, { at: Date.now(), status: "synced", full: false, stamp, name: names.get(it.transporterId) || "" });
+        } else {
+          captureLog.get(it.itineraryId).stamp = captureLog.get(it.itineraryId).full ? captureLog.get(it.itineraryId).stamp : stamp;
+        }
+        window.postMessage({
+          source: "SYMX_CONTENT",
+          type: "ITINERARY_SYNC_REQUEST",
+          payload: {
+            serviceAreaId: it.serviceAreaId || lastCapturedServiceArea || "",
+            date,
+            itineraryDetails: it,
+            stops: [],
+          },
+        }, "*");
+      }, delay);
+    });
+    renderPanel();
+  }
+
   // ── Slim summaries (/api/summaries) ──
   // Before a route departs, Cortex's route-summaries response carries zero
   // stop counts and no driver. This lighter endpoint, which the page polls
@@ -426,6 +485,7 @@
   function processSlimSummaries(data) {
     if (!data) return;
     const slim = Array.isArray(data.routeSummaries) ? data.routeSummaries : [];
+    bulkSyncItinerarySummaries(data);
     if (slim.length === 0) return;
     let touched = false;
     slim.forEach((r) => {

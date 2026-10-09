@@ -50,6 +50,8 @@ const AUTO_FIELDS = [
     "appSignIn",
     "plannedEndTime",
     "amazonAppLogout",
+    "amazonOutLunch",
+    "amazonInLunch",
 ] as const;
 
 function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string, string | number> {
@@ -105,6 +107,22 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
     if (plannedLast) fields.plannedLastStop = plannedLast;
     const actualLast = epochToClockTime(lastTaskActual);
     if (actualLast) fields.actualLastStop = actualLast;
+
+    // Amazon's own "last stop" time (what the driver list shows as "Last:
+    // Delivery at …"). Preferred over the stop-by-stop calculation when present.
+    const lastExec = epochToClockTime(itineraryDetails?.lastStopExecutionTime);
+    if (lastExec) fields.actualLastStop = lastExec;
+
+    // Meal break (driver-specific, from the itinerary itself).
+    const meal = (Array.isArray(itineraryDetails?.breaks) ? itineraryDetails.breaks : []).find(
+        (b: any) => b?.type === "MEAL" && b?.state === "OFF" && b?.timeStampOn && b?.timeStampOff
+    );
+    if (meal) {
+        const outL = epochToClockTime(meal.timeStampOn);
+        const inL = epochToClockTime(meal.timeStampOff);
+        if (outL) fields.amazonOutLunch = outL;
+        if (inL) fields.amazonInLunch = inL;
+    }
 
     if (Array.isArray(itineraryDetails?.rescueActions)) {
         fields.stopsRescued = itineraryDetails.rescueActions.length;
@@ -181,6 +199,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({
                 ok: false,
                 skipped: true,
+                itineraryId: itineraryDetails.itineraryId || "",
                 reason: `No route found for transporter ${transporterId} on ${date} at ${site.code}`,
             }, { headers: CORS_HEADERS });
         }
@@ -204,6 +223,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({
             ok: true,
+            itineraryId: itineraryDetails.itineraryId || "",
             station: site.code,
             transporterId,
             updated: updatedFields,
