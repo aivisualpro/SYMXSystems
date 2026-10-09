@@ -11,7 +11,7 @@ import { WeeklyScorecardImport } from "@/components/driver-ranking/weekly-scorec
 import { QualityDetailImport } from "@/components/driver-ranking/quality-detail-import";
 import { RankingSettingsDialog } from "@/components/driver-ranking/ranking-settings-dialog";
 import { TeamPerformanceDashboard } from "@/components/driver-ranking/team-performance-dashboard";
-import { DriverHistoryReviewPanel } from "@/components/driver-ranking/driver-history-review-panel";
+import { DriverHistoryReviewPanel } from "@/components/driver-ranking/driver-history-review-panel";\nimport { DriverQrCardsDialog } from "@/components/driver-ranking/driver-qr-cards-dialog";
 import type { AmazonMetric, DriverRankingResult, DriverRankingRow } from "@/lib/driver-ranking/driver-ranking-data";
 import { amazonWeeklyMetrics } from "@/lib/driver-ranking/amazon-weekly-summary";
 import { efficiencyDistribution, getEfficiencyPerformanceState, getOperationalPerformanceState, performanceValueClass, type EfficiencyDistribution, type PerformanceState } from "@/lib/driver-ranking/performance-colors";
@@ -104,7 +104,7 @@ export default function DriverRankingsPage() {
         {data?.canEdit ? <Button size="sm" variant="outline" onClick={() => setSettingsOpen(true)}><Settings className="size-4"/>Ranking Settings</Button> : null}
         <WeeklyScorecardImport enabled={Boolean(data?.canEdit)} onImported={importedWeek => { setWeek(importedWeek); setRefresh(value => value + 1); }}/>
         <QualityDetailImport enabled={Boolean(data?.canEdit)} week={week} onImported={() => setRefresh(value => value + 1)}/>
-        <Button size="sm" variant="outline" asChild><a href={`/api/driver-rankings/export?week=${encodeURIComponent(week)}`} download><Download className="size-4"/>Export</a></Button>
+        <DriverQrCardsDialog drivers={data?.drivers || []} week={week} enabled={Boolean(data?.canEdit && data?.publicDriverPerformanceEnabled)}/><Button size="sm" variant="outline" asChild><a href={`/api/driver-rankings/export?week=${encodeURIComponent(week)}`} download><Download className="size-4"/>Export</a></Button>
       </div>
     </div>
     <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[12rem_minmax(0,1fr)_auto]">
