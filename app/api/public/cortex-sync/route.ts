@@ -55,9 +55,6 @@ const AUTO_FIELDS = [
 function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string, string | number> {
     const fields: Record<string, string | number> = {};
     const td = itineraryDetails?.transporterTimeAttributes || {};
-    const routes0 = itineraryDetails?.routes?.[0] || {};
-    const rdp = routes0.routeDeliveryProgress || {};
-    const totalStops: number = typeof rdp.totalStops === "number" ? rdp.totalStops : 0;
 
     const actualDeparture = epochToClockTime(td.actualDepartureTime);
     if (actualDeparture) fields.actualDepartureTime = actualDeparture;
@@ -76,23 +73,28 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
         .sort((a: any, b: any) => a.sequenceNumber - b.sequenceNumber);
 
     // sequenceNumber 1 is the warehouse PICK_UP — not a customer stop.
-    const firstStop = realStops.find((s: any) => s.sequenceNumber > 1) || null;
-    // Sequence 1 is the warehouse pickup, so the page's "stop N" is sequence N+1.
-    // Matching sequenceNumber to totalStops therefore landed one stop early.
-    // The last customer stop is simply the highest real sequence number.
-    const lastStop = realStops.length > 1 ? realStops[realStops.length - 1] : null;
+    const customerStops = realStops.filter((s: any) => s.sequenceNumber > 1);
 
-    // A stop can hold many tasks (one per package). Use the earliest execution
-    // time for the first stop and the latest for the last, not whichever task
-    // happens to be listed first.
-    const execTimes = (stop: any): number[] =>
-        (Array.isArray(stop?.tasks) ? stop.tasks : [])
-            .map((t: any) => Number(t?.actualExecutionTime))
-            .filter((n: number) => Number.isFinite(n) && n > 0);
-    const firstTimes = execTimes(firstStop);
-    const lastTimes = execTimes(lastStop);
-    const firstTaskActual = firstTimes.length ? Math.min(...firstTimes) : undefined;
-    const lastTaskActual = lastTimes.length ? Math.max(...lastTimes) : undefined;
+    // PLANNED first/last follow the planned route order (sequence): the page's
+    // "stop N" is sequence N+1 because sequence 1 is the pickup.
+    const firstStop = customerStops[0] || null;
+    const lastStop = customerStops.length ? customerStops[customerStops.length - 1] : null;
+
+    // ACTUAL first/last follow the clock, not the plan: drivers go out of order,
+    // so the first/last actual delivery is the earliest/latest execution time
+    // across every stop. A stop holds many tasks (one per package); prefer
+    // drop-offs so pickups at the stop don't skew the times.
+    const actualTimes: number[] = [];
+    for (const stop of customerStops) {
+        const tasks: any[] = Array.isArray(stop?.tasks) ? stop.tasks : [];
+        const drops = tasks.filter((t: any) => t?.taskType === "DROP_OFF");
+        for (const t of (drops.length ? drops : tasks)) {
+            const n = Number(t?.actualExecutionTime);
+            if (Number.isFinite(n) && n > 0) actualTimes.push(n);
+        }
+    }
+    const firstTaskActual = actualTimes.length ? Math.min(...actualTimes) : undefined;
+    const lastTaskActual = actualTimes.length ? Math.max(...actualTimes) : undefined;
 
     const plannedFirst = epochToClockTime(firstStop?.expectedStartTime);
     if (plannedFirst) fields.plannedFirstStop = plannedFirst;
