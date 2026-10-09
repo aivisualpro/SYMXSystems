@@ -231,19 +231,19 @@ export default function EfficiencyV2Page() {
 
             {/* ── controls ── */}
             <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex rounded-lg border border-border/50 p-0.5 text-xs">
+                <div className="inline-flex rounded-lg border border-border/50 p-0.5 text-sm">
                     {([["overview", "Overview"], ["table", "Full table"]] as const).map(([k, l]) => (
-                        <button key={k} onClick={() => setTab(k)} className={cn("rounded-md px-3 py-1.5 font-medium transition", tab === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>{l}</button>
+                        <button key={k} onClick={() => setTab(k)} className={cn("rounded-md px-4 py-2 text-sm font-medium transition", tab === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>{l}</button>
                     ))}
                 </div>
                 {tab === "overview" && (
                     <>
-                        <div className="inline-flex rounded-lg border border-border/50 p-0.5 text-xs">
+                        <div className="inline-flex rounded-lg border border-border/50 p-0.5 text-sm">
                             {([["all", `All drivers (${dayRows.length})`], ["attention", `Needs attention (${summary.attention})`]] as const).map(([k, l]) => (
-                                <button key={k} onClick={() => setFilter(k)} className={cn("rounded-md px-3 py-1.5 font-medium transition", filter === k ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground")}>{l}</button>
+                                <button key={k} onClick={() => setFilter(k)} className={cn("rounded-md px-4 py-2 text-sm font-medium transition", filter === k ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground")}>{l}</button>
                             ))}
                         </div>
-                        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="rounded-lg border border-border/50 bg-card px-2 py-1.5 text-xs">
+                        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="rounded-lg border border-border/50 bg-card px-3 py-2 text-sm">
                             <option value="attention">Sort: most urgent</option>
                             <option value="eff">Sort: lowest efficiency</option>
                             <option value="route">Sort: route #</option>
@@ -251,36 +251,36 @@ export default function EfficiencyV2Page() {
                         </select>
                     </>
                 )}
-                <span className="ml-auto text-[11px] text-muted-foreground">Prototype · click a driver for the timeline · only DCT is editable here</span>
+                <span className="ml-auto text-xs text-muted-foreground">Prototype · click a driver for the timeline · only DCT is editable here</span>
             </div>
 
             {/* ── 2. Driver list ── */}
             {tab === "overview" ? (
                 <div className="overflow-hidden rounded-xl border border-border/50 bg-card">
-                    <div className="grid grid-cols-[minmax(160px,1.4fr)_70px_110px_110px_130px_130px_110px_minmax(200px,1.5fr)_24px] gap-2 border-b border-border/50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <div className="grid grid-cols-[minmax(180px,1.5fr)_minmax(70px,.5fr)_minmax(110px,.8fr)_minmax(140px,1fr)_minmax(150px,1.1fr)_minmax(130px,.9fr)_minmax(110px,.8fr)_minmax(240px,2.6fr)_20px] gap-3 border-b border-border/50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         <div>Driver</div><div>Stops</div><div>Status</div><div>Departure</div><div>Last stop</div><div>Return (RTS)</div><div>Efficiency</div><div>Flags</div><div />
                     </div>
                     {list.length === 0 && <div className="p-8 text-center text-sm text-muted-foreground">{filter === "attention" ? "Nobody needs attention right now." : "No routes for this day."}</div>}
                     {list.map((r) => {
                         const st = status(r), fl = flagsFor(r), dl = depLevel(r), ll = lastLevel(r), el = effLevel(r);
                         return (
-                            <button key={r.id} onClick={() => setSelected(r)} className="grid w-full grid-cols-[minmax(160px,1.4fr)_70px_110px_110px_130px_130px_110px_minmax(200px,1.5fr)_24px] items-center gap-2 border-b border-border/30 px-3 py-2.5 text-left text-xs transition hover:bg-secondary/40">
+                            <button key={r.id} onClick={() => setSelected(r)} className="grid w-full grid-cols-[minmax(180px,1.5fr)_minmax(70px,.5fr)_minmax(110px,.8fr)_minmax(140px,1fr)_minmax(150px,1.1fr)_minmax(130px,.9fr)_minmax(110px,.8fr)_minmax(240px,2.6fr)_20px] items-center gap-3 border-b border-border/30 px-4 py-3 text-left text-sm transition hover:bg-secondary/40">
                                 <div>
-                                    <div className="font-semibold text-foreground">{r.name}</div>
-                                    <div className="text-[11px] text-muted-foreground">{r.route || "—"}{r.appIn ? ` · in ${clock(r.appIn)}` : ""}</div>
+                                    <div className="text-base font-semibold text-foreground">{r.name}</div>
+                                    <div className="text-xs text-muted-foreground">{r.route || "—"}{r.appIn ? ` · in ${clock(r.appIn)}` : ""}</div>
                                 </div>
-                                <div className="tabular-nums">{r.stops || "—"}<div className="text-[10px] text-muted-foreground">{r.sph ? `${r.sph}/hr plan` : ""}</div></div>
-                                <div><span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", st.tone)}>{st.label}</span></div>
-                                <div className="tabular-nums">{clock(r.actDep)}<div className="text-[10px]"><span className="text-muted-foreground">plan {mins(r.wave) !== null ? fmtTime((mins(r.wave) as number) + 20) : "—"} </span><Delta v={r.depDelay} level={dl} /></div></div>
-                                <div className="tabular-nums">{clock(r.actLast)}<div className="text-[10px]"><span className="text-muted-foreground">plan {clock(r.planLast)} </span><Delta v={r.lastDelay} level={ll} /></div></div>
-                                <div className="tabular-nums">{r.estRTS || r.planRTS || "—"}<div className="text-[10px] text-muted-foreground">{r.estRTS ? `plan ${r.planRTS}` : "planned"}</div></div>
+                                <div className="tabular-nums">{r.stops || "—"}<div className="text-xs text-muted-foreground">{r.sph ? `${r.sph}/hr plan` : ""}</div></div>
+                                <div><span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", st.tone)}>{st.label}</span></div>
+                                <div className="tabular-nums">{clock(r.actDep)}<div className="text-xs"><span className="text-muted-foreground">plan {mins(r.wave) !== null ? fmtTime((mins(r.wave) as number) + 20) : "—"} </span><Delta v={r.depDelay} level={dl} /></div></div>
+                                <div className="tabular-nums">{clock(r.actLast)}<div className="text-xs"><span className="text-muted-foreground">plan {clock(r.planLast)} </span><Delta v={r.lastDelay} level={ll} /></div></div>
+                                <div className="tabular-nums">{r.estRTS || r.planRTS || "—"}<div className="text-xs text-muted-foreground">{r.estRTS ? `plan ${r.planRTS}` : "planned"}</div></div>
                                 <div>
-                                    <div className={cn("font-bold tabular-nums", chipTone[el])}>{r.eff ? `${r.eff}%` : "—"}</div>
+                                    <div className={cn("text-lg font-bold tabular-nums", chipTone[el])}>{r.eff ? `${r.eff}%` : "—"}</div>
                                     <div className="mt-1 h-1.5 w-20 overflow-hidden rounded-full bg-zinc-800"><div className={cn("h-full rounded-full", barTone[el])} style={{ width: `${Math.min(100, r.eff || 0)}%` }} /></div>
                                 </div>
                                 <div className="flex flex-wrap gap-1">
-                                    {fl.length === 0 ? <span className="inline-flex items-center gap-1 text-[11px] text-emerald-500/80"><CheckCircle2 className="h-3 w-3" />On track</span>
-                                        : fl.map((f, i) => <span key={i} className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", f.level === "bad" ? "bg-red-500/15 text-red-400" : "bg-amber-500/15 text-amber-400")}>{f.label}</span>)}
+                                    {fl.length === 0 ? <span className="inline-flex items-center gap-1 text-xs text-emerald-500/80"><CheckCircle2 className="h-3 w-3" />On track</span>
+                                        : fl.map((f, i) => <span key={i} className={cn("rounded px-2 py-1 text-xs font-medium", f.level === "bad" ? "bg-red-500/15 text-red-400" : "bg-amber-500/15 text-amber-400")}>{f.label}</span>)}
                                 </div>
                                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             </button>
@@ -303,10 +303,10 @@ export default function EfficiencyV2Page() {
 
 function Kpi({ icon: Icon, label, value, hint, level }: { icon: any; label: string; value: string; hint?: string; level: Level }) {
     return (
-        <div className="rounded-xl border border-border/50 bg-card p-3">
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><Icon className="h-3.5 w-3.5" />{label}</div>
-            <div className={cn("mt-1 text-2xl font-bold tabular-nums", level === "none" ? "text-foreground" : chipTone[level])}>{value}</div>
-            {hint && <div className="mt-0.5 text-[10px] text-muted-foreground">{hint}</div>}
+        <div className="rounded-xl border border-border/50 bg-card px-4 py-3">
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground"><Icon className="h-4 w-4" />{label}</div>
+            <div className={cn("mt-1 text-3xl font-bold tabular-nums", level === "none" ? "text-foreground" : chipTone[level])}>{value}</div>
+            {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
         </div>
     );
 }
@@ -314,7 +314,7 @@ function Kpi({ icon: Icon, label, value, hint, level }: { icon: any; label: stri
 function TimelineRow({ label, plan, act, delta, level }: { label: string; plan: string; act: string; delta?: string; level?: Level }) {
     const done = !!act && act !== "—";
     return (
-        <div className="grid grid-cols-[18px_1fr_90px_90px_70px] items-center gap-2 py-2 text-xs">
+        <div className="grid grid-cols-[18px_1fr_90px_90px_70px] items-center gap-2 py-2.5 text-sm">
             <span className={cn("h-2.5 w-2.5 rounded-full", done ? "bg-emerald-500" : "bg-zinc-700")} />
             <span className="font-medium">{label}</span>
             <span className="text-right tabular-nums text-muted-foreground">{plan || "—"}</span>
@@ -338,11 +338,11 @@ function Drawer({ row: r, onSaveDct }: { row: Row; onSaveDct: (r: Row, v: string
             <div className="space-y-5 px-4 pb-6">
                 {fl.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                        {fl.map((f, i) => <span key={i} className={cn("rounded px-2 py-1 text-[11px] font-medium", f.level === "bad" ? "bg-red-500/15 text-red-400" : "bg-amber-500/15 text-amber-400")}>{f.label}</span>)}
+                        {fl.map((f, i) => <span key={i} className={cn("rounded px-2 py-1 text-xs font-medium", f.level === "bad" ? "bg-red-500/15 text-red-400" : "bg-amber-500/15 text-amber-400")}>{f.label}</span>)}
                     </div>
                 )}
                 <div>
-                    <div className="mb-1 grid grid-cols-[18px_1fr_90px_90px_70px] gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <div className="mb-1 grid grid-cols-[18px_1fr_90px_90px_70px] gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         <span /><span>Timeline</span><span className="text-right">Plan</span><span className="text-right">Actual</span><span className="text-right">Δ</span>
                     </div>
                     <div className="divide-y divide-border/30">
@@ -354,7 +354,7 @@ function Drawer({ row: r, onSaveDct }: { row: Row; onSaveDct: (r: Row, v: string
                         <TimelineRow label="Called in finished (DCT)" plan={clock(r.actLast)} act={r.dct ? clock(r.dct) : ""} delta={r.dctDelay} level={(mins(r.dctDelay) ?? 0) >= T.dctRed ? "bad" : r.dctDelay ? "ok" : "none"} />
                         <TimelineRow label="Return to station" plan={r.planRTS} act={r.estRTS} />
                     </div>
-                    <div className="mt-1 text-[10px] text-muted-foreground">Return "actual" is an estimate: DCT + planned inbound stem ({dur(r.planIB)}).</div>
+                    <div className="mt-1 text-xs text-muted-foreground">Return "actual" is an estimate: DCT + planned inbound stem ({dur(r.planIB)}).</div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
@@ -368,7 +368,7 @@ function Drawer({ row: r, onSaveDct }: { row: Row; onSaveDct: (r: Row, v: string
 
                 <div className="rounded-lg border border-border/50 p-3">
                     <div className="mb-1.5 text-xs font-semibold">Delivery completion time (DCT)</div>
-                    <div className="mb-2 text-[11px] text-muted-foreground">When the driver called in finished. Type 1830 or 18:30.</div>
+                    <div className="mb-2 text-xs text-muted-foreground">When the driver called in finished. Type 1830 or 18:30.</div>
                     <div className="flex gap-2">
                         <Input value={dct} onChange={(e) => setDct(e.target.value)} placeholder="e.g. 1830" className="h-8" />
                         <Button size="sm" onClick={() => onSaveDct(r, dct)}>Save</Button>
@@ -382,8 +382,8 @@ function Drawer({ row: r, onSaveDct }: { row: Row; onSaveDct: (r: Row, v: string
 function Mini({ label, value, level }: { label: string; value: string; level?: Level }) {
     return (
         <div className="rounded-lg border border-border/50 p-2">
-            <div className="text-[10px] text-muted-foreground">{label}</div>
-            <div className={cn("text-sm font-bold tabular-nums", level ? chipTone[level] : "")}>{value}</div>
+            <div className="text-xs text-muted-foreground">{label}</div>
+            <div className={cn("text-base font-bold tabular-nums", level ? chipTone[level] : "")}>{value}</div>
         </div>
     );
 }
@@ -401,15 +401,15 @@ function FullTable({ rows, onOpen }: { rows: Row[]; onOpen: (r: Row) => void }) 
     ];
     return (
         <div className="overflow-auto rounded-xl border border-border/50 bg-card">
-            <table className="w-max min-w-full border-collapse text-xs">
+            <table className="w-max min-w-full border-collapse text-sm">
                 <thead className="sticky top-0 z-10 bg-card">
                     <tr className="border-b border-border/50">
-                        <th rowSpan={2} className="sticky left-0 z-20 bg-card px-3 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground">Driver</th>
-                        <th rowSpan={2} className="px-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground">Route</th>
-                        {groups.map((g, i) => <th key={g.title} colSpan={g.cols.length} className={cn("border-l border-border/40 px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wider text-foreground/80", i % 2 ? "bg-secondary/30" : "")}>{g.title}</th>)}
+                        <th rowSpan={2} className="sticky left-0 z-20 bg-card px-3 py-2 text-left text-xs uppercase tracking-wider text-muted-foreground">Driver</th>
+                        <th rowSpan={2} className="px-2 text-left text-xs uppercase tracking-wider text-muted-foreground">Route</th>
+                        {groups.map((g, i) => <th key={g.title} colSpan={g.cols.length} className={cn("border-l border-border/40 px-2 py-1 text-center text-xs font-semibold uppercase tracking-wider text-foreground/80", i % 2 ? "bg-secondary/30" : "")}>{g.title}</th>)}
                     </tr>
                     <tr className="border-b border-border/50">
-                        {groups.map((g, gi) => g.cols.map((c, ci) => <th key={g.title + c.label + ci} className={cn("px-2 py-1.5 text-right text-[10px] font-medium text-muted-foreground", ci === 0 && "border-l border-border/40", gi % 2 ? "bg-secondary/30" : "")}>{c.label}</th>))}
+                        {groups.map((g, gi) => g.cols.map((c, ci) => <th key={g.title + c.label + ci} className={cn("px-2 py-1.5 text-right text-xs font-medium text-muted-foreground", ci === 0 && "border-l border-border/40", gi % 2 ? "bg-secondary/30" : "")}>{c.label}</th>))}
                     </tr>
                 </thead>
                 <tbody>
@@ -417,7 +417,7 @@ function FullTable({ rows, onOpen }: { rows: Row[]; onOpen: (r: Row) => void }) 
                         <tr key={r.id} onClick={() => onOpen(r)} className="cursor-pointer border-b border-border/20 hover:bg-secondary/40">
                             <td className="sticky left-0 bg-card px-3 py-2 font-semibold">{r.name}</td>
                             <td className="px-2 text-muted-foreground">{r.route}</td>
-                            {groups.map((g, gi) => g.cols.map((c, ci) => <td key={g.title + c.label + ci} className={cn("px-2 py-2 text-right tabular-nums", ci === 0 && "border-l border-border/40", gi % 2 ? "bg-secondary/20" : "")}>{c.get(r)}</td>))}
+                            {groups.map((g, gi) => g.cols.map((c, ci) => <td key={g.title + c.label + ci} className={cn("px-3 py-2.5 text-right tabular-nums", ci === 0 && "border-l border-border/40", gi % 2 ? "bg-secondary/20" : "")}>{c.get(r)}</td>))}
                         </tr>
                     ))}
                 </tbody>
