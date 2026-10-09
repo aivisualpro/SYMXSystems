@@ -193,6 +193,14 @@
   };
 
   let panelOpen = true;
+  let visitState = { running: false, done: 0, total: 0 };
+  window.addEventListener("message", (ev) => {
+    if (ev.source !== window || !ev.data || ev.data.source !== "SYMX_EXTENSION" || ev.data.type !== "VISIT_PROGRESS") return;
+    const p = ev.data.payload || {};
+    visitState = { running: !!p.running, done: p.done || 0, total: p.total || 0 };
+    renderPanel();
+  });
+
   function renderPanel() {
     if (!document.body) return;
     let panel = document.getElementById("symx-capture-panel");
@@ -217,6 +225,31 @@
     head.addEventListener("click", () => { panelOpen = !panelOpen; renderPanel(); });
     panel.appendChild(head);
     if (!panelOpen) return;
+    const todo = list.filter((x) => x.state !== "done" && x.state !== "no-route");
+    const bar = document.createElement("div");
+    bar.style.cssText = "padding:6px 12px;border-top:1px solid rgba(255,255,255,.08);";
+    const btn = document.createElement("button");
+    btn.style.cssText = "width:100%;padding:6px;border:0;border-radius:8px;font-weight:700;cursor:pointer;color:#fff;background:" + (visitState.running ? "#6b7280" : "#ea580c") + ";";
+    if (visitState.running) {
+      btn.textContent = `Visiting ${visitState.done}/${visitState.total}… (click to stop)`;
+      btn.addEventListener("click", () => window.postMessage({ source: "SYMX_CONTENT", type: "VISIT_CANCEL_REQUEST", payload: {} }, "*"));
+    } else if (todo.length === 0) {
+      btn.textContent = "All drivers fully captured";
+      btn.disabled = true; btn.style.background = "#16a34a"; btn.style.cursor = "default";
+    } else {
+      btn.textContent = `Capture ${todo.length} remaining (auto-visit)`;
+      btn.addEventListener("click", () => {
+        window.postMessage({ source: "SYMX_CONTENT", type: "VISIT_REQUEST", payload: {
+          ids: todo.map((x) => x.id),
+          date: lastCapturedApiDate || businessDateString(),
+          serviceAreaId: lastCapturedServiceArea || "",
+        } }, "*");
+        visitState = { running: true, done: 0, total: todo.length };
+        renderPanel();
+      });
+    }
+    bar.appendChild(btn);
+    panel.appendChild(bar);
     list.forEach((x) => {
       const ui = STATE_UI[x.state];
       const row = document.createElement("div");

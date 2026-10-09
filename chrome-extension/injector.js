@@ -40,6 +40,18 @@ window.addEventListener("message", (event) => {
     }
   }
 
+  if (type === "VISIT_REQUEST" || type === "VISIT_CANCEL_REQUEST") {
+    if (!isExtensionContextValid()) return;
+    try {
+      chrome.runtime.sendMessage(
+        type === "VISIT_REQUEST"
+          ? { type: "VISIT_START", ids: payload.ids, date: payload.date, serviceAreaId: payload.serviceAreaId }
+          : { type: "VISIT_CANCEL" }
+      );
+    } catch (err) {}
+    return;
+  }
+
   if (type === "ITINERARY_SYNC_REQUEST") {
     if (!isExtensionContextValid()) {
       console.warn("[SYMX Extension] Extension context invalidated. Please refresh the page to reconnect.");
@@ -103,3 +115,13 @@ if (isExtensionContextValid()) {
     console.warn("[SYMX Extension] Could not register message listener (context invalidated).", err);
   }
 }
+
+
+// Progress from the background's auto-visit loop -> page (MAIN world).
+try {
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg && msg.type === "VISIT_PROGRESS") {
+      window.postMessage({ source: "SYMX_EXTENSION", type: "VISIT_PROGRESS", payload: msg }, "*");
+    }
+  });
+} catch (e) {}
