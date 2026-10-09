@@ -30,6 +30,7 @@ export const SCOPED_PATH_PREFIXES: string[] = [
   "/dispatching",  // routes, route info, imports
   "/scheduling",   // schedules, audit logs, notes  (API: /api/schedules)
   "/scorecard",    // all eight scorecard collections + remarks
+  "/driver-rankings", // Driver Performance rankings + team views are site-scoped
   "/dashboard",    // KPI pipelines
   "/hr",           // employees, callouts, timecard audit, tickets
   "/incidents",
