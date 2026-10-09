@@ -527,7 +527,7 @@ export default function EfficiencyPage() {
             const mins = parseTime(raw);
             if (mins !== null) displayVal = fmtTime(mins);
         } else if (field === "driverEfficiency" && raw !== "—") {
-            displayVal = `${raw}%`;
+            displayVal = raw.endsWith("%") ? raw : `${raw}%`;
         }
 
         const isTimeField = field.toLowerCase().includes("time") || field.toLowerCase().includes("delay") || field.toLowerCase().includes("duration") || field.toLowerCase().includes("stem") || field.toLowerCase().includes("stop");
