@@ -77,9 +77,10 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
 
     // sequenceNumber 1 is the warehouse PICK_UP — not a customer stop.
     const firstStop = realStops.find((s: any) => s.sequenceNumber > 1) || null;
-    const lastStop = totalStops > 0
-        ? (realStops.find((s: any) => s.sequenceNumber === totalStops) || realStops[realStops.length - 1] || null)
-        : (realStops[realStops.length - 1] || null);
+    // Sequence 1 is the warehouse pickup, so the page's "stop N" is sequence N+1.
+    // Matching sequenceNumber to totalStops therefore landed one stop early.
+    // The last customer stop is simply the highest real sequence number.
+    const lastStop = realStops.length > 1 ? realStops[realStops.length - 1] : null;
 
     // A stop can hold many tasks (one per package). Use the earliest execution
     // time for the first stop and the latest for the last, not whichever task
