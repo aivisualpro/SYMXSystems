@@ -1,0 +1,10 @@
+{
+  "name": "cdf_complete_site_week_transporter_tracking_unique",
+  "key": { "siteId": 1, "week": 1, "transporterId": 1, "trackingId": 1 },
+  "partialFilterExpression": {
+    "siteId": { "$type": "objectId" },
+    "week": { "$type": "string", "$gt": "" },
+    "transporterId": { "$type": "string", "$gt": "" },
+    "trackingId": { "$type": "string", "$gt": "" }
+  }
+}

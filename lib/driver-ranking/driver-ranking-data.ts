@@ -76,8 +76,7 @@ export async function loadDriverRankingData(siteId: string, input: { week?: stri
   if (!Types.ObjectId.isValid(siteId)) throw new Error("Select one site.");
   const site = new Types.ObjectId(siteId), period = rankingPeriod(input);
   const start = new Date(`${period.startDate}T00:00:00.000Z`), end = new Date(`${period.endDate}T23:59:59.999Z`), week = period.yearWeek;
-  const [employees, routes, routeTypes, writeups, overviewRows, successfulImports, routeWeeks, overviewWeeks] = await Promise.all([
-    Employees.find({ transporterId: { $nin: [null, ""] } }, { firstName: 1, lastName: 1, transporterId: 1, profileImage: 1, primarySiteId: 1, status: 1 }).lean<any[]>(),
+  const [routes, routeTypes, writeups, overviewRows, successfulImports, routeWeeks, overviewWeeks] = await Promise.all([
     Routes.find({ siteId: site, date: { $gte: start, $lte: end } }, { transporterId: 1, date: 1, typeId: 1, routeNumber: 1, routeDuration: 1, driverEfficiency: 1, stopCount: 1, packageCount: 1, stopsRescued: 1, plannedFirstStop: 1, plannedLastStop: 1, actualFirstStop: 1, actualLastStop: 1 }).lean<any[]>(),
     RouteTypes.find({}, { name: 1 }).lean<any[]>(),
     Writeups.find({ siteId: site, incidentDate: { $gte: start, $lte: end } }, { employeeId: 1, transporterId: 1, incidentDate: 1, categoryLabel: 1, status: 1 }).lean<any[]>(),
@@ -85,6 +84,16 @@ export async function loadDriverRankingData(siteId: string, input: { week?: stri
     week ? AmazonReportImport.find({ siteId: site, week, periodType: "Weekly", reportType: "delivery-excellence", status: "success" }, { _id: 1 }).lean<any[]>() : Promise.resolve([]),
     Routes.distinct("yearWeek", { siteId: site }), WeeklyOverview.distinct("week", { siteId: site }),
   ]);
+  const selectedSiteTransporterIds = [...new Set([
+    ...routes.map(row => tid(row.transporterId)),
+    ...overviewRows.map(row => tid(row.transporterId)),
+  ].filter(Boolean))];
+  const employees = selectedSiteTransporterIds.length
+    ? await Employees.find(
+      { transporterId: { $in: selectedSiteTransporterIds } },
+      { firstName: 1, lastName: 1, transporterId: 1, profileImage: 1, primarySiteId: 1, status: 1 },
+    ).lean<any[]>()
+    : [];
   const successfulIds = new Set(successfulImports.map(row => String(row._id)));
   const finalizedOverview = overviewRows.filter(row => Array.isArray(row.sourceImportIds) && row.sourceImportIds.some((id: unknown) => successfulIds.has(String(id))));
   const overviewByDriver = new Map(finalizedOverview.map(row => [tid(row.transporterId), row]));

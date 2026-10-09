@@ -67,25 +67,6 @@ export function PublicDriverPerformancePage({ token, initialData }: { token: str
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const body = document.body;
-    const previous = {
-      height: body.style.height,
-      minHeight: body.style.minHeight,
-      overflowX: body.style.overflowX,
-      overflowY: body.style.overflowY,
-      overscrollBehaviorY: body.style.overscrollBehaviorY,
-    };
-    body.style.height = "auto";
-    body.style.minHeight = "100vh";
-    body.style.overflowX = "hidden";
-    body.style.overflowY = "auto";
-    body.style.overscrollBehaviorY = "auto";
-    return () => {
-      Object.assign(body.style, previous);
-    };
-  }, []);
-
-  useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError("");

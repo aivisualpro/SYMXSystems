@@ -5,7 +5,7 @@ import connectToDatabase from "@/lib/db";
 import SymxAppModule from "@/lib/models/SymxAppModule";
 
 // ── VERSION: bump this whenever DEFAULT_MODULES changes to force a DB reseed ──
-const MODULES_VERSION = 13;
+const MODULES_VERSION = 14;
 
 // Default modules — must match actual routes in /app/(protected)/
 const DEFAULT_MODULES = [
@@ -78,7 +78,7 @@ const DEFAULT_MODULES = [
       { name: "Settings", url: "/admin/writeup-settings" },
     ]
   },
-  { name: "Scorecard", url: "/scorecard", icon: "IconChartBar", order: 8, subModules: [] },
+  { name: "Scorecard", url: "/driver-rankings", icon: "IconChartBar", order: 8, subModules: [] },
 ];
 
 // In-memory cache

@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import { siteOwned } from "./plugins/site-owned";
 import { importProvenance } from "./plugins/import-provenance";
+import canonicalIndex from "./cdf-canonical-index.json";
 
 export interface IScoreCardCDFNegative extends Document {
   sourceImportIds?: mongoose.Types.ObjectId[];
@@ -46,9 +47,14 @@ const ScoreCardCDFNegativeSchema: Schema = new Schema({
   trackingId: { type: String },
   deliveryDate: { type: String },
   employeeId: { type: Schema.Types.ObjectId, ref: 'SymxEmployee' },
-}, { timestamps: true, collection: 'ScoreCard_CDF_Negative' });
+}, { timestamps: true, collection: 'ScoreCard_CDF_Negative', autoIndex: false });
 
-ScoreCardCDFNegativeSchema.index({ week: 1, deliveryAssociate: 1, trackingId: 1 }, { unique: true });
+ScoreCardCDFNegativeSchema.index(canonicalIndex.key as Record<string, 1>, {
+  name: canonicalIndex.name,
+  unique: true,
+  partialFilterExpression: canonicalIndex.partialFilterExpression,
+  collation: { locale: "simple" },
+});
 
 // ── Multi-site ──
 // Station that owns these records. Immutable: a later transfer does
