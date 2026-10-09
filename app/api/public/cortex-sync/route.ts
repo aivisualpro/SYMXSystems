@@ -75,7 +75,14 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
         .sort((a: any, b: any) => a.sequenceNumber - b.sequenceNumber);
 
     // sequenceNumber 1 is the warehouse PICK_UP — not a customer stop.
-    const customerStops = realStops.filter((s: any) => s.sequenceNumber > 1);
+    // The trailing RETURN / BACK_TO_ORIGIN entry sometimes still carries the
+    // route code (not null) but has no planned time and only RETURN tasks —
+    // that is not a customer stop either.
+    const isReturnOnly = (s: any) => {
+        const tasks: any[] = Array.isArray(s?.tasks) ? s.tasks : [];
+        return tasks.length > 0 && tasks.every((t: any) => /RETURN|BACK_TO_ORIGIN/i.test(String(t?.taskType || "")));
+    };
+    const customerStops = realStops.filter((s: any) => s.sequenceNumber > 1 && !isReturnOnly(s));
 
     // PLANNED first/last follow the planned route order (sequence): the page's
     // "stop N" is sequence N+1 because sequence 1 is the pickup.
@@ -107,6 +114,18 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
     if (plannedLast) fields.plannedLastStop = plannedLast;
     const actualLast = epochToClockTime(lastTaskActual);
     if (actualLast) fields.actualLastStop = actualLast;
+
+    // Cortex reports an outbound stem of 0 for some drivers (e.g. several routes
+    // in one block). The stem is simply departure -> first delivery, so derive it.
+    if (!fields.actualOutboundStem && firstTaskActual && td.actualDepartureTime) {
+        const depMs = Number(td.actualDepartureTime);
+        const depSec = depMs >= 1e14 ? depMs / 1e6 : depMs >= 1e11 ? depMs / 1e3 : depMs;
+        const diffMs = (firstTaskActual - depSec) * 1000;
+        if (diffMs > 0 && diffMs < 6 * 3600 * 1000) {
+            const stem = durationMsToHMM(diffMs);
+            if (stem) fields.actualOutboundStem = stem;
+        }
+    }
 
     // Amazon's own "last stop" time (what the driver list shows as "Last:
     // Delivery at …"). Preferred over the stop-by-stop calculation when present.

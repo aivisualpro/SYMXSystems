@@ -8,6 +8,21 @@
 // ══════════════════════════════════════════════════════════════
 
 (function () {
+
+  // Auto-visit tabs run in the background; make the page believe it is visible
+  // so Cortex doesn't pause its data requests.
+  try {
+    const isVisit = /[?&]symx_visit=1/.test(location.search) || sessionStorage.getItem("symx_visit") === "1";
+    if (isVisit) {
+      sessionStorage.setItem("symx_visit", "1");
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      document.hasFocus = () => true;
+      window.addEventListener("visibilitychange", (e) => e.stopImmediatePropagation(), true);
+      document.addEventListener("visibilitychange", (e) => e.stopImmediatePropagation(), true);
+      console.log("[SYMX visit] background capture tab");
+    }
+  } catch (e) {}
   "use strict";
 
   // ── Intercept XHR to capture route-summaries API ──
@@ -201,6 +216,38 @@
     renderPanel();
   });
 
+  // Walk through each driver inside this tab using Cortex's own client-side
+  // navigation. Cortex's page then loads (and signs) the itinerary request
+  // itself and the normal capture + sync runs.
+  async function runInPageVisit(ids) {
+    if (visitState.running || !ids.length) return;
+    const sa = lastCapturedServiceArea || new URL(location.href).searchParams.get("serviceAreaId") || "";
+    const day = lastCapturedApiDate || businessDateString();
+    const origin = location.pathname + location.search;
+    visitState = { running: true, done: 0, total: ids.length, cancel: false };
+    renderPanel();
+    for (const id of ids) {
+      if (visitState.cancel) break;
+      const before = captureLog.get(id);
+      const beforeAt = before && before.full ? before.at : 0;
+      history.pushState({}, "", `/operations/execution/itineraries/${id}/documentType/Itinerary?provider=ALL_DRIVERS&selectedDay=${day}&serviceAreaId=${sa}`);
+      window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
+      const t0 = Date.now();
+      // wait until this itinerary has been captured (fresh), max 15s
+      while (Date.now() - t0 < 15000) {
+        await new Promise((r) => setTimeout(r, 300));
+        const rec = captureLog.get(id);
+        if (rec && rec.full && rec.at > beforeAt && rec.note !== undefined) break;
+      }
+      visitState.done++;
+      renderPanel();
+    }
+    history.pushState({}, "", origin);
+    window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
+    visitState = { running: false, done: visitState.done, total: ids.length };
+    renderPanel();
+  }
+
   function renderPanel() {
     if (!document.body) return;
     let panel = document.getElementById("symx-capture-panel");
@@ -232,20 +279,14 @@
     btn.style.cssText = "width:100%;padding:6px;border:0;border-radius:8px;font-weight:700;cursor:pointer;color:#fff;background:" + (visitState.running ? "#6b7280" : "#ea580c") + ";";
     if (visitState.running) {
       btn.textContent = `Visiting ${visitState.done}/${visitState.total}… (click to stop)`;
-      btn.addEventListener("click", () => window.postMessage({ source: "SYMX_CONTENT", type: "VISIT_CANCEL_REQUEST", payload: {} }, "*"));
+      btn.addEventListener("click", () => { visitState.cancel = true; });
     } else if (todo.length === 0) {
       btn.textContent = "All drivers fully captured";
       btn.disabled = true; btn.style.background = "#16a34a"; btn.style.cursor = "default";
     } else {
       btn.textContent = `Capture ${todo.length} remaining (auto-visit)`;
       btn.addEventListener("click", () => {
-        window.postMessage({ source: "SYMX_CONTENT", type: "VISIT_REQUEST", payload: {
-          ids: todo.map((x) => x.id),
-          date: lastCapturedApiDate || businessDateString(),
-          serviceAreaId: lastCapturedServiceArea || "",
-        } }, "*");
-        visitState = { running: true, done: 0, total: todo.length };
-        renderPanel();
+        runInPageVisit(todo.map((x) => x.id));
       });
     }
     bar.appendChild(btn);

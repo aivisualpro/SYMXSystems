@@ -141,7 +141,7 @@ async function runVisit(originTabId, ids, date, serviceAreaId) {
     for (const id of ids) {
       if (visit.cancel) break;
       notifyVisit(originTabId);
-      const url = `https://logistics.amazon.com/operations/execution/itineraries/${encodeURIComponent(id)}/documentType/Itinerary?provider=ALL_DRIVERS&selectedDay=${encodeURIComponent(date)}&serviceAreaId=${encodeURIComponent(serviceAreaId)}`;
+      const url = `https://logistics.amazon.com/operations/execution/itineraries/${encodeURIComponent(id)}/documentType/Itinerary?provider=ALL_DRIVERS&selectedDay=${encodeURIComponent(date)}&serviceAreaId=${encodeURIComponent(serviceAreaId)}&symx_visit=1`;
       await chrome.tabs.update(tab.id, { url });
       await new Promise((res) => { visit.resolve = res; setTimeout(res, 25000); });
       visit.resolve = null;
