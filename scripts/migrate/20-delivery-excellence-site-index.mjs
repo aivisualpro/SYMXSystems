@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { MongoClient } from "mongodb";
+import { createHash } from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 import { loadEnv, resolveTargetDb, connectWithDiagnostics } from "../lib/target-db.mjs";
@@ -10,14 +11,15 @@ const env = loadEnv(rootDir);
 const { uri } = resolveTargetDb(env, { scriptName: "20-delivery-excellence-site-index" });
 const collectionName = "ScoreCard_DeliveryExcellence";
 const legacyKey = { week: 1, transporterId: 1 };
+const legacyName = "week_1_transporterId_1";
 const canonicalKey = { siteId: 1, week: 1, transporterId: 1 };
 const canonicalName = "siteId_1_week_1_transporterId_1";
 const sameKey = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
 async function inspect(collection) {
-  const [indexes, total, incomplete, duplicates] = await Promise.all([
+  const [indexes, documents, incomplete, duplicates] = await Promise.all([
     collection.indexes(),
-    collection.countDocuments({}),
+    collection.find({}).sort({ _id: 1 }).toArray(),
     collection.countDocuments({ $or: [
       { siteId: { $exists: false } }, { siteId: null },
       { week: { $exists: false } }, { week: null }, { week: "" },
@@ -29,7 +31,8 @@ async function inspect(collection) {
       { $match: { count: { $gt: 1 } } },
     ]).toArray(),
   ]);
-  return { indexes, total, incomplete, duplicates };
+  const fingerprint = createHash("sha256").update(JSON.stringify(documents)).digest("hex");
+  return { indexes, total: documents.length, fingerprint, incomplete, duplicates };
 }
 
 async function main() {
@@ -42,7 +45,10 @@ async function main() {
     if (before.incomplete || before.duplicates.length) throw new Error("Preflight failed; no indexes were changed.");
 
     const canonical = before.indexes.find(index => index.unique && sameKey(index.key, canonicalKey));
-    const legacy = before.indexes.find(index => index.unique && sameKey(index.key, legacyKey));
+    const legacy = before.indexes.find(index => index.name === legacyName);
+    if (legacy && (!legacy.unique || !sameKey(legacy.key, legacyKey))) {
+      throw new Error(`${legacyName} exists with an unexpected definition; no indexes were changed.`);
+    }
     if (dryRun) {
       console.log(`Would create canonical index: ${!canonical}`);
       console.log(`Would remove legacy index: ${Boolean(legacy)}`);
@@ -56,8 +62,9 @@ async function main() {
 
     const after = await inspect(collection);
     if (!after.indexes.some(index => index.unique && sameKey(index.key, canonicalKey))) throw new Error("Canonical index missing after migration.");
-    if (after.indexes.some(index => index.unique && sameKey(index.key, legacyKey))) throw new Error("Legacy index remains after migration.");
+    if (after.indexes.some(index => index.name === legacyName)) throw new Error("Legacy index remains after migration.");
     if (after.total !== before.total) throw new Error("Document count changed unexpectedly.");
+    if (after.fingerprint !== before.fingerprint) throw new Error("Document contents changed unexpectedly.");
     console.log(`Verified ${canonicalName}; documents modified: 0.`);
   } finally {
     await client.close();

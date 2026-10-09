@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import connectToDatabase from "@/lib/db";
 import { requirePermission } from "@/lib/auth/require-permission";
-import { getRequestScope } from "@/lib/scoped-query";
-import { importWeeklyScorecard, previewWeeklyScorecard } from "@/lib/imports/weekly-scorecard";
+import { getRequestScope, resolveWriteSiteId } from "@/lib/scoped-query";
+import { detectWeeklyScorecardSite, importWeeklyScorecard, inspectWeeklyScorecardHistory, parseWeeklyScorecardFilenameSite, previewWeeklyScorecard } from "@/lib/imports/weekly-scorecard";
 import Site from "@/lib/models/Site";
 
 const rowSchema = z.record(z.string(), z.unknown());
@@ -15,6 +15,8 @@ const requestSchema = z.object({
   rows: z.array(rowSchema).min(1).max(1000),
   fileName: z.string().min(1).max(255),
   fileHash: z.string().regex(/^[a-f0-9]{64}$/),
+  targetSiteId: z.string().optional(),
+  confirmWeekUpdate: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -30,18 +32,40 @@ export async function POST(request: NextRequest) {
     const scope = await getRequestScope();
     if (scope.activeSiteIds.length !== 1) return NextResponse.json({ error: "Select one site before importing." }, { status: 400 });
     const input = parsed.data;
+    const sites = await Site.find({}, { code: 1, name: 1 }).lean<any[]>();
+    const siteOptions = sites.map(site => ({ id: String(site._id), code: String(site.code || "").toUpperCase() }));
+    const selectedSite = siteOptions.find(site => site.id === scope.activeSiteIds[0]);
+    const filenameSiteCode = parseWeeklyScorecardFilenameSite(input.fileName);
+    const detectedSite = detectWeeklyScorecardSite(input.fileName, input.rows, siteOptions);
+    if (filenameSiteCode && !detectedSite) {
+      return NextResponse.json({ error: `The file belongs to ${filenameSiteCode}, but that station is not configured.` }, { status: 409 });
+    }
+    const targetSiteId = input.targetSiteId || detectedSite?.id || scope.activeSiteIds[0];
+    const writeSiteId = resolveWriteSiteId(scope, targetSiteId);
+    if (!writeSiteId) return NextResponse.json({ error: "You do not have access to the detected station." }, { status: 403 });
+    if (writeSiteId !== scope.activeSiteIds[0] && detectedSite?.id !== writeSiteId) {
+      return NextResponse.json({ error: "The file does not identify the requested station." }, { status: 409 });
+    }
+    if (detectedSite && detectedSite.id !== writeSiteId) {
+      return NextResponse.json({ error: `This file belongs to ${detectedSite.code} and cannot be imported into another station.` }, { status: 409 });
+    }
     if (input.action === "preview") {
-      const preview = await previewWeeklyScorecard(scope.activeSiteIds[0], input.rows, input.week);
-      const site = await Site.findById(scope.activeSiteIds[0], { code: 1, name: 1 }).lean<any>();
+      const preview = await previewWeeklyScorecard(writeSiteId, input.rows, input.week);
+      const history = preview.errors.length ? { exactDuplicate: false, sameWeekDifferentFile: false } : await inspectWeeklyScorecardHistory(writeSiteId, preview.week, input.fileHash);
+      const site = sites.find(candidate => String(candidate._id) === writeSiteId);
       return NextResponse.json({
         reportLabel: "Weekly Driver Scorecard", periodType: "Weekly", site: site?.code || site?.name || "Selected site", week: preview.week,
+        selectedSite: selectedSite?.code || "Selected site", targetSiteId: writeSiteId,
+        wrongStation: !!detectedSite && detectedSite.id !== scope.activeSiteIds[0],
+        exactDuplicate: history.exactDuplicate, sameWeekDifferentFile: history.sameWeekDifferentFile,
         rows: preview.rows.length, matchedDrivers: preview.matchedDrivers, unmatchedDrivers: preview.unmatchedDrivers,
         newCount: preview.newCount, updateCount: preview.updateCount, errors: preview.errors,
       }, { status: preview.errors.length ? 400 : 200 });
     }
     const result = await importWeeklyScorecard({
-      siteId: scope.activeSiteIds[0], rows: input.rows, week: input.week, fileName: input.fileName, fileHash: input.fileHash,
+      siteId: writeSiteId, rows: input.rows, week: input.week, fileName: input.fileName, fileHash: input.fileHash,
       importedBy: String(session.id), importedByName: session.name || session.email || undefined,
+      confirmWeekUpdate: input.confirmWeekUpdate,
     });
     return NextResponse.json({ success: true, ...result });
   } catch (error: any) {
