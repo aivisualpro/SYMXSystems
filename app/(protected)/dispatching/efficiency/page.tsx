@@ -167,6 +167,8 @@ interface RouteRow {
     cortexConflicts?: { field: string; cortexValue: string; currentValue: string; detectedAt: string }[];
 }
 
+const TIME_OF_DAY = new Set(["actualDepartureTime", "plannedFirstStop", "actualFirstStop", "plannedLastStop", "actualLastStop", "deliveryCompletionTime", "appSignIn", "plannedEndTime"]);
+
 type SortKey = typeof COLUMNS[number]["key"];
 
 export default function EfficiencyPage() {
@@ -202,18 +204,28 @@ export default function EfficiencyPage() {
     }, [routeTypeIdMap, routeTypeNameMap]);
 
     // ── Parse Smart Time ──
-    const parseSmartTime = (val: string) => {
+    // Time entry. Honors an explicit "a"/"p" ("1:05 PM", "105p"). With no
+    // AM/PM typed, a time-of-day that would land well before the route's wave
+    // ("105" on an 11:30 wave) is read as PM instead of silently saving 1:05 AM.
+    const parseSmartTime = (val: string, waveTime?: string, timeOfDay = false) => {
         if (!val) return "";
+        const lower = val.toLowerCase();
+        const hasP = /p/.test(lower), hasA = /a/.test(lower);
         let clean = val.replace(/[^\d]/g, "");
+        if (clean.length === 1 || clean.length === 2) clean = `${clean.padStart(2, "0")}00`;
         if (clean.length === 3) clean = `0${clean}`;
-        if (clean.length === 4) {
-            let h = parseInt(clean.slice(0, 2));
-            let m = parseInt(clean.slice(2, 4));
-            if (h > 23) h = 23;
-            if (m > 59) m = 59;
-            return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+        if (clean.length !== 4) return val;
+        let h = parseInt(clean.slice(0, 2));
+        let m = parseInt(clean.slice(2, 4));
+        if (h > 23) h = 23;
+        if (m > 59) m = 59;
+        if (hasP && h < 12) h += 12;
+        else if (hasA && h === 12) h = 0;
+        else if (!hasP && !hasA && timeOfDay && h < 12) {
+            const waveM = parseTime(waveTime || "");
+            if (waveM !== null && h * 60 + m < waveM - 60 && (h + 12) * 60 + m <= 23 * 60 + 59) h += 12;
         }
-        return val;
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
     };
 
     // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
@@ -534,7 +546,7 @@ export default function EfficiencyPage() {
         const isNumeric = ["stopCount", "stopsPerHour", "stopsRescued", "driverEfficiency"].includes(field);
         const isDelayField = field.toLowerCase().includes("delay");
 
-        const handleInputKey = (val: string) => isTimeField ? parseSmartTime(val) : val;
+        const handleInputKey = (val: string) => isTimeField ? parseSmartTime(val, row.waveTime, TIME_OF_DAY.has(field)) : val;
 
         let customBg = "text-foreground";
         let Icon = null;
@@ -820,7 +832,7 @@ export default function EfficiencyPage() {
                                                             }}
                                                             onBlur={() => {
                                                                 if (isTimeField) {
-                                                                    setQuickEditForm(prev => ({ ...prev, [f.key]: parseSmartTime((prev as any)[f.key] || "") }))
+                                                                    setQuickEditForm(prev => ({ ...prev, [f.key]: parseSmartTime((prev as any)[f.key] || "", quickEditRow?.waveTime, TIME_OF_DAY.has(f.key)) }))
                                                                 }
                                                             }}
                                                             className="h-9 shadow-sm" placeholder="—"
