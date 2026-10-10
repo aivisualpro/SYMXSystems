@@ -28,6 +28,7 @@ export interface ISYMXRoute extends Document {
     waveTime: string;            // time "2:00 PM"
     pad: string;
     wst: string;
+    amazonServiceType?: string;  // original Cortex serviceTypeName (wst holds the translated SYMX value)
     wstDuration: number;
     wstRevenue: number;          // currency $
     notes: string;
@@ -135,6 +136,7 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
         waveTime: { type: String, default: "" },
         pad: { type: String, default: "" },
         wst: { type: String, default: "" },
+        amazonServiceType: { type: String, default: "" },
         wstDuration: { type: Number, default: 0 },
         wstRevenue: { type: Number, default: 0 },
         notes: { type: String, default: "" },

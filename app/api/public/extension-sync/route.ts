@@ -323,7 +323,7 @@ export async function POST(req: NextRequest) {
         const amazonServiceTypeToWst = new Map<string, string>();
         wstOpts.forEach((opt: any) => {
             if (opt.amazonServiceType && opt.wst) {
-                amazonServiceTypeToWst.set(opt.amazonServiceType.trim(), opt.wst.trim());
+                amazonServiceTypeToWst.set(opt.amazonServiceType.trim().toLowerCase(), opt.wst.trim());
             }
         });
 
@@ -508,8 +508,9 @@ export async function POST(req: NextRequest) {
             // ── Map Amazon serviceTypeName to internal WST via DB config ──
             const serviceTypeName = route.serviceTypeName || raw.serviceTypeName;
             if (serviceTypeName) {
-                const mappedWst = amazonServiceTypeToWst.get(serviceTypeName.trim());
+                const mappedWst = amazonServiceTypeToWst.get(serviceTypeName.trim().toLowerCase());
                 row.wst = mappedWst || serviceTypeName;
+                row.amazonServiceType = serviceTypeName.trim();
             }
 
             // ── Deep search for blockDurationInMinutes anywhere in the payload ──
@@ -617,6 +618,7 @@ export async function POST(req: NextRequest) {
                 }
 
                 if (row.wst) syncFields.wst = row.wst;
+                if (row.amazonServiceType) syncFields.amazonServiceType = row.amazonServiceType;
                 if (row.wstDuration) syncFields.wstDuration = Number(row.wstDuration) || 0;
                 if (matchedPad) syncFields.pad = matchedPad;
 

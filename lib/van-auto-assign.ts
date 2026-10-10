@@ -47,7 +47,7 @@ import RouteType from "./models/RouteType";
 import { toPacificDate } from "@/app/(protected)/dispatching/routes/_components/routes-utils";
 
 const NEW_HIRE_WINDOW_DAYS = 90;
-const RECENT_VAN_WINDOW_DAYS = 7;
+const RECENT_VAN_WINDOW_DAYS = 45;
 
 // The only two schedule types a van actually needs to be assigned for.
 // Everything else (Crash, Fleet, Pending ECP, Close, Open, TCO, Trainer,
@@ -66,13 +66,27 @@ const SIZE_RANK: Record<string, number> = {
   XXL: 5,
 };
 
-function sizeToken(serviceType: string): string {
-  const parts = (serviceType || "").trim().toUpperCase().split(/\s+/).filter(Boolean);
-  return parts[parts.length - 1] || "";
+/** Parse a size rank from either a SYMX WST ("SP L"), a Cortex name
+ *  ("Standard Parcel - Large Van") or a van serviceType. null = no size. */
+function parseSize(text: string): number | null {
+  const t = (text || "").trim().toLowerCase();
+  if (!t) return null;
+  if (/extra[\s-]*large|\bxl\b|\bsp\s*xl\b/.test(t)) return 4;
+  if (/\bxxl\b/.test(t)) return 5;
+  if (/\blarge\b|\bl\b/.test(t)) return 3;
+  if (/medium|\bmed\b|\bm\b/.test(t)) return 2;
+  if (/small|\bsm\b|\bs\b/.test(t)) return 1;
+  return null;
 }
 
 function sizeRank(serviceType: string): number {
-  return SIZE_RANK[sizeToken(serviceType)] ?? 3;
+  return parseSize(serviceType) ?? 3;
+}
+
+/** Closest size first (exact, then one step smaller, then one step larger…). */
+function sizeDistance(vanType: string, need: number): number {
+  const d = sizeRank(vanType) - need;
+  return Math.abs(d) * 2 + (d > 0 ? 1 : 0);
 }
 
 function hasDashcam(v: { dashcam?: string }): boolean {
@@ -181,7 +195,7 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
     if (!vanName) return null;
     const v = vehicleByName.get(vanName);
     if (!v || usedToday.has(v.vehicleName)) return null;
-    if (requiredType && (v.serviceType || "").trim().toLowerCase() !== requiredType) return null;
+    // Any size is acceptable for a familiar van (smaller or larger than the WST).
     return v;
   };
 
@@ -210,7 +224,7 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
   const isFlexibleRow = (r: any): boolean => {
     const typeName = (typeIdToName.get(String(r.typeId || "")) || "").toLowerCase();
     const wst = (r.wst || "").trim();
-    return typeName === "training otr" || wst === "" || /nursery/i.test(wst);
+    return typeName === "training otr" || wst === "" || /nursery/i.test(wst) || parseSize(wst) === null;
   };
   const nonFlexible = unassigned.filter((r) => !isFlexibleRow(r));
   const flexible = unassigned.filter(isFlexibleRow);
@@ -262,9 +276,10 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
       continue;
     }
 
-    let candidates = vehicles.filter(
-      (v) => !usedToday.has(v.vehicleName) && (v.serviceType || "").trim().toLowerCase() === requiredType
-    );
+    const need = parseSize(route.wst) ?? 3;
+    let candidates = vehicles
+      .filter((v) => !usedToday.has(v.vehicleName))
+      .sort((x, y) => sizeDistance(x.serviceType, need) - sizeDistance(y.serviceType, need));
 
     if (candidates.length === 0) {
       result.flaggedCount++;
@@ -272,7 +287,7 @@ export async function autoAssignVansForDay(siteId: string, dateStr: string): Pro
         transporterId: route.transporterId,
         employeeName: employeeName(route),
         wst: route.wst || "",
-        reason: `No available "${route.wst}" van at this station`,
+        reason: "No unassigned active van left at this station",
       });
       continue;
     }
