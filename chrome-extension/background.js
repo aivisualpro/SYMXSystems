@@ -236,8 +236,12 @@ async function runScheduled(final, slot) {
   running = true;
   const { date } = pacificNow();
   const log = [];
+  await chrome.storage.local.set({ lastRun: { at: new Date().toISOString(), log: ["starting…"], running: true } });
   try {
-    const cfg = await fetch(`${SYMX_API_BASE}/api/public/extension-config`, { headers: { "x-extension-key": SYMX_API_KEY } }).then((r) => r.json());
+    const cfgRes = await fetch(`${SYMX_API_BASE}/api/public/extension-config`, { headers: { "x-extension-key": SYMX_API_KEY } });
+    const cfg = await cfgRes.json().catch(() => ({}));
+    if (!cfgRes.ok || !Array.isArray(cfg.stations)) log.push(`config failed (HTTP ${cfgRes.status}) — is the latest version deployed?`);
+    else if (cfg.stations.length === 0) log.push("no active stations returned");
     for (const st of cfg.stations || []) {
       if (!st.serviceAreaId) { log.push(`${st.code}: skipped (no Amazon service area)`); continue; }
       let note = "timeout";
@@ -277,14 +281,23 @@ async function runScheduled(final, slot) {
 let cdfWaiter = null;
 let cdfRunning = false;
 async function runCdfScheduled() {
-  if (cdfRunning || running) return;
+  if (cdfRunning || running) {
+    chrome.storage.local.set({ lastCdfRun: { at: new Date().toISOString(), log: [cdfRunning ? "already running" : "a capture run is in progress"], running: true } });
+    return;
+  }
   cdfRunning = true;
   const log = [];
+  const status = (extra) => chrome.storage.local.set({ lastCdfRun: Object.assign({ at: new Date().toISOString(), log: log.slice(), running: true }, extra || {}) });
+  await status();
   try {
     const { date } = pacificNow();
     const y = new Date(date + "T12:00:00Z"); y.setUTCDate(y.getUTCDate() - 1);
     const to = y.toISOString().slice(0, 10);
-    const cfg = await fetch(`${SYMX_API_BASE}/api/public/extension-config`, { headers: { "x-extension-key": SYMX_API_KEY } }).then((r) => r.json());
+    const cfgRes = await fetch(`${SYMX_API_BASE}/api/public/extension-config`, { headers: { "x-extension-key": SYMX_API_KEY } });
+    const cfg = await cfgRes.json().catch(() => ({}));
+    if (!cfgRes.ok || !Array.isArray(cfg.stations)) log.push(`config failed (HTTP ${cfgRes.status}) — is the latest version deployed?`);
+    else if (cfg.stations.length === 0) log.push("no active stations returned");
+    await status();
     for (const st of cfg.stations || []) {
       let win = null, note = "timeout";
       try {
@@ -296,6 +309,7 @@ async function runCdfScheduled() {
       cdfWaiter = null;
       if (win) chrome.windows.remove(win.id).catch(() => {});
       log.push(`${st.code}: ${note}`);
+      await status();
     }
   } catch (e) { log.push("failed: " + e.message); }
   await chrome.storage.local.set({ lastCdfRun: { at: new Date().toISOString(), log } });

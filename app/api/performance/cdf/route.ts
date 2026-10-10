@@ -2,7 +2,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { getRequestScope, siteFilter } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, orgWide } from "@/lib/scoped-query";
 import CdfFeedback from "@/lib/models/CdfFeedback";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 
@@ -36,14 +36,24 @@ export async function GET(req: NextRequest) {
         const items = await CdfFeedback.find({ ...S, deliveryDate: { $gte: since } }).sort({ deliveryDate: -1, deliveredAt: -1 }).lean() as any[];
 
         const tids = [...new Set(items.map((i) => i.transporterId).filter(Boolean))];
-        const todayRoutes = tids.length
-            ? await SYMXRoute.find(
-                { ...S, date: new Date(`${today}T00:00:00.000Z`), transporterId: { $in: tids } },
-                { transporterId: 1, type: 1, routeNumber: 1, waveTime: 1, attendance: 1 }
-            ).lean() as any[]
-            : [];
+        const dayStart = new Date(`${today}T00:00:00.000Z`);
+        const dayEnd = new Date(dayStart.getTime() + 86400000);
+        const proj = { transporterId: 1, type: 1, routeNumber: 1, waveTime: 1, attendance: 1, siteId: 1 };
+        const norm = (v: any) => String(v || "").trim().toUpperCase();
+        const wanted = new Set(tids.map(norm));
         const todayBy = new Map<string, any>();
-        todayRoutes.forEach((r) => todayBy.set(String(r.transporterId).trim().toUpperCase(), r));
+        if (wanted.size) {
+            // Whole day's routes in the selected scope, matched case-insensitively in JS.
+            const scoped = await SYMXRoute.find({ ...S, date: { $gte: dayStart, $lt: dayEnd } }, proj).lean() as any[];
+            scoped.forEach((r) => { const k = norm(r.transporterId); if (wanted.has(k) && !todayBy.has(k)) todayBy.set(k, r); });
+            // Fallback: driver may be scheduled under a different station than the feedback was captured for.
+            const missing = [...wanted].filter((k) => !todayBy.has(k));
+            if (missing.length) {
+                const q = SYMXRoute.find({ date: { $gte: dayStart, $lt: dayEnd } }, proj);
+                const any = await orgWide(q, "match CDF driver to today's route when station differs") .lean() as any[];
+                any.forEach((r) => { const k = norm(r.transporterId); if (missing.includes(k) && !todayBy.has(k)) todayBy.set(k, r); });
+            }
+        }
 
         const counts: Record<string, number> = {};
         items.forEach((i) => { counts[i.transporterId] = (counts[i.transporterId] || 0) + 1; });

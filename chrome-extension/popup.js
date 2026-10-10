@@ -694,6 +694,7 @@ init();
   function ago(iso) { const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 1 ? "just now" : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`; }
   function summarize(run) {
     if (!run) return { text: "never run", cls: "" };
+    if (run.running) return { text: "running…", cls: "ok" };
     const bad = (run.log || []).filter((l) => /timeout|error|failed|no driver/i.test(l)).length;
     return { text: `${ago(run.at)}${bad ? " · " + bad + " issue" + (bad > 1 ? "s" : "") : " · ok"}`, cls: bad ? "warn" : "ok" };
   }
