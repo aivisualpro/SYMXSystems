@@ -22,6 +22,16 @@ export interface MergeResult {
     conflicts: string[];
 }
 
+import { parseTime } from "@/app/(protected)/dispatching/routes/_components/routes-utils";
+
+/** A departure far outside the route's wave (2h before .. 6h after) is not real. */
+function departureImplausible(depStr: any, waveStr: any): boolean {
+    const dep = parseTime(String(depStr || ""));
+    const wave = parseTime(String(waveStr || ""));
+    if (dep === null || wave === null) return false;
+    return dep < wave - 120 || dep > wave + 360;
+}
+
 export function mergeCortexFields(
     existing: any,
     computed: Record<string, string | number>,
@@ -34,6 +44,19 @@ export function mergeCortexFields(
     const setOps: Record<string, any> = {};
     const updated: string[] = [];
     const conflicts: string[] = [];
+
+    // Never write an implausible departure (e.g. a multi-route driver's other
+    // leg, or a wrong-unit timestamp showing as 1:05 AM on an 11:30 wave), and
+    // clear one a previous sync wrote.
+    if ("actualDepartureTime" in computed && departureImplausible(computed.actualDepartureTime, existing.waveTime)) {
+        delete (computed as any).actualDepartureTime;
+    }
+    if (owned.has("actualDepartureTime") && !("actualDepartureTime" in computed) &&
+        departureImplausible(existing.actualDepartureTime, existing.waveTime)) {
+        setOps.actualDepartureTime = "";
+        owned.delete("actualDepartureTime");
+        updated.push("actualDepartureTime");
+    }
 
     for (const field of fields) {
         if (!(field in computed)) continue;
