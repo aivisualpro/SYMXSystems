@@ -672,19 +672,48 @@ function escapeHtml(str) {
 init();
 
 
-// ── Scheduled runs ──
+// ── Automation card ──
 (function () {
   const cb = document.getElementById("schedEnabled");
-  const btn = document.getElementById("runNowBtn");
-  const txt = document.getElementById("lastRunText");
-  if (!cb || !btn) return;
-  chrome.storage.local.get(["schedEnabled", "lastRun"], (r) => {
-    cb.checked = !!r.schedEnabled;
-    if (r.lastRun) txt.textContent = `Last run ${new Date(r.lastRun.at).toLocaleTimeString()}: ${r.lastRun.log.join(" | ")}`;
-  });
-  cb.addEventListener("change", () => chrome.storage.local.set({ schedEnabled: cb.checked }));
-  btn.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "RUN_NOW", final: false });
-    txt.textContent = "Run started — windows will open and close by themselves…";
-  });
+  const runBtn = document.getElementById("runNowBtn");
+  const cdfBtn = document.getElementById("cdfNowBtn");
+  const runChip = document.getElementById("runChip");
+  const cdfChip = document.getElementById("cdfChip");
+  const nextRun = document.getElementById("nextRun");
+  const runLog = document.getElementById("runLog");
+  if (!cb) return;
+  try { document.getElementById("verLabel").textContent = "V." + chrome.runtime.getManifest().version; } catch (e) {}
+
+  const SLOTS = ["08:45", "12:30", "15:00", "18:00", "22:00", "22:30", "23:00"];
+  const LABEL = { "08:45": "feedback pull", "12:30": "capture", "15:00": "capture", "18:00": "capture", "22:00": "close-out", "22:30": "close-out", "23:00": "close-out + summary" };
+  const fmt12 = (hm) => { const [h, m] = hm.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
+  function pacificHM() {
+    const p = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Los_Angeles", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+    return `${p.find((x) => x.type === "hour").value.replace("24", "00")}:${p.find((x) => x.type === "minute").value}`;
+  }
+  function ago(iso) { const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 1 ? "just now" : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`; }
+  function summarize(run) {
+    if (!run) return { text: "never run", cls: "" };
+    const bad = (run.log || []).filter((l) => /timeout|error|failed|no driver/i.test(l)).length;
+    return { text: `${ago(run.at)}${bad ? " · " + bad + " issue" + (bad > 1 ? "s" : "") : " · ok"}`, cls: bad ? "warn" : "ok" };
+  }
+  function render() {
+    chrome.storage.local.get(["schedEnabled", "lastRun", "lastCdfRun"], (r) => {
+      cb.checked = !!r.schedEnabled;
+      const now = pacificHM();
+      const next = SLOTS.find((t) => t > now) || SLOTS[0];
+      nextRun.textContent = r.schedEnabled ? `Next: ${fmt12(next)} PT · ${LABEL[next]}` : "Off — scheduled runs are paused";
+      const a = summarize(r.lastRun), c = summarize(r.lastCdfRun);
+      runChip.textContent = a.text; runChip.className = "chip " + a.cls;
+      cdfChip.textContent = c.text; cdfChip.className = "chip " + c.cls;
+      const lines = [...((r.lastCdfRun && r.lastCdfRun.log) || []).map((l) => "Feedback · " + l), ...((r.lastRun && r.lastRun.log) || []).map((l) => "Capture · " + l)];
+      runLog.textContent = lines.join("\n");
+      runLog.style.display = lines.length ? "block" : "none";
+    });
+  }
+  cb.addEventListener("change", () => chrome.storage.local.set({ schedEnabled: cb.checked }, render));
+  runBtn.addEventListener("click", () => { chrome.runtime.sendMessage({ type: "RUN_NOW", final: false }); runLog.textContent = "Capture started — windows open and close by themselves…"; runLog.style.display = "block"; });
+  cdfBtn.addEventListener("click", () => { chrome.runtime.sendMessage({ type: "CDF_NOW" }); runLog.textContent = "Feedback pull started — windows open and close by themselves…"; runLog.style.display = "block"; });
+  chrome.storage.onChanged.addListener(render);
+  render();
 })();

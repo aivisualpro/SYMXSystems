@@ -54,6 +54,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "GET_STATIONS") {
+    fetch(`${SYMX_API_BASE}/api/public/extension-config`, { headers: { "x-extension-key": SYMX_API_KEY } })
+      .then((r) => r.json())
+      .then((j) => sendResponse(j))
+      .catch((e) => sendResponse({ stations: [], error: e.message }));
+    return true;
+  }
+  if (message.type === "SYNC_CDF") {
+    fetch(`${SYMX_API_BASE}/api/public/cdf-sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-extension-key": SYMX_API_KEY },
+      body: JSON.stringify(message.data),
+    })
+      .then((r) => r.json())
+      .then((j) => { chrome.storage.local.set({ lastCdf: { at: new Date().toISOString(), result: j } }); sendResponse(j); })
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
   if (message.type === "VISIT_START" && sender.tab) {
     runVisit(sender.tab.id, message.ids || [], message.date, message.serviceAreaId);
     sendResponse({ ok: true });
@@ -164,7 +182,8 @@ async function runVisit(originTabId, ids, date, serviceAreaId) {
 // required), capture every driver, close it, then ask SYMX to post any new
 // issues to that station's Slack channel. Meant for an always-on computer.
 // ══════════════════════════════════════════════════════════════
-const SCHEDULE_TIMES = ["12:30", "15:00", "18:00", "22:00", "22:30", "23:00"]; // Pacific; 22:00+ also checks returns/logouts; last = end of day
+const CDF_TIME = "08:45"; // daily Customer Delivery Feedback pull (data trails ~1 day)
+const SCHEDULE_TIMES = ["08:45", "12:30", "15:00", "18:00", "22:00", "22:30", "23:00"]; // Pacific; 22:00+ also checks returns/logouts; last = end of day
 const RUN_TIMEOUT_MS = 8 * 60 * 1000;
 let runWaiter = null;
 
@@ -190,12 +209,20 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   // keep only today's keys
   Object.keys(schedDone).forEach((k) => { if (!k.startsWith(date)) delete schedDone[k]; });
   await chrome.storage.local.set({ schedDone });
-  runScheduled(hm === SCHEDULE_TIMES[SCHEDULE_TIMES.length - 1], hm);
+  if (hm === CDF_TIME) runCdfScheduled();
+  else runScheduled(hm === SCHEDULE_TIMES[SCHEDULE_TIMES.length - 1], hm);
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "RUN_DONE" && runWaiter && sender.tab && sender.tab.id === runWaiter.tabId) {
     runWaiter.resolve(message.note || "ok");
+  }
+  if (message.type === "SYNC_CDF" && cdfWaiter && sender.tab && sender.tab.id === cdfWaiter.tabId) {
+    setTimeout(() => cdfWaiter && cdfWaiter.resolve("ok"), 1500); // let the sync response land first
+  }
+  if (message.type === "CDF_NOW") {
+    runCdfScheduled();
+    sendResponse({ ok: true });
   }
   if (message.type === "RUN_NOW") {
     runScheduled(!!message.final, pacificNow().hm);
@@ -212,6 +239,7 @@ async function runScheduled(final, slot) {
   try {
     const cfg = await fetch(`${SYMX_API_BASE}/api/public/extension-config`, { headers: { "x-extension-key": SYMX_API_KEY } }).then((r) => r.json());
     for (const st of cfg.stations || []) {
+      if (!st.serviceAreaId) { log.push(`${st.code}: skipped (no Amazon service area)`); continue; }
       let note = "timeout";
       let win = null;
       try {
@@ -241,4 +269,35 @@ async function runScheduled(final, slot) {
   }
   await chrome.storage.local.set({ lastRun: { at: new Date().toISOString(), final, log } });
   running = false;
+}
+
+
+// ── Daily CDF pull: open each station's Customer Delivery Feedback page for
+// yesterday; content.js captures the page's own data request and syncs it.
+let cdfWaiter = null;
+let cdfRunning = false;
+async function runCdfScheduled() {
+  if (cdfRunning || running) return;
+  cdfRunning = true;
+  const log = [];
+  try {
+    const { date } = pacificNow();
+    const y = new Date(date + "T12:00:00Z"); y.setUTCDate(y.getUTCDate() - 1);
+    const to = y.toISOString().slice(0, 10);
+    const cfg = await fetch(`${SYMX_API_BASE}/api/public/extension-config`, { headers: { "x-extension-key": SYMX_API_KEY } }).then((r) => r.json());
+    for (const st of cfg.stations || []) {
+      let win = null, note = "timeout";
+      try {
+        const url = `https://logistics.amazon.com/performance?pageId=dsp_customer_delivery_feedback_negative&navMenuVariant=external&station=${encodeURIComponent(st.code)}&tabId=customer-delivery-feedback-daily-tab&timeFrame=Daily&to=${to}&symx_cdf=1`;
+        win = await chrome.windows.create({ url, type: "normal", focused: false, width: 1280, height: 800 });
+        const tabId = win.tabs && win.tabs[0] && win.tabs[0].id;
+        note = await new Promise((resolve) => { cdfWaiter = { tabId, resolve }; setTimeout(() => resolve("timeout"), 120000); });
+      } catch (e) { note = "error: " + e.message; }
+      cdfWaiter = null;
+      if (win) chrome.windows.remove(win.id).catch(() => {});
+      log.push(`${st.code}: ${note}`);
+    }
+  } catch (e) { log.push("failed: " + e.message); }
+  await chrome.storage.local.set({ lastCdfRun: { at: new Date().toISOString(), log } });
+  cdfRunning = false;
 }

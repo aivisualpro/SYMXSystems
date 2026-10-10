@@ -27,6 +27,7 @@ import {
   IconTarget,
   IconRoute,
   IconClipboardText,
+  IconTrendingUp,
 } from "@tabler/icons-react";
 
 import { NavDocuments } from "@/components/nav-documents";
@@ -74,6 +75,7 @@ const ICON_MAP: Record<string, any> = {
   IconUsers,
   IconRoute,
   IconClipboardText,
+  IconTrendingUp,
 };
 
 const data = {
@@ -203,6 +205,15 @@ const data = {
       url: "/driver-rankings",
       icon: IconTarget,
       subModules: []
+    },
+    {
+      name: "Performance",
+      url: "/performance",
+      icon: IconTrendingUp,
+      subModules: [
+        { name: "Customer Feedback", url: "/performance/cdf" },
+        { name: "Driver Trends", url: "/performance/trends" },
+      ]
     },
   ],
 };

@@ -12,7 +12,7 @@
   // Auto-visit tabs run in the background; make the page believe it is visible
   // so Cortex doesn't pause its data requests.
   try {
-    const isVisit = /[?&]symx_(visit|run)=1/.test(location.search) || sessionStorage.getItem("symx_visit") === "1" || sessionStorage.getItem("symx_run") === "1";
+    const isVisit = /[?&]symx_(visit|run|cdf)=1/.test(location.search) || sessionStorage.getItem("symx_visit") === "1" || sessionStorage.getItem("symx_run") === "1" || /[?&]symx_cdf=1/.test(location.search);
     if (isVisit) {
       sessionStorage.setItem("symx_visit", "1");
       Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
@@ -71,6 +71,13 @@
           const data = JSON.parse(this.responseText);
           processItineraryResponse(data, this._symxUrl);
         }
+        if (
+          this._symxUrl &&
+          typeof this._symxUrl === "string" &&
+          this._symxUrl.includes("dataSetId=da_dsp_daily_cdf_deep_dive")
+        ) {
+          processCdfDeepDive(this._symxUrl, JSON.parse(this.responseText));
+        }
       } catch (e) {
         // Silently ignore parse errors
       }
@@ -95,6 +102,9 @@
       if (/\/execution\/api\/summaries\?/.test(url)) {
         extractApiParams(url);
         processSlimSummaries(await response.clone().json());
+      }
+      if (url.includes("dataSetId=da_dsp_daily_cdf_deep_dive")) {
+        processCdfDeepDive(url, await response.clone().json());
       }
       if (url.includes("/execution/api/itineraries/")) {
         const cloned = response.clone();
@@ -585,6 +595,68 @@
   // constantly, has the real planned totals and the assigned driver, so it
   // fills those gaps (and supplies the route itself when route-summaries
   // hasn't listed it yet). It never overwrites richer data already captured.
+  // ── Customer Delivery Feedback (CDF) capture ──
+  // The performance portal's own request for the CDF deep dive carries every
+  // delivery for the station (positives included). Send the rows to SYMX and
+  // look up, for each negative one, the Cortex itinerary + stop so the app can
+  // link straight to it. Plain same-origin GETs: no signing needed here.
+  let cdfStations = null;
+  window.addEventListener("message", (ev) => {
+    if (ev.source !== window || !ev.data || ev.data.source !== "SYMX_EXTENSION") return;
+    if (ev.data.type === "STATIONS") cdfStations = ev.data.payload;
+    if (ev.data.type === "CDF_RESULT") console.log("[SYMX CDF] sync result", ev.data.payload);
+  });
+  const cdfSent = new Map(); // station|to -> signature already sent
+  async function processCdfDeepDive(url, data) {
+    try {
+      const u = new URL(url, location.origin);
+      const station = (u.searchParams.get("station") || "").toUpperCase();
+      if (!station) return;
+      const rawRows = data && data.tableData && data.tableData.da_dsp_daily_cdf_deep_dive && data.tableData.da_dsp_daily_cdf_deep_dive.rows;
+      if (!Array.isArray(rawRows)) return;
+      const rows = rawRows.map((r) => (typeof r === "string" ? JSON.parse(r) : r));
+      const negative = rows.filter((r) => r.negative_feedback_flag === 1 || r.level_2_negative_feedback_flag === 1);
+      // Per-driver/day response counts (denominator for trend rates).
+      const dayMap = new Map();
+      rows.forEach((r) => {
+        const k = r.transporter_id + "|" + r.delivery_date;
+        const d = dayMap.get(k) || { transporterId: r.transporter_id, driverName: r.da_name || "", date: r.delivery_date, responses: 0, negatives: 0, positives: 0 };
+        d.responses++;
+        if (r.negative_feedback_flag === 1 || r.level_2_negative_feedback_flag === 1) d.negatives++;
+        if (r.was_great === 1) d.positives++;
+        dayMap.set(k, d);
+      });
+      const daily = Array.from(dayMap.values());
+      const sig = station + "|" + rows.length + "|" + negative.map((r) => r.tracking_id).sort().join(",");
+      if (cdfSent.get(station) === sig) return;
+      cdfSent.set(station, sig);
+
+      // Station -> serviceAreaId (needed by the map-details lookup).
+      if (!cdfStations) {
+        window.postMessage({ source: "SYMX_CONTENT", type: "STATIONS_REQUEST" }, "*");
+        for (let i = 0; i < 20 && !cdfStations; i++) await new Promise((r) => setTimeout(r, 250));
+      }
+      const st = ((cdfStations && cdfStations.stations) || []).find((s) => (s.code || "").toUpperCase() === station);
+      const links = {};
+      if (st) {
+        for (const r of negative) {
+          try {
+            const q = new URLSearchParams({ daId: r.transporter_id, deliveryDate: r.delivery_date, serviceAreaId: st.serviceAreaId, trackingId: r.tracking_id });
+            const res = await fetch("/performance/api/v1/getDeliveryMapDetails?" + q.toString(), { credentials: "include" });
+            if (res.ok) {
+              const d = await res.json();
+              if (d && d.itineraryId) links[r.tracking_id] = { itineraryId: d.itineraryId, stopIndex: typeof d.stopIndex === "number" ? d.stopIndex : undefined };
+            }
+          } catch (e) {}
+        }
+      }
+      window.postMessage({ source: "SYMX_CONTENT", type: "CDF_SYNC", payload: { stationCode: station, rows: negative, links, daily } }, "*");
+      console.log("[SYMX CDF]", station, negative.length, "negative of", rows.length, "rows;", Object.keys(links).length, "links");
+    } catch (e) {
+      console.warn("[SYMX CDF] capture failed", e);
+    }
+  }
+
   function processSlimSummaries(data) {
     if (!data) return;
     const slim = Array.isArray(data.routeSummaries) ? data.routeSummaries : [];

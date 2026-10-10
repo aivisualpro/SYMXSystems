@@ -40,6 +40,26 @@ window.addEventListener("message", (event) => {
     }
   }
 
+  if (type === "STATIONS_REQUEST") {
+    if (!isExtensionContextValid()) return;
+    try {
+      chrome.runtime.sendMessage({ type: "GET_STATIONS" }, (resp) => {
+        window.postMessage({ source: "SYMX_EXTENSION", type: "STATIONS", payload: resp }, "*");
+      });
+    } catch (e) {}
+    return;
+  }
+
+  if (type === "CDF_SYNC") {
+    if (!isExtensionContextValid()) return;
+    try {
+      chrome.runtime.sendMessage({ type: "SYNC_CDF", data: payload }, (resp) => {
+        window.postMessage({ source: "SYMX_EXTENSION", type: "CDF_RESULT", payload: resp }, "*");
+      });
+    } catch (e) {}
+    return;
+  }
+
   if (type === "RUN_DONE") {
     if (!isExtensionContextValid()) return;
     try { chrome.runtime.sendMessage({ type: "RUN_DONE", note: payload && payload.note }); } catch (e) {}

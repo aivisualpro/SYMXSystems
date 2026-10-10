@@ -5,7 +5,7 @@ import connectToDatabase from "@/lib/db";
 import SymxAppModule from "@/lib/models/SymxAppModule";
 
 // ── VERSION: bump this whenever DEFAULT_MODULES changes to force a DB reseed ──
-const MODULES_VERSION = 14;
+const MODULES_VERSION = 15;
 
 // Default modules — must match actual routes in /app/(protected)/
 const DEFAULT_MODULES = [
@@ -79,6 +79,14 @@ const DEFAULT_MODULES = [
     ]
   },
   { name: "Scorecard", url: "/driver-rankings", icon: "IconChartBar", order: 8, subModules: [] },
+  // Driver performance beyond the Amazon scorecard: customer feedback (CDF)
+  // queue and per-driver trends / improvement after discussions.
+  {
+    name: "Performance", url: "/performance", icon: "IconTrendingUp", order: 8.5, subModules: [
+      { name: "Customer Feedback", url: "/performance/cdf" },
+      { name: "Driver Trends", url: "/performance/trends" },
+    ]
+  },
 ];
 
 // In-memory cache

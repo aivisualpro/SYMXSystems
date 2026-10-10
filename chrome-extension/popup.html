@@ -23,12 +23,47 @@
         </div>
         <div class="header-text">
           <h1>SYMX Route Fetch</h1>
-          <span class="version">V.1.1.0</span>
+          <span class="version" id="verLabel">V.1.8</span>
         </div>
       </div>
       <div class="status-dot" id="statusDot" title="Checking..."></div>
     </header>
 
+    <!-- ── Automation ── -->
+    <section class="auto-card">
+      <div class="auto-head">
+        <div>
+          <div class="auto-title">Automation</div>
+          <div class="auto-sub" id="nextRun">Off</div>
+        </div>
+        <label class="switch" title="Run captures on schedule (keep Chrome open and signed in)">
+          <input type="checkbox" id="schedEnabled" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="job">
+        <div class="job-main">
+          <div class="job-name">Routes, efficiency &amp; close-out</div>
+          <div class="job-when">12:30 · 3:00 · 6:00 · 10:00 · 10:30 · 11:00 PM</div>
+        </div>
+        <span class="chip" id="runChip">—</span>
+      </div>
+      <div class="job">
+        <div class="job-main">
+          <div class="job-name">Customer feedback (CDF)</div>
+          <div class="job-when">Every morning at 8:45 AM · all stations</div>
+        </div>
+        <span class="chip" id="cdfChip">—</span>
+      </div>
+      <div class="auto-actions">
+        <button class="btn btn-secondary" id="runNowBtn">Run capture now</button>
+        <button class="btn btn-secondary" id="cdfNowBtn">Pull feedback now</button>
+      </div>
+      <div class="run-log" id="runLog"></div>
+    </section>
+
+    <details class="manual" id="manualBox">
+      <summary>Manual capture &amp; sync</summary>
     <!-- ── Date Info (single row) ── -->
     <div class="section" id="pageInfoSection" style="display: none;">
       <div class="info-card" style="width:100%;">
@@ -126,17 +161,9 @@
       <div class="sync-result" id="syncResult"></div>
     </div>
 
+    </details>
+
     <!-- ── Footer ── -->
-    <div id="schedBox" style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.08);font-size:12px;color:#cbd5e1;">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-        <input type="checkbox" id="schedEnabled" />
-        <span>Scheduled runs <span style="opacity:.6">(12:30, 3, 6, 10, 10:30, 11 PM PT)</span></span>
-      </label>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-        <button id="runNowBtn" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;color:inherit;cursor:pointer;">Run now</button>
-        <span id="lastRunText" style="opacity:.7;font-size:11px;"></span>
-      </div>
-    </div>
     <footer class="footer">
       <span>SYMX Systems</span>
       <span class="footer-dot">·</span>
