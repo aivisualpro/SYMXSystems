@@ -120,6 +120,21 @@ describe("private driver performance links", () => {
     expect(page).toContain("min-h-10");
   });
 
+  it("shows driver-friendly weekly focus actions without zero-streak wording", () => {
+    const page = readFileSync("components/driver-ranking/public-driver-performance.tsx", "utf8");
+    expect(page).toContain("What to Work On This Week");
+    expect(page).not.toContain("Fix This Week");
+    expect(page).toContain("Follow customer notes, verify the address, and deliver to the correct location.");
+    expect(page).toContain("Take a clear delivery photo every time. Make sure the package and delivery location are visible.");
+    expect(page).toContain("Verify the address and delivery location before completing the stop.");
+    expect(page).toContain("Reattempt deliveries before returning packages. Contact Dispatch when needed.");
+    expect(page).toContain("Follow the correct customer-unavailable steps. Call, text, and notify Dispatch.");
+    expect(page).toContain("Drive safely and avoid repeat safety violations.");
+    expect(page).toContain("Stay organized and keep a steady pace throughout your route.");
+    expect(page).toContain("Keep a consistent pace while maintaining safety and quality.");
+    expect(page).not.toContain("Opportunity to Start");
+  });
+
   it("keeps the public scorecard scrollable when a Radix scroll lock is present", () => {
     const layout = readFileSync("app/driver-performance/layout.tsx", "utf8");
     const styles = readFileSync("app/driver-performance/driver-performance.css", "utf8");

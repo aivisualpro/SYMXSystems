@@ -10,6 +10,21 @@ type Highlight = { label: string; value: string; detail?: string };
 
 const unavailable = "N/A";
 const qualityLabels = ["CDF", "DSB", "Delivery Completion", "POD", "PSB"];
+const focusActions = [
+  { label: "CDF", matches: ["cdf", "customer feedback"], action: "Follow customer notes, verify the address, and deliver to the correct location." },
+  { label: "POD", matches: ["pod", "photo"], action: "Take a clear delivery photo every time. Make sure the package and delivery location are visible." },
+  { label: "DSB", matches: ["dsb", "delivery success behavior"], action: "Verify the address and delivery location before completing the stop." },
+  { label: "Delivery Completion", matches: ["delivery completion", "dcr"], action: "Reattempt deliveries before returning packages. Contact Dispatch when needed." },
+  { label: "PSB", matches: ["psb", "customer unavailable"], action: "Follow the correct customer-unavailable steps. Call, text, and notify Dispatch." },
+  { label: "Safety", matches: ["safety"], action: "Drive safely and avoid repeat safety violations." },
+  { label: "Efficiency", matches: ["efficiency"], action: "Stay organized and keep a steady pace throughout your route." },
+  { label: "Packages / Day", matches: ["packages / day", "packages per day", "workload"], action: "Keep a consistent pace while maintaining safety and quality." },
+] as const;
+
+function focusAction(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return focusActions.find(item => item.matches.some(match => normalized.includes(match)));
+}
 
 function isUnavailable(value?: string) {
   const normalized = value?.trim().toLowerCase();
@@ -105,16 +120,18 @@ export function PublicDriverPerformancePage({ token, initialData }: { token: str
   const scoreState: PerformanceState = data.summary.status === "Top Performer" ? "top" : data.summary.status === "Focus Area" ? "attention" : data.summary.status === "Building Momentum" ? "good" : "neutral";
   const trendState: PerformanceState = data.summary.trend.startsWith("↑") ? "top" : data.summary.trend.startsWith("↓") ? "attention" : "neutral";
 
-  const detailedIssues: Highlight[] = [...data.qualityDetails.cdf, ...data.qualityDetails.dsb].map(item => ({
-    label: item.friendlyLabel,
-    value: `${item.count} event${item.count === 1 ? "" : "s"}`,
-    detail: item.explanation,
-  }));
-  const focusMetrics: Highlight[] = focusLabels.map(label => {
-    const metric = metrics.get(label);
-    return { label, value: metric?.current ?? "Review", detail: undefined };
-  }).filter(item => !isUnavailable(item.value));
-  const fixThisWeek = [...detailedIssues, ...focusMetrics]
+  const actionableFocusLabels = [
+    ...focusLabels,
+    ...(cdfEvents > 0 ? ["CDF"] : []),
+    ...(dsbEvents > 0 ? ["DSB"] : []),
+  ];
+  const workThisWeek: Highlight[] = actionableFocusLabels.flatMap(label => {
+    const guidance = focusAction(label);
+    if (!guidance) return [];
+    const metric = metrics.get(guidance.label);
+    if (!metric || isUnavailable(metric.current)) return [];
+    return [{ label: guidance.label, value: metric.current, detail: guidance.action }];
+  })
     .filter((item, index, items) => items.findIndex(candidate => candidate.label === item.label) === index)
     .slice(0, 3);
 
@@ -150,11 +167,11 @@ export function PublicDriverPerformancePage({ token, initialData }: { token: str
       <SummaryCard label="Score" value={data.summary.finalScore} state={scoreState} />
       <SummaryCard label="Rank" value={data.summary.overallRank} state={scoreState} />
       <SummaryCard label="Trend" value={trendLabel(data.summary.trend)} state={trendState} />
-      <SummaryCard label="Focus" value={data.summary.mainFocus || "Stay steady"} state={fixThisWeek.length ? "attention" : "top"} />
+      <SummaryCard label="Focus" value={data.summary.mainFocus || "Stay steady"} state={workThisWeek.length ? "attention" : "top"} />
     </div></section>
 
-    <section className="border-t pt-3" aria-labelledby="fix-heading"><h2 id="fix-heading" className={`text-xs font-semibold uppercase ${performanceValueClass.attention}`}>Fix This Week</h2>
-      {fixThisWeek.length ? <div className="mt-1 divide-y">{fixThisWeek.map(item => <HighlightRow key={item.label} item={item} tone="attention" />)}</div> : <p className="mt-2 text-sm text-muted-foreground">No major issues highlighted this week.</p>}
+    <section className="border-t pt-3" aria-labelledby="work-heading"><h2 id="work-heading" className={`text-xs font-semibold uppercase ${performanceValueClass.attention}`}>What to Work On This Week</h2>
+      {workThisWeek.length ? <div className="mt-1 divide-y">{workThisWeek.map(item => <HighlightRow key={item.label} item={item} tone="attention" />)}</div> : <p className="mt-2 text-sm text-muted-foreground">No major issues highlighted this week.</p>}
     </section>
 
     <section className="border-t pt-3" aria-labelledby="good-heading"><h2 id="good-heading" className={`text-xs font-semibold uppercase ${performanceValueClass.top}`}>Doing Well</h2>
@@ -174,7 +191,7 @@ export function PublicDriverPerformancePage({ token, initialData }: { token: str
       </div>
     </section>
 
-    {data.qualityDetails.cdf.length ? <section className="border-t pt-3" aria-labelledby="feedback-heading"><h2 id="feedback-heading" className="text-xs font-semibold uppercase text-muted-foreground">Customer Feedback</h2><div className="mt-1 divide-y">{data.qualityDetails.cdf.map(item => <div key={item.friendlyLabel} className="flex justify-between gap-3 py-2.5"><p className="text-sm font-semibold">{item.friendlyLabel}</p><p className={`text-sm font-semibold ${performanceValueClass.attention}`}>{item.count} event{item.count === 1 ? "" : "s"}</p></div>)}</div></section> : null}
+    {data.qualityDetails.cdf.length ? <section className="border-t pt-3" aria-labelledby="feedback-heading"><h2 id="feedback-heading" className="text-xs font-semibold uppercase text-muted-foreground">Customer Feedback</h2><div className="mt-1 divide-y">{data.qualityDetails.cdf.map(item => <div key={item.friendlyLabel} className="py-2.5"><div className="flex justify-between gap-3"><p className="text-sm font-semibold">{item.friendlyLabel}</p><p className={`text-sm font-semibold ${performanceValueClass.attention}`}>{item.count} event{item.count === 1 ? "" : "s"}</p></div><p className="mt-1 text-sm leading-snug text-muted-foreground">{item.explanation}</p></div>)}</div></section> : null}
 
     <section className="border-t pt-3" aria-labelledby="trend-heading"><h2 id="trend-heading" className="text-xs font-semibold uppercase text-muted-foreground">6-Week Trend</h2><div className="mt-1 h-40"><ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}><LineChart data={data.history} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}><CartesianGrid vertical={false} stroke="currentColor" opacity={0.15}/><XAxis dataKey="week" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} tickFormatter={value => String(value).replace(/^\d{4}-/, "")}/><YAxis width={40} tickLine={false} axisLine={false} tick={{ fontSize: 10 }} tickFormatter={value => `${value}%`} domain={["auto", "auto"]}/><Tooltip content={({ active, payload, label }) => active && payload?.length ? <div className="rounded-lg border border-white/15 bg-[#111] px-3 py-2 text-xs text-white shadow-md"><p>{String(label).replace(/^\d{4}-/, "")}</p><strong>{Number(payload[0].value).toFixed(2)}%</strong></div> : null}/><Line dataKey="finalScore" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false}/></LineChart></ResponsiveContainer></div><div className="mt-1 flex gap-1.5 overflow-x-auto pb-1">{data.history.map(point => <div key={point.week} className="shrink-0 rounded border px-2 py-1 text-center text-xs"><span className="text-muted-foreground">{point.week.replace(/^\d{4}-/, "")}</span> <span className="font-semibold">{point.finalScore.toFixed(0)}%</span></div>)}</div></section>
 
