@@ -5,6 +5,8 @@ import { getSession } from "@/lib/auth";
 import { getRequestScope, siteFilter, orgWide } from "@/lib/scoped-query";
 import CdfFeedback from "@/lib/models/CdfFeedback";
 import SYMXRoute from "@/lib/models/SYMXRoute";
+import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+import RouteType from "@/lib/models/RouteType";
 
 async function guard(level: "view" | "edit") {
     try {
@@ -55,6 +57,29 @@ export async function GET(req: NextRequest) {
             }
         }
 
+        // Fallback: no route row yet (routes are often built late / not at all on
+        // light days) — use the published schedule for today.
+        const schedBy = new Map<string, { working: boolean; type: string }>();
+        {
+            const missing = [...wanted].filter((k) => !todayBy.has(k));
+            if (missing.length) {
+                const rts = await RouteType.find({}, { _id: 1, name: 1 }).lean() as any[];
+                const rtName = new Map(rts.map((r: any) => [String(r._id), String(r.name || "").trim()]));
+                const sched = await SymxEmployeeSchedule.find(
+                    { ...S, date: { $gte: dayStart, $lt: dayEnd } },
+                    { transporterId: 1, typeId: 1, type: 1, status: 1 }
+                ).lean() as any[];
+                sched.forEach((r) => {
+                    const k = norm(r.transporterId);
+                    if (!missing.includes(k) || schedBy.has(k)) return;
+                    const type = rtName.get(String(r.typeId || "")) || String(r.type || "").trim();
+                    const st = String(r.status || "").toLowerCase();
+                    const working = !!type && !NOT_WORKING.has(type.toLowerCase()) && !["off", "call out", "callout"].includes(st);
+                    schedBy.set(k, { working, type });
+                });
+            }
+        }
+
         const counts: Record<string, number> = {};
         items.forEach((i) => { counts[i.transporterId] = (counts[i.transporterId] || 0) + 1; });
 
@@ -70,7 +95,9 @@ export async function GET(req: NextRequest) {
                     _id: String(i._id),
                     siteId: i.siteId ? String(i.siteId) : "",
                     driverCount: counts[i.transporterId] || 1,
-                    today: r ? { working, type, routeNumber: r.routeNumber || "", waveTime: r.waveTime || "", absent } : { working: false, type: "", routeNumber: "", waveTime: "", absent: false },
+                    today: !r && schedBy.has(norm(i.transporterId))
+                        ? { working: schedBy.get(norm(i.transporterId))!.working, type: schedBy.get(norm(i.transporterId))!.type, routeNumber: "", waveTime: "", absent: false }
+                        : r ? { working, type, routeNumber: r.routeNumber || "", waveTime: r.waveTime || "", absent } : { working: false, type: "", routeNumber: "", waveTime: "", absent: false },
                 };
             }),
         });
