@@ -7,6 +7,7 @@ import CdfFeedback from "@/lib/models/CdfFeedback";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import RouteType from "@/lib/models/RouteType";
+import SymxEmployee from "@/lib/models/SymxEmployee";
 
 async function guard(level: "view" | "edit") {
     try {
@@ -37,12 +38,39 @@ export async function GET(req: NextRequest) {
 
         const items = await CdfFeedback.find({ ...S, deliveryDate: { $gte: since } }).sort({ deliveryDate: -1, deliveredAt: -1 }).lean() as any[];
 
-        const tids = [...new Set(items.map((i) => i.transporterId).filter(Boolean))];
+        const norm = (v: any) => String(v || "").trim().toUpperCase();
+        // CDF carries AMAZON's transporter id, which can differ from SYMX's. Resolve
+        // each driver to a SYMX transporterId by first+last name within the station.
+        const nameKey = (site: any, first: string, last: string) => `${String(site)}|${first.trim().toLowerCase()}|${last.trim().toLowerCase()}`;
+        const emps = await orgWide(
+            SymxEmployee.find({}, { transporterId: 1, firstName: 1, lastName: 1, primarySiteId: 1 }),
+            "resolve CDF driver (Amazon id) to SYMX transporterId by name"
+        ).lean() as any[];
+        const empByName = new Map<string, string>();
+        const empByNameAnySite = new Map<string, string>();
+        emps.forEach((e) => {
+            if (!e.transporterId) return;
+            empByName.set(nameKey(e.primarySiteId, e.firstName || "", e.lastName || ""), e.transporterId);
+            const k = `${(e.firstName || "").trim().toLowerCase()}|${(e.lastName || "").trim().toLowerCase()}`;
+            empByNameAnySite.set(k, e.transporterId);
+        });
+        const symxTid = (i: any): string => {
+            const parts = String(i.driverName || "").trim().split(/\s+/).filter(Boolean);
+            if (parts.length >= 2) {
+                const f = parts[0], l = parts[parts.length - 1];
+                return empByName.get(nameKey(i.siteId, f, l)) || empByNameAnySite.get(`${f.toLowerCase()}|${l.toLowerCase()}`) || "";
+            }
+            return "";
+        };
+        // every key a driver might be known by on today's route/schedule
+        const keysFor = (i: any): string[] => [norm(i.transporterId), norm(symxTid(i))].filter(Boolean);
+        const tids = [...new Set(items.flatMap((i) => keysFor(i)))];
         const dayStart = new Date(`${today}T00:00:00.000Z`);
         const dayEnd = new Date(dayStart.getTime() + 86400000);
-        const proj = { transporterId: 1, type: 1, routeNumber: 1, waveTime: 1, attendance: 1, siteId: 1 };
-        const norm = (v: any) => String(v || "").trim().toUpperCase();
+        const proj = { transporterId: 1, typeId: 1, type: 1, routeNumber: 1, waveTime: 1, attendance: 1, siteId: 1 };
         const wanted = new Set(tids.map(norm));
+        const rtAll = await RouteType.find({}, { _id: 1, name: 1 }).lean() as any[];
+        const rtName = new Map(rtAll.map((r: any) => [String(r._id), String(r.name || "").trim()]));
         const todayBy = new Map<string, any>();
         if (wanted.size) {
             // Whole day's routes in the selected scope, matched case-insensitively in JS.
@@ -63,8 +91,6 @@ export async function GET(req: NextRequest) {
         {
             const missing = [...wanted].filter((k) => !todayBy.has(k));
             if (missing.length) {
-                const rts = await RouteType.find({}, { _id: 1, name: 1 }).lean() as any[];
-                const rtName = new Map(rts.map((r: any) => [String(r._id), String(r.name || "").trim()]));
                 const sched = await SymxEmployeeSchedule.find(
                     { ...S, date: { $gte: dayStart, $lt: dayEnd } },
                     { transporterId: 1, typeId: 1, type: 1, status: 1 }
@@ -86,17 +112,19 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
             today,
             items: items.map((i) => {
-                const r = todayBy.get(String(i.transporterId).trim().toUpperCase());
-                const type = String(r?.type || "").trim();
+                const keys = keysFor(i);
+                const r = keys.map((k) => todayBy.get(k)).find(Boolean);
+                const sch = keys.map((k) => schedBy.get(k)).find(Boolean);
+                const type = String(r?.type || rtName.get(String(r?.typeId || "")) || "").trim();
                 const absent = String(r?.attendance || "").toLowerCase() === "absent";
-                const working = !!r && !!type && !NOT_WORKING.has(type.toLowerCase()) && !absent;
+                const working = !!r && !NOT_WORKING.has(type.toLowerCase()) && !absent;
                 return {
                     ...i,
                     _id: String(i._id),
                     siteId: i.siteId ? String(i.siteId) : "",
                     driverCount: counts[i.transporterId] || 1,
-                    today: !r && schedBy.has(norm(i.transporterId))
-                        ? { working: schedBy.get(norm(i.transporterId))!.working, type: schedBy.get(norm(i.transporterId))!.type, routeNumber: "", waveTime: "", absent: false }
+                    today: !r && sch
+                        ? { working: sch.working, type: sch.type, routeNumber: "", waveTime: "", absent: false }
                         : r ? { working, type, routeNumber: r.routeNumber || "", waveTime: r.waveTime || "", absent } : { working: false, type: "", routeNumber: "", waveTime: "", absent: false },
                 };
             }),

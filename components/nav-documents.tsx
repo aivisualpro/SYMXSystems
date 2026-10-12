@@ -38,6 +38,7 @@ export function NavDocuments({
     url: string;
     icon: Icon;
     badge?: number | string;
+    alert?: boolean;
   }[];
   label?: string;
 }) {
@@ -64,7 +65,9 @@ export function NavDocuments({
               <SidebarMenuBadge
                 className={cn(
                   "rounded-full px-1.5 min-w-5 h-5 flex items-center justify-center",
-                  pathname.startsWith(item.url)
+                  item.alert
+                    ? "bg-red-500 text-white font-bold animate-pulse"
+                    : pathname.startsWith(item.url)
                     ? "bg-white text-primary font-bold"
                     : "bg-muted text-muted-foreground"
                 )}

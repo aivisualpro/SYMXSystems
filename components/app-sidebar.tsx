@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   IconBell,
@@ -233,6 +234,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [isAdmin, setIsAdmin] = React.useState(false);
   const [loadingPermissions, setLoadingPermissions] = React.useState(true);
   const [dynamicModules, setDynamicModules] = React.useState<any[] | null>(null);
+  const { data: cdfBadge } = useQuery({
+    queryKey: ["performance", "cdf", "badge"],
+    queryFn: async () => {
+      const r = await fetch("/api/performance/cdf?days=30");
+      if (!r.ok) return { count: 0 };
+      const j = await r.json();
+      return { count: (j.items || []).filter((i: any) => i.status === "open" && i.today?.working).length };
+    },
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+  const cdfTodayCount: number = cdfBadge?.count || 0;
   const router = useRouter();
 
   React.useEffect(() => {
@@ -326,7 +340,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return permFiltered;
   };
 
-  const filteredAdmin = filterItems(adminItems, 'admin');
+  // Performance: count of open CDF items whose driver is working today.
+  const filteredAdminBase = filterItems(adminItems, 'admin');
+  const filteredAdmin = filteredAdminBase.map((it: any) =>
+    it.name === "Performance" && cdfTodayCount > 0 ? { ...it, badge: cdfTodayCount, alert: true } : it
+  );
   const filteredSecondary = data.navSecondary.filter(item => {
     if (isAdmin) return true;
     const perm = permissions.find((p: any) => p.module === item.title);
