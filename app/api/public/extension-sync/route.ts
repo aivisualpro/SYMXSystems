@@ -7,7 +7,8 @@ import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import DropdownOption from "@/lib/models/DropdownOption";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
-import { epochToClockTime, epochToHHMM } from "@/lib/cortex-time";
+import WavePadDefault from "@/lib/models/WavePadDefault";
+import { epochToClockTime, epochToHHMM, to24h } from "@/lib/cortex-time";
 import { mergeCortexFields } from "@/lib/cortex-merge";
 
 /**
@@ -318,6 +319,14 @@ export async function POST(req: NextRequest) {
             }
         });
 
+        // ── Per-station wave time → default PAD ──
+        const wavePadMap = new Map<string, string>();
+        const newWaves: { siteId: any; wave: string }[] = [];
+        {
+            const wp = await WavePadDefault.find({ siteId: { $in: siteIds } }).lean() as any[];
+            wp.forEach((w) => wavePadMap.set(`${String(w.siteId)}|${w.wave}`, w.pad || ""));
+        }
+
         // ── Fetch WST options to map Amazon serviceTypeName → WST ──
         const wstOpts = await SYMXWSTOption.find({ isActive: true }).lean();
         const amazonServiceTypeToWst = new Map<string, string>();
@@ -465,27 +474,19 @@ export async function POST(req: NextRequest) {
             // Parse route data into SYMX format
             const parsedWaveTime = parseAmazonTime(resolvedWaveTime);
 
-            // ── Match waveTime to nearest dropdown option & get default PAD ──
-            let matchedWaveTime = parsedWaveTime;
+            // ── Wave time is EXACTLY plannedDeparture − 20 min (never snapped). The
+            // default PAD comes from THIS station's wave→PAD settings; a wave time the
+            // station hasn't seen is recorded (blank PAD) so it shows up in Settings. ──
+            const matchedWaveTime = parsedWaveTime;
             let matchedPad = "";
-            if (parsedWaveTime && waveTimePadEntries.length > 0) {
-                const inputMins = timeToMinutes(parsedWaveTime);
-                if (inputMins >= 0) {
-                    // Find the closest wave time option (within 30 min tolerance)
-                    let bestMatch: typeof waveTimePadEntries[0] | null = null;
-                    let bestDiff = Infinity;
-                    for (const entry of waveTimePadEntries) {
-                        if (entry.minutes < 0) continue;
-                        const diff = Math.abs(entry.minutes - inputMins);
-                        if (diff < bestDiff) {
-                            bestDiff = diff;
-                            bestMatch = entry;
-                        }
-                    }
-                    // Only match if within 30 minutes
-                    if (bestMatch && bestDiff <= 30) {
-                        matchedWaveTime = bestMatch.description;
-                        matchedPad = bestMatch.defaultPad;
+            if (parsedWaveTime) {
+                const w24 = to24h(parsedWaveTime);
+                if (/^\d{2}:\d{2}$/.test(w24)) {
+                    const k = `${String(siteId)}|${w24}`;
+                    if (wavePadMap.has(k)) matchedPad = wavePadMap.get(k) || "";
+                    else {
+                        wavePadMap.set(k, "");
+                        newWaves.push({ siteId, wave: w24 });
                     }
                 }
             }
@@ -637,6 +638,18 @@ export async function POST(req: NextRequest) {
         // Execute RoutesInfo upserts
         let saved = 0;
         if (ops.length > 0) {
+            if (newWaves.length > 0) {
+                await WavePadDefault.bulkWrite(
+                    newWaves.map((n) => ({
+                        updateOne: {
+                            filter: { siteId: n.siteId, wave: n.wave },
+                            update: { $setOnInsert: { pad: "", discovered: true }, $set: { lastSeenAt: new Date() } },
+                            upsert: true,
+                        },
+                    })),
+                    { ordered: false }
+                ).catch(() => {});
+            }
             const result = await SYMXRoutesInfo.bulkWrite(ops, { ordered: false });
             saved = result.upsertedCount + result.modifiedCount;
         }

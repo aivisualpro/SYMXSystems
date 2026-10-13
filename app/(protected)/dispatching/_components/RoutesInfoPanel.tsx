@@ -945,11 +945,18 @@ export default function RoutesInfoPanel({ open, onClose, date }: RoutesInfoPanel
                 // Auto-populate PAD logic if waveTime is selected
                 if (column.key === "waveTime" && value) {
                     try {
-                        const res = await fetch(`/api/admin/settings/dropdowns?type=wave time`);
+                        // Per-station wave → PAD defaults (Settings → General → Wave & PAD)
+                        const res = await fetch(`/api/admin/settings/wave-pads`);
                         const json = await res.json();
-                        const waveOpt = json.find((o: any) => o.description === value);
-                        if (waveOpt && waveOpt.defaultPad) {
-                            updateCell(editingCell.row, "pad", waveOpt.defaultPad);
+                        const m = String(value).trim().match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+                        if (m) {
+                            let h = parseInt(m[1], 10);
+                            const ap = (m[3] || "").toLowerCase();
+                            if (ap === "pm" && h < 12) h += 12;
+                            if (ap === "am" && h === 12) h = 0;
+                            const w24 = `${String(h).padStart(2, "0")}:${m[2]}`;
+                            const hit = (json.rows || []).find((o: any) => o.wave === w24);
+                            if (hit && hit.pad) updateCell(editingCell.row, "pad", hit.pad);
                         }
                     } catch (e) {
                         console.error("Failed to auto-populate default PAD");

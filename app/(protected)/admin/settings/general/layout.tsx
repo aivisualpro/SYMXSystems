@@ -12,6 +12,7 @@ const SUB_TABS = [
     { id: "default-routes", label: "Default Routes", icon: Route },
     { id: "dropdowns", label: "Dropdowns", icon: ListFilter },
     { id: "wst", label: "WST", icon: Settings },
+    { id: "wave-pads", label: "Wave & PAD", icon: ListFilter },
     { id: "end-of-day-tasks", label: "End-of-Day Tasks", icon: ClipboardCheck },
 ];
 
