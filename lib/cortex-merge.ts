@@ -32,6 +32,20 @@ function departureImplausible(depStr: any, waveStr: any): boolean {
     return dep < wave - 120 || dep > wave + 360;
 }
 
+const ACTUAL_CLOCK_FIELDS = ["actualFirstStop", "actualLastStop", "deliveryCompletionTime", "actualReturnTime", "actualDepartureTime"];
+
+/** True when an "actual" clock time on today's route is later than now — impossible. */
+export function isFutureActual(timeStr: any, routeDate: any): boolean {
+    const t = parseTime(String(timeStr || ""));
+    if (t === null || !routeDate) return false;
+    const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+    const rd = new Date(routeDate);
+    if (isNaN(rd.getTime()) || rd.toISOString().slice(0, 10) !== day(new Date())) return false;
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Los_Angeles", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+    const nowMin = (parseInt(parts.find((p) => p.type === "hour")!.value, 10) % 24) * 60 + parseInt(parts.find((p) => p.type === "minute")!.value, 10);
+    return t > nowMin + 10;
+}
+
 export function mergeCortexFields(
     existing: any,
     computed: Record<string, string | number>,
@@ -58,10 +72,23 @@ export function mergeCortexFields(
         updated.push("actualDepartureTime");
     }
 
+    // An actual time later than the current time can't have happened yet — never
+    // write one, and clear one a previous sync wrote.
+    for (const f of ACTUAL_CLOCK_FIELDS) {
+        if (f in computed && isFutureActual(computed[f], existing.date)) delete (computed as any)[f];
+        if (owned.has(f) && !(f in computed) && isFutureActual(existing[f], existing.date)) {
+            setOps[f] = "";
+            owned.delete(f);
+            updated.push(f);
+        }
+    }
+
     for (const field of fields) {
         if (!(field in computed)) continue;
         const cortexValue = computed[field];
         const currentValue = existing[field];
+        // "" means "Cortex has nothing yet" — only ever clears a value a sync wrote.
+        if (cortexValue === "" && !owned.has(field)) continue;
         const isEmpty =
             currentValue === "" || currentValue === undefined || currentValue === null ||
             (typeof currentValue === "number" && currentValue === 0);

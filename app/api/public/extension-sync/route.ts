@@ -9,7 +9,7 @@ import DropdownOption from "@/lib/models/DropdownOption";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
 import WavePadDefault from "@/lib/models/WavePadDefault";
 import { epochToClockTime, epochToHHMM, to24h } from "@/lib/cortex-time";
-import { mergeCortexFields } from "@/lib/cortex-merge";
+import { mergeCortexFields, isFutureActual } from "@/lib/cortex-merge";
 
 /**
  * ══════════════════════════════════════════════════════════════
@@ -585,9 +585,10 @@ export async function POST(req: NextRequest) {
                 // NOTE: route.departureTime is Amazon's PLANNED departure, so it must
                 // never feed actualDepartureTime. The real value comes from
                 // transporters[0].actualRouteDepartureTime (see autoCandidates below).
-                if (route.firstStopTime) syncFields.actualFirstStop = parseAmazonTime(route.firstStopTime);
-                if (route.lastStopTime) syncFields.actualLastStop = parseAmazonTime(route.lastStopTime);
-                if (route.completionTime) syncFields.deliveryCompletionTime = parseAmazonTime(route.completionTime);
+                const notFuture = (v: string) => (v && !isFutureActual(v, dateObj) ? v : "");
+                const fs1 = notFuture(parseAmazonTime(route.firstStopTime)); if (fs1) syncFields.actualFirstStop = fs1;
+                // actualLastStop comes only from the itinerary sync, once the route is complete.
+                const ct1 = notFuture(parseAmazonTime(route.completionTime)); if (ct1) syncFields.deliveryCompletionTime = ct1;
                 if (route.outboundStem) syncFields.actualOutboundStem = parseAmazonTime(route.outboundStem);
                 if (route.stopsPerHour) syncFields.stopsPerHour = parseFloat(route.stopsPerHour) || 0;
                 // plannedFirstStop is intentionally NOT written here: the old source

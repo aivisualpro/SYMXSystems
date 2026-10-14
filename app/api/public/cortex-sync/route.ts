@@ -113,8 +113,15 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
 
     const plannedLast = epochToClockTime(lastStop?.expectedStartTime);
     if (plannedLast) fields.plannedLastStop = plannedLast;
+
+    // The route is complete only when EVERY customer stop has an executed task.
+    // Until then "last stop" would just be the latest delivery so far (i.e. ~now),
+    // so it is held back (and cleared if an earlier sync wrote it).
+    const routeComplete = customerStops.length > 0 && customerStops.every((st: any) =>
+        (Array.isArray(st?.tasks) ? st.tasks : []).some((t: any) => Number(t?.actualExecutionTime) > 0));
     const actualLast = epochToClockTime(lastTaskActual);
-    if (actualLast) fields.actualLastStop = actualLast;
+    if (routeComplete && actualLast) fields.actualLastStop = actualLast;
+    else if (!routeComplete) fields.actualLastStop = "";
 
     // Cortex reports an outbound stem of 0 for some drivers (e.g. several routes
     // in one block). The stem is simply departure -> first delivery, so derive it.
@@ -131,7 +138,7 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
     // Amazon's own "last stop" time (what the driver list shows as "Last:
     // Delivery at …"). Preferred over the stop-by-stop calculation when present.
     const lastExec = epochToClockTime(itineraryDetails?.lastStopExecutionTime);
-    if (lastExec) fields.actualLastStop = lastExec;
+    if (lastExec && routeComplete) fields.actualLastStop = lastExec;
 
     // Meal break (driver-specific, from the itinerary itself).
     const meal = (Array.isArray(itineraryDetails?.breaks) ? itineraryDetails.breaks : []).find(
