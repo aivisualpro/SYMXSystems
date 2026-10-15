@@ -1,43 +1,28 @@
 /**
- * Manual, single-day/single-station van auto-assignment.
+ * Van auto-assignment for ONE station and ONE day, solved as a global
+ * assignment problem (min-cost bipartite matching / Hungarian algorithm)
+ * instead of a driver-by-driver greedy loop. A greedy loop lets an early
+ * pick steal the van a later driver needed and silently skips people; the
+ * matching minimizes TOTAL penalty across every route at once.
  *
- * Distinct from the existing `autoAssignVans()` in route-generation.ts,
- * which runs automatically for a whole WEEK right after routes are
- * generated and only understands two hardcoded size categories. This is
- * the on-demand version a dispatcher triggers from the Routes page for
- * the day/station they're looking at, with the rules Rohan asked for:
+ * Rows that get a van: "Route" and "Training OTR" only (Flight Risk, Trainer,
+ * Open, Close, Rescue, Call Out, ... get none). Rows that already have a van
+ * are fixed — never moved — and their vans leave the pool.
  *
- *   - Only ever touches the ONE station currently in view (never pools
- *     vans across stations) and only fills in blank van fields — an
- *     already-assigned row is never touched or re-shuffled.
- *   - Only rows whose type is "Route" or "Training OTR" need a van at
- *     all — Crash, Fleet, Pending ECP, Close, Open, TCO, etc. are left
- *     alone regardless of whether their van is blank.
- *   - "Route" rows are a hard size match: a route whose WST is a
- *     specific size (e.g. "SP XL") can only get a van whose serviceType
- *     is that exact size. "Training OTR" rows (typically Nursery WSTs)
- *     can take any van, and among the leftover vans we prefer the
- *     smaller ones first so scarce XL vans stay free for routes that
- *     actually need XL.
- *   - Never assigns a Grounded (or Maintenance/Inactive/Decommissioned)
- *     van, and never a van already running another route at this
- *     station today.
- *   - For each driver, tries their own Default Vans first, in order —
- *     Primary, then Backup 1, then Backup 2 (set on their HR profile) —
- *     before anything else, as long as the van still qualifies (right
- *     size for a Route row, available, not grounded). Only when none of
- *     the three apply does it fall back to the van they drove most
- *     recently, then to the general pool.
- *   - Training OTR rows always prefer a dashcam-equipped van among the
- *     otherwise-qualifying candidates (these are the newer/training
- *     drivers by nature of the row type). Route rows additionally
- *     prefer dashcam for drivers hired within the last 90 days.
- *   - Processes drivers senior-first (earliest hiredDate) so that if two
- *     drivers' preferences ever collide over the same van, the
- *     longest-tenured driver's preference wins.
- *   - If nothing qualifies for a route, the row is left blank and
- *     flagged with a reason rather than force-assigning a wrong size or
- *     a grounded van.
+ * HARD constraints (infinite cost)
+ *   - van is Active and belongs to this station; not used by another route today
+ *   - Training OTR requires a dashcam (Netradyne) van
+ * Every route ends up assigned or flagged with a reason — never silently skipped.
+ *
+ * SOFT preferences (summed into a cost; lower is better)
+ *   - Familiarity: Primary < Backup 1 < Backup 2 < recent van < ever-driven < unknown
+ *   - Dashcam: weighted by INEXPERIENCE — drivers ranked by routes completed
+ *     (fewest = highest need); a dashcam-less van costs more the newer the driver is
+ *   - Size: WST size (L/XL/S…) is the target; bigger or smaller van is allowed but
+ *     penalised per step. When bag counts exist, routes are ranked by bags and the
+ *     size "ladder" is applied: highest bags -> biggest vans, down the ladder.
+ *   - Scarcity: dashcam vans carry a small cost for experienced drivers so they stay
+ *     free for the drivers who need them
  */
 import mongoose from "mongoose";
 import SYMXRoute from "./models/SYMXRoute";
@@ -46,28 +31,25 @@ import Vehicle from "./models/Vehicle";
 import RouteType from "./models/RouteType";
 import { toPacificDate } from "@/app/(protected)/dispatching/routes/_components/routes-utils";
 
-const NEW_HIRE_WINDOW_DAYS = 90;
 const RECENT_VAN_WINDOW_DAYS = 45;
 
-// The only two schedule types a van actually needs to be assigned for.
-// Everything else (Crash, Fleet, Pending ECP, Close, Open, TCO, Trainer,
-// Suspension, Modified Duty, Stand by, Rescue, Assign Schedule...) is left
-// alone even if its van field happens to be blank.
-const VAN_ELIGIBLE_TYPE_NAMES = new Set(["route", "training otr", "flight risk"]);
-
-// Common size tokens, roughly small -> large. Anything not recognized
-// (a station's own custom service-type label) falls back to a middle
-// rank so it's not wrongly treated as the scarcest size.
-const SIZE_RANK: Record<string, number> = {
-  S: 1, SM: 1, SMALL: 1,
-  M: 2, MD: 2, MED: 2, MEDIUM: 2,
-  L: 3, LG: 3, LARGE: 3,
-  XL: 4,
-  XXL: 5,
+// ── Cost weights (tuning knobs) ────────────────────────────────────────
+const W = {
+  famPrimary: 0, famBackup1: 10, famBackup2: 20,
+  famRecentBase: 15, famRecentPerRank: 5,   // most recently used = cheapest
+  famSeen: 40, famUnknown: 60,
+  dashcamMax: 100,          // dashcam-less van for the most inexperienced driver
+  dashcamHoard: 6,          // experienced driver taking a dashcam van
+  sizeStep: 20, sizeSmallerExtra: 5,        // per size step off target (smaller slightly worse)
+  sizeStepFlexible: 4,      // Training OTR / Nursery rows: soft preference for smaller vans
+  unassigned: 1000,         // "leave blank + flag" — must beat any real cost
+  hard: 1e7,
 };
 
-/** Parse a size rank from either a SYMX WST ("SP L"), a Cortex name
- *  ("Standard Parcel - Large Van") or a van serviceType. null = no size. */
+// Only these need a van at all.
+const VAN_ELIGIBLE_TYPE_NAMES = new Set(["route", "training otr"]);
+
+/** Size rank from a WST ("SP L"), Cortex name ("Standard Parcel - Large Van") or van serviceType. */
 function parseSize(text: string): number | null {
   const t = (text || "").trim().toLowerCase();
   if (!t) return null;
@@ -78,20 +60,45 @@ function parseSize(text: string): number | null {
   if (/small|\bsm\b|\bs\b/.test(t)) return 1;
   return null;
 }
-
-function sizeRank(serviceType: string): number {
-  return parseSize(serviceType) ?? 3;
-}
-
-/** Closest size first (exact, then one step smaller, then one step larger…). */
-function sizeDistance(vanType: string, need: number): number {
-  const d = sizeRank(vanType) - need;
-  return Math.abs(d) * 2 + (d > 0 ? 1 : 0);
-}
+const sizeRank = (t: string) => parseSize(t) ?? 3;
 
 function hasDashcam(v: { dashcam?: string }): boolean {
   const d = (v.dashcam || "").trim().toLowerCase();
   return !!d && d !== "none";
+}
+const key = (s: any) => String(s || "").trim().toLowerCase();
+
+/** Hungarian algorithm — min-cost assignment of n rows to m >= n columns. Returns col index per row. */
+function hungarian(cost: number[][]): number[] {
+  const n = cost.length;
+  const m = cost[0]?.length ?? 0;
+  const u = new Array(n + 1).fill(0), v = new Array(m + 1).fill(0);
+  const p = new Array(m + 1).fill(0), way = new Array(m + 1).fill(0);
+  for (let i = 1; i <= n; i++) {
+    p[0] = i;
+    let j0 = 0;
+    const minv = new Array(m + 1).fill(Infinity);
+    const used = new Array(m + 1).fill(false);
+    do {
+      used[j0] = true;
+      const i0 = p[j0];
+      let delta = Infinity, j1 = 0;
+      for (let j = 1; j <= m; j++) {
+        if (used[j]) continue;
+        const cur = cost[i0 - 1][j - 1] - u[i0] - v[j];
+        if (cur < minv[j]) { minv[j] = cur; way[j] = j0; }
+        if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+      }
+      for (let j = 0; j <= m; j++) {
+        if (used[j]) { u[p[j]] += delta; v[j] -= delta; } else minv[j] -= delta;
+      }
+      j0 = j1;
+    } while (p[j0] !== 0);
+    do { const j1 = way[j0]; p[j0] = p[j1]; j0 = j1; } while (j0);
+  }
+  const res = new Array(n).fill(-1);
+  for (let j = 1; j <= m; j++) if (p[j]) res[p[j] - 1] = j - 1;
+  return res;
 }
 
 export interface AutoAssignResult {
@@ -104,246 +111,190 @@ export interface AutoAssignResult {
 export async function autoAssignVansForDay(siteId: string, dateStr: string): Promise<AutoAssignResult> {
   const siteObjectId = new mongoose.Types.ObjectId(siteId);
 
-  // Loose UTC window around the target Pacific-time day, narrowed down
-  // precisely below with toPacificDate — same defensive pattern used
-  // elsewhere in this codebase for date-string matching across the
-  // UTC/Pacific boundary.
   const rangeStart = new Date(`${dateStr}T00:00:00.000Z`);
   rangeStart.setUTCDate(rangeStart.getUTCDate() - 1);
   const rangeEnd = new Date(`${dateStr}T23:59:59.999Z`);
   rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 1);
 
-  // Eligible route types — ONLY "Route" and "Training OTR" need a van at
-  // all. Everything else keeps whatever van field it has (usually blank)
-  // untouched, even by this bulk tool.
   const allRouteTypes = await RouteType.find({}, { _id: 1, name: 1 }).lean() as any[];
-  const typeIdToName = new Map(allRouteTypes.map((rt: any) => [String(rt._id), (rt.name || "").trim()]));
+  const typeIdToName = new Map(allRouteTypes.map((rt: any) => [String(rt._id), (rt.name || "").trim().toLowerCase()]));
   const eligibleTypeIds = allRouteTypes
     .filter((rt: any) => VAN_ELIGIBLE_TYPE_NAMES.has((rt.name || "").trim().toLowerCase()))
     .map((rt: any) => String(rt._id));
 
-  // All of this station's routes in the loose window — filtered down to
-  // the exact day, and to this station, in JS.
   const dayRoutesRaw = await SYMXRoute.find({
     siteId: siteObjectId,
     date: { $gte: rangeStart, $lte: rangeEnd },
   }).lean() as any[];
   const dayRoutes = dayRoutesRaw.filter((r) => toPacificDate(r.date) === dateStr);
 
-  const unassigned = dayRoutes.filter(
+  const todo = dayRoutes.filter(
     (r) => (!r.van || !r.van.trim()) && eligibleTypeIds.includes(String(r.typeId || ""))
   );
 
   const result: AutoAssignResult = { assignedCount: 0, flaggedCount: 0, assignments: [], flagged: [] };
-  if (unassigned.length === 0) return result;
+  if (todo.length === 0) return result;
 
-  // Vans already running a route at this station today — never double-book.
-  const usedToday = new Set(
-    dayRoutes.filter((r) => r.van && r.van.trim()).map((r) => r.van.trim())
-  );
+  // Vans already running today (any row) are fixed.
+  const usedToday = new Set(dayRoutes.filter((r) => r.van && r.van.trim()).map((r) => key(r.van)));
 
-  // This station's active fleet. Grounded/Maintenance/Inactive/
-  // Decommissioned vans are excluded simply by not being "Active".
-  const vehicles = await Vehicle.find(
+  const allVehicles = await Vehicle.find(
     { status: "Active", currentSiteId: siteObjectId },
     { vehicleName: 1, serviceType: 1, dashcam: 1 }
   ).lean() as any[];
-  const vehicleByName = new Map(vehicles.map((v) => [v.vehicleName, v]));
+  const vans = allVehicles.filter((v) => !usedToday.has(key(v.vehicleName)));
 
-  // Employee lookup — hiredDate (new-hire dashcam preference + seniority
-  // ordering) and each driver's own Default Vans (Primary/Backup 1/2).
-  const transporterIds = [...new Set(unassigned.map((r) => r.transporterId))];
+  // ── Driver features ──
+  const tids = [...new Set(todo.map((r) => r.transporterId))];
   const employees = await SymxEmployee.find(
-    { transporterId: { $in: transporterIds } },
-    { transporterId: 1, hiredDate: 1, firstName: 1, lastName: 1, defaultVan1: 1, defaultVan2: 1, defaultVan3: 1 }
+    { transporterId: { $in: tids } },
+    { transporterId: 1, firstName: 1, lastName: 1, defaultVan1: 1, defaultVan2: 1, defaultVan3: 1 }
   ).lean() as any[];
   const empByTid = new Map(employees.map((e) => [e.transporterId, e]));
 
-  // Each driver's most recent van at THIS station in the last N days
-  // (excluding today), used only when none of their Default Vans apply.
+  // Routes completed (experience): past Route/Training OTR rows with stops, this station.
+  const expAgg = await SYMXRoute.aggregate([
+    { $match: { siteId: siteObjectId, transporterId: { $in: tids }, date: { $lt: rangeStart }, typeId: { $in: eligibleTypeIds }, stopCount: { $gt: 0 } } },
+    { $group: { _id: "$transporterId", n: { $sum: 1 } } },
+  ]);
+  const completed = new Map<string, number>(expAgg.map((x: any) => [x._id, x.n]));
+  const expOf = (tid: string) => completed.get(tid) || 0;
+  // Inexperience in [0,1]: 1 = fewest routes completed among today's drivers.
+  const sortedExp = [...new Set(tids.map(expOf))].sort((a, b) => a - b);
+  const inexperience = (tid: string) =>
+    sortedExp.length <= 1 ? 0.5 : 1 - sortedExp.indexOf(expOf(tid)) / (sortedExp.length - 1);
+
+  // Recent vans (most recent first, distinct) + every van ever used in the window.
   const recentStart = new Date(rangeStart);
-  recentStart.setUTCDate(recentStart.getUTCDate() - RECENT_VAN_WINDOW_DAYS - 1);
-  const recentRoutesRaw = await SYMXRoute.find({
-    siteId: siteObjectId,
-    transporterId: { $in: transporterIds },
-    van: { $nin: ["", null] },
+  recentStart.setUTCDate(recentStart.getUTCDate() - RECENT_VAN_WINDOW_DAYS);
+  const recentRaw = await SYMXRoute.find({
+    siteId: siteObjectId, transporterId: { $in: tids }, van: { $nin: ["", null] },
     date: { $gte: recentStart, $lt: rangeStart },
   }, { transporterId: 1, van: 1, date: 1 }).sort({ date: -1 }).lean() as any[];
-  const recentVanByTid = new Map<string, string>();
-  for (const r of recentRoutesRaw) {
-    if (!recentVanByTid.has(r.transporterId)) recentVanByTid.set(r.transporterId, r.van);
+  const recentVans = new Map<string, string[]>();
+  for (const r of recentRaw) {
+    const list = recentVans.get(r.transporterId) || [];
+    if (!list.includes(key(r.van))) list.push(key(r.van));
+    recentVans.set(r.transporterId, list);
   }
 
-  const isNewHire = (transporterId: string): boolean => {
-    const emp = empByTid.get(transporterId);
-    if (!emp?.hiredDate) return false;
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - NEW_HIRE_WINDOW_DAYS);
-    return new Date(emp.hiredDate) > cutoff;
+  const nameOf = (r: any): string => {
+    const e = empByTid.get(r.transporterId);
+    return r.employeeName || (e ? `${e.firstName || ""} ${e.lastName || ""}`.trim() : r.transporterId);
   };
 
-  const employeeName = (r: any): string => {
-    const emp = empByTid.get(r.transporterId);
-    return r.employeeName || (emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() : r.transporterId);
+  // ── Route features ──
+  const isTrainingOTR = (r: any) => typeIdToName.get(String(r.typeId || "")) === "training otr";
+  const wstSize = (r: any) => parseSize(r.wst) ?? parseSize(r.amazonServiceType || "");
+  const isFlexible = (r: any) => isTrainingOTR(r) || wstSize(r) === null || /nursery/i.test(r.wst || "");
+  const bagsOf = (r: any) => { const n = parseFloat(String(r.bags ?? "").replace(/[^\d.]/g, "")); return Number.isFinite(n) ? n : 0; };
+
+  // Bag ladder: when most size-bearing routes have bags, rank by bags and give the
+  // biggest vans to the highest-bag routes, stepping down.
+  const sized = todo.filter((r) => !isFlexible(r));
+  const withBags = sized.filter((r) => bagsOf(r) > 0);
+  const targetByRoute = new Map<any, number>();
+  const ladderNote = new Map<any, string>();
+  if (withBags.length >= Math.max(2, Math.ceil(sized.length * 0.5))) {
+    const poolSizes = vans.map((v) => sizeRank(v.serviceType)).sort((a, b) => b - a);
+    const ranked = [...withBags].sort((a, b) => bagsOf(b) - bagsOf(a));
+    ranked.forEach((r, i) => {
+      if (poolSizes.length === 0) return;
+      const idx = Math.min(poolSizes.length - 1, Math.floor((i * poolSizes.length) / ranked.length));
+      targetByRoute.set(r, poolSizes[idx]);
+      ladderNote.set(r, `bags #${i + 1}/${ranked.length}`);
+    });
+  }
+  const targetSize = (r: any): number =>
+    targetByRoute.get(r) ?? (isFlexible(r) ? 1 : (wstSize(r) ?? 3));
+
+  // ── Cost matrix ──
+  const famCost = (tid: string, van: any): { cost: number; tag: string } => {
+    const e = empByTid.get(tid);
+    const k = key(van.vehicleName);
+    if (e && key(e.defaultVan1) === k) return { cost: W.famPrimary, tag: "primary van" };
+    if (e && key(e.defaultVan2) === k) return { cost: W.famBackup1, tag: "backup 1" };
+    if (e && key(e.defaultVan3) === k) return { cost: W.famBackup2, tag: "backup 2" };
+    const rec = recentVans.get(tid) || [];
+    const ri = rec.indexOf(k);
+    if (ri >= 0) return { cost: W.famRecentBase + ri * W.famRecentPerRank, tag: ri === 0 ? "most recent van" : "drove it recently" };
+    return { cost: rec.length ? W.famSeen : W.famUnknown, tag: "" };
   };
 
-  // A van qualifies for a route if it's in this station's active fleet,
-  // not already used today, and — for an exact-size ("Route") row — its
-  // serviceType matches the WST exactly. Flexible ("Training OTR") rows
-  // have no size requirement.
-  const qualifies = (vanName: string | undefined, requiredType: string | null): any | null => {
-    if (!vanName) return null;
-    const v = vehicleByName.get(vanName);
-    if (!v || usedToday.has(v.vehicleName)) return null;
-    // Any size is acceptable for a familiar van (smaller or larger than the WST).
-    return v;
+  const edge = (r: any, van: any): { cost: number; why: string[] } => {
+    const why: string[] = [];
+    const training = isTrainingOTR(r);
+    const dash = hasDashcam(van);
+    if (training && !dash) return { cost: W.hard, why: ["no dashcam"] };
+
+    const fam = famCost(r.transporterId, van);
+    if (fam.tag) why.push(fam.tag);
+
+    const inexp = inexperience(r.transporterId);
+    let dashCost = 0;
+    if (!dash) dashCost = W.dashcamMax * inexp;
+    else {
+      why.push(`dashcam, ${expOf(r.transporterId)} routes done`);
+      if (inexp < 0.5) dashCost = W.dashcamHoard;
+    }
+
+    const tgt = targetSize(r);
+    const d = sizeRank(van.serviceType) - tgt;
+    const step = isFlexible(r) && !targetByRoute.has(r) ? W.sizeStepFlexible : W.sizeStep;
+    const sizeCost = Math.abs(d) * step + (d < 0 ? W.sizeSmallerExtra * Math.abs(d) : 0);
+    if (!isFlexible(r) || targetByRoute.has(r)) {
+      const lab = (n: number) => (["", "S", "M", "L", "XL", "XXL"][n] || String(n));
+      why.push(d === 0 ? `size ${lab(tgt)} match` : `size ${lab(sizeRank(van.serviceType))} for ${lab(tgt)}`);
+      const ln = ladderNote.get(r);
+      if (ln) why.push(ln);
+    }
+    return { cost: fam.cost + dashCost + sizeCost, why };
   };
 
-  // Primary -> Backup 1 -> Backup 2, in that order — a driver's own
-  // assigned vans always come before their recent-van history or the
-  // general pool.
-  const preferredDefaultVan = (transporterId: string, requiredType: string | null): any | null => {
-    const emp = empByTid.get(transporterId);
-    if (!emp) return null;
-    return (
-      qualifies(emp.defaultVan1, requiredType) ||
-      qualifies(emp.defaultVan2, requiredType) ||
-      qualifies(emp.defaultVan3, requiredType) ||
-      null
-    );
-  };
-
-  // "Route" rows are exact-size; "Training OTR" rows are flexible
-  // (usually Nursery WSTs) regardless of what their WST string says.
-  // Senior-first (earliest hiredDate) within each group so a
-  // longer-tenured driver's Default Van / recent van wins any contention.
-  // Flexible = Training OTR rows, OR any row whose WST is a Nursery level
-  // (or blank) — a "Route" row with WST "Nursery 3" has no size-specific
-  // van to match against (no van's serviceType is "Nursery 3"), so the
-  // exact-match path below would flag it as having no available van.
-  const isFlexibleRow = (r: any): boolean => {
-    const typeName = (typeIdToName.get(String(r.typeId || "")) || "").toLowerCase();
-    const wst = (r.wst || "").trim();
-    return typeName === "training otr" || wst === "" || /nursery/i.test(wst) || parseSize(wst) === null;
-  };
-  const nonFlexible = unassigned.filter((r) => !isFlexibleRow(r));
-  const flexible = unassigned.filter(isFlexibleRow);
-
-  const byHiredDateAsc = (a: any, b: any) => {
-    const ah = empByTid.get(a.transporterId)?.hiredDate;
-    const bh = empByTid.get(b.transporterId)?.hiredDate;
-    const at = ah ? new Date(ah).getTime() : 0;
-    const bt = bh ? new Date(bh).getTime() : 0;
-    return at - bt;
-  };
-  nonFlexible.sort(byHiredDateAsc);
-  flexible.sort(byHiredDateAsc);
+  // Rows = routes, columns = vans + one "leave blank" column per route.
+  const n = todo.length, m = vans.length;
+  const edges: { cost: number; why: string[] }[][] = todo.map((r) => vans.map((v) => edge(r, v)));
+  const matrix: number[][] = todo.map((_, i) => {
+    const row: number[] = [];
+    for (let j = 0; j < m; j++) row.push(edges[i][j].cost);
+    for (let j = 0; j < n; j++) row.push(W.unassigned);
+    return row;
+  });
+  const pick = hungarian(matrix);
 
   const updateOps: any[] = [];
-
-  const tryAssign = (route: any, van: any) => {
-    usedToday.add(van.vehicleName);
-    updateOps.push({
-      updateOne: {
-        filter: { _id: route._id },
-        update: { $set: { van: van.vehicleName, serviceType: van.serviceType || "", dashcam: van.dashcam || "" } },
-      },
-    });
-    result.assignedCount++;
-    result.assignments.push({
-      transporterId: route.transporterId,
-      employeeName: employeeName(route),
-      van: van.vehicleName,
-      wst: route.wst || "",
-      reason: "",
-    });
-  };
-
-  // ── "Route" rows — exact-size WST match ──
-  for (const route of nonFlexible) {
-    const requiredType = (route.wst || "").trim().toLowerCase();
-
-    const defaultVan = preferredDefaultVan(route.transporterId, requiredType);
-    if (defaultVan) {
-      tryAssign(route, defaultVan);
-      continue;
-    }
-
-    const recentVanName = recentVanByTid.get(route.transporterId);
-    const recentVan = qualifies(recentVanName, requiredType);
-    if (recentVan) {
-      tryAssign(route, recentVan);
-      continue;
-    }
-
-    const need = parseSize(route.wst) ?? 3;
-    let candidates = vehicles
-      .filter((v) => !usedToday.has(v.vehicleName))
-      .sort((x, y) => sizeDistance(x.serviceType, need) - sizeDistance(y.serviceType, need));
-
-    if (candidates.length === 0) {
+  todo.forEach((r, i) => {
+    const j = pick[i];
+    if (j >= 0 && j < m && edges[i][j].cost < W.hard) {
+      const van = vans[j];
+      updateOps.push({
+        updateOne: {
+          filter: { _id: r._id },
+          update: { $set: { van: van.vehicleName, serviceType: van.serviceType || "", dashcam: van.dashcam || "" } },
+        },
+      });
+      result.assignedCount++;
+      result.assignments.push({
+        transporterId: r.transporterId, employeeName: nameOf(r), van: van.vehicleName,
+        wst: r.wst || "", reason: edges[i][j].why.join(" · "),
+      });
+    } else {
+      const training = isTrainingOTR(r);
+      const dashLeft = vans.some(hasDashcam);
       result.flaggedCount++;
       result.flagged.push({
-        transporterId: route.transporterId,
-        employeeName: employeeName(route),
-        wst: route.wst || "",
-        reason: "No unassigned active van left at this station",
+        transporterId: r.transporterId, employeeName: nameOf(r), wst: r.wst || "",
+        reason: m === 0
+          ? "No active unassigned van at this station"
+          : training && !dashLeft
+            ? "Training OTR needs a dashcam van and none are left"
+            : training
+              ? "Training OTR needs a dashcam van — remaining ones went to other Training OTR routes"
+              : "Not enough vans for every route today",
       });
-      continue;
     }
+  });
 
-    if (isNewHire(route.transporterId)) {
-      const withDashcam = candidates.filter(hasDashcam);
-      if (withDashcam.length > 0) candidates = withDashcam;
-    }
-
-    tryAssign(route, candidates[0]);
-  }
-
-  // ── "Training OTR" rows — flexible, smaller vans + dashcam first ──
-  for (const route of flexible) {
-    const defaultVan = preferredDefaultVan(route.transporterId, null);
-    if (defaultVan) {
-      tryAssign(route, defaultVan);
-      continue;
-    }
-
-    const recentVanName = recentVanByTid.get(route.transporterId);
-    const recentVan = qualifies(recentVanName, null);
-    if (recentVan) {
-      tryAssign(route, recentVan);
-      continue;
-    }
-
-    let candidates = vehicles
-      .filter((v) => !usedToday.has(v.vehicleName))
-      .sort((a, b) => sizeRank(a.serviceType) - sizeRank(b.serviceType));
-
-    if (candidates.length === 0) {
-      result.flaggedCount++;
-      result.flagged.push({
-        transporterId: route.transporterId,
-        employeeName: employeeName(route),
-        wst: route.wst || "",
-        reason: "No available van at this station",
-      });
-      continue;
-    }
-
-    // Nursery / Training OTR drivers are new by nature of the row —
-    // always prefer a dashcam (Netradyne) van first, then the smallest
-    // size among those; if no dashcam van is free, smallest overall.
-    const dashcamPool = candidates.filter(hasDashcam);
-    const pool = dashcamPool.length > 0 ? dashcamPool : candidates;
-    const smallestRank = sizeRank(pool[0].serviceType);
-    candidates = pool.filter((v) => sizeRank(v.serviceType) === smallestRank);
-
-    tryAssign(route, candidates[0]);
-  }
-
-  if (updateOps.length > 0) {
-    await SYMXRoute.bulkWrite(updateOps, { ordered: false });
-  }
-
+  if (updateOps.length > 0) await SYMXRoute.bulkWrite(updateOps, { ordered: false });
   return result;
 }

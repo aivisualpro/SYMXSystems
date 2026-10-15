@@ -83,7 +83,10 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
         const tasks: any[] = Array.isArray(s?.tasks) ? s.tasks : [];
         return tasks.length > 0 && tasks.every((t: any) => /RETURN|BACK_TO_ORIGIN/i.test(String(t?.taskType || "")));
     };
-    const customerStops = realStops.filter((s: any) => s.sequenceNumber > 1 && !isReturnOnly(s));
+    // A real customer stop has at least one DROP_OFF. Stops that only hold PICK_UP
+    // tasks are the driver loading packages at the station (not a delivery).
+    const hasDrop = (s: any) => (Array.isArray(s?.tasks) ? s.tasks : []).some((t: any) => t?.taskType === "DROP_OFF");
+    const customerStops = realStops.filter((s: any) => s.sequenceNumber > 1 && !isReturnOnly(s) && hasDrop(s));
 
     // PLANNED first/last follow the planned route order (sequence): the page's
     // "stop N" is sequence N+1 because sequence 1 is the pickup.
@@ -98,7 +101,7 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
     for (const stop of customerStops) {
         const tasks: any[] = Array.isArray(stop?.tasks) ? stop.tasks : [];
         const drops = tasks.filter((t: any) => t?.taskType === "DROP_OFF");
-        for (const t of (drops.length ? drops : tasks)) {
+        for (const t of drops) {
             const n = Number(t?.actualExecutionTime);
             if (Number.isFinite(n) && n > 0) actualTimes.push(n);
         }
