@@ -19,12 +19,14 @@ export default function WavePadsPage() {
     const [loading, setLoading] = useState(true);
     const [newWave, setNewWave] = useState("");
     const [newPad, setNewPad] = useState("");
+    const [offset, setOffset] = useState("20");
 
     const load = useCallback(async () => {
         const r = await fetch("/api/admin/settings/wave-pads");
         const j = await r.json();
         setRows(j.rows || []);
         setSingle(j.single !== false);
+        if (j.offset !== undefined) setOffset(String(j.offset));
         setLoading(false);
     }, []);
     useEffect(() => { load(); }, [load]);
@@ -46,6 +48,12 @@ export default function WavePadsPage() {
         if (await save(newWave, newPad)) { setNewWave(""); setNewPad(""); load(); }
     };
 
+    const saveOffset = async () => {
+        const r = await fetch("/api/admin/settings/wave-pads", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offset: Number(offset) }) });
+        const j = await r.json();
+        if (!r.ok) notify.error(j.error || "Failed to save"); else notify.success(`Wave time = planned departure − ${j.offset} min`);
+    };
+
     const remove = async (id: string) => {
         await fetch(`/api/admin/settings/wave-pads?id=${id}`, { method: "DELETE" });
         load();
@@ -59,9 +67,14 @@ export default function WavePadsPage() {
             <div>
                 <h2 className="text-lg font-semibold">Wave time → default PAD</h2>
                 <p className="text-sm text-muted-foreground">
-                    Set per station (use the station switcher). Wave time is the planned departure minus 20 minutes.
+                    Set per station (use the station switcher). Wave time is the planned departure minus the minutes set below (per station).
                     New wave times the sync hasn't seen appear here automatically so you can set their PAD.
                 </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2">
+                <span className="text-sm">Wave time = planned departure −</span>
+                <Input value={offset} onChange={(e) => setOffset(e.target.value)} onBlur={saveOffset} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} disabled={!single} className="h-8 w-16" inputMode="numeric" />
+                <span className="text-sm">min</span>
             </div>
             {!single && <p className="text-sm text-amber-500">Select a single station to edit its wave times.</p>}
             {needs > 0 && (

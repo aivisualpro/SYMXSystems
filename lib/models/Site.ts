@@ -28,6 +28,8 @@ export interface ISite extends Document {
   siteType: SiteType;
   address: string;
   trainingAddress?: string;
+  /** Minutes subtracted from Amazon's planned departure to get the wave time (default 20). */
+  waveOffsetMinutes?: number;
   /** Slack incoming-webhook URL for this station's efficiency alerts. */
   slackWebhookUrl?: string;
   slackAlertsEnabled?: boolean;
@@ -66,6 +68,7 @@ const SiteSchema: Schema = new Schema(
     // Where new-hire training is held for this station. Used by the
     // "Training Reminder" message ({trainingAddress}).
     trainingAddress: { type: String, default: "" },
+    waveOffsetMinutes: { type: Number, default: 20 },
     // Incoming webhook for this station's Slack channel. Efficiency alerts
     // (late departures, behind pace, low efficiency, daily summary) post here.
     slackWebhookUrl: { type: String, default: "" },

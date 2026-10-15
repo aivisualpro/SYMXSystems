@@ -196,7 +196,7 @@ export async function POST(req: NextRequest) {
     // that have not been mapped yet.
     const sites: any[] = await Site.find(
       { status: "active" },
-      { _id: 1, code: 1, name: 1, amazon: 1 }
+      { _id: 1, code: 1, name: 1, amazon: 1, waveOffsetMinutes: 1 }
     ).lean();
 
     const siteByServiceArea = new Map<string, any>();
@@ -437,7 +437,8 @@ export async function POST(req: NextRequest) {
             const rawDeparture = raw.plannedDepartureTime || route.departureTime || raw.departureTime || "";
             let resolvedWaveTime = "";
             if (rawDeparture) {
-                resolvedWaveTime = subtractMinutes(rawDeparture, 20);
+                const off = Number(routeSite.waveOffsetMinutes);
+                resolvedWaveTime = subtractMinutes(rawDeparture, Number.isFinite(off) && off >= 0 ? off : 20);
             }
 
             // ── plannedFirstStop = plannedStart ──
