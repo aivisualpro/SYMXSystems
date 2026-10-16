@@ -182,6 +182,7 @@ async function runVisit(originTabId, ids, date, serviceAreaId) {
 // required), capture every driver, close it, then ask SYMX to post any new
 // issues to that station's Slack channel. Meant for an always-on computer.
 // ══════════════════════════════════════════════════════════════
+const PAY_TIMES = ["07:15", "16:30"]; // daily invoice sync (Pacific)
 const CDF_TIME = "08:45"; // daily Customer Delivery Feedback pull (data trails ~1 day)
 const SCHEDULE_TIMES = ["08:45", "12:30", "15:00", "18:00", "22:00", "22:30", "23:00"]; // Pacific; 22:00+ also checks returns/logouts; last = end of day
 const RUN_TIMEOUT_MS = 8 * 60 * 1000;
@@ -202,7 +203,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   const { schedEnabled, schedDone = {} } = await chrome.storage.local.get(["schedEnabled", "schedDone"]);
   if (!schedEnabled) return;
   const { date, hm } = pacificNow();
-  if (!SCHEDULE_TIMES.includes(hm)) return;
+  if (!SCHEDULE_TIMES.includes(hm) && !PAY_TIMES.includes(hm)) return;
   const key = `${date}|${hm}`;
   if (schedDone[key]) return;
   schedDone[key] = true;
@@ -210,6 +211,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   Object.keys(schedDone).forEach((k) => { if (!k.startsWith(date)) delete schedDone[k]; });
   await chrome.storage.local.set({ schedDone });
   if (hm === CDF_TIME) runCdfScheduled();
+  else if (PAY_TIMES.includes(hm)) runPaymentsScheduled();
   else runScheduled(hm === SCHEDULE_TIMES[SCHEDULE_TIMES.length - 1], hm);
 });
 
@@ -219,6 +221,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === "SYNC_CDF" && cdfWaiter && sender.tab && sender.tab.id === cdfWaiter.tabId) {
     setTimeout(() => cdfWaiter && cdfWaiter.resolve("ok"), 1500); // let the sync response land first
+  }
+  if (message.type === "PAY_SYNC") {
+    fetch(`${SYMX_API_BASE}/api/public/payments-sync`, { method: "POST", headers: { "Content-Type": "application/json", "x-extension-key": SYMX_API_KEY }, body: JSON.stringify(message.data) })
+      .then((r) => r.json()).then((j) => { payStats.saved += j.saved || 0; payStats.audited += j.audited || 0; if (j.error) payStats.err = j.error; }).catch((e) => { payStats.err = e.message; });
+  }
+  if (message.type === "PAY_DONE" && payWaiter && sender.tab && sender.tab.id === payWaiter.tabId) {
+    setTimeout(() => payWaiter && payWaiter.resolve((message.data && message.data.note) || "ok"), 2500); // let syncs land
+  }
+  if (message.type === "PAY_NOW") {
+    runPaymentsScheduled();
+    sendResponse({ ok: true });
   }
   if (message.type === "CDF_NOW") {
     runCdfScheduled();
@@ -314,4 +327,24 @@ async function runCdfScheduled() {
   } catch (e) { log.push("failed: " + e.message); }
   await chrome.storage.local.set({ lastCdfRun: { at: new Date().toISOString(), log } });
   cdfRunning = false;
+}
+
+
+// ── Payments (invoices) — read-only sync of Amazon's payments portal ──
+let payRunning = false, payWaiter = null, payStats = { saved: 0, audited: 0, err: "" };
+async function runPaymentsScheduled() {
+  if (payRunning || running || cdfRunning) return;
+  payRunning = true; payStats = { saved: 0, audited: 0, err: "" };
+  let note = "timeout", win = null;
+  const set = (extra) => chrome.storage.local.set({ lastPayRun: Object.assign({ at: new Date().toISOString(), log: [note] }, extra) });
+  await set({ running: true, log: ["started"] });
+  try {
+    win = await chrome.windows.create({ url: "https://logistics.amazon.com/flexpayments/simpson/flexpro/invoices?symx_pay=1", type: "normal", focused: false, width: 1280, height: 800 });
+    const tabId = win.tabs && win.tabs[0] && win.tabs[0].id;
+    note = await new Promise((resolve) => { payWaiter = { tabId, resolve }; setTimeout(() => resolve("timeout"), 180000); });
+  } catch (e) { note = "error: " + e.message; }
+  payWaiter = null;
+  if (win) chrome.windows.remove(win.id).catch(() => {});
+  await set({ log: [note, `saved ${payStats.saved}, audited ${payStats.audited}${payStats.err ? " · server error: " + payStats.err : ""}`], bad: !!payStats.err || /error|no invoice|timeout/.test(note) });
+  payRunning = false;
 }

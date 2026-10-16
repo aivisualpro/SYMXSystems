@@ -25,6 +25,7 @@
 // /everyday are API-only with no page of their own. Listing an API path
 // here would leave the banner showing on a page that is actually scoped.
 export const SCOPED_PATH_PREFIXES: string[] = [
+  "/payments",     // Super Admin only: invoices, audit, disputes (APIs use siteFilter)
   "/performance",  // CDF feedback queue + driver trends (APIs use siteFilter)
   "/writeups",     // Write-Ups + Verbal Coachings
   "/fleet",        // vehicles, repairs, inspections, rentals

@@ -60,6 +60,12 @@ window.addEventListener("message", (event) => {
     return;
   }
 
+  if (type === "PAY_SYNC" || type === "PAY_DONE") {
+    if (!isExtensionContextValid()) return;
+    try { chrome.runtime.sendMessage({ type, data: payload }); } catch (e) {}
+    return;
+  }
+
   if (type === "RUN_DONE") {
     if (!isExtensionContextValid()) return;
     try { chrome.runtime.sendMessage({ type: "RUN_DONE", note: payload && payload.note }); } catch (e) {}

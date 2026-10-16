@@ -29,6 +29,7 @@ import {
   IconRoute,
   IconClipboardText,
   IconTrendingUp,
+  IconCash,
 } from "@tabler/icons-react";
 
 import { NavDocuments } from "@/components/nav-documents";
@@ -341,7 +342,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   };
 
   // Performance: count of open CDF items whose driver is working today.
-  const filteredAdminBase = filterItems(adminItems, 'admin');
+  const filteredAdminBase = [...filterItems(adminItems, 'admin')];
+  // Payments: Super Admin only, never driven by the module/permission matrix.
+  if (isAdmin) filteredAdminBase.push({ name: "Payments", url: "/payments", icon: IconCash, subModules: [] } as any);
   const filteredAdmin = filteredAdminBase.map((it: any) =>
     it.name === "Performance" && cdfTodayCount > 0 ? { ...it, badge: cdfTodayCount, alert: true } : it
   );

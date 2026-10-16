@@ -679,6 +679,8 @@ init();
   const cdfBtn = document.getElementById("cdfNowBtn");
   const runChip = document.getElementById("runChip");
   const cdfChip = document.getElementById("cdfChip");
+  const payChip = document.getElementById("payChip");
+  const payBtn = document.getElementById("payNowBtn");
   const nextRun = document.getElementById("nextRun");
   const runLog = document.getElementById("runLog");
   if (!cb) return;
@@ -699,7 +701,7 @@ init();
     return { text: `${ago(run.at)}${bad ? " · " + bad + " issue" + (bad > 1 ? "s" : "") : " · ok"}`, cls: bad ? "warn" : "ok" };
   }
   function render() {
-    chrome.storage.local.get(["schedEnabled", "lastRun", "lastCdfRun"], (r) => {
+    chrome.storage.local.get(["schedEnabled", "lastRun", "lastCdfRun", "lastPayRun"], (r) => {
       cb.checked = !!r.schedEnabled;
       const now = pacificHM();
       const next = SLOTS.find((t) => t > now) || SLOTS[0];
@@ -707,7 +709,9 @@ init();
       const a = summarize(r.lastRun), c = summarize(r.lastCdfRun);
       runChip.textContent = a.text; runChip.className = "chip " + a.cls;
       cdfChip.textContent = c.text; cdfChip.className = "chip " + c.cls;
-      const lines = [...((r.lastCdfRun && r.lastCdfRun.log) || []).map((l) => "Feedback · " + l), ...((r.lastRun && r.lastRun.log) || []).map((l) => "Capture · " + l)];
+      const pr = r.lastPayRun;
+      if (pr) { payChip.textContent = pr.running ? "running…" : `${ago(pr.at)}${pr.bad ? " · issue" : " · ok"}`; payChip.className = "chip " + (pr.running ? "ok" : pr.bad ? "warn" : "ok"); }
+      const lines = [...((pr && pr.log) || []).map((l) => "Payments · " + l), ...((r.lastCdfRun && r.lastCdfRun.log) || []).map((l) => "Feedback · " + l), ...((r.lastRun && r.lastRun.log) || []).map((l) => "Capture · " + l)];
       runLog.textContent = lines.join("\n");
       runLog.style.display = lines.length ? "block" : "none";
     });
@@ -715,6 +719,7 @@ init();
   cb.addEventListener("change", () => chrome.storage.local.set({ schedEnabled: cb.checked }, render));
   runBtn.addEventListener("click", () => { chrome.runtime.sendMessage({ type: "RUN_NOW", final: false }); runLog.textContent = "Capture started — windows open and close by themselves…"; runLog.style.display = "block"; });
   cdfBtn.addEventListener("click", () => { chrome.runtime.sendMessage({ type: "CDF_NOW" }); runLog.textContent = "Feedback pull started — windows open and close by themselves…"; runLog.style.display = "block"; });
+  payBtn.addEventListener("click", () => { chrome.runtime.sendMessage({ type: "PAY_NOW" }); runLog.textContent = "Payments sync started — a window opens and closes by itself…"; runLog.style.display = "block"; });
   chrome.storage.onChanged.addListener(render);
   render();
 })();

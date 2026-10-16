@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SYMX Route Fetch",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "description": "Scrape Amazon Logistics route data and Cortex itineraries, sync to SYMX Systems",
   "permissions": [
     "activeTab",
@@ -38,6 +38,12 @@
     {
       "matches": ["https://logistics.amazon.com/*"],
       "js": ["content.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://logistics.amazon.com/flexpayments/*"],
+      "js": ["payments.js"],
       "run_at": "document_start",
       "world": "MAIN"
     }
