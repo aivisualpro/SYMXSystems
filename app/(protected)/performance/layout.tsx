@@ -3,10 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { MessageSquareWarning, TrendingUp } from "lucide-react";
+import { MessageSquareWarning, TrendingUp, LifeBuoy, Gauge, MapPin } from "lucide-react";
 
 const TABS = [
     { href: "/performance/cdf", label: "Customer feedback", icon: MessageSquareWarning, hint: "Daily queue to discuss with drivers" },
+    { href: "/performance/day", label: "Day detail", icon: Gauge, hint: "Pace, breaks and delivery quality for every driver" },
+    { href: "/performance/areas", label: "Areas", icon: MapPin, hint: "Who performs well where" },
+    { href: "/performance/rescues", label: "Rescues", icon: LifeBuoy, hint: "Who covered whose routes" },
     { href: "/performance/trends", label: "Driver trends", icon: TrendingUp, hint: "How often, and improving?" },
 ];
 

@@ -396,7 +396,12 @@
     // Confirmed real shape: { itineraryDetails: {...}, stops: [...], addresses, transporters, companies }
     if (raw && raw.itineraryDetails) {
       const nested = Array.isArray(raw.itineraryDetails.stops) ? raw.itineraryDetails.stops : [];
-      return { itineraryDetails: raw.itineraryDetails, stops: Array.isArray(raw.stops) && raw.stops.length ? raw.stops : nested };
+      // Compact address lookup (id -> zip/city) so SYMX can track delivery areas.
+      const addresses = {};
+      (Array.isArray(raw.addresses) ? raw.addresses : []).forEach((a) => {
+        if (a && a.addressId) addresses[a.addressId] = { z: a.postalCode || "", c: a.city || "" };
+      });
+      return { itineraryDetails: raw.itineraryDetails, stops: Array.isArray(raw.stops) && raw.stops.length ? raw.stops : nested, addresses };
     }
     // Defensive fallback in case Amazon ever returns itineraryDetails unwrapped
     if (raw && raw.transporterId && raw.serviceAreaId) {
@@ -421,6 +426,7 @@
           date: lastCapturedApiDate || businessDateString(),
           itineraryDetails: payload.itineraryDetails,
           stops: payload.stops,
+          addresses: payload.addresses || {},
         },
       },
       "*"

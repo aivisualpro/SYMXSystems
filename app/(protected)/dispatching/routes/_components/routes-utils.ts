@@ -160,6 +160,8 @@ export interface RouteRow {
   bags: string;
   ov: string;
   stagingLocation: string;
+  onRoadPickups?: number;
+  onRoadPickupsDone?: number;
   attendance: string;
   profileImage: string;
   // Raw fields from DB

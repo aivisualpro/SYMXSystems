@@ -28,6 +28,8 @@ export interface ISYMXRoute extends Document {
     waveTime: string;            // time "2:00 PM"
     pad: string;
     wst: string;
+    onRoadPickups?: number;      // customer pickups (on-road) on this driver's itinerary — need stickers
+    onRoadPickupsDone?: number;
     amazonServiceType?: string;  // original Cortex serviceTypeName (wst holds the translated SYMX value)
     wstDuration: number;
     wstRevenue: number;          // currency $
@@ -137,6 +139,8 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
         pad: { type: String, default: "" },
         wst: { type: String, default: "" },
         amazonServiceType: { type: String, default: "" },
+        onRoadPickups: { type: Number, default: 0 },
+        onRoadPickupsDone: { type: Number, default: 0 },
         wstDuration: { type: Number, default: 0 },
         wstRevenue: { type: Number, default: 0 },
         notes: { type: String, default: "" },

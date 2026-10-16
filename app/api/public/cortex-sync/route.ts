@@ -4,6 +4,9 @@ import Site from "@/lib/models/Site";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import { epochToClockTime, epochToHHMM, durationMsToHMM } from "@/lib/cortex-time";
 import { mergeCortexFields } from "@/lib/cortex-merge";
+import RouteContribution from "@/lib/models/RouteContribution";
+import RouteDayStats from "@/lib/models/RouteDayStats";
+import { computeDayStats } from "@/lib/cortex-stats";
 
 /**
  * ══════════════════════════════════════════════════════════════
@@ -201,7 +204,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: CORS_HEADERS });
     }
 
-    const { serviceAreaId, date, itineraryDetails, stops } = body || {};
+    const { serviceAreaId, date, itineraryDetails, stops, addresses } = body || {};
     if (!serviceAreaId || !date || !itineraryDetails) {
         return NextResponse.json(
             { error: "serviceAreaId, date, and itineraryDetails are required" },
@@ -236,6 +239,49 @@ export async function POST(req: NextRequest) {
 
         const dateObj = new Date(`${date}T00:00:00.000Z`);
 
+        // ── Route contributions (rescues / hand-offs) ──
+        // An itinerary lists every route this driver delivered for. One row per
+        // (route, driver) so a route's deliveries can be split between drivers.
+        try {
+            const rts: any[] = Array.isArray(itineraryDetails.routes) ? itineraryDetails.routes : [];
+            const ops = rts.filter((r) => r?.routeCode).map((r) => {
+                const p = r.routeDeliveryProgress || {};
+                return {
+                    updateOne: {
+                        filter: { siteId: site._id, date, routeCode: String(r.routeCode), transporterId },
+                        update: { $set: {
+                            itineraryId: itineraryDetails.itineraryId || "",
+                            itineraryRouteCode: itineraryDetails.routeCode || "",
+                            completedDeliveries: Number(p.completedDeliveries) || 0,
+                            totalDeliveries: Number(p.totalDeliveries) || 0,
+                            completedStops: Number(p.completedStops) || 0,
+                            totalStops: Number(p.totalStops) || 0,
+                            onRoadPickups: Number(p.onRoadPickups) || 0,
+                            plannedDepartureTime: Number(r.plannedDepartureTime) || undefined,
+                        } },
+                        upsert: true,
+                    },
+                };
+            });
+            if (ops.length) await RouteContribution.bulkWrite(ops as any, { ordered: false });
+        } catch (e) { console.error("route contribution upsert failed", e); }
+
+
+        // ── Pace / breaks / delivery quality / areas (needs the full itinerary with stops) ──
+        try {
+            const stopsForStats = Array.isArray(stops) && stops.length ? stops : (Array.isArray(itineraryDetails.stops) ? itineraryDetails.stops : []);
+            if (stopsForStats.length) {
+                const st = computeDayStats(itineraryDetails, stopsForStats, addresses && typeof addresses === "object" ? addresses : {});
+                if (st) {
+                    await RouteDayStats.updateOne(
+                        { siteId: site._id, date, transporterId },
+                        { $set: { ...st, itineraryId: itineraryDetails.itineraryId || "", routeCode: itineraryDetails.routeCode || "" } },
+                        { upsert: true }
+                    );
+                }
+            }
+        } catch (e) { console.error("day stats failed", e); }
+
         const existing = await SYMXRoute.findOne({ transporterId, date: dateObj, siteId: site._id }) as any;
         if (!existing) {
             return NextResponse.json({
@@ -260,6 +306,12 @@ export async function POST(req: NextRequest) {
         }
         const { setOps, updated: updatedFields, conflicts: newConflictFields } =
             mergeCortexFields(effectiveExisting, computed, AUTO_FIELDS);
+
+        // On-road (customer) pickups across this driver's routes — stickers needed.
+        const rtsAll: any[] = Array.isArray(itineraryDetails.routes) ? itineraryDetails.routes : [];
+        const pu = rtsAll.reduce((a, r) => a + (Number(r?.routeDeliveryProgress?.onRoadPickups) || 0), 0);
+        const puDone = rtsAll.reduce((a, r) => a + (Number(r?.routeDeliveryProgress?.completedOnRoadPickups) || 0), 0);
+        if (rtsAll.length) { (setOps as any).onRoadPickups = pu; (setOps as any).onRoadPickupsDone = puDone; }
 
         await SYMXRoute.updateOne({ _id: existing._id }, { $set: setOps });
 

@@ -324,6 +324,8 @@ export default function RoutesPage() {
                 bags: rec.bags || "",
                 ov: rec.ov || "",
                 stagingLocation: rec.stagingLocation || "",
+                onRoadPickups: rec.onRoadPickups || 0,
+                onRoadPickupsDone: rec.onRoadPickupsDone || 0,
                 attendance: rec.attendance || "",
                 profileImage: emp?.profileImage || "",
                 actualDepartureTime: rec.actualDepartureTime || "",
@@ -1036,7 +1038,19 @@ export default function RoutesPage() {
                                                         </td>
 
                                                         {/* 3. Route # */}
-                                                        <td className="px-2 py-1.5">{renderCell(row, "routeNumber", row.routeNumber)}</td>
+                                                        <td className="px-2 py-1.5">
+                                                            <div className="flex items-center gap-1.5">
+                                                                {renderCell(row, "routeNumber", row.routeNumber)}
+                                                                {(row.onRoadPickups || 0) > 0 && (
+                                                                    <span
+                                                                        title={`${row.onRoadPickups} customer pickup${row.onRoadPickups === 1 ? "" : "s"} (${row.onRoadPickupsDone || 0} done) — issue stickers`}
+                                                                        className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400"
+                                                                    >
+                                                                        PU {row.onRoadPickups}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
 
                                                         {/* 4. Van */}
                                                         <td className="px-2 py-1.5 align-middle text-left" onClick={(e) => e.stopPropagation()}>
