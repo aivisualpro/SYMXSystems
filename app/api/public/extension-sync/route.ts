@@ -608,7 +608,8 @@ export async function POST(req: NextRequest) {
                         stem = parseAmazonDuration(os);
                     }
                     const m = stem.match(/^(\d+):(\d{2})$/);
-                    if (m && Number(m[1]) < 6) syncFields.actualOutboundStem = stem;
+                    // only final once the driver has actually started delivering
+                    if (m && Number(m[1]) < 6 && (Number(route.deliveriesAttempted) > 0 || Number(route.deliveriesCompleted) > 0)) syncFields.actualOutboundStem = stem;
                 }
                 if (route.stopsPerHour) syncFields.stopsPerHour = parseFloat(route.stopsPerHour) || 0;
                 // plannedFirstStop is intentionally NOT written here: the old source

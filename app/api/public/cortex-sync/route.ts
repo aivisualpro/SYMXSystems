@@ -70,8 +70,9 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
     const plannedStem = durationMsToHMM(td.plannedOutboundStemTime);
     if (plannedStem) fields.plannedOutboundStem = plannedStem;
 
-    const actualStem = durationMsToHMM(td.actualOutboundStemTime);
-    if (actualStem) fields.actualOutboundStem = actualStem;
+    // Cortex's outbound stem keeps ticking while the driver is still on the way — it is only
+    // final once the first delivery has happened, so it is set further down after that is known.
+    const actualStemRaw = durationMsToHMM(td.actualOutboundStemTime);
 
     // Real customer stops only: Amazon appends a BACK_TO_ORIGIN / RETURN
     // pair after the last delivery, both marked with routeCode: null —
@@ -141,6 +142,8 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
     const actualLast = epochToClockTime(lastTaskActual);
     if (routeComplete && actualLast) fields.actualLastStop = actualLast;
     else if (!routeComplete) fields.actualLastStop = "";
+
+    if (actualStemRaw && firstTaskActual) fields.actualOutboundStem = actualStemRaw;
 
     // Cortex reports an outbound stem of 0 for some drivers (e.g. several routes
     // in one block). The stem is simply departure -> first delivery, so derive it.
@@ -340,6 +343,27 @@ export async function POST(req: NextRequest) {
             mergeCortexFields(effectiveExisting, computed, AUTO_FIELDS);
         // Wrong pickup-time value and no real first delivery yet: blank it rather than leave it showing.
         if (clearedPickupFirst && !("actualFirstStop" in setOps)) setOps.actualFirstStop = "";
+
+        // Live-day guards (today's routes only): values that cannot exist yet are blanked, even if an
+        // older sync or a bad capture left them behind. Needs the per-route progress Cortex sends.
+        {
+            const rts: any[] = Array.isArray(itineraryDetails.routes) ? itineraryDetails.routes : [];
+            const todayPT = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+            const isToday = !!existing.date && new Date(existing.date).toISOString().slice(0, 10) === todayPT;
+            if (isToday && rts.length) {
+                const sum = (k: string) => rts.reduce((a, r) => a + (Number(r?.routeDeliveryProgress?.[k]) || 0), 0);
+                const deliveriesDone = sum("completedDeliveries"), stopsDone = sum("completedStops"), stopsTotal = sum("totalStops");
+                const complete = stopsTotal > 0 && stopsDone >= stopsTotal;
+                const clear: string[] = [];
+                if (deliveriesDone === 0 && !computed.actualFirstStop) clear.push("actualFirstStop", "actualOutboundStem");
+                if (!complete && !computed.actualLastStop) clear.push("actualLastStop");
+                if (clear.length) {
+                    const owned = new Set<string>((setOps as any).cortexSyncedFields || ownedFields);
+                    for (const f of clear) { if ((existing as any)[f] || (setOps as any)[f]) { (setOps as any)[f] = ""; updatedFields.push(f); } owned.delete(f); }
+                    (setOps as any).cortexSyncedFields = Array.from(owned);
+                }
+            }
+        }
 
         // On-road (customer) pickups across this driver's routes — stickers needed.
         const rtsAll: any[] = Array.isArray(itineraryDetails.routes) ? itineraryDetails.routes : [];

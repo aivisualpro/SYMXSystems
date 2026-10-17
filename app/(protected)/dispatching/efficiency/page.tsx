@@ -1,5 +1,5 @@
 "use client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../_components/dispatching-context";
@@ -79,6 +79,7 @@ const COLUMNS = [
     { key: "routeDuration", label: "Duration", width: "w-[80px] shrink-0" },
     { key: "waveTime", label: "Wave", width: "w-[75px] shrink-0" },
     { key: "appSignIn", label: "App In", width: "w-[70px] shrink-0" },
+    { key: "plannedDeparture", label: "Pln Dep", width: "w-[75px] shrink-0" },
     { key: "actualDepartureTime", label: "Act Dep", width: "w-[75px] shrink-0" },
     { key: "departureDelay", label: "Dep Delay", width: "w-[80px] shrink-0" },
     { key: "plannedOutboundStem", label: "Pln OB", width: "w-[70px] shrink-0" },
@@ -118,7 +119,7 @@ const EDITABLE_FIELDS = new Set([
 
 // Auto-computed fields (never editable)
 const COMPUTED_FIELDS = new Set([
-    "departureDelay", "outboundDelay", "firstStopDelay", "lastStopDelay", "actualInboundStem", "inboundDelay",
+    "plannedDeparture", "departureDelay", "outboundDelay", "firstStopDelay", "lastStopDelay", "actualInboundStem", "inboundDelay",
     "plannedRTSTime", "plannedInboundStem", "estimatedRTSTime",
     "plannedDuration1stToLast", "actualDuration1stToLast",
     "stopsPerHour", "dctDelay", "driverEfficiency",
@@ -140,6 +141,7 @@ interface RouteRow {
     stopCount: number;
     routeDuration: string;
     waveTime: string;
+    plannedDeparture: string;
     appSignIn: string;
     plannedEndTime: string;
     actualDepartureTime: string;
@@ -171,7 +173,7 @@ interface RouteRow {
     cortexConflicts?: { field: string; cortexValue: string; currentValue: string; detectedAt: string }[];
 }
 
-const TIME_OF_DAY = new Set(["actualDepartureTime", "plannedFirstStop", "actualFirstStop", "plannedLastStop", "actualLastStop", "deliveryCompletionTime", "appSignIn", "plannedEndTime"]);
+const TIME_OF_DAY = new Set(["plannedDeparture", "actualDepartureTime", "plannedFirstStop", "actualFirstStop", "plannedLastStop", "actualLastStop", "deliveryCompletionTime", "appSignIn", "plannedEndTime"]);
 
 // ── Delay severity (minutes late; negative = early) ──
 // Bands: [green below, white through, yellow through, red-text through]; above the last = highlighted red.
@@ -210,7 +212,7 @@ const TONE_CLASS: Record<string, string> = {
 // ── Column groups (header band + divider on the first column of each group) ──
 const COLUMN_GROUPS: { label: string; keys: string[]; tint: string; col: string; strong: string }[] = [
     { label: "Driver", keys: ["employee", "routeNumber", "stopCount", "routeDuration", "waveTime"], tint: "text-slate-300 bg-slate-500/10", col: "bg-slate-400/[0.04]", strong: "bg-slate-400/[0.08]" },
-    { label: "Departure", keys: ["appSignIn", "actualDepartureTime", "departureDelay"], tint: "text-sky-300 bg-sky-500/10", col: "bg-sky-400/[0.06]", strong: "bg-sky-400/[0.13]" },
+    { label: "Departure", keys: ["appSignIn", "plannedDeparture", "actualDepartureTime", "departureDelay"], tint: "text-sky-300 bg-sky-500/10", col: "bg-sky-400/[0.06]", strong: "bg-sky-400/[0.13]" },
     { label: "Outbound drive", keys: ["plannedOutboundStem", "actualOutboundStem", "outboundDelay"], tint: "text-violet-300 bg-violet-500/10", col: "bg-violet-400/[0.06]", strong: "bg-violet-400/[0.13]" },
     { label: "First stop", keys: ["plannedFirstStop", "actualFirstStop", "firstStopDelay"], tint: "text-emerald-300 bg-emerald-500/10", col: "bg-emerald-400/[0.06]", strong: "bg-emerald-400/[0.13]" },
     { label: "Last stop", keys: ["plannedLastStop", "actualLastStop", "lastStopDelay"], tint: "text-amber-300 bg-amber-500/10", col: "bg-amber-400/[0.06]", strong: "bg-amber-400/[0.13]" },
@@ -284,6 +286,13 @@ export default function EfficiencyPage() {
 
     // ── Hydrate from layout's shared rawRouteData (no independent fetch) ──
     const { rawRouteData, rawRouteDataLoading } = useDispatching();
+    // Minutes between wave time and planned departure for this station (Settings → Wave & PAD).
+    const { data: wavePadCfg } = useQuery({
+        queryKey: ["wave-pads-offset"],
+        queryFn: async () => { const r = await fetch("/api/admin/settings/wave-pads"); return r.ok ? r.json() : { offset: 20 }; },
+        staleTime: 30 * 1000,
+    });
+    const waveOffset: number = Number.isFinite(wavePadCfg?.offset) ? wavePadCfg.offset : 20;
 
     useEffect(() => {
         if (rawRouteDataLoading) { setLoading(true); return; }
@@ -308,12 +317,14 @@ export default function EfficiencyPage() {
             const dctM = parseTime(rec.deliveryCompletionTime || "");
 
             // Compute derived fields (same logic as routes/page.tsx)
-            const departureDelay = (actDepM !== null && waveM !== null) ? fmtDur(actDepM - (waveM + 20)) : "";
+            const planDepM = waveM !== null ? waveM + waveOffset : null;
+            const plannedDeparture = fmtTime(planDepM);
+            const departureDelay = (actDepM !== null && planDepM !== null) ? fmtDur(actDepM - planDepM) : "";
             const outboundDelay = (actOBM !== null && planOBM !== null) ? fmtDur(actOBM - planOBM) : "";
             const firstStopDelay = (actFirstM !== null && planFirstM !== null) ? fmtDur(actFirstM - planFirstM) : "";
             const lastStopDelay = (actLastM !== null && planLastM !== null) ? fmtDur(actLastM - planLastM) : "";
 
-            const plannedRTSM = (waveM !== null && durM !== null) ? waveM + durM + 20 : null;
+            const plannedRTSM = (waveM !== null && durM !== null) ? waveM + durM + waveOffset : null;
             const plannedRTSTime = fmtTime(plannedRTSM);
 
             const planDur1LM = (planLastM !== null && planFirstM !== null) ? planLastM - planFirstM : null;
@@ -362,6 +373,7 @@ export default function EfficiencyPage() {
                 stopCount,
                 routeDuration: rec.routeDuration || "",
                 waveTime: rec.waveTime || "",
+                plannedDeparture,
                 appSignIn: rec.appSignIn || "",
                 plannedEndTime: rec.plannedEndTime || "",
                 actualDepartureTime: rec.actualDepartureTime || "",
@@ -396,7 +408,7 @@ export default function EfficiencyPage() {
         });
         setAllRoutes(resolvedRows);
         setLoading(false);
-    }, [rawRouteData, rawRouteDataLoading, routeTypeIdMap, routeTypeNameMap]);
+    }, [rawRouteData, rawRouteDataLoading, routeTypeIdMap, routeTypeNameMap, waveOffset]);
 
     // ── Helper: patch TanStack cache directly for instant cross-tab sync ──
     const patchRouteCache = useCallback((routeId: string, updates: Record<string, any>) => {
