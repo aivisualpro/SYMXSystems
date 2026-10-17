@@ -173,6 +173,53 @@ interface RouteRow {
 
 const TIME_OF_DAY = new Set(["actualDepartureTime", "plannedFirstStop", "actualFirstStop", "plannedLastStop", "actualLastStop", "deliveryCompletionTime", "appSignIn", "plannedEndTime"]);
 
+// ── Delay severity (minutes late; negative = early) ──
+// Bands: [green below, white through, yellow through, red-text through]; above the last = highlighted red.
+const DELAY_BANDS: Record<string, [number, number, number]> = {
+    departureDelay: [0, 5, 9],   // <1 green · 1–5 white · 6–9 yellow · 10–15 red · >15 highlighted
+    outboundDelay: [0, 5, 9],
+    inboundDelay: [0, 5, 9],
+    dctDelay: [0, 5, 9],
+    firstStopDelay: [0, 5, 14],  // compounds dep + outbound, so a wider yellow band
+    lastStopDelay: [0, 14, 29],  // end-of-day drift: 1–14 white · 15–29 yellow · 30–45 red · 46+ highlighted
+};
+const DELAY_RED_MAX: Record<string, number> = { departureDelay: 15, outboundDelay: 15, inboundDelay: 15, dctDelay: 15, firstStopDelay: 29, lastStopDelay: 45 };
+function delayMinutes(v: string): number | null {
+    const m = String(v || "").trim().match(/^(-?)(\d+):(\d{2})/);
+    if (!m) return null;
+    const n = parseInt(m[2], 10) * 60 + parseInt(m[3], 10);
+    return m[1] ? -n : n;
+}
+function delayTone(field: string, v: string): "green" | "white" | "yellow" | "red" | "critical" | null {
+    const bands = DELAY_BANDS[field]; const mins = delayMinutes(v);
+    if (!bands || mins === null) return null;
+    if (mins <= bands[0]) return "green";
+    if (mins <= bands[1]) return "white";
+    if (mins <= bands[2]) return "yellow";
+    if (mins <= DELAY_RED_MAX[field]) return "red";
+    return "critical";
+}
+const TONE_CLASS: Record<string, string> = {
+    green: "text-emerald-400",
+    white: "text-foreground",
+    yellow: "bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30 px-1.5 py-0.5 rounded-md",
+    red: "bg-red-500/15 text-red-400 ring-1 ring-red-500/30 px-1.5 py-0.5 rounded-md",
+    critical: "bg-red-600 text-white font-bold px-1.5 py-0.5 rounded-md shadow-sm",
+};
+
+// ── Column groups (header band + divider on the first column of each group) ──
+const COLUMN_GROUPS: { label: string; keys: string[]; tint: string }[] = [
+    { label: "Driver", keys: ["employee", "routeNumber", "stopCount", "routeDuration", "waveTime"], tint: "text-slate-300 bg-slate-500/10" },
+    { label: "Departure", keys: ["appSignIn", "actualDepartureTime", "departureDelay"], tint: "text-sky-300 bg-sky-500/10" },
+    { label: "Outbound drive", keys: ["plannedOutboundStem", "actualOutboundStem", "outboundDelay"], tint: "text-violet-300 bg-violet-500/10" },
+    { label: "First stop", keys: ["plannedFirstStop", "actualFirstStop", "firstStopDelay"], tint: "text-emerald-300 bg-emerald-500/10" },
+    { label: "Last stop", keys: ["plannedLastStop", "actualLastStop", "lastStopDelay"], tint: "text-amber-300 bg-amber-500/10" },
+    { label: "Return to station", keys: ["plannedEndTime", "plannedRTSTime", "estimatedRTSTime", "plannedInboundStem", "actualInboundStem", "inboundDelay"], tint: "text-rose-300 bg-rose-500/10" },
+    { label: "Totals", keys: ["plannedDuration1stToLast", "actualDuration1stToLast", "stopsPerHour", "deliveryCompletionTime", "dctDelay", "stopsRescued", "driverEfficiency", "actions"], tint: "text-teal-300 bg-teal-500/10" },
+];
+const GROUP_FIRST = new Set(COLUMN_GROUPS.map(g => g.keys[0]));
+const colPx = (w: string) => Number((w.match(/w-\[(\d+)px\]/) || [])[1] || 0);
+
 type SortKey = typeof COLUMNS[number]["key"];
 
 export default function EfficiencyPage() {
@@ -471,8 +518,9 @@ export default function EfficiencyPage() {
         let dateFiltered = allRoutes;
         if (selectedDate) dateFiltered = allRoutes.filter(r => r.date ? toPacificDate(r.date) === selectedDate : false);
         
-        // Filter: Show ONLY "Route" type
-        dateFiltered = dateFiltered.filter(r => (r.type || "").trim().toLowerCase() === "route");
+        // Show everyone with an assigned route (Route type, Training OTR, Flight Risk, etc.) —
+        // not just the plain "Route" type.
+        dateFiltered = dateFiltered.filter(r => (r.type || "").trim().toLowerCase() === "route" || !!(r.routeNumber || "").trim());
         
         const totalForDate = dateFiltered.length;
 
@@ -562,22 +610,14 @@ export default function EfficiencyPage() {
 
         const handleInputKey = (val: string) => isTimeField ? parseSmartTime(val, row.waveTime, TIME_OF_DAY.has(field)) : val;
 
-        let customBg = "text-foreground";
+        let customBg = String(field).startsWith("planned") || field === "plannedRTSTime" || field === "routeDuration" ? "text-muted-foreground" : "text-foreground";
         let Icon = null;
         if (displayVal === "—") {
             customBg = "text-muted-foreground/40";
         } else if (isDelayField) {
-            // Color all delay fields green/red like Routes page
-            customBg = isDelayPositive(String(value)) ? "text-red-400" : "text-emerald-500";
-            // Extra alert styling for critical delays
-            if (field === "lastStopDelay" || field === "dctDelay") {
-                const parts = String(value).split(":");
-                if (parts.length >= 2) {
-                    const mins = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-                    const threshold = field === "lastStopDelay" ? 105 : 5;
-                    if (mins >= threshold) { customBg = "bg-red-600 text-white font-bold px-1.5 py-0.5 rounded shadow-sm"; Icon = AlertCircle; }
-                }
-            }
+            const tone = delayTone(field as string, String(value));
+            customBg = TONE_CLASS[tone || "white"];
+            if (tone === "critical") Icon = AlertCircle;
         } else {
             if (field === "actualDepartureTime") {
                 const actDepParts = String(value).split(":");
@@ -695,76 +735,70 @@ export default function EfficiencyPage() {
                 {/* Scrollable Container */}
                 <div className="flex-1 overflow-auto w-full relative">
                     <div className="w-max min-w-full flex flex-col min-h-full">
-                        {/* Header */}
-                        <div className="flex items-center gap-1 py-2.5 border-b border-border/50 bg-card sticky top-0 z-30 shadow-sm">
-                            {COLUMNS.map((col) => {
-                                const isSticky = col.key === "employee";
-                                return (
-                                    <button key={col.key} onClick={() => handleSort(col.key)}
-                                        className={cn(
-                                            "flex items-center gap-0.5 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold hover:text-foreground transition-colors text-left",
-                                            col.width,
-                                            isSticky ? "bg-card self-stretch" : ""
-                                        )}>
-                                        {col.label}
-                                        {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />)}
-                                    </button>
-                                );
-                            })}
+                        {/* Header: group band + column labels */}
+                        <div className="sticky top-0 z-30 bg-card shadow-sm">
+                            <div className="flex items-stretch gap-1 border-b border-border/30">
+                                {COLUMN_GROUPS.map((g) => {
+                                    const px = g.keys.reduce((a, k) => a + colPx(COLUMNS.find(c => c.key === k)?.width || "") + 4, 0);
+                                    return (
+                                        <div key={g.label} style={{ width: px - 4 }}
+                                            className={cn("shrink-0 text-[9px] font-bold uppercase tracking-[0.14em] py-1 px-2 rounded-sm", g.tint,)}>
+                                            {g.label}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <div className="flex items-center gap-1 py-2 border-b border-border/50">
+                                {COLUMNS.map((col) => {
+                                    const isSticky = col.key === "employee";
+                                    const isDelayCol = String(col.key).toLowerCase().includes("delay");
+                                    return (
+                                        <button key={col.key} onClick={() => handleSort(col.key)}
+                                            className={cn(
+                                                "flex items-center gap-0.5 text-[9px] uppercase tracking-wider font-semibold hover:text-foreground transition-colors text-left",
+                                                isDelayCol ? "text-foreground/90" : "text-muted-foreground",
+                                                col.width,
+                                                GROUP_FIRST.has(col.key) && !isSticky && "border-l border-border/40 pl-2",
+                                                isSticky ? "bg-card self-stretch" : ""
+                                            )}>
+                                            {col.label}
+                                            {sortKey === col.key && (sortDir === "asc" ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />)}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {/* Rows */}
                         <div className="flex-1">
-                            {filteredRoutes.map((row) => (
-                                <div key={row._id} className="flex items-center gap-1 py-1.5 border-b border-border/20 hover:bg-muted/20 transition-colors group/row">
-                                    <div className="w-[260px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold flex items-center gap-1.5 min-w-0 pl-3 pr-2 overflow-hidden self-stretch">
-                                        <span
-                                            className="text-[11px] font-semibold truncate"
-                                            style={{ color: row.typeColor || getTypeStyle(row.type).colorHex || "inherit" }}
-                                        >
-                                            {row.employeeName}
-                                        </span>
-                                    </div>
-                                    <div className="w-[80px] shrink-0">{renderCell(row, "routeNumber", row.routeNumber)}</div>
-                                    <div className="w-[70px] shrink-0">{renderCell(row, "stopCount", row.stopCount)}</div>
-                                    <div className="w-[80px] shrink-0">{renderCell(row, "routeDuration", row.routeDuration)}</div>
-                                    <div className="w-[75px] shrink-0">{renderCell(row, "waveTime", row.waveTime)}</div>
-                                    <div className="w-[70px] shrink-0">{renderCell(row, "appSignIn", row.appSignIn)}</div>
-                                    <div className="w-[75px] shrink-0">{renderCell(row, "actualDepartureTime", row.actualDepartureTime)}</div>
-                                    <div className="w-[80px] shrink-0">{renderCell(row, "departureDelay", row.departureDelay)}</div>
-                                    <div className="w-[70px] shrink-0">{renderCell(row, "plannedOutboundStem", row.plannedOutboundStem)}</div>
-                                    <div className="w-[70px] shrink-0">{renderCell(row, "actualOutboundStem", row.actualOutboundStem)}</div>
-                                    <div className="w-[75px] shrink-0">{renderCell(row, "outboundDelay", row.outboundDelay)}</div>
-                                    <div className="w-[70px] shrink-0">{renderCell(row, "plannedFirstStop", row.plannedFirstStop)}</div>
-                                    <div className="w-[70px] shrink-0">{renderCell(row, "actualFirstStop", row.actualFirstStop)}</div>
-                                    <div className="w-[75px] shrink-0">{renderCell(row, "firstStopDelay", row.firstStopDelay)}</div>
-                                    <div className="w-[75px] shrink-0">{renderCell(row, "plannedLastStop", row.plannedLastStop)}</div>
-                                    <div className="w-[75px] shrink-0">{renderCell(row, "actualLastStop", row.actualLastStop)}</div>
-                                    <div className="w-[80px] shrink-0">{renderCell(row, "lastStopDelay", row.lastStopDelay)}</div>
-                                    <div className="w-[70px] shrink-0">{renderCell(row, "plannedEndTime", row.plannedEndTime)}</div>
-                                    <div className="w-[75px] shrink-0">{renderCell(row, "plannedRTSTime", row.plannedRTSTime)}</div>
-                                    <div className="w-[75px] shrink-0">{renderCell(row, "estimatedRTSTime", row.estimatedRTSTime)}</div>
-                                    <div className="w-[70px] shrink-0">{renderCell(row, "plannedInboundStem", row.plannedInboundStem)}</div>
-                                    <div className="w-[70px] shrink-0">{renderCell(row, "actualInboundStem", row.actualInboundStem)}</div>
-                                    <div className="w-[75px] shrink-0">{renderCell(row, "inboundDelay", row.inboundDelay)}</div>
-                                    <div className="w-[70px] shrink-0">{renderCell(row, "plannedDuration1stToLast", row.plannedDuration1stToLast)}</div>
-                                    <div className="w-[70px] shrink-0">{renderCell(row, "actualDuration1stToLast", row.actualDuration1stToLast)}</div>
-                                    <div className="w-[65px] shrink-0">{renderCell(row, "stopsPerHour", row.stopsPerHour)}</div>
-                                    <div className="w-[75px] shrink-0">{renderCell(row, "deliveryCompletionTime", row.deliveryCompletionTime)}</div>
-                                    <div className="w-[80px] shrink-0">{renderCell(row, "dctDelay", row.dctDelay)}</div>
-                                    <div className="w-[75px] shrink-0">{renderCell(row, "stopsRescued", row.stopsRescued)}</div>
-                                    <div className="w-[70px] shrink-0">{renderEfficiency(row)}</div>
-                                    <div className="w-[40px] shrink-0 pr-1 text-right">
-                                        <button
-                                            onClick={() => {
-                                                setQuickEditRow(row);
-                                                setQuickEditForm(row);
-                                            }}
-                                            className="p-1.5 rounded bg-muted/50 text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors shadow-sm ml-auto"
-                                        >
-                                            <Pencil className="h-3 w-3" />
-                                        </button>
-                                    </div>
+                            {filteredRoutes.map((row, i) => (
+                                <div key={row._id} className={cn("flex items-center gap-1 py-2 border-b border-border/15 hover:bg-primary/5 transition-colors group/row", i % 2 === 1 && "bg-muted/10")}>
+                                    {COLUMNS.map((col) => {
+                                        const k = col.key as string;
+                                        const first = GROUP_FIRST.has(k) && k !== "employee";
+                                        const wrap = cn(first && "border-l border-border/30 pl-1");
+                                        if (k === "employee") return (
+                                            <div key={k} className="w-[260px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold flex items-center gap-2 min-w-0 pl-3 pr-2 overflow-hidden self-stretch">
+                                                <span className="text-[12px] font-semibold truncate" style={{ color: row.typeColor || getTypeStyle(row.type).colorHex || "inherit" }}>{row.employeeName}</span>
+                                                {(row.type || "").trim().toLowerCase() !== "route" && row.type && (
+                                                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">{row.type}</span>
+                                                )}
+                                            </div>
+                                        );
+                                        if (k === "actions") return (
+                                            <div key={k} className="w-[40px] shrink-0 pr-1 text-right">
+                                                <button onClick={() => { setQuickEditRow(row); setQuickEditForm(row); }}
+                                                    className="p-1.5 rounded bg-muted/50 text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors shadow-sm ml-auto">
+                                                    <Pencil className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        );
+                                        return (
+                                            <div key={k} className={cn(col.width, wrap)}>
+                                                {k === "driverEfficiency" ? renderEfficiency(row) : renderCell(row, k as keyof RouteRow, (row as any)[k])}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             ))}
 
