@@ -216,7 +216,7 @@ export default function EfficiencyV2Page() {
     if (rawRouteDataLoading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
 
     return (
-        <div className="flex h-full flex-col gap-4 overflow-auto p-1">
+        <div className="h-full space-y-4 overflow-y-auto p-1 pb-10">
             {/* ── 1. Station summary ── */}
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 <Kpi icon={Gauge} label="Avg efficiency" value={summary.avgEff ? `${summary.avgEff}%` : "—"}
