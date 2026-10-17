@@ -92,6 +92,7 @@ interface EmployeeRecipient {
     stagingLocation?: string;
     pad?: string;
     waveTime?: string;
+    plannedFirstStop?: string;
   }[];
 }
 
@@ -317,6 +318,7 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
   const stagingLocation = targetShift?.stagingLocation || "";
   const pad = targetShift?.pad || "";
   const waveTime = targetShift?.waveTime || "";
+  const firstStopTime = targetShift?.plannedFirstStop || "TBD";
 
   return template
     .replace(/\{name\}/gi, name)
@@ -331,6 +333,7 @@ function personalizeMessage(template: string, emp: EmployeeRecipient, tabId?: st
     .replace(/\{stagingLocation\}/gi, stagingLocation)
     .replace(/\{pad\}/gi, pad)
     .replace(/\{waveTime\}/gi, waveTime)
+    .replace(/\{firstStopTime\}/gi, firstStopTime)
     .replace(/\{trainingAddress\}/gi, emp.trainingAddress || "(training address not set)");
 }
 
@@ -382,8 +385,8 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-rose-500",
     borderColor: "border-rose-500/30",
     defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYour route itinerary has been updated. Please review your assigned route for today.\nRoute: {routeNumber}\nVan: {van}\nStaging: {stagingLocation}\nPad: {pad}\nWave Time: {waveTime}\n\nPlease confirm here: {confirmationLink}\n\nThank you!",
-    variables: ["name", "dayOfWeek", "date", "van", "stagingLocation", "routeNumber", "pad", "waveTime", "confirmationLink"],
+      "Hello {name}\n\n{dayOfWeek} {date}\n\nYour route itinerary has been updated. Please review your assigned route for today.\nRoute: {routeNumber}\nVan: {van}\nStaging: {stagingLocation}\nPad: {pad}\nWave Time: {waveTime}\nFirst Stop Time: {firstStopTime} (be at your first stop by then)\n\nPlease confirm here: {confirmationLink}\n\nThank you!",
+    variables: ["name", "dayOfWeek", "date", "van", "stagingLocation", "routeNumber", "pad", "waveTime", "firstStopTime", "confirmationLink"],
   },
   {
     id: "week-schedule",

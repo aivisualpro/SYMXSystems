@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import Site from "@/lib/models/Site";
 import SYMXRoute from "@/lib/models/SYMXRoute";
-import { epochToClockTime, epochToHHMM, durationMsToHMM } from "@/lib/cortex-time";
+import { epochToClockTime, epochToHHMM, epochToDate, durationMsToHMM } from "@/lib/cortex-time";
 import { mergeCortexFields } from "@/lib/cortex-merge";
 import RouteContribution from "@/lib/models/RouteContribution";
 import RouteDayStats from "@/lib/models/RouteDayStats";
@@ -45,6 +45,7 @@ const AUTO_FIELDS = [
     "actualDepartureTime",
     "plannedOutboundStem",
     "actualOutboundStem",
+    "plannedInboundStem",
     "plannedFirstStop",
     "actualFirstStop",
     "plannedLastStop",
@@ -119,6 +120,17 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
 
     const plannedLast = epochToClockTime(lastStop?.expectedStartTime);
     if (plannedLast) fields.plannedLastStop = plannedLast;
+
+    // Planned inbound stem = Cortex's planned return-to-station minus the planned
+    // last-stop time (the drive back after the final delivery).
+    {
+        const rts = epochToDate(td.plannedRtsTime);
+        const lastPlan = epochToDate(lastStop?.expectedStartTime);
+        if (rts && lastPlan) {
+            const ib = durationMsToHMM(rts.getTime() - lastPlan.getTime());
+            if (ib) fields.plannedInboundStem = ib;
+        }
+    }
 
     // The route is complete only when EVERY customer stop has an executed task.
     // Until then "last stop" would just be the latest delivery so far (i.e. ~now),

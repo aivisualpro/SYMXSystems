@@ -78,7 +78,7 @@ import RouteDetailModal from "../_components/RouteDetailModal";
 import { getTypeStyle, TYPE_OPTIONS, TYPE_MAP, getContrastText } from "@/lib/route-types";
 import {
   ATTENDANCE_OPTIONS, getAttendanceStyle,
-  parseTime, isDelayPositive, fmtDur, fmtTime, durToHrs, stripSec,
+  parseTime, parseStem, isDelayPositive, fmtDur, fmtTime, durToHrs, stripSec,
   BUSINESS_TZ, toPacificDate,
   COLUMNS, type ColumnDef, type RouteRow, type SortKey,
   SHORT_DAYS,
@@ -478,8 +478,8 @@ export default function RoutesPage() {
             const waveM = parseTime(r.waveTime);
             const durM = parseTime(r.routeDuration);
             const actDepM = parseTime(r.actualDepartureTime);
-            const planOBM = parseTime(r.plannedOutboundStem);
-            const actOBM = parseTime(r.actualOutboundStem);
+            const planOBM = parseStem(r.plannedOutboundStem);
+            const actOBM = parseStem(r.actualOutboundStem);
             const planFirstM = parseTime(r.plannedFirstStop);
             const actFirstM = parseTime(r.actualFirstStop);
             const planLastM = parseTime(r.plannedLastStop);

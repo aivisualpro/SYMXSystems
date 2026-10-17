@@ -24,13 +24,13 @@ export function parseTime(t: string): number | null {
   if (!t || !t.trim()) return null;
   const s = t.trim();
   // Handle negative duration: "-H:MM" or "H:MM"
-  const mNeg = s.match(/^(-?)(\d{1,2}):(\d{2})$/);
+  const mNeg = s.match(/^(-?)(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (mNeg) {
     const val = parseInt(mNeg[2]) * 60 + parseInt(mNeg[3]);
     return mNeg[1] === "-" ? -val : val;
   }
   // Handle 12h format: "2:00 PM"
-  const m12 = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  const m12 = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
   if (m12) {
     let h = parseInt(m12[1]);
     const min = parseInt(m12[2]);
@@ -40,6 +40,15 @@ export function parseTime(t: string): number | null {
     return h * 60 + min;
   }
   return null;
+}
+
+// Outbound stem is a DURATION (H:MM). A clock-style value ("1:05 PM") or one
+// over 6h is bad data from an older sync — treat as missing instead of
+// producing a bogus delay.
+export function parseStem(t: string): number | null {
+  if (!t || /am|pm/i.test(t)) return null;
+  const v = parseTime(t);
+  return v !== null && v >= 0 && v <= 360 ? v : null;
 }
 
 export function isDelayPositive(d: string): boolean {

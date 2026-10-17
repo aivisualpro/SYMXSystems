@@ -19,7 +19,8 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDispatching } from "../_components/dispatching-context";
-import { parseTime, fmtDur, fmtTime } from "../routes/_components/routes-utils";
+import { parseTime, parseStem, fmtDur, fmtTime } from "../routes/_components/routes-utils";
+const stemMins = (v: string) => parseStem(v || "");
 import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 import { Loader2, AlertTriangle, CheckCircle2, Clock, Gauge, LifeBuoy, Users, Truck, ChevronRight } from "lucide-react";
@@ -117,7 +118,7 @@ export default function EfficiencyV2Page() {
         const out: Row[] = rawRouteData.routes.map((rec: any) => {
             const emp = rawRouteData.employees?.[rec.transporterId];
             const waveM = mins(rec.waveTime), durM = mins(rec.routeDuration);
-            const actDepM = mins(rec.actualDepartureTime), planOBM = mins(rec.plannedOutboundStem), actOBM = mins(rec.actualOutboundStem);
+            const actDepM = mins(rec.actualDepartureTime), planOBM = stemMins(rec.plannedOutboundStem), actOBM = stemMins(rec.actualOutboundStem);
             const planFirstM = mins(rec.plannedFirstStop), actFirstM = mins(rec.actualFirstStop);
             const planLastM = mins(rec.plannedLastStop), actLastM = mins(rec.actualLastStop), dctM = mins(rec.deliveryCompletionTime);
             const planRTSM = waveM !== null && durM !== null ? waveM + durM + 20 : null;

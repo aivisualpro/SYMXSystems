@@ -48,6 +48,7 @@ const DISPATCHING_TABS = [
     { id: "time", label: "Time", href: "/dispatching/time", icon: Clock, gradient: "from-rose-500 to-pink-500", description: "Time tracking and shift management" },
     { id: "closing", label: "Closing", href: "/dispatching/closing", icon: DoorClosed, gradient: "from-indigo-500 to-blue-500", description: "End-of-day dispatch closing procedures" },
     { id: "efficiency", label: "Efficiency", href: "/dispatching/efficiency", icon: TrendingUp, gradient: "from-teal-500 to-emerald-500", description: "Route efficiency and performance metrics" },
+    { id: "efficiency-v2", label: "Efficiency v2", href: "/dispatching/efficiency-v2", icon: TrendingUp, gradient: "from-cyan-500 to-sky-500", description: "Plan vs actual timeline view" },
 ] as const;
 
 // ── Day names ──
@@ -329,6 +330,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
         if (pathname.includes("/dispatching/attendance")) return "Attendance";
         if (pathname.includes("/dispatching/time")) return "Time";
         if (pathname.includes("/dispatching/closing")) return "Closing";
+        if (pathname.includes("/dispatching/efficiency-v2")) return "Efficiency v2";
         if (pathname.includes("/dispatching/efficiency")) return "Efficiency";
         return "Dispatching";
     }, [pathname]);
@@ -454,7 +456,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                     <div data-tab-nav className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border min-w-max">
                         {DISPATCHING_TABS.map((tab) => {
                             const Icon = tab.icon;
-                            const isActive = pathname.startsWith(tab.href);
+                            const isActive = tab.id === "efficiency" ? (pathname.startsWith(tab.href) && !pathname.startsWith("/dispatching/efficiency-v2")) : pathname.startsWith(tab.href);
                             const tabParams = new URLSearchParams();
                             if (selectedWeek) tabParams.set("week", selectedWeek);
                             if (selectedDate) tabParams.set("date", selectedDate);

@@ -590,7 +590,22 @@ export async function POST(req: NextRequest) {
                 const fs1 = notFuture(parseAmazonTime(route.firstStopTime)); if (fs1) syncFields.actualFirstStop = fs1;
                 // actualLastStop comes only from the itinerary sync, once the route is complete.
                 const ct1 = notFuture(parseAmazonTime(route.completionTime)); if (ct1) syncFields.deliveryCompletionTime = ct1;
-                if (route.outboundStem) syncFields.actualOutboundStem = parseAmazonTime(route.outboundStem);
+                // outboundStem is a DURATION (departure → first delivery), never a clock time.
+                // Accept "H:MM"/"H:MM:SS", or a number (ms if huge, else seconds); reject
+                // anything outside 0–6h so a mis-scaled value can't produce a bogus delay.
+                {
+                    const os: any = route.outboundStem;
+                    let stem = "";
+                    if (typeof os === "number" || (typeof os === "string" && /^\d+(\.\d+)?$/.test(os.trim()))) {
+                        const n = Number(os);
+                        const secs = n >= 1e5 ? n / 1000 : n;
+                        if (secs > 0 && secs < 6 * 3600) stem = fmtDurSecs(secs);
+                    } else if (typeof os === "string" && !/am|pm/i.test(os)) {
+                        stem = parseAmazonDuration(os);
+                    }
+                    const m = stem.match(/^(\d+):(\d{2})$/);
+                    if (m && Number(m[1]) < 6) syncFields.actualOutboundStem = stem;
+                }
                 if (route.stopsPerHour) syncFields.stopsPerHour = parseFloat(route.stopsPerHour) || 0;
                 // plannedFirstStop is intentionally NOT written here: the old source
                 // (plannedBreaks[0].plannedStart) is the first planned REST BREAK,

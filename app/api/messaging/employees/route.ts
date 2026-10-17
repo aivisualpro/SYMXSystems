@@ -173,7 +173,7 @@ export async function GET(req: NextRequest) {
     const routePromise = routeQuery
       ? SYMXRoute.find(
           { ...routeQuery, ...S },
-          { transporterId: 1, date: 1, routeNumber: 1, stagingLocation: 1, pad: 1, waveTime: 1, van: 1 }
+          { transporterId: 1, date: 1, routeNumber: 1, stagingLocation: 1, pad: 1, waveTime: 1, van: 1, plannedFirstStop: 1 }
         ).lean()
       : Promise.resolve(null);
 
@@ -390,6 +390,7 @@ export async function GET(req: NextRequest) {
             stagingLocation: routeInfo.stagingLocation || "",
             pad: routeInfo.pad || "",
             waveTime: routeInfo.waveTime || "",
+            plannedFirstStop: routeInfo.plannedFirstStop || "",
           };
         }),
       };

@@ -41,6 +41,7 @@ const CORTEX_AUTO_FIELDS = new Set([
     "actualDepartureTime",
     "plannedOutboundStem",
     "actualOutboundStem",
+    "plannedInboundStem",
     "plannedFirstStop",
     "actualFirstStop",
     "plannedLastStop",

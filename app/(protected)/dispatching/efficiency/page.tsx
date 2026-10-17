@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatching } from "../_components/dispatching-context";
 import { useRouteTypes } from "@/lib/query/hooks/useShared";
 import { getContrastText } from "@/lib/route-types";
-import { parseTime, fmtDur, fmtTime } from "../routes/_components/routes-utils";
+import { parseTime, parseStem, fmtDur, fmtTime } from "../routes/_components/routes-utils";
 
 import { cn } from "@/lib/utils";
 import {
@@ -94,6 +94,8 @@ const COLUMNS = [
     { key: "plannedRTSTime", label: "Pln RTS", width: "w-[75px] shrink-0" },
     { key: "estimatedRTSTime", label: "Est RTS", width: "w-[75px] shrink-0" },
     { key: "plannedInboundStem", label: "Pln IB", width: "w-[70px] shrink-0" },
+    { key: "actualInboundStem", label: "Act IB", width: "w-[70px] shrink-0" },
+    { key: "inboundDelay", label: "IB Delay", width: "w-[75px] shrink-0" },
     { key: "plannedDuration1stToLast", label: "Pln 1-L", width: "w-[70px] shrink-0" },
     { key: "actualDuration1stToLast", label: "Act 1-L", width: "w-[70px] shrink-0" },
     { key: "stopsPerHour", label: "Stp/Hr", width: "w-[65px] shrink-0" },
@@ -116,7 +118,7 @@ const EDITABLE_FIELDS = new Set([
 
 // Auto-computed fields (never editable)
 const COMPUTED_FIELDS = new Set([
-    "departureDelay", "outboundDelay", "firstStopDelay", "lastStopDelay",
+    "departureDelay", "outboundDelay", "firstStopDelay", "lastStopDelay", "actualInboundStem", "inboundDelay",
     "plannedRTSTime", "plannedInboundStem", "estimatedRTSTime",
     "plannedDuration1stToLast", "actualDuration1stToLast",
     "stopsPerHour", "dctDelay", "driverEfficiency",
@@ -154,6 +156,8 @@ interface RouteRow {
     plannedRTSTime: string;
     estimatedRTSTime: string;
     plannedInboundStem: string;
+    actualInboundStem: string;
+    inboundDelay: string;
     plannedDuration1stToLast: string;
     actualDuration1stToLast: string;
     stopsPerHour: number;
@@ -245,8 +249,8 @@ export default function EfficiencyPage() {
             const waveM = parseTime(rec.waveTime || "");
             const durM = parseTime(rec.routeDuration || "");
             const actDepM = parseTime(rec.actualDepartureTime || "");
-            const planOBM = parseTime(rec.plannedOutboundStem || "");
-            const actOBM = parseTime(rec.actualOutboundStem || "");
+            const planOBM = parseStem(rec.plannedOutboundStem || "");
+            const actOBM = parseStem(rec.actualOutboundStem || "");
             const planFirstM = parseTime(rec.plannedFirstStop || "");
             const actFirstM = parseTime(rec.actualFirstStop || "");
             const planLastM = parseTime(rec.plannedLastStop || "");
@@ -269,9 +273,17 @@ export default function EfficiencyPage() {
             const actualDuration1stToLast = fmtDur(actDur1LM);
 
             const planIBM = (plannedRTSM !== null && planLastM !== null) ? plannedRTSM - planLastM : null;
-            const plannedInboundStem = fmtDur(planIBM);
+            // Plan IB: Cortex's planned drive back (stored), else the old estimate only if sensible.
+            const storedIB = parseStem(rec.plannedInboundStem || "");
+            const planIBFinal = storedIB !== null ? storedIB : (planIBM !== null && planIBM >= 0 && planIBM <= 360 ? planIBM : null);
+            const plannedInboundStem = fmtDur(planIBFinal);
+            // Actual IB: last delivery -> back at station. Delay = actual - plan.
+            const actRetM = parseTime(rec.actualReturnTime || "");
+            const actIBM = (actRetM !== null && actLastM !== null && actRetM >= actLastM) ? actRetM - actLastM : null;
+            const actualInboundStem = fmtDur(actIBM);
+            const inboundDelay = (actIBM !== null && planIBFinal !== null) ? fmtDur(actIBM - planIBFinal) : "";
 
-            const estRTSM = (dctM !== null && planIBM !== null) ? dctM + planIBM : null;
+            const estRTSM = (dctM !== null && planIBFinal !== null) ? dctM + planIBFinal : null;
             const estimatedRTSTime = fmtTime(estRTSM);
 
             const stopCount = rec.stopCount || 0;
@@ -316,6 +328,8 @@ export default function EfficiencyPage() {
                 plannedRTSTime,
                 estimatedRTSTime,
                 plannedInboundStem,
+                actualInboundStem,
+                inboundDelay,
                 plannedDuration1stToLast,
                 actualDuration1stToLast,
                 stopsPerHour,
@@ -535,7 +549,7 @@ export default function EfficiencyPage() {
         const raw = value === 0 || value === "" ? "—" : String(value);
         
         let displayVal = raw === "—" ? raw : stripSec(raw);
-        if (field === "actualDepartureTime" && raw !== "—") {
+        if (TIME_OF_DAY.has(field as string) && raw !== "—") {
             const mins = parseTime(raw);
             if (mins !== null) displayVal = fmtTime(mins);
         } else if (field === "driverEfficiency" && raw !== "—") {
@@ -731,6 +745,8 @@ export default function EfficiencyPage() {
                                     <div className="w-[75px] shrink-0">{renderCell(row, "plannedRTSTime", row.plannedRTSTime)}</div>
                                     <div className="w-[75px] shrink-0">{renderCell(row, "estimatedRTSTime", row.estimatedRTSTime)}</div>
                                     <div className="w-[70px] shrink-0">{renderCell(row, "plannedInboundStem", row.plannedInboundStem)}</div>
+                                    <div className="w-[70px] shrink-0">{renderCell(row, "actualInboundStem", row.actualInboundStem)}</div>
+                                    <div className="w-[75px] shrink-0">{renderCell(row, "inboundDelay", row.inboundDelay)}</div>
                                     <div className="w-[70px] shrink-0">{renderCell(row, "plannedDuration1stToLast", row.plannedDuration1stToLast)}</div>
                                     <div className="w-[70px] shrink-0">{renderCell(row, "actualDuration1stToLast", row.actualDuration1stToLast)}</div>
                                     <div className="w-[65px] shrink-0">{renderCell(row, "stopsPerHour", row.stopsPerHour)}</div>

@@ -88,7 +88,15 @@
   async function run() {
     const t0 = await waitFor("getAllInvoices", 25000);
     if (!t0) { post("PAY_DONE", { note: "no invoice list seen — open the Payments > Invoices page while signed in" }); return; }
-    const list = find(t0.response, ["invoices", "batches", "invoiceList", "batchList", "items"]) || (Array.isArray(t0.response) ? t0.response : []);
+    // find the array of invoice rows wherever it sits (the rows carry a batchId)
+    const findList = (n, d) => {
+      if (!n || typeof n !== "object" || d > 5) return null;
+      if (Array.isArray(n)) { if (n.length && n[0] && typeof n[0] === "object" && n[0].batchId) return n; for (const x of n) { const r = findList(x, d + 1); if (r) return r; } return null; }
+      for (const k of Object.keys(n)) { const r = findList(n[k], d + 1); if (r) return r; }
+      return null;
+    };
+    const list = findList(t0.response, 0) || [];
+    if (!list.length) log("list shape: keys=" + Object.keys(t0.response || {}).join(",") + " · sample=" + JSON.stringify(t0.response).slice(0, 300));
     log(`list: ${list.length} invoices`);
     const cutoff = Date.now() - 150 * 864e5;
     const rows = list.filter((r) => { const t = Number(r.invoiceDateInEpochMillis); return !t || t >= cutoff; });
