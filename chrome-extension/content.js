@@ -35,6 +35,27 @@
   let lastCapturedServiceArea = ""; // serviceAreaId from API URL
   let lastSummariesUrl = "";        // for periodic automatic refetch
 
+  // ── Discovery helper: remember any API response that mentions block/duration/hours keys,
+  // so we can find where Cortex keeps the paid block length (Edit route assignments dialog).
+  // Read it from the page console with:  copy(JSON.stringify(window.__symxSniff, null, 1))
+  window.__symxSniff = window.__symxSniff || [];
+  function symxSniff(url, text) {
+    try {
+      // Opt-in only (so normal capture is never affected): run localStorage.setItem("symx_sniff","1") then reload.
+      if (localStorage.getItem("symx_sniff") !== "1") return;
+      if (!url || typeof text !== "string" || text.length > 3e6 || window.__symxSniff.length >= 40) return;
+      if (!/logistics\.amazon\.com|^\//.test(url)) return;
+      const keys = new Set();
+      const re = /"([A-Za-z]*(?:[Dd]uration|[Bb]lock|[Hh]ours|[Pp]aid)[A-Za-z]*)"\s*:\s*([^,}\]]{0,40})/g;
+      let m, sample = [];
+      while ((m = re.exec(text)) && sample.length < 12) { if (!keys.has(m[1] + m[2])) { keys.add(m[1] + m[2]); sample.push(m[1] + ": " + m[2]); } }
+      if (!sample.length) return;
+      const clean = String(url).replace(/([?&](?:token|sig|signature)=)[^&]+/gi, "$1…");
+      if (window.__symxSniff.some((e) => e.url === clean)) return;
+      window.__symxSniff.push({ url: clean, found: sample });
+    } catch (e) {}
+  }
+
   XMLHttpRequest.prototype.open = function (method, url, ...rest) {
     this._symxUrl = url;
     this._symxMethod = method;
@@ -43,6 +64,7 @@
 
   XMLHttpRequest.prototype.send = function (...args) {
     this.addEventListener("load", function () {
+      try { symxSniff(this._symxUrl, this.responseText); } catch (e) {}
       try {
         if (
           this._symxUrl &&
@@ -62,6 +84,14 @@
         ) {
           extractApiParams(this._symxUrl);
           processSlimSummaries(JSON.parse(this.responseText));
+        }
+        if (
+          this._symxUrl && typeof this._symxUrl === "string" &&
+          /\/execution\/api\/[^?]*summar/i.test(this._symxUrl) && !this._symxUrl.includes("route-summaries") && !/\/execution\/api\/summaries\?/.test(this._symxUrl)
+        ) {
+          // Cortex renamed/added a summaries endpoint? Accept it if the payload has the same shape.
+          const d = JSON.parse(this.responseText);
+          if (d && (Array.isArray(d.itinerarySummaries) || Array.isArray(d.routeSummaries))) { extractApiParams(this._symxUrl); processSlimSummaries(d); }
         }
         if (
           this._symxUrl &&
@@ -92,6 +122,7 @@
 
     try {
       const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
+      try { if (localStorage.getItem("symx_sniff") === "1") response.clone().text().then((t) => symxSniff(url, t)).catch(() => {}); } catch (e) {}
       if (url.includes("route-summaries")) {
         extractApiParams(url);
         lastSummariesUrl = url;
@@ -105,6 +136,10 @@
       }
       if (url.includes("dataSetId=da_dsp_daily_cdf_deep_dive")) {
         processCdfDeepDive(url, await response.clone().json());
+      }
+      if (/\/execution\/api\/[^?]*summar/i.test(url) && !url.includes("route-summaries") && !/\/execution\/api\/summaries\?/.test(url)) {
+        const d = await response.clone().json();
+        if (d && (Array.isArray(d.itinerarySummaries) || Array.isArray(d.routeSummaries))) { extractApiParams(url); processSlimSummaries(d); }
       }
       if (url.includes("/execution/api/itineraries/")) {
         const cloned = response.clone();
@@ -274,7 +309,16 @@
       document.body.appendChild(panel);
     }
     const list = buildChecklist();
-    if (list.length === 0) { panel.style.display = "none"; return; }
+    if (list.length === 0) {
+      if (/\/operations\/execution\/itineraries/.test(location.pathname)) {
+        panel.style.display = "block"; panel.textContent = "";
+        const w = document.createElement("div");
+        w.style.cssText = "padding:8px 12px;font-weight:600;";
+        w.textContent = "SYMX: waiting for the driver list… (change the date or refresh the page if this stays)";
+        panel.appendChild(w);
+      } else panel.style.display = "none";
+      return;
+    }
     panel.style.display = "block";
     const done = list.filter((x) => x.state === "done").length;
     const auto = list.filter((x) => x.state === "partial" || x.state === "done" || x.state === "stale").length;

@@ -12,6 +12,7 @@
   const log = (m) => { logLines.push(m); console.log("[SYMX Payments]", m); };
   window.__symxPay = { seen, logLines };
 
+  const pageBatch = () => (location.pathname.match(/invoices\/([0-9a-f-]{20,})/i) || [])[1] || "";
   const opOf = (url) => OPS.find((o) => String(url).includes(o));
   const origFetch = window.fetch;
   window.fetch = async function (input, init) {
@@ -19,7 +20,7 @@
     const res = await origFetch.apply(this, arguments);
     try {
       const op = opOf(url);
-      if (op) res.clone().json().then((j) => { seen[op] = { method: (init && init.method) || (input && input.method) || "GET", url, body: init && init.body, response: j }; }).catch(() => {});
+      if (op) res.clone().json().then((j) => { seen[op] = { method: (init && init.method) || (input && input.method) || "GET", url, body: init && init.body, response: j, sample: pageBatch() }; }).catch(() => {});
     } catch (e) {}
     return res;
   };
@@ -27,7 +28,7 @@
   XMLHttpRequest.prototype.open = function (m, u) { this.__sp = { method: m, url: u }; return xo.apply(this, arguments); };
   XMLHttpRequest.prototype.send = function (b) {
     const sp = this.__sp;
-    if (sp && opOf(sp.url)) this.addEventListener("load", () => { try { seen[opOf(sp.url)] = { method: sp.method, url: sp.url, body: b, response: JSON.parse(this.responseText) }; } catch (e) {} });
+    if (sp && opOf(sp.url)) this.addEventListener("load", () => { try { seen[opOf(sp.url)] = { method: sp.method, url: sp.url, body: b, response: JSON.parse(this.responseText), sample: pageBatch() }; } catch (e) {} });
     return xs.apply(this, arguments);
   };
 
@@ -36,22 +37,17 @@
 
   // Call an operation for one invoice, based on how the page called it (or the list call as a guide).
   async function call(op, batchId, extra) {
-    const tpl = seen[op] || seen.getAllInvoices;
-    if (!tpl) return null;
-    let url = tpl.url.replace(opOf(tpl.url), op);
-    let method = (tpl.method || "GET").toUpperCase();
-    let body;
-    if (seen[op] && tpl.body) body = String(tpl.body).replace(/"batchId"\s*:\s*"[^"]*"/, `"batchId":"${batchId}"`);
-    if (seen[op] && /batchId=/.test(url)) url = url.replace(/batchId=[^&]*/, "batchId=" + encodeURIComponent(batchId));
-    if (!seen[op]) {
-      if (method === "GET") url += (url.includes("?") ? "&" : "?") + "batchId=" + encodeURIComponent(batchId);
-      else body = JSON.stringify(Object.assign({ batchId }, extra || {}));
-    }
+    const tpl = seen[op];
+    if (!tpl) return null; // no template learned from the page yet
+    const swap = (str) => (tpl.sample ? String(str || "").split(tpl.sample).join(batchId) : String(str || ""));
+    const url = swap(tpl.url);
+    const method = (tpl.method || "GET").toUpperCase();
+    const body = method === "GET" ? undefined : swap(tpl.body);
     try {
-      const r = await origFetch(url, { method, credentials: "include", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: method === "GET" ? undefined : body });
-      if (!r.ok) { log(`${op} ${batchId}: HTTP ${r.status}`); return null; }
+      const r = await origFetch(url, { method, credentials: "include", headers: { "Content-Type": "application/json", Accept: "application/json" }, body });
+      if (!r.ok) { log(`${op} ${batchId.slice(0, 8)}: HTTP ${r.status}`); return null; }
       return await r.json();
-    } catch (e) { log(`${op} ${batchId}: ${e.message}`); return null; }
+    } catch (e) { log(`${op} ${batchId.slice(0, 8)}: ${e.message}`); return null; }
   }
 
   // Turn whatever shape the summary comes in into [{heading, columns, rows:[{group, lines}]}]
@@ -85,43 +81,70 @@
   const find = (o, keys) => { for (const k of keys) if (o && o[k] !== undefined) return o[k]; return undefined; };
   const post = (type, payload) => window.postMessage({ source: "SYMX_CONTENT", type, payload }, "*");
 
-  async function run() {
-    const t0 = await waitFor("getAllInvoices", 25000);
-    if (!t0) { post("PAY_DONE", { note: "no invoice list seen — open the Payments > Invoices page while signed in" }); return; }
-    // find the array of invoice rows wherever it sits (the rows carry a batchId)
-    const findList = (n, d) => {
-      if (!n || typeof n !== "object" || d > 5) return null;
-      if (Array.isArray(n)) { if (n.length && n[0] && typeof n[0] === "object" && n[0].batchId) return n; for (const x of n) { const r = findList(x, d + 1); if (r) return r; } return null; }
-      for (const k of Object.keys(n)) { const r = findList(n[k], d + 1); if (r) return r; }
-      return null;
-    };
-    const list = findList(t0.response, 0) || [];
-    if (!list.length) log("list shape: keys=" + Object.keys(t0.response || {}).join(",") + " · sample=" + JSON.stringify(t0.response).slice(0, 300));
-    log(`list: ${list.length} invoices`);
-    const cutoff = Date.now() - 150 * 864e5;
-    const rows = list.filter((r) => { const t = Number(r.invoiceDateInEpochMillis); return !t || t >= cutoff; });
+  const findList = (n, d) => {
+    if (!n || typeof n !== "object" || d > 5) return null;
+    if (Array.isArray(n)) { if (n.length && n[0] && typeof n[0] === "object" && n[0].batchId) return n; for (const x of n) { const r = findList(x, d + 1); if (r) return r; } return null; }
+    for (const k of Object.keys(n)) { const r = findList(n[k], d + 1); if (r) return r; }
+    return null;
+  };
+  const DETAIL = (id) => `${location.origin}${(location.pathname.match(/^(.*?\/invoices)/) || [, "/flexpayments/simpson/flexpro/invoices"])[1]}/${id}?symx_pay=2`;
+  const sendRows = async (rows, withDetail) => {
     let sent = 0, detailed = 0, chunk = [];
     const flush = () => { if (chunk.length) { post("PAY_SYNC", { invoices: chunk }); sent += chunk.length; chunk = []; } };
     for (const row of rows) {
       const batchId = String(row.batchId || "");
       if (!batchId) continue;
+      const item = { list: row };
       const open = row.disputeWindowStatus === "OPEN";
       const recent = Number(row.invoiceDateInEpochMillis) > Date.now() - 35 * 864e5;
-      const item = { list: row };
-      if (open || recent) {
+      if (withDetail && (open || recent)) {
         const [sum, batch, disp, adj] = await Promise.all([call("invoiceSummary", batchId), call("batchDetails", batchId), call("listDisputes", batchId), call("listDraftAdjustments", batchId)]);
-        if (sum) { item.tables = toTables(sum); if (item.tables.length) detailed++; else log(`summary for ${batchId}: no tables recognised`); }
+        if (sum) { item.tables = toTables(sum); if (item.tables.length) detailed++; else log(`summary ${batchId.slice(0, 8)}: no tables recognised`); }
         if (batch) item.batch = batch; if (disp) item.disputes = disp; if (adj) item.adjustments = adj;
       }
       chunk.push(item);
       if (chunk.length >= 5) flush();
     }
     flush();
+    return { sent, detailed };
+  };
+
+  // Phase 1 (invoice list page): read the list, then open the first recent invoice so the page
+  // makes its own detail calls — we learn the real endpoints from those and replay them.
+  async function run() {
+    const t0 = await waitFor("getAllInvoices", 25000);
+    if (!t0) { post("PAY_DONE", { note: "no invoice list seen — open Payments > Invoices while signed in" }); return; }
+    const list = findList(t0.response, 0) || [];
+    if (!list.length) { post("PAY_DONE", { note: "list shape: keys=" + Object.keys(t0.response || {}).join(",") }); return; }
+    log(`list: ${list.length} invoices`);
+    const cutoff = Date.now() - 150 * 864e5;
+    const rows = list.filter((r) => { const t = Number(r.invoiceDateInEpochMillis); return !t || t >= cutoff; });
+    try { sessionStorage.setItem("symx_pay_rows", JSON.stringify(rows)); } catch (e) {}
+    const probe = rows.find((r) => r.disputeWindowStatus === "OPEN") || rows[0];
+    if (!probe) { post("PAY_DONE", { note: "no invoices" }); return; }
+    location.href = DETAIL(probe.batchId); // phase 2 continues on the detail page
+  }
+
+  // Phase 2 (invoice detail page): endpoints are now known from the page's own calls.
+  async function run2() {
+    let rows = []; try { rows = JSON.parse(sessionStorage.getItem("symx_pay_rows") || "[]"); } catch (e) {}
+    if (!rows.length) { post("PAY_DONE", { note: "lost the invoice list between pages" }); return; }
+    const need = ["invoiceSummary"];
+    const t = Date.now(); while (need.some((o) => !seen[o]) && Date.now() - t < 20000) await sleep(400);
+    await sleep(1200); // let batchDetails / disputes finish too
+    log("learned: " + Object.keys(seen).filter((k) => k !== "getAllInvoices").map((k) => k + " " + seen[k].url.replace(/^https?:\/\/[^/]+/, "").slice(0, 70)).join(" | "));
+    const withDetail = !!seen.invoiceSummary;
+    if (!withDetail) log("page never called invoiceSummary — sending list only");
+    const { sent, detailed } = await sendRows(rows, withDetail);
+    try { sessionStorage.removeItem("symx_pay_rows"); } catch (e) {}
     post("PAY_DONE", { note: `sent ${sent} invoices (${detailed} with line items)${logLines.length ? " · " + logLines.slice(-3).join("; ") : ""}` });
   }
 
   if (/[?&]symx_pay=1/.test(location.search)) {
     const start = () => run().catch((e) => post("PAY_DONE", { note: "error: " + e.message }));
     if (document.readyState === "complete") start(); else window.addEventListener("load", start);
+  } else if (/[?&]symx_pay=2/.test(location.search)) {
+    const start2 = () => run2().catch((e) => post("PAY_DONE", { note: "error: " + e.message }));
+    if (document.readyState === "complete") start2(); else window.addEventListener("load", start2);
   }
 })();

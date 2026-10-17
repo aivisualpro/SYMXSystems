@@ -526,17 +526,20 @@ export async function POST(req: NextRequest) {
                 return undefined;
             };
 
-            let blockDuration = findKeyDeep(route, "blockDurationInMinutes");
-            if (blockDuration === undefined || blockDuration === null || blockDuration === "") {
-                if (typeof raw === "string") {
-                    try {
-                        const parsed = JSON.parse(raw);
-                        blockDuration = findKeyDeep(parsed, "blockDurationInMinutes");
-                    } catch (e) {}
-                } else {
-                    blockDuration = findKeyDeep(raw, "blockDurationInMinutes");
-                }
-            }
+            // A route can list several transporters (hand-offs) and the first is often null,
+            // so collect EVERY blockDurationInMinutes in the payload and take the first real number.
+            const collectKey = (obj: any, targetKey: string, out: any[] = [], depth = 0): any[] => {
+                if (!obj || typeof obj !== "object" || depth > 8) return out;
+                if (Array.isArray(obj)) { obj.forEach((x) => collectKey(x, targetKey, out, depth + 1)); return out; }
+                if (targetKey in obj) out.push(obj[targetKey]);
+                for (const k of Object.keys(obj)) collectKey(obj[k], targetKey, out, depth + 1);
+                return out;
+            };
+            let rawObj: any = raw;
+            if (typeof raw === "string") { try { rawObj = JSON.parse(raw); } catch { rawObj = null; } }
+            const blockCandidates = [...collectKey(route, "blockDurationInMinutes"), ...collectKey(rawObj, "blockDurationInMinutes")]
+                .map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
+            const blockDuration: any = blockCandidates.length ? blockCandidates[0] : undefined;
 
             if (blockDuration !== undefined && blockDuration !== null && blockDuration !== "") {
                 const hours = Number(blockDuration) / 60;
@@ -587,7 +590,8 @@ export async function POST(req: NextRequest) {
                 // never feed actualDepartureTime. The real value comes from
                 // transporters[0].actualRouteDepartureTime (see autoCandidates below).
                 const notFuture = (v: string) => (v && !isFutureActual(v, dateObj) ? v : "");
-                const fs1 = notFuture(parseAmazonTime(route.firstStopTime)); if (fs1) syncFields.actualFirstStop = fs1;
+                // route.firstStopTime is the station PICK-UP (loading packages), not the first delivery —
+                // the real first delivery comes only from the driver's itinerary sync. Never write it here.
                 // actualLastStop comes only from the itinerary sync, once the route is complete.
                 const ct1 = notFuture(parseAmazonTime(route.completionTime)); if (ct1) syncFields.deliveryCompletionTime = ct1;
                 // outboundStem is a DURATION (departure → first delivery), never a clock time.

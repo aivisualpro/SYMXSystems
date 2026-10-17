@@ -4,6 +4,7 @@ import Site from "@/lib/models/Site";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import { epochToClockTime, epochToHHMM, epochToDate, durationMsToHMM } from "@/lib/cortex-time";
 import { mergeCortexFields } from "@/lib/cortex-merge";
+import { parseTime } from "@/app/(protected)/dispatching/routes/_components/routes-utils";
 import RouteContribution from "@/lib/models/RouteContribution";
 import RouteDayStats from "@/lib/models/RouteDayStats";
 import { computeDayStats } from "@/lib/cortex-stats";
@@ -316,8 +317,29 @@ export async function POST(req: NextRequest) {
         if (legacyPlannedFirst && effectiveExisting.plannedFirstStop === legacyPlannedFirst && !ownedFields.includes("plannedFirstStop")) {
             effectiveExisting.plannedFirstStop = "";
         }
+        let clearedPickupFirst = false;
+        // Legacy cleanup: an older sync stored the station PICK-UP time as "Act 1st". A real first
+        // delivery can never be before the pickup finished, so a stored value earlier than that (that no
+        // sync owns) is that old wrong value — treat it as empty so the true first delivery replaces it.
+        {
+            const pickupTimes: number[] = [];
+            for (const st of stopList) {
+                const tasks: any[] = Array.isArray(st?.tasks) ? st.tasks : [];
+                if (tasks.length && tasks.every((t: any) => t?.taskType === "PICK_UP")) {
+                    for (const t of tasks) { const n = Number(t?.actualExecutionTime); if (Number.isFinite(n) && n > 0) pickupTimes.push(n); }
+                }
+            }
+            const lastPickup = pickupTimes.length ? parseTime(epochToClockTime(Math.max(...pickupTimes))) : null;
+            const curFirst = parseTime(String(effectiveExisting.actualFirstStop || ""));
+            if (lastPickup !== null && curFirst !== null && curFirst < lastPickup + 2 && !ownedFields.includes("actualFirstStop")) {
+                effectiveExisting.actualFirstStop = "";
+                clearedPickupFirst = true;
+            }
+        }
         const { setOps, updated: updatedFields, conflicts: newConflictFields } =
             mergeCortexFields(effectiveExisting, computed, AUTO_FIELDS);
+        // Wrong pickup-time value and no real first delivery yet: blank it rather than leave it showing.
+        if (clearedPickupFirst && !("actualFirstStop" in setOps)) setOps.actualFirstStop = "";
 
         // On-road (customer) pickups across this driver's routes — stickers needed.
         const rtsAll: any[] = Array.isArray(itineraryDetails.routes) ? itineraryDetails.routes : [];
