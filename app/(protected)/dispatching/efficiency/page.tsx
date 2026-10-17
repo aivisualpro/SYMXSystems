@@ -208,15 +208,18 @@ const TONE_CLASS: Record<string, string> = {
 };
 
 // ── Column groups (header band + divider on the first column of each group) ──
-const COLUMN_GROUPS: { label: string; keys: string[]; tint: string }[] = [
-    { label: "Driver", keys: ["employee", "routeNumber", "stopCount", "routeDuration", "waveTime"], tint: "text-slate-300 bg-slate-500/10" },
-    { label: "Departure", keys: ["appSignIn", "actualDepartureTime", "departureDelay"], tint: "text-sky-300 bg-sky-500/10" },
-    { label: "Outbound drive", keys: ["plannedOutboundStem", "actualOutboundStem", "outboundDelay"], tint: "text-violet-300 bg-violet-500/10" },
-    { label: "First stop", keys: ["plannedFirstStop", "actualFirstStop", "firstStopDelay"], tint: "text-emerald-300 bg-emerald-500/10" },
-    { label: "Last stop", keys: ["plannedLastStop", "actualLastStop", "lastStopDelay"], tint: "text-amber-300 bg-amber-500/10" },
-    { label: "Return to station", keys: ["plannedEndTime", "plannedRTSTime", "estimatedRTSTime", "plannedInboundStem", "actualInboundStem", "inboundDelay"], tint: "text-rose-300 bg-rose-500/10" },
-    { label: "Totals", keys: ["plannedDuration1stToLast", "actualDuration1stToLast", "stopsPerHour", "deliveryCompletionTime", "dctDelay", "stopsRescued", "driverEfficiency", "actions"], tint: "text-teal-300 bg-teal-500/10" },
+const COLUMN_GROUPS: { label: string; keys: string[]; tint: string; col: string; strong: string }[] = [
+    { label: "Driver", keys: ["employee", "routeNumber", "stopCount", "routeDuration", "waveTime"], tint: "text-slate-300 bg-slate-500/10", col: "bg-slate-400/[0.04]", strong: "bg-slate-400/[0.08]" },
+    { label: "Departure", keys: ["appSignIn", "actualDepartureTime", "departureDelay"], tint: "text-sky-300 bg-sky-500/10", col: "bg-sky-400/[0.06]", strong: "bg-sky-400/[0.13]" },
+    { label: "Outbound drive", keys: ["plannedOutboundStem", "actualOutboundStem", "outboundDelay"], tint: "text-violet-300 bg-violet-500/10", col: "bg-violet-400/[0.06]", strong: "bg-violet-400/[0.13]" },
+    { label: "First stop", keys: ["plannedFirstStop", "actualFirstStop", "firstStopDelay"], tint: "text-emerald-300 bg-emerald-500/10", col: "bg-emerald-400/[0.06]", strong: "bg-emerald-400/[0.13]" },
+    { label: "Last stop", keys: ["plannedLastStop", "actualLastStop", "lastStopDelay"], tint: "text-amber-300 bg-amber-500/10", col: "bg-amber-400/[0.06]", strong: "bg-amber-400/[0.13]" },
+    { label: "Return to station", keys: ["plannedEndTime", "plannedRTSTime", "estimatedRTSTime", "plannedInboundStem", "actualInboundStem", "inboundDelay"], tint: "text-rose-300 bg-rose-500/10", col: "bg-rose-400/[0.06]", strong: "bg-rose-400/[0.13]" },
+    { label: "Totals", keys: ["plannedDuration1stToLast", "actualDuration1stToLast", "stopsPerHour", "deliveryCompletionTime", "dctDelay", "stopsRescued", "driverEfficiency", "actions"], tint: "text-teal-300 bg-teal-500/10", col: "bg-teal-400/[0.06]", strong: "bg-teal-400/[0.13]" },
 ];
+// Whole-column wash: soft tint per phase, stronger on the delay (answer) columns.
+const COL_BG: Record<string, string> = {};
+COLUMN_GROUPS.forEach(g => g.keys.forEach(k => { COL_BG[k] = String(k).toLowerCase().includes("delay") ? g.strong : g.col; }));
 const GROUP_FIRST = new Set(COLUMN_GROUPS.map(g => g.keys[0]));
 const colPx = (w: string) => Number((w.match(/w-\[(\d+)px\]/) || [])[1] || 0);
 
@@ -737,28 +740,29 @@ export default function EfficiencyPage() {
                     <div className="w-max min-w-full flex flex-col min-h-full">
                         {/* Header: group band + column labels */}
                         <div className="sticky top-0 z-30 bg-card shadow-sm">
-                            <div className="flex items-stretch gap-1 border-b border-border/30">
+                            <div className="flex items-stretch border-b border-border/30">
                                 {COLUMN_GROUPS.map((g) => {
-                                    const px = g.keys.reduce((a, k) => a + colPx(COLUMNS.find(c => c.key === k)?.width || "") + 4, 0);
+                                    const px = g.keys.reduce((a, k) => a + colPx(COLUMNS.find(c => c.key === k)?.width || ""), 0);
                                     return (
-                                        <div key={g.label} style={{ width: px - 4 }}
+                                        <div key={g.label} style={{ width: px }}
                                             className={cn("shrink-0 text-[9px] font-bold uppercase tracking-[0.14em] py-1 px-2 rounded-sm", g.tint,)}>
                                             {g.label}
                                         </div>
                                     );
                                 })}
                             </div>
-                            <div className="flex items-center gap-1 py-2 border-b border-border/50">
+                            <div className="flex items-stretch border-b border-border/50">
                                 {COLUMNS.map((col) => {
                                     const isSticky = col.key === "employee";
                                     const isDelayCol = String(col.key).toLowerCase().includes("delay");
                                     return (
                                         <button key={col.key} onClick={() => handleSort(col.key)}
                                             className={cn(
-                                                "flex items-center gap-0.5 text-[9px] uppercase tracking-wider font-semibold hover:text-foreground transition-colors text-left",
+                                                "flex items-center gap-0.5 text-[9px] uppercase tracking-wider font-semibold hover:text-foreground transition-colors text-left px-1.5 py-2.5",
+                                                COL_BG[col.key as string],
                                                 isDelayCol ? "text-foreground/90" : "text-muted-foreground",
                                                 col.width,
-                                                GROUP_FIRST.has(col.key) && !isSticky && "border-l border-border/40 pl-2",
+                                                GROUP_FIRST.has(col.key) && !isSticky && "border-l border-border/40",
                                                 isSticky ? "bg-card self-stretch" : ""
                                             )}>
                                             {col.label}
@@ -772,13 +776,13 @@ export default function EfficiencyPage() {
                         {/* Rows */}
                         <div className="flex-1">
                             {filteredRoutes.map((row, i) => (
-                                <div key={row._id} className={cn("flex items-center gap-1 py-2 border-b border-border/15 hover:bg-primary/5 transition-colors group/row", i % 2 === 1 && "bg-muted/10")}>
+                                <div key={row._id} className={cn("flex items-stretch border-b border-border/15 hover:bg-primary/5 transition-colors group/row", i % 2 === 1 && "bg-muted/10")}>
                                     {COLUMNS.map((col) => {
                                         const k = col.key as string;
                                         const first = GROUP_FIRST.has(k) && k !== "employee";
-                                        const wrap = cn(first && "border-l border-border/30 pl-1");
+                                        const wrap = cn("flex items-center px-1.5 py-2", COL_BG[k], first && "border-l border-border/30");
                                         if (k === "employee") return (
-                                            <div key={k} className="w-[260px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold flex items-center gap-2 min-w-0 pl-3 pr-2 overflow-hidden self-stretch">
+                                            <div key={k} className="w-[260px] shrink-0 sticky left-0 z-20 bg-card border-r border-border/50 font-bold flex items-center gap-2 min-w-0 pl-3 pr-2 overflow-hidden self-stretch py-2">
                                                 <span className="text-[12px] font-semibold truncate" style={{ color: row.typeColor || getTypeStyle(row.type).colorHex || "inherit" }}>{row.employeeName}</span>
                                                 {(row.type || "").trim().toLowerCase() !== "route" && row.type && (
                                                     <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">{row.type}</span>
@@ -786,7 +790,7 @@ export default function EfficiencyPage() {
                                             </div>
                                         );
                                         if (k === "actions") return (
-                                            <div key={k} className="w-[40px] shrink-0 pr-1 text-right">
+                                            <div key={k} className={cn("w-[40px] shrink-0 pr-1 text-right flex items-center justify-end", COL_BG[k])}>
                                                 <button onClick={() => { setQuickEditRow(row); setQuickEditForm(row); }}
                                                     className="p-1.5 rounded bg-muted/50 text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors shadow-sm ml-auto">
                                                     <Pencil className="h-3 w-3" />
