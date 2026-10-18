@@ -54,6 +54,8 @@ interface RouteDetail {
     stagingLocation: string;
     extraStops: number;
     stopsRescued: number;
+    workPhone?: string;
+    cortexVin?: string;
     departureDelay: string;
     actualDepartureTime: string;
     plannedOutboundStem: string;
@@ -165,6 +167,8 @@ export default function RouteDetailModal({ open, onClose, routeId, employeeName,
             color: "text-primary",
             fields: [
                 { label: "Route #", key: "routeNumber" },
+                { label: "Work phone (Cortex)", key: "workPhone" },
+                { label: "Cortex VIN", key: "cortexVin" },
                 { label: "Route Size", key: "routeSize" },
                 { label: "Type", key: "type" },
                 { label: "Sub Type", key: "subType" },

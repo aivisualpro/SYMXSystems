@@ -3,6 +3,7 @@ import connectToDatabase from "@/lib/db";
 import Site from "@/lib/models/Site";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import { epochToClockTime, epochToHHMM, epochToDate, durationMsToHMM } from "@/lib/cortex-time";
+import { findWorkPhone, findVin } from "@/lib/cortex-contact";
 import { mergeCortexFields } from "@/lib/cortex-merge";
 import { parseTime } from "@/app/(protected)/dispatching/routes/_components/routes-utils";
 import RouteContribution from "@/lib/models/RouteContribution";
@@ -59,6 +60,24 @@ const AUTO_FIELDS = [
     "amazonInLunch",
     "actualReturnTime",
 ] as const;
+
+/**
+ * Has this driver's route finished, judging from the per-route progress Cortex includes in the
+ * itinerary summary? Several independent signs are accepted because the counts don't always line up
+ * (undeliverable stops, pickup stops) — any one of them means finished.
+ */
+function summarySaysFinished(itineraryDetails: any): boolean {
+    const rts: any[] = Array.isArray(itineraryDetails?.routes) ? itineraryDetails.routes : [];
+    const td = itineraryDetails?.transporterTimeAttributes || {};
+    if (Number(td.returnToStationTime) > 0) return true;
+    if (!rts.length) return false;
+    const sum = (k: string) => rts.reduce((a, r) => a + (Number(r?.routeDeliveryProgress?.[k]) || 0), 0);
+    const stopsTotal = sum("totalStops"), stopsDone = sum("completedStops");
+    const delTotal = sum("totalDeliveries"), delDone = sum("completedDeliveries");
+    if (stopsTotal > 0 && stopsDone >= stopsTotal) return true;
+    if (delTotal > 0 && delDone >= delTotal) return true;
+    return false;
+}
 
 function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string, string | number> {
     const fields: Record<string, string | number> = {};
@@ -137,8 +156,9 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
     // The route is complete only when EVERY customer stop has an executed task.
     // Until then "last stop" would just be the latest delivery so far (i.e. ~now),
     // so it is held back (and cleared if an earlier sync wrote it).
-    const routeComplete = customerStops.length > 0 && customerStops.every((st: any) =>
-        (Array.isArray(st?.tasks) ? st.tasks : []).some((t: any) => Number(t?.actualExecutionTime) > 0));
+    const routeComplete = (customerStops.length > 0 && customerStops.every((st: any) =>
+        (Array.isArray(st?.tasks) ? st.tasks : []).some((t: any) => Number(t?.actualExecutionTime) > 0)))
+        || summarySaysFinished(itineraryDetails);
     const actualLast = epochToClockTime(lastTaskActual);
     if (routeComplete && actualLast) fields.actualLastStop = actualLast;
     else if (!routeComplete) fields.actualLastStop = "";
@@ -353,7 +373,7 @@ export async function POST(req: NextRequest) {
             if (isToday && rts.length) {
                 const sum = (k: string) => rts.reduce((a, r) => a + (Number(r?.routeDeliveryProgress?.[k]) || 0), 0);
                 const deliveriesDone = sum("completedDeliveries"), stopsDone = sum("completedStops"), stopsTotal = sum("totalStops");
-                const complete = stopsTotal > 0 && stopsDone >= stopsTotal;
+                const complete = summarySaysFinished(itineraryDetails) || !!existing.actualReturnTime || !!computed.actualReturnTime;
                 const clear: string[] = [];
                 if (deliveriesDone === 0 && !computed.actualFirstStop) clear.push("actualFirstStop", "actualOutboundStem");
                 if (!complete && !computed.actualLastStop) clear.push("actualLastStop");
@@ -369,6 +389,8 @@ export async function POST(req: NextRequest) {
         const rtsAll: any[] = Array.isArray(itineraryDetails.routes) ? itineraryDetails.routes : [];
         const pu = rtsAll.reduce((a, r) => a + (Number(r?.routeDeliveryProgress?.onRoadPickups) || 0), 0);
         const puDone = rtsAll.reduce((a, r) => a + (Number(r?.routeDeliveryProgress?.completedOnRoadPickups) || 0), 0);
+        // Issued work phone + VIN the driver is in today (both change daily).
+        { const ph = findWorkPhone(itineraryDetails), vn = findVin(itineraryDetails); if (ph) (setOps as any).workPhone = ph; if (vn) (setOps as any).cortexVin = vn; }
         if (rtsAll.length) { (setOps as any).onRoadPickups = pu; (setOps as any).onRoadPickupsDone = puDone; }
 
         await SYMXRoute.updateOne({ _id: existing._id }, { $set: setOps });

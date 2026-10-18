@@ -107,6 +107,9 @@ export interface ISYMXRoute extends Document {
     // Keys of Slack alerts already posted for this route, so a driver is
     // alerted once per issue rather than on every scheduled run.
     alertsSent: string[];
+    // Issued work phone and the VIN Cortex says the driver is in (change daily; from Cortex).
+    workPhone?: string;
+    cortexVin?: string;
     // When the driver actually got back to the station (from Cortex).
     actualReturnTime: string;
     // Pending Cortex-vs-manual disagreements awaiting dispatcher review.
@@ -212,6 +215,8 @@ const SYMXRouteSchema = new Schema<ISYMXRoute>(
         cortexSyncedFields: { type: [String], default: [] },
         alertsSent: { type: [String], default: [] },
         actualReturnTime: { type: String, default: "" },
+        workPhone: { type: String, default: "" },
+        cortexVin: { type: String, default: "" },
         cortexConflicts: {
             type: [{
                 field: { type: String, required: true },

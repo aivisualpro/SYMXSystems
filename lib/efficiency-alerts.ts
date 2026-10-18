@@ -28,6 +28,8 @@ export interface AlertRow {
     alertsSent: string[];
     returned: boolean;
     loggedOut: boolean;
+    van: string;
+    vinMismatch: string; // "" when fine, else a short description
 }
 
 export function toAlertRow(rec: any, name: string): AlertRow {
@@ -63,6 +65,10 @@ export function toAlertRow(rec: any, name: string): AlertRow {
         alertsSent: Array.isArray(rec.alertsSent) ? rec.alertsSent : [],
         returned: !!(rec.actualReturnTime && String(rec.actualReturnTime).trim()),
         loggedOut: !!(rec.amazonAppLogout && String(rec.amazonAppLogout).trim()),
+        van: rec.van || "",
+        vinMismatch: rec.cortexVin && String(rec.vin || "").toUpperCase() !== String(rec.cortexVin).toUpperCase()
+            ? `SYMX has ${rec.van || "no van"}${rec.vin ? ` (…${String(rec.vin).slice(-6)})` : ""}, Cortex has …${String(rec.cortexVin).slice(-6)}`
+            : "",
     };
 }
 
@@ -84,6 +90,9 @@ export function evaluateAlerts(rows: AlertRow[], nowMin: number, final: boolean)
         }
         if (r.lastDelayMin !== null && r.lastDelayMin >= ALERT_T.lastRed) {
             add("last-stop-late", `:warning: ${who} last stop was *${fmtDur(r.lastDelayMin)} behind* plan`);
+        }
+        if (r.vinMismatch) {
+            add("van-mismatch", `:oncoming_automobile: ${who} van mismatch — ${r.vinMismatch}. Fix it on the Routes screen.`);
         }
         if (final && r.eff > 0 && r.eff < ALERT_T.effRed) {
             add("low-eff", `:chart_with_downwards_trend: ${who} efficiency *${r.eff}%* (${r.rescued} rescued)`);

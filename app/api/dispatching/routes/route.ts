@@ -343,6 +343,17 @@ export async function GET(req: NextRequest) {
             rtIdToName.set(String(rt._id), rt.name || "");
         }
 
+        // ── Van Cortex says the driver is actually in (by VIN) → SYMX van name ──
+        const cortexVins = Array.from(new Set(routes.map((r: any) => String(r.cortexVin || "").toUpperCase()).filter(Boolean)));
+        const cortexVinToName: Record<string, string> = {};
+        if (cortexVins.length) {
+            const cv = await orgWide(
+                Vehicle.find({ vin: { $in: cortexVins } }, { vin: 1, vehicleName: 1 }),
+                "naming the van Cortex reports for a route already scoped to this station — a van loaned in from another station must still resolve to its name"
+            ).lean();
+            (cv as any[]).forEach((v: any) => { if (v.vin) cortexVinToName[String(v.vin).toUpperCase()] = v.vehicleName || ""; });
+        }
+
         // ── Enrich routes with vin resolved from vehicleName → vin map ──
         const backfillVinOps: any[] = [];
         const enrichedRoutes = routes
@@ -365,8 +376,12 @@ export async function GET(req: NextRequest) {
                     },
                 });
             }
+            const cVin = String(r.cortexVin || "").toUpperCase();
+            const vinMismatch = !!cVin && String(resolvedVin || "").toUpperCase() !== cVin;
             return {
                 ...r,
+                vinMismatch,
+                cortexVan: cVin ? (cortexVinToName[cVin] || "") : "",
                 type: resolvedType,
                 vin: resolvedVin,
                 employeeName: emp.name || r.transporterId,

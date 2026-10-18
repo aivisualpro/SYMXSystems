@@ -325,6 +325,10 @@ export default function RoutesPage() {
                 ov: rec.ov || "",
                 stagingLocation: rec.stagingLocation || "",
                 onRoadPickups: rec.onRoadPickups || 0,
+                vinMismatch: !!rec.vinMismatch,
+                cortexVan: rec.cortexVan || "",
+                cortexVin: rec.cortexVin || "",
+                workPhone: rec.workPhone || "",
                 onRoadPickupsDone: rec.onRoadPickupsDone || 0,
                 attendance: rec.attendance || "",
                 profileImage: emp?.profileImage || "",
@@ -1048,6 +1052,23 @@ export default function RoutesPage() {
                                                                     >
                                                                         PU {row.onRoadPickups}
                                                                     </span>
+                                                                )}
+                                                                {row.vinMismatch && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            if (row.cortexVan) handleVanChange(row._id, row.cortexVan, row.transporterId);
+                                                                            else notify.error(`Cortex has VIN …${(row.cortexVin || "").slice(-6)}, which isn't in your fleet. Add that van in Fleet first.`);
+                                                                        }}
+                                                                        title={row.cortexVan
+                                                                            ? `Cortex has this driver in ${row.cortexVan} (…${(row.cortexVin || "").slice(-6)}) but SYMX shows ${row.van || "no van"}. Click to switch SYMX to ${row.cortexVan}.`
+                                                                            : `Cortex VIN …${(row.cortexVin || "").slice(-6)} isn't in your fleet. SYMX shows ${row.van || "no van"}.`}
+                                                                        className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-bold text-red-400 ring-1 ring-red-500/30 hover:bg-red-500/25"
+                                                                    >
+                                                                        <AlertCircle className="h-3 w-3" />
+                                                                        {row.cortexVan ? `Use ${row.cortexVan}` : "VIN ≠"}
+                                                                    </button>
                                                                 )}
                                                             </div>
                                                         </td>

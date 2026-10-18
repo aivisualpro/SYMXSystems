@@ -170,6 +170,10 @@ export interface RouteRow {
   ov: string;
   stagingLocation: string;
   onRoadPickups?: number;
+  vinMismatch?: boolean;
+  cortexVan?: string;
+  cortexVin?: string;
+  workPhone?: string;
   onRoadPickupsDone?: number;
   attendance: string;
   profileImage: string;

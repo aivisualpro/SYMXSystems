@@ -632,6 +632,8 @@ export default function EfficiencyPage() {
         } else if (isDelayField) {
             const tone = delayTone(field as string, String(value));
             customBg = TONE_CLASS[tone || "white"];
+            // Nobody should leave late: any departure delay over 0 is bold red.
+            if (field === "departureDelay" && (delayMinutes(String(value)) ?? 0) > 0) customBg = "text-red-500 font-extrabold";
             if (tone === "critical") Icon = AlertCircle;
         } else {
             if (field === "actualDepartureTime") {

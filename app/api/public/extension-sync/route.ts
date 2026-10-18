@@ -9,6 +9,7 @@ import DropdownOption from "@/lib/models/DropdownOption";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
 import WavePadDefault from "@/lib/models/WavePadDefault";
 import { epochToClockTime, epochToHHMM, to24h } from "@/lib/cortex-time";
+import { findWorkPhone, findVin } from "@/lib/cortex-contact";
 import { mergeCortexFields, isFutureActual } from "@/lib/cortex-merge";
 
 /**
@@ -640,6 +641,7 @@ export async function POST(req: NextRequest) {
                     autoCandidates.push({ transporterId, siteId, plannedDeparture: epochToClockTime(raw.plannedDepartureTime), computed: computedAuto });
                 }
 
+                { const ph = findWorkPhone(tr), vn = findVin(tr); if (ph) syncFields.workPhone = ph; if (vn) syncFields.cortexVin = vn; }
                 if (row.wst) syncFields.wst = row.wst;
                 if (row.amazonServiceType) syncFields.amazonServiceType = row.amazonServiceType;
                 if (row.wstDuration) syncFields.wstDuration = Number(row.wstDuration) || 0;
