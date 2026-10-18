@@ -96,3 +96,19 @@ export function epochToBusinessDateString(value: unknown): string {
     // en-CA locale gives YYYY-MM-DD directly
     return d.toLocaleDateString("en-CA", { timeZone: BUSINESS_TZ });
 }
+
+/**
+ * The driver's real meal break from Cortex's break list: a MEAL break that has both a start and an
+ * end, where the end is after the start and it lasted under 3 hours. When there are several (a
+ * paused/restarted break, or a second planned one) the earliest completed one wins, so Out and In
+ * always come from the SAME break and can never end up reversed.
+ */
+export function pickMealBreak(breaks: any): any | null {
+    const list = Array.isArray(breaks) ? breaks : [];
+    const ok = list
+        .filter((b: any) => b && b.type === "MEAL" && b.timeStampOn && b.timeStampOff)
+        .map((b: any) => ({ b, on: epochToDate(b.timeStampOn)?.getTime() ?? 0, off: epochToDate(b.timeStampOff)?.getTime() ?? 0 }))
+        .filter((x) => x.on > 0 && x.off > x.on && x.off - x.on < 3 * 3600 * 1000);
+    ok.sort((a, b) => a.on - b.on);
+    return ok.length ? ok[0].b : null;
+}

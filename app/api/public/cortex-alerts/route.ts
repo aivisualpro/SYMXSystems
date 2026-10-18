@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
         await connectToDatabase();
         const site = await Site.findOne({ "amazon.serviceAreaId": String(serviceAreaId).trim() }).lean() as any;
         if (!site) return NextResponse.json({ error: "Unknown station" }, { status: 404, headers: CORS });
+        if (!dryRun) await Site.updateOne({ _id: site._id }, { $set: { lastCaptureAt: new Date() } });
         if (!site.slackWebhookUrl || site.slackAlertsEnabled === false) {
             return NextResponse.json({ ok: true, posted: 0, skipped: "Slack not configured for this station" }, { headers: CORS });
         }

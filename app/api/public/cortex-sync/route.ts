@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import Site from "@/lib/models/Site";
 import SYMXRoute from "@/lib/models/SYMXRoute";
-import { epochToClockTime, epochToHHMM, epochToDate, durationMsToHMM } from "@/lib/cortex-time";
+import { epochToClockTime, epochToHHMM, epochToDate, durationMsToHMM, pickMealBreak } from "@/lib/cortex-time";
 import { findWorkPhone, findVin } from "@/lib/cortex-contact";
 import { mergeCortexFields } from "@/lib/cortex-merge";
 import { parseTime } from "@/app/(protected)/dispatching/routes/_components/routes-utils";
@@ -183,9 +183,7 @@ function computeCortexFields(itineraryDetails: any, stops: any[]): Record<string
     if (lastExec && routeComplete) fields.actualLastStop = lastExec;
 
     // Meal break (driver-specific, from the itinerary itself).
-    const meal = (Array.isArray(itineraryDetails?.breaks) ? itineraryDetails.breaks : []).find(
-        (b: any) => b?.type === "MEAL" && b?.state === "OFF" && b?.timeStampOn && b?.timeStampOff
-    );
+    const meal = pickMealBreak(itineraryDetails?.breaks);
     if (meal) {
         const outL = epochToHHMM(meal.timeStampOn);
         const inL = epochToHHMM(meal.timeStampOff);
@@ -264,6 +262,9 @@ export async function POST(req: NextRequest) {
                 { status: 404, headers: CORS_HEADERS }
             );
         }
+
+        // Heartbeat for the capture watchdog (best-effort).
+        Site.updateOne({ _id: site._id }, { $set: { lastCaptureAt: new Date() } }).catch(() => {});
 
         const transporterId = String(itineraryDetails.transporterId || "").trim().toUpperCase();
         if (!transporterId) {

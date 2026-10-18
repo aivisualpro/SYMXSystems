@@ -33,6 +33,11 @@ export interface ISite extends Document {
   /** Slack incoming-webhook URL for this station's efficiency alerts. */
   slackWebhookUrl?: string;
   slackAlertsEnabled?: boolean;
+  /** Heartbeat: last time the extension delivered data for this station. */
+  lastCaptureAt?: Date | null;
+  /** Watchdog state: the capture slot we already alerted about (e.g. "2026-10-17 15:00"), cleared on recovery. */
+  watchdogAlertedSlot?: string;
+  watchdogAlertedAt?: Date | null;
   status: "active" | "inactive";
   isDefault: boolean;
   messaging?: {
@@ -73,6 +78,9 @@ const SiteSchema: Schema = new Schema(
     // (late departures, behind pace, low efficiency, daily summary) post here.
     slackWebhookUrl: { type: String, default: "" },
     slackAlertsEnabled: { type: Boolean, default: true },
+    lastCaptureAt: { type: Date, default: null },
+    watchdogAlertedSlot: { type: String, default: "" },
+    watchdogAlertedAt: { type: Date, default: null },
     status: { type: String, enum: ["active", "inactive"], default: "active", index: true },
     // Exactly one site carries isDefault. During the migration it is the
     // site every pre-existing record is backfilled to, and the fallback

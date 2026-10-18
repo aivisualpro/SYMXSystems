@@ -8,7 +8,7 @@ import SymxEmployee from "@/lib/models/SymxEmployee";
 import DropdownOption from "@/lib/models/DropdownOption";
 import SYMXWSTOption from "@/lib/models/SYMXWSTOption";
 import WavePadDefault from "@/lib/models/WavePadDefault";
-import { epochToClockTime, epochToHHMM, to24h } from "@/lib/cortex-time";
+import { epochToClockTime, epochToHHMM, to24h, pickMealBreak } from "@/lib/cortex-time";
 import { findWorkPhone, findVin } from "@/lib/cortex-contact";
 import { mergeCortexFields, isFutureActual } from "@/lib/cortex-merge";
 
@@ -627,9 +627,7 @@ export async function POST(req: NextRequest) {
                 const computedAuto: Record<string, string | number> = {};
                 const actDep = epochToClockTime(tr.actualRouteDepartureTime);
                 if (actDep) computedAuto.actualDepartureTime = actDep;
-                const mealBreak = (Array.isArray(tr.breaks) ? tr.breaks : []).find(
-                    (b: any) => b?.type === "MEAL" && b?.timeStampOn && b?.timeStampOff && b?.state === "OFF"
-                );
+                const mealBreak = pickMealBreak(tr.breaks);
                 if (mealBreak) {
                     const out = epochToHHMM(mealBreak.timeStampOn);
                     const inn = epochToHHMM(mealBreak.timeStampOff);

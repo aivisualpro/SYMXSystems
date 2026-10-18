@@ -43,6 +43,8 @@ export default function SitesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [slackTesting, setSlackTesting] = useState(false);
+  const [slackTestMsg, setSlackTestMsg] = useState("");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: "", code: "", siteType: "permanent", address: "" });
@@ -363,8 +365,30 @@ export default function SitesPage() {
                     checked={editForm.slackAlertsEnabled}
                     onChange={(e) => setEditForm({ ...editForm, slackAlertsEnabled: e.target.checked })}
                   />
-                  Post late-departure, behind-pace, low-efficiency alerts and the daily summary
+                  Post late-departure, behind-pace, low-efficiency alerts, the daily summary, and capture-watchdog warnings
                 </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!editForm.slackWebhookUrl.trim() || slackTesting}
+                    className="rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                    onClick={async () => {
+                      setSlackTesting(true); setSlackTestMsg("");
+                      try {
+                        const r = await fetch("/api/admin/sites/slack-test", {
+                          method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ webhookUrl: editForm.slackWebhookUrl, code: editing.code }),
+                        });
+                        const j = await r.json().catch(() => ({}));
+                        setSlackTestMsg(r.ok ? "Sent — check the Slack channel." : j.error || "Failed");
+                      } catch { setSlackTestMsg("Network error"); }
+                      setSlackTesting(false);
+                    }}
+                  >
+                    {slackTesting ? "Sending…" : "Send test message"}
+                  </button>
+                  {slackTestMsg && <span className="text-xs text-muted-foreground">{slackTestMsg}</span>}
+                </div>
               </div>
 
               {/* ── Messaging (Quo / OpenPhone) ──
