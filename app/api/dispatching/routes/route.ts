@@ -219,7 +219,7 @@ export async function GET(req: NextRequest) {
             ]),
             allVanNames.length > 0
                 ? orgWide(
-                    Vehicle.find({ vehicleName: { $in: allVanNames } }, { vin: 1, vehicleName: 1 }),
+                    Vehicle.find({ vehicleName: { $in: allVanNames } }, { vin: 1, vehicleName: 1, currentSiteId: 1 }),
                     "resolving names/vans for records already scoped to this station — a driver or van loaned in from elsewhere must still display, not appear blank"
                   ).lean()
                 : [],
@@ -293,12 +293,17 @@ export async function GET(req: NextRequest) {
 
         const vehicleNames: Record<string, string> = {};
         const vehicleNameToVin: Record<string, string> = {};
+        // Van names are only unique within a station ("3" can exist at several), so keep the VIN per
+        // (station, name) and prefer the route's own station when resolving a van to its VIN.
+        const vinBySiteName: Record<string, string> = {};
         (vehicleDocs as any[]).forEach((v: any) => {
             if (v.vin && v.vehicleName) {
                 vehicleNames[v.vin] = v.vehicleName;
                 vehicleNameToVin[v.vehicleName] = v.vin;
+                if (v.currentSiteId) vinBySiteName[`${String(v.currentSiteId)}|${v.vehicleName}`] = v.vin;
             }
         });
+        const vinForVan = (siteId: any, van: string) => (siteId && vinBySiteName[`${String(siteId)}|${van}`]) || vehicleNameToVin[van] || "";
 
         // ── Build Confirmation Status Map ──
         // Single source: shiftNotification[] from SYMXEmployeeSchedules
@@ -344,14 +349,14 @@ export async function GET(req: NextRequest) {
         }
 
         // ── Van Cortex says the driver is actually in (by VIN) → SYMX van name ──
-        const cortexVins = Array.from(new Set(routes.map((r: any) => String(r.cortexVin || "").toUpperCase()).filter(Boolean)));
+        const cortexVins = Array.from(new Set(routes.map((r: any) => String(r.cortexVin || "").toUpperCase().replace(/[^A-Z0-9]/g, "")).filter(Boolean)));
         const cortexVinToName: Record<string, string> = {};
         if (cortexVins.length) {
             const cv = await orgWide(
-                Vehicle.find({ vin: { $in: cortexVins } }, { vin: 1, vehicleName: 1 }),
+                Vehicle.find({ vin: { $in: cortexVins.flatMap((x) => [x, x.toLowerCase()]) } }, { vin: 1, vehicleName: 1 }),
                 "naming the van Cortex reports for a route already scoped to this station — a van loaned in from another station must still resolve to its name"
             ).lean();
-            (cv as any[]).forEach((v: any) => { if (v.vin) cortexVinToName[String(v.vin).toUpperCase()] = v.vehicleName || ""; });
+            (cv as any[]).forEach((v: any) => { if (v.vin) cortexVinToName[String(v.vin).toUpperCase().replace(/[^A-Z0-9]/g, "")] = v.vehicleName || ""; });
         }
 
         // ── Enrich routes with vin resolved from vehicleName → vin map ──
@@ -366,7 +371,7 @@ export async function GET(req: NextRequest) {
             const resolvedType = typeId ? (rtIdToName.get(typeId) || r.type || "") : (r.type || "");
             const emp = employeeMap[(r.transporterId || "").trim().toUpperCase()] || {};
             // Resolve vin from the van (vehicleName) field
-            const resolvedVin = r.van ? (vehicleNameToVin[r.van] || r.vin || "") : (r.vin || "");
+            const resolvedVin = r.van ? (vinForVan(r.siteId, r.van) || r.vin || "") : (r.vin || "");
             // Queue lazy backfill if vin is missing or stale in the DB (only for W19+)
             if (resolvedVin && r.vin !== resolvedVin && (r.yearWeek || "") >= "2026-W19") {
                 backfillVinOps.push({
@@ -376,12 +381,15 @@ export async function GET(req: NextRequest) {
                     },
                 });
             }
-            const cVin = String(r.cortexVin || "").toUpperCase();
-            const vinMismatch = !!cVin && String(resolvedVin || "").toUpperCase() !== cVin;
+            const normVin = (v: any) => String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+            const cVin = normVin(r.cortexVin);
+            const cVanName = cVin ? (cortexVinToName[cVin] || "") : "";
+            // Same VIN, or Cortex's VIN resolves to the very van that's assigned (by name), is NOT a mismatch.
+            const vinMismatch = !!cVin && normVin(resolvedVin) !== cVin && !(cVanName && cVanName === r.van);
             return {
                 ...r,
                 vinMismatch,
-                cortexVan: cVin ? (cortexVinToName[cVin] || "") : "",
+                cortexVan: cVanName,
                 type: resolvedType,
                 vin: resolvedVin,
                 employeeName: emp.name || r.transporterId,

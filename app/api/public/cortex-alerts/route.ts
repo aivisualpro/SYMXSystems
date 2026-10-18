@@ -3,6 +3,7 @@ import connectToDatabase from "@/lib/db";
 import Site from "@/lib/models/Site";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 import SymxEmployee from "@/lib/models/SymxEmployee";
+import Vehicle from "@/lib/models/Vehicle";
 import { toAlertRow, evaluateAlerts, buildSummary, buildCloseout } from "@/lib/efficiency-alerts";
 
 /**
@@ -56,6 +57,20 @@ export async function POST(req: NextRequest) {
         const nameBy = new Map(emps.map((e) => [String(e.transporterId || "").trim().toUpperCase(), `${e.firstName} ${e.lastName}`]));
         const rows = routeRecs.map((r) => toAlertRow(r, nameBy.get(String(r.transporterId || "").trim().toUpperCase()) || r.transporterId));
 
+        // A VIN "mismatch" that resolves to the same van name is not a real mismatch — drop it.
+        {
+            const norm = (v: any) => String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+            const mism = routeRecs.filter((r) => r.cortexVin && norm(r.vin) !== norm(r.cortexVin));
+            if (mism.length) {
+                const vs = await Vehicle.find({ vin: { $in: mism.flatMap((r) => [String(r.cortexVin), norm(r.cortexVin)]) } }, { vin: 1, vehicleName: 1 }).lean() as any[];
+                const nameByVin = new Map(vs.map((v) => [norm(v.vin), v.vehicleName]));
+                for (const r of mism) {
+                    if (nameByVin.get(norm(r.cortexVin)) && nameByVin.get(norm(r.cortexVin)) === r.van) {
+                        const row = rows.find((x) => x.id === String(r._id)); if (row) row.vinMismatch = "";
+                    }
+                }
+            }
+        }
         const alerts = evaluateAlerts(rows, nowPacificMinutes(), final);
         const summary = final ? buildSummary(site.code, date, rows) : null;
         const closeoutMsg = closeout ? buildCloseout(site.code, rows, slot, !!body.final) : null;

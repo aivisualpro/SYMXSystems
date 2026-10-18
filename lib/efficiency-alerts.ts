@@ -66,7 +66,7 @@ export function toAlertRow(rec: any, name: string): AlertRow {
         returned: !!(rec.actualReturnTime && String(rec.actualReturnTime).trim()),
         loggedOut: !!(rec.amazonAppLogout && String(rec.amazonAppLogout).trim()),
         van: rec.van || "",
-        vinMismatch: rec.cortexVin && String(rec.vin || "").toUpperCase() !== String(rec.cortexVin).toUpperCase()
+        vinMismatch: rec.cortexVin && String(rec.vin || "").toUpperCase().replace(/[^A-Z0-9]/g, "") !== String(rec.cortexVin).toUpperCase().replace(/[^A-Z0-9]/g, "")
             ? `SYMX has ${rec.van || "no van"}${rec.vin ? ` (…${String(rec.vin).slice(-6)})` : ""}, Cortex has …${String(rec.cortexVin).slice(-6)}`
             : "",
     };
