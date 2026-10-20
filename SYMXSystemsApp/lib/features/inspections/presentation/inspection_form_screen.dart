@@ -105,7 +105,12 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
       setState(() {
         _photoUrls[index] = url;
         _uploading[index] = false;
+        // A failed upload must not look like a saved photo.
+        if (url == null) _photoFiles[index] = null;
       });
+      if (url == null) {
+        _showSnack('Photo did not upload — check your connection and retake it.');
+      }
     }
   }
 
@@ -116,6 +121,10 @@ class _InspectionFormScreenState extends ConsumerState<InspectionFormScreen> {
       return;
     }
 
+    if (_uploading.any((u) => u)) {
+      _showSnack('Photos are still uploading — wait a moment.');
+      return;
+    }
     setState(() => _saving = true);
     try {
       final repo = ref.read(inspectionRepositoryProvider);

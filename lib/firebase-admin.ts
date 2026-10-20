@@ -88,9 +88,18 @@ export async function sendSafetyAlertPush(
       },
       android: {
         priority: "high",
+        // A safety alert older than a couple of minutes is noise, not help —
+        // drop it rather than buzzing the driver about something stale if
+        // the phone was offline.
+        ttl: 120 * 1000,
         notification: {
-          channelId: "safety_alerts",
-          sound: "default",
+          // v2 channel = alarm-stream audio + custom siren (see push_service.dart).
+          channelId: "safety_alerts_v2",
+          sound: "alert",
+          priority: "max",
+          visibility: "public",
+          defaultVibrateTimings: true,
+          tag: `netradyne-${alert.netradyneAlertId}`,
         },
       },
     });

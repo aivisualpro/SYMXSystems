@@ -35,7 +35,7 @@ class InspectionRepository {
           filename: file.path.split('/').last,
         ),
       });
-      final res = await _dio.post('/api/admin/upload', data: formData);
+      final res = await _dio.post('/api/mobile/upload', data: formData);
       return res.data['secure_url'] as String?;
     } catch (e) {
       return null;

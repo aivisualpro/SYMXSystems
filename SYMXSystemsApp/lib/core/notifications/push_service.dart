@@ -11,7 +11,10 @@ import 'package:flutter_tts/flutter_tts.dart';
 /// Play services uses the same channel/importance when it shows the
 /// notification itself (app backgrounded/killed) as when our own code
 /// shows it (app foregrounded).
-const _channelId = 'safety_alerts';
+// v2: Android freezes a channel's sound/importance once created, so the louder
+// alarm-stream channel needs a new id. Must match the id the server sends
+// (lib/firebase-admin.ts) and AndroidManifest.xml.
+const _channelId = 'safety_alerts_v2';
 const _channelName = 'Safety Alerts';
 const _channelDescription =
     'Near-real-time safety event alerts from the fleet safety camera system';
@@ -61,6 +64,11 @@ Future<void> _showLocalNotification(RemoteMessage message) async {
         importance: Importance.max,
         priority: Priority.high,
         playSound: true,
+        sound: RawResourceAndroidNotificationSound('alert'),
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+        category: AndroidNotificationCategory.alarm,
+        visibility: NotificationVisibility.public,
+        fullScreenIntent: true,
         enableVibration: true,
       ),
     ),
@@ -121,6 +129,8 @@ class PushService {
           description: _channelDescription,
           importance: Importance.max,
           playSound: true,
+          sound: RawResourceAndroidNotificationSound('alert'),
+          audioAttributesUsage: AudioAttributesUsage.alarm,
           enableVibration: true,
         ));
 
@@ -172,5 +182,32 @@ class PushService {
   /// the user is authenticated.
   void listenForTokenRefresh(Dio dio) {
     FirebaseMessaging.instance.onTokenRefresh.listen((_) => registerToken(dio));
+  }
+
+  /// True when Android will actually show/sound notifications for this app.
+  /// Used by the Today tab to warn the driver if alerts are blocked.
+  Future<bool> alertsEnabled() async {
+    try {
+      final settings = await FirebaseMessaging.instance.getNotificationSettings();
+      return settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Asks the backend to push a test safety alert to THIS driver's phone.
+  /// Returns null on success, otherwise a human-readable problem.
+  Future<String?> sendTestAlert(Dio dio) async {
+    try {
+      await registerToken(dio);
+      final res = await dio.post('/api/mobile/test-alert');
+      final data = res.data;
+      if (data is Map && data['ok'] == true) return null;
+      return (data is Map ? data['error'] : null)?.toString() ??
+          'Could not send the test alert.';
+    } catch (e) {
+      return 'Could not reach the server. Check the phone\'s connection.';
+    }
   }
 }

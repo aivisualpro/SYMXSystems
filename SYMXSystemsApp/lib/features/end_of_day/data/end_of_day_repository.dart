@@ -63,7 +63,7 @@ class EndOfDayRepository {
           filename: file.path.split('/').last,
         ),
       });
-      final res = await _dio.post('/api/admin/upload', data: formData);
+      final res = await _dio.post('/api/mobile/upload?folder=end-of-day', data: formData);
       return res.data['secure_url'] as String?;
     } catch (_) {
       return null;

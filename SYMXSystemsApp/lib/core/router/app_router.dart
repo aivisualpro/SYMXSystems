@@ -8,6 +8,7 @@ import '../../features/end_of_day/presentation/end_of_day_screen.dart';
 import '../../features/home/presentation/home_shell.dart';
 import '../../features/inspections/presentation/inspections_screen.dart';
 import '../../features/notices/presentation/notices_screen.dart';
+import '../../features/today/presentation/today_screen.dart';
 
 /// Custom fade + scale page transition used across all routes.
 CustomTransitionPage<void> _fadeScalePage({
@@ -66,7 +67,20 @@ final routerProvider = Provider<GoRouter>((ref) {
           return HomeShell(navigationShell: navigationShell);
         },
         branches: [
-          // Tab 0 — Daily Inspections
+          // Tab 0 — Today (van + route + alert status)
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/today',
+                pageBuilder: (context, state) => _fadeScalePage(
+                  state: state,
+                  child: const TodayScreen(),
+                ),
+              ),
+            ],
+          ),
+
+          // Tab 1 — Daily Inspections
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -79,7 +93,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
 
-          // Tab 1 — Notices
+          // Tab 2 — Notices
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -92,7 +106,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
 
-          // Tab 2 — End of Day
+          // Tab 3 — End of Day
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -108,10 +122,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
 
-    // Redirect `/home` → `/inspections` (first tab).
+    // Redirect `/home` → `/today` (first tab).
     redirect: (context, state) {
       if (state.matchedLocation == '/home') {
-        return '/inspections';
+        return '/today';
       }
       return null;
     },

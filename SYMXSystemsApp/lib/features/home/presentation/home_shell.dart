@@ -26,6 +26,12 @@ class _Tab {
 
 const _kTabs = <_Tab>[
   _Tab(
+    icon: Icons.local_shipping_outlined,
+    activeIcon: Icons.local_shipping,
+    label: 'Today',
+    title: 'Today',
+  ),
+  _Tab(
     icon: Icons.fact_check_outlined,
     activeIcon: Icons.fact_check,
     label: 'Inspections',
@@ -84,18 +90,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     final label = event.logicalKey.keyLabel;
 
-    // Tab switching: 1, 2, 3
-    if (label == '1') {
-      widget.navigationShell.goBranch(0,
-          initialLocation: widget.navigationShell.currentIndex == 0);
-      return KeyEventResult.handled;
-    } else if (label == '2') {
-      widget.navigationShell.goBranch(1,
-          initialLocation: widget.navigationShell.currentIndex == 1);
-      return KeyEventResult.handled;
-    } else if (label == '3') {
-      widget.navigationShell.goBranch(2,
-          initialLocation: widget.navigationShell.currentIndex == 2);
+    // Tab switching: 1-4
+    final idx = int.tryParse(label);
+    if (idx != null && idx >= 1 && idx <= _kTabs.length) {
+      widget.navigationShell.goBranch(idx - 1,
+          initialLocation: widget.navigationShell.currentIndex == idx - 1);
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;

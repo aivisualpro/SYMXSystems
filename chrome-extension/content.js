@@ -56,6 +56,23 @@
     } catch (e) {}
   }
 
+  // Diagnostics: remember what each Cortex API call returned (path -> top-level
+  // arrays and their lengths). Shown in the panel when no driver list is found so
+  // we can see which endpoint carries the drivers. Also: window.__symxApi
+  window.__symxApi = window.__symxApi || {};
+  function noteApi(url, text) {
+    try {
+      if (!url || typeof text !== "string" || text.length > 4e6) return;
+      const path = String(url).split("?")[0].replace(/^https?:\/\/[^/]+/, "");
+      if (!/\/(execution|operations|dispatch)/i.test(path)) return;
+      if (text.charAt(0) !== "{") return;
+      const d = JSON.parse(text);
+      const parts = [];
+      Object.keys(d).forEach((k) => { if (Array.isArray(d[k])) parts.push(k + ":" + d[k].length); });
+      window.__symxApi[path.split("/").slice(-2).join("/")] = parts.join(",") || "(no arrays)";
+    } catch (e) {}
+  }
+
   XMLHttpRequest.prototype.open = function (method, url, ...rest) {
     this._symxUrl = url;
     this._symxMethod = method;
@@ -65,6 +82,7 @@
   XMLHttpRequest.prototype.send = function (...args) {
     this.addEventListener("load", function () {
       try { symxSniff(this._symxUrl, this.responseText); } catch (e) {}
+      try { noteApi(this._symxUrl, this.responseText); } catch (e) {}
       try {
         if (
           this._symxUrl &&
@@ -123,6 +141,7 @@
     try {
       const url = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
       try { if (localStorage.getItem("symx_sniff") === "1") response.clone().text().then((t) => symxSniff(url, t)).catch(() => {}); } catch (e) {}
+      try { if (/\/(execution|operations|dispatch)/i.test(url)) response.clone().text().then((t) => noteApi(url, t)).catch(() => {}); } catch (e) {}
       if (url.includes("route-summaries")) {
         extractApiParams(url);
         lastSummariesUrl = url;
@@ -281,7 +300,10 @@
       if (visitState.cancel) break;
       const before = captureLog.get(id);
       const beforeAt = before && before.full ? before.at : 0;
-      history.pushState({}, "", `/operations/execution/itineraries/${id}/documentType/Itinerary?provider=ALL_DRIVERS&selectedDay=${day}&serviceAreaId=${sa}`);
+      // Before a driver starts, Cortex has no itinerary — the page is keyed by the
+      // ROUTE id with documentType=RMSRoute (same data: every planned stop + time).
+      const docType = (bulkItins.get(id) || {}).docType || "Itinerary";
+      history.pushState({}, "", `/operations/execution/itineraries/${id}/documentType/${docType}?provider=ALL_DRIVERS&selectedDay=${day}&serviceAreaId=${sa}`);
       window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
       const t0 = Date.now();
       // wait until this itinerary has been captured (fresh), max 15s
@@ -310,11 +332,18 @@
     }
     const list = buildChecklist();
     if (list.length === 0) {
-      if (/\/operations\/execution\/itineraries/.test(location.pathname)) {
+      if (/\/operations\/execution\//.test(location.pathname)) {
         panel.style.display = "block"; panel.textContent = "";
         const w = document.createElement("div");
-        w.style.cssText = "padding:8px 12px;font-weight:600;";
-        w.textContent = "SYMX: waiting for the driver list… (change the date or refresh the page if this stays)";
+        w.style.cssText = "padding:8px 12px;font-weight:600;line-height:1.4;";
+        if (capturedRoutes.size > 0) {
+          // Routes loaded, but none carries a driver itinerary yet — normal early
+          // in the day, before drivers start. Say so instead of staying blank.
+          const seen = Object.entries(window.__symxApi || {}).map(([k, v]) => `${k} [${v}]`).join("; ");
+          w.textContent = `SYMX: ${capturedRoutes.size} routes seen but no driver itinerary links found. Open the DAs/DPs tab, or tell Rohan this: ${seen || "no API calls recorded"}`;
+        } else {
+          w.textContent = "SYMX: waiting for the route list… (refresh this Cortex tab if this stays)";
+        }
         panel.appendChild(w);
       } else panel.style.display = "none";
       return;
@@ -710,7 +739,32 @@
   function processSlimSummaries(data) {
     if (!data) return;
     const slim = Array.isArray(data.routeSummaries) ? data.routeSummaries : [];
+    // Diagnostics: field names on a route + transporter entry (to find the itinerary link).
+    try {
+      if (slim[0]) window.__symxApi["routeSummaries[0] fields"] = Object.keys(slim[0]).join(",");
+      const t0 = Array.isArray(data.transporters) && data.transporters[0];
+      if (t0) window.__symxApi["transporters[0] fields"] = Object.keys(t0).join(",");
+    } catch (e) {}
     bulkSyncItinerarySummaries(data);
+    // Before drivers start there are no itinerarySummaries. Cortex still serves
+    // every planned stop at /itineraries/<routeId>/documentType/RMSRoute, so
+    // list each assigned route that has no real itinerary yet under its routeId.
+    {
+      const realCodes = new Set();
+      bulkItins.forEach((e) => { if (e.docType !== "RMSRoute") e.codes.forEach((c) => realCodes.add(c)); });
+      // A route that now has a real itinerary no longer needs its pre-start entry.
+      Array.from(bulkItins.entries()).forEach(([k, e]) => {
+        if (e.docType === "RMSRoute" && e.codes.some((c) => realCodes.has(c))) { bulkItins.delete(k); captureLog.delete(k); }
+      });
+      const trs = Array.isArray(data.transporters) ? data.transporters : [];
+      slim.forEach((r) => {
+        if (!r || !r.routeId || !r.routeCode || realCodes.has(r.routeCode) || bulkItins.has(r.routeId)) return;
+        const tid = r.transporterIdFromRms || r.transporterId || "";
+        if (!tid) return; // no driver assigned yet — nothing to match in SYMX
+        const tr = trs.find((x) => x.transporterId === tid);
+        bulkItins.set(r.routeId, { id: r.routeId, codes: [r.routeCode], name: tr ? [tr.firstName, tr.lastName].filter(Boolean).join(" ") : "", stamp: "", docType: "RMSRoute" });
+      });
+    }
     if (slim.length === 0) return;
     let touched = false;
     slim.forEach((r) => {
