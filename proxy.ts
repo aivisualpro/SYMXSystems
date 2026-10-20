@@ -13,6 +13,9 @@ const publicPaths = [
   "/api/auth/forgot-password",
   "/api/public/",
   "/api/mobile/",
+  // Older driver-app builds upload photos here with a badge token (no cookie).
+  // The route itself still requires an office session OR a valid driver token.
+  "/api/admin/upload",
   "/api/messaging/webhook",
   "/driver-performance/",
   "/c/",

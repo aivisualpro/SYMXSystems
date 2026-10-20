@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
+import { jwtVerify } from "jose";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -11,14 +12,32 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+const badgeKey = new TextEncoder().encode(process.env.JWT_SECRET || "symx_systems_secret_key");
+
+/** Driver app (badge-token) callers: older app builds upload photos here. */
+async function isDriverToken(req: NextRequest): Promise<boolean> {
+  const token = req.headers.get("x-badge-token");
+  if (!token) return false;
+  try {
+    const { payload } = await jwtVerify(token, badgeKey, { algorithms: ["HS256"] });
+    return !!String((payload as any).transporterId || "").trim();
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(req: NextRequest) {
+  let driverOnly = false;
   try {
     const session = await getSession();
     if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      // Not an office user — allow a signed-in driver app, restricted to photos below.
+      if (await isDriverToken(req)) driverOnly = true;
+      else return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   } catch (e: any) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (await isDriverToken(req)) driverOnly = true;
+    else return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   // 1. Verify credentials present
@@ -52,7 +71,14 @@ export async function POST(req: NextRequest) {
 
     // Determine folder from query param or default
     const { searchParams } = new URL(req.url);
-    const folder = searchParams.get("folder") || "symx-systems/products";
+    let folder = searchParams.get("folder") || "symx-systems/products";
+    if (driverOnly) {
+      // Driver tokens may only upload photos, always into the inspections folder.
+      if (!/\.(jpe?g|png|heic|heif|webp)$/.test(file.name.toLowerCase()) && !(file.type || "").startsWith("image/")) {
+        return NextResponse.json({ error: "Only photos can be uploaded" }, { status: 400 });
+      }
+      folder = "symx-systems/inspections";
+    }
 
     // Determine resource_type based on file extension
     // PDFs, docs, etc. must use "raw" to be accessible via direct URL
