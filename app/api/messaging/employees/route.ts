@@ -114,6 +114,15 @@ export async function GET(req: NextRequest) {
       // selected week, tomorrow lands in the *next* week, so we must fetch it.
       if ((filter === "off-tomorrow" || filter === "future-shift") && checkDate) {
         const weekDates2 = getWeekDateStrings(yearWeek);
+        if (filter === "future-shift") {
+          // status rows live on shift day - 1, which can fall in the previous week
+          const pd = new Date(checkDate + "T12:00:00.000Z");
+          pd.setUTCDate(pd.getUTCDate() - 1);
+          if (!weekDates2.includes(pd.toISOString().split("T")[0])) {
+            const prevW = getPrevYearWeek(yearWeek);
+            if (!adjacentWeeks.includes(prevW)) adjacentWeeks.push(prevW);
+          }
+        }
 
         // Next day — needed because the filter always looks at "tomorrow"
         const nextDay = new Date(checkDate + "T12:00:00.000Z");
@@ -342,7 +351,15 @@ export async function GET(req: NextRequest) {
         }
       } else if (filter && scheduleField) {
         // Other tabs: from schedule arrays (single source of truth)
-        const targetDate = date || (filter === "shift" || filter === "route-itinerary" ? getTodayPacific() : getTomorrowPacific());
+        let targetDate = date || (filter === "shift" || filter === "route-itinerary" ? getTodayPacific() : getTomorrowPacific());
+        // future-shift: `date` is the SHIFT day, but the sent/confirmed entries are
+        // stored on the row of the day the message was sent (shift day - 1). Reading
+        // the shift day's own row is why "sent" status vanished after a refresh.
+        if (filter === "future-shift") {
+          const d = new Date(targetDate + "T12:00:00.000Z");
+          d.setUTCDate(d.getUTCDate() - 1);
+          targetDate = d.toISOString().split("T")[0];
+        }
         const targetSched = empSchedules.find((s: any) => toPacificDate(s.date) === targetDate);
         if (targetSched) {
           const entries = targetSched[scheduleField] || [];

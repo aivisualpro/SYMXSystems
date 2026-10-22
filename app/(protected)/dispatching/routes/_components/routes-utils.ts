@@ -175,6 +175,7 @@ export interface RouteRow {
   cortexVin?: string;
   workPhone?: string;
   onRoadPickupsDone?: number;
+  onRoadPickupStops?: { time: string; done: boolean; doneAt?: string }[];
   attendance: string;
   profileImage: string;
   // Raw fields from DB
@@ -220,3 +221,41 @@ export const SHORT_DAYS: Record<string, string> = {
   Sunday: "Sun", Monday: "Mon", Tuesday: "Tue", Wednesday: "Wed",
   Thursday: "Thu", Friday: "Fri", Saturday: "Sat",
 };
+
+
+// ── On-road (customer) pickup status ──
+// Green = every pickup done. Red = a pickup's planned time has passed and it is
+// not done. Amber = pickups still to come. Past days with an unfinished pickup are red.
+export function pickupStatus(row: {
+  date?: string;
+  onRoadPickups?: number;
+  onRoadPickupsDone?: number;
+  onRoadPickupStops?: { time: string; done: boolean; doneAt?: string }[];
+}): { state: "done" | "overdue" | "pending"; cls: string; tip: string } {
+  const total = row.onRoadPickups || 0;
+  const stops = Array.isArray(row.onRoadPickupStops) ? row.onRoadPickupStops : [];
+  const allDone = (total > 0 && (row.onRoadPickupsDone || 0) >= total) || (stops.length > 0 && stops.every((s) => s.done));
+
+  const nowParts = new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TZ, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+  const nowMin = (Number(nowParts.find((p) => p.type === "hour")?.value) % 24) * 60 + Number(nowParts.find((p) => p.type === "minute")?.value);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(new Date());
+  const rowDay = row.date ? toPacificDate(row.date) : today;
+
+  const lines = stops.map((s, i) => {
+    const t = s.time || "time n/a";
+    return s.done ? `Pickup ${i + 1}: due ${t} — done${s.doneAt ? " " + s.doneAt : ""}` : `Pickup ${i + 1}: due ${t} — not done`;
+  });
+  const head = `${total} customer pickup${total === 1 ? "" : "s"} (${row.onRoadPickupsDone || 0} done) — issue stickers`;
+  const tip = [head, ...lines].join("\n");
+
+  if (allDone) return { state: "done", cls: "bg-emerald-500/20 text-emerald-400", tip };
+  const overdue =
+    rowDay < today ||
+    (rowDay === today && stops.some((s) => {
+      if (s.done) return false;
+      const t = parseTime(s.time || "");
+      return t !== null && nowMin > t;
+    }));
+  if (overdue) return { state: "overdue", cls: "bg-red-500/20 text-red-400", tip };
+  return { state: "pending", cls: "bg-amber-500/20 text-amber-400", tip };
+}

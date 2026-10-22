@@ -66,6 +66,16 @@ import {
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { notify } from "@/lib/notify";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // ── Types ──
 interface EmployeeRecipient {
@@ -772,6 +782,8 @@ function MessagingSubTab({
 
   const [sending, setSending] = useState(false);
   const [sendProgress, setSendProgress] = useState<{ current: number; total: number } | null>(null);
+  // Confirmation shown before sending for a date after today.
+  const [futureConfirm, setFutureConfirm] = useState<{ dateLabel: string } | null>(null);
   const [selectedAll, setSelectedAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState(tab.defaultMessage);
@@ -1109,8 +1121,20 @@ function MessagingSubTab({
     }
   };
 
+  // Entry point for the Send button. Messages for a date after today are easy to
+  // send by accident (wrong day selected) and can't be recalled, so confirm first.
+  const handleSend = () => {
+    const isDated = tab.id !== "week-schedule" && tab.id !== "flyer";
+    const today = getTodayPacific();
+    if (isDated && selectedDate && selectedDate > today) {
+      setFutureConfirm({ dateLabel: formatDateMMDDYYYY(selectedDate) });
+      return;
+    }
+    void doSend();
+  };
+
   // Send messages — personalized per employee (one-by-one to avoid timeouts)
-  const handleSend = async () => {
+  const doSend = async () => {
     const selectedEmployees = filteredEmployees.filter((e) => selectedIds.has(e._id));
 
     if (selectedEmployees.length === 0) {
@@ -1927,6 +1951,25 @@ function MessagingSubTab({
           </div>
         </div>
       </div>
+
+      <AlertDialog open={!!futureConfirm} onOpenChange={(o) => { if (!o) setFutureConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send for a future date?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You&apos;re about to text {selectedCount} recipient{selectedCount !== 1 ? "s" : ""} about{" "}
+              <span className="font-semibold text-foreground">{futureConfirm?.dateLabel}</span>
+              , which is after today. Messages can&apos;t be recalled once sent.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setFutureConfirm(null); void doSend(); }}>
+              Send anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

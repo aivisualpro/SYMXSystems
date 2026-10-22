@@ -81,7 +81,7 @@ import {
   parseTime, parseStem, isDelayPositive, fmtDur, fmtTime, durToHrs, stripSec,
   BUSINESS_TZ, toPacificDate,
   COLUMNS, type ColumnDef, type RouteRow, type SortKey,
-  SHORT_DAYS,
+  SHORT_DAYS, pickupStatus,
 } from "./_components/routes-utils";
 
 export default function RoutesPage() {
@@ -330,6 +330,7 @@ export default function RoutesPage() {
                 cortexVin: rec.cortexVin || "",
                 workPhone: rec.workPhone || "",
                 onRoadPickupsDone: rec.onRoadPickupsDone || 0,
+                onRoadPickupStops: Array.isArray(rec.onRoadPickupStops) ? rec.onRoadPickupStops : [],
                 attendance: rec.attendance || "",
                 profileImage: emp?.profileImage || "",
                 actualDepartureTime: rec.actualDepartureTime || "",
@@ -1045,14 +1046,17 @@ export default function RoutesPage() {
                                                         <td className="px-2 py-1.5">
                                                             <div className="flex items-center gap-1.5">
                                                                 {renderCell(row, "routeNumber", row.routeNumber)}
-                                                                {(row.onRoadPickups || 0) > 0 && (
-                                                                    <span
-                                                                        title={`${row.onRoadPickups} customer pickup${row.onRoadPickups === 1 ? "" : "s"} (${row.onRoadPickupsDone || 0} done) — issue stickers`}
-                                                                        className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400"
-                                                                    >
-                                                                        PU {row.onRoadPickups}
-                                                                    </span>
-                                                                )}
+                                                                {(row.onRoadPickups || 0) > 0 && (() => {
+                                                                    const st = pickupStatus(row);
+                                                                    return (
+                                                                        <span
+                                                                            title={st.tip}
+                                                                            className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-bold", st.cls)}
+                                                                        >
+                                                                            PU {row.onRoadPickups}
+                                                                        </span>
+                                                                    );
+                                                                })()}
                                                                 {row.vinMismatch && (
                                                                     <button
                                                                         type="button"

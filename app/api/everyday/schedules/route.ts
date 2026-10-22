@@ -86,25 +86,36 @@ export async function GET(req: NextRequest) {
             { transporterId: 1, dayBeforeConfirmation: 1 }
         ).lean()) as any[];
 
-        let confirmedIds = new Set<string>();
-        if (yearWeek) {
-            // Read confirmation status from the schedule's futureShift array (single source of truth)
-            const weekSchedules = await SymxEmployeeSchedule.find(
-                { yearWeek, futureShift: { $exists: true, $ne: [] }, ...S },
-                { transporterId: 1, futureShift: 1 }
-            ).lean() as any[];
-            weekSchedules.forEach((s: any) => {
-                const entries: any[] = Array.isArray(s.futureShift) ? s.futureShift : [];
-                if (entries.some((e: any) => e.status === "confirmed")) {
-                    confirmedIds.add(s.transporterId);
-                }
-            });
-        }
+        // "Tomorrow's shift" (future-shift / off-tomorrow) messages are recorded on the
+        // schedule row of the day they were SENT (shift day minus 1) — see
+        // /api/messaging/send. So a confirmation for shift day D lives on the row
+        // dated D-1, and only on that row. (This used to scan the whole week, which
+        // marked a driver confirmed for a day whose message was never sent just
+        // because they had confirmed a different day's message that week.)
+        const prev = new Date(dateStr + "T12:00:00.000Z");
+        prev.setUTCDate(prev.getUTCDate() - 1);
+        const prevStr = prev.toISOString().split("T")[0];
+        const confirmedIds = new Set<string>();
+        const sentIds = new Set<string>();
+        const prevDocs = await SymxEmployeeSchedule.find(
+            {
+                date: { $gte: new Date(prevStr + "T00:00:00.000Z"), $lte: new Date(prevStr + "T23:59:59.999Z") },
+                futureShift: { $exists: true, $ne: [] },
+                ...S,
+            },
+            { transporterId: 1, futureShift: 1 }
+        ).lean() as any[];
+        prevDocs.forEach((d: any) => {
+            const entries: any[] = Array.isArray(d.futureShift) ? d.futureShift : [];
+            if (entries.length) sentIds.add(d.transporterId);
+            if (entries.some((e: any) => e.status === "confirmed")) confirmedIds.add(d.transporterId);
+        });
 
         const enrichedSchedules = schedules.map(s => {
             return {
                 ...s,
-                futureShiftConfirmed: confirmedIds.has(s.transporterId)
+                futureShiftConfirmed: confirmedIds.has(s.transporterId),
+                futureShiftSent: sentIds.has(s.transporterId)
             };
         });
 

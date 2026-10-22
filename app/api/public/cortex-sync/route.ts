@@ -388,11 +388,36 @@ export async function POST(req: NextRequest) {
 
         // On-road (customer) pickups across this driver's routes — stickers needed.
         const rtsAll: any[] = Array.isArray(itineraryDetails.routes) ? itineraryDetails.routes : [];
-        const pu = rtsAll.reduce((a, r) => a + (Number(r?.routeDeliveryProgress?.onRoadPickups) || 0), 0);
-        const puDone = rtsAll.reduce((a, r) => a + (Number(r?.routeDeliveryProgress?.completedOnRoadPickups) || 0), 0);
+        const puProgress = rtsAll.reduce((a, r) => a + (Number(r?.routeDeliveryProgress?.onRoadPickups) || 0), 0);
+        const puDoneProgress = rtsAll.reduce((a, r) => a + (Number(r?.routeDeliveryProgress?.completedOnRoadPickups) || 0), 0);
+        // Cortex only fills the on-road pickup counters once a route has started, but the planned
+        // stops already carry them: a customer stop (sequence > 1; sequence 1 is the station load)
+        // holding PICK_UP tasks. Count those so pickups show before the route starts.
+        let puStops = 0, puStopsDone = 0;
+        const puStopList: { time: string; done: boolean; doneAt: string }[] = [];
+        for (const st of stopList) {
+            if (!(Number(st?.sequenceNumber) > 1)) continue;
+            const puTasks = (Array.isArray(st?.tasks) ? st.tasks : []).filter((t: any) => t?.taskType === "PICK_UP");
+            if (!puTasks.length) continue;
+            let doneTasks = 0, lastDone = 0;
+            for (const t of puTasks) {
+                puStops++;
+                const at = Number(t?.actualExecutionTime);
+                if (at > 0) { puStopsDone++; doneTasks++; if (at > lastDone) lastDone = at; }
+            }
+            // Planned time of the stop (when the driver is due there) + when it was actually done.
+            puStopList.push({
+                time: epochToClockTime(st?.expectedStartTime) || epochToClockTime(st?.plannedStartTime) || "",
+                done: doneTasks === puTasks.length,
+                doneAt: doneTasks === puTasks.length && lastDone ? epochToClockTime(lastDone) : "",
+            });
+        }
+        // Cortex's own counter wins once it has one; the stop-based count only fills in when it is 0.
+        const pu = puProgress > 0 ? puProgress : puStops;
+        const puDone = puProgress > 0 ? puDoneProgress : puStopsDone;
         // Issued work phone + VIN the driver is in today (both change daily).
         { const ph = findWorkPhone(itineraryDetails), vn = findVin(itineraryDetails); if (ph) (setOps as any).workPhone = ph; if (vn) (setOps as any).cortexVin = vn; }
-        if (rtsAll.length) { (setOps as any).onRoadPickups = pu; (setOps as any).onRoadPickupsDone = puDone; }
+        if (rtsAll.length) { (setOps as any).onRoadPickups = pu; (setOps as any).onRoadPickupsDone = puDone; (setOps as any).onRoadPickupStops = puStopList; }
 
         await SYMXRoute.updateOne({ _id: existing._id }, { $set: setOps });
 
