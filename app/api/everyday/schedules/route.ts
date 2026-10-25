@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import { getRequestScope, siteFilter, resolveWriteSiteId } from "@/lib/scoped-query";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+import { entriesInWindow, messageWindowForTab } from "@/lib/messaging-constants";
 
 export async function PUT(req: NextRequest) {
   try {
@@ -106,7 +107,8 @@ export async function GET(req: NextRequest) {
             { transporterId: 1, futureShift: 1 }
         ).lean() as any[];
         prevDocs.forEach((d: any) => {
-            const entries: any[] = Array.isArray(d.futureShift) ? d.futureShift : [];
+            const [wFrom, wTo] = messageWindowForTab("future-shift", prevStr);
+            const entries: any[] = entriesInWindow(Array.isArray(d.futureShift) ? d.futureShift : [], wFrom, wTo);
             if (entries.length) sentIds.add(d.transporterId);
             if (entries.some((e: any) => e.status === "confirmed")) confirmedIds.add(d.transporterId);
         });

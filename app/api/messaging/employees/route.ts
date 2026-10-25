@@ -6,7 +6,7 @@ import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SYMXRoute from "@/lib/models/SYMXRoute";
 
-import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
+import { TAB_TO_SCHEDULE_FIELD, entriesInWindow, messageWindowForTab } from "@/lib/messaging-constants";
 import RouteType from "@/lib/models/RouteType";
 import Site from "@/lib/models/Site";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
@@ -362,7 +362,10 @@ export async function GET(req: NextRequest) {
         }
         const targetSched = empSchedules.find((s: any) => toPacificDate(s.date) === targetDate);
         if (targetSched) {
-          const entries = targetSched[scheduleField] || [];
+          let entries = targetSched[scheduleField] || [];
+          // Only messages sent for THIS day count (see entriesInWindow); stale ones from
+          // other days must not show as sent/confirmed here.
+          { const [wFrom, wTo] = messageWindowForTab(filter, targetDate); entries = entriesInWindow(entries, wFrom, wTo); }
           if (entries.length > 0) {
             const lastEntry = entries[entries.length - 1];
             messagingStatus[filter] = {

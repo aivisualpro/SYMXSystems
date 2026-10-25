@@ -1,4 +1,5 @@
 import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
+import { entriesInWindow, messageWindowForTab } from "@/lib/messaging-constants";
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId, orgWide} from "@/lib/scoped-query";
@@ -311,10 +312,12 @@ export async function GET(req: NextRequest) {
         const confirmationMap: Record<string, any> = {};
 
         (confirmationDocs as any[]).forEach((sched: any) => {
-            const arr: any[] = Array.isArray(sched.shiftNotification) ? sched.shiftNotification : [];
-            if (arr.length === 0) return;
             const tid = (sched.transporterId || "").trim().toUpperCase();
             const dateStr = sched.date ? new Date(sched.date).toISOString().split('T')[0] : "";
+            // Only messages sent ON this route's day count for this route's day.
+            const [wFrom, wTo] = messageWindowForTab("shift", dateStr);
+            const arr: any[] = entriesInWindow(Array.isArray(sched.shiftNotification) ? sched.shiftNotification : [], wFrom, wTo);
+            if (arr.length === 0) return;
             const key = `${tid}_${dateStr}`;
 
             const history = arr.map((entry: any) => ({

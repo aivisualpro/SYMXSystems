@@ -4,7 +4,7 @@ import connectToDatabase from "@/lib/db";
 import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
-import { TAB_TO_SCHEDULE_FIELD } from "@/lib/messaging-constants";
+import { TAB_TO_SCHEDULE_FIELD, entriesInWindow, messageWindowForTab } from "@/lib/messaging-constants";
 
 /**
  * Lightweight polling endpoint for live message status updates.
@@ -96,7 +96,8 @@ export async function GET(req: NextRequest) {
     };
 
     schedules.forEach((sched: any) => {
-      const entries: any[] = Array.isArray(sched[scheduleField]) ? sched[scheduleField] : [];
+      let entries: any[] = Array.isArray(sched[scheduleField]) ? sched[scheduleField] : [];
+      if (scheduleDate) { const [wFrom, wTo] = messageWindowForTab(messageType, scheduleDate); entries = entriesInWindow(entries, wFrom, wTo); }
       if (entries.length === 0) return;
 
       let bestEntry = entries[entries.length - 1];
