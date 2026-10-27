@@ -1,8 +1,11 @@
+import { requireSuperAdminApi } from "@/lib/payments-auth";
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import VehicleRepair from "@/lib/models/VehicleRepair";
 
 export async function GET() {
+  const __auth = await requireSuperAdminApi();
+  if ("response" in __auth) return __auth.response;
   try {
     await connectToDatabase();
     

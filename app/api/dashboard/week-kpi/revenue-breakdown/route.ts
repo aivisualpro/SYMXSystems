@@ -1,4 +1,4 @@
-import { requirePermission } from "@/lib/auth/require-permission";
+import { requireSuperAdmin } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -52,7 +52,7 @@ function parseTime(timeStr: string): number | null {
 export async function GET(req: NextRequest) {
   let revenueBreakdownSession;
   try {
-    revenueBreakdownSession = await requirePermission("Dashboard", "view");
+    revenueBreakdownSession = await requireSuperAdmin();
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });
@@ -181,7 +181,7 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    await requirePermission("Dashboard", "view");
+    await requireSuperAdmin();
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });

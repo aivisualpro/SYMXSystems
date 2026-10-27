@@ -330,6 +330,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const permFiltered = isAdmin ? items : items.filter(item => {
       const itemName = item.name || item.title;
 
+      // The Dashboard is Super Admin only — never shown through the role matrix.
+      if (itemName === "Dashboard") return false;
+
       const perm = permissions.find((p: any) => p.module === itemName);
       if (perm) {
         return perm.actions?.view !== false;
@@ -368,7 +371,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               size="lg"
               tooltip="Symx Systems Dashboard"
             >
-              <Link href="/dashboard" className="flex items-center gap-3 p-2 group-data-[collapsible=icon]:justify-center overflow-hidden">
+              <Link href={isAdmin ? "/dashboard" : "/profile"} className="flex items-center gap-3 p-2 group-data-[collapsible=icon]:justify-center overflow-hidden">
                 {/* Animated Icon Wrapper */}
                 <div className="relative flex-shrink-0 flex items-center justify-center">
                   <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse-slow" />

@@ -1,9 +1,9 @@
-const CACHE_NAME = 'symx-v4';
+const CACHE_NAME = 'symx-v5';
 
 // Assets to pre-cache on install
 const PRECACHE_URLS = [
   '/',
-  '/dashboard',
+  '/profile',
   '/manifest.json',
   '/symx-logo.png',
   '/logo.png',
@@ -92,7 +92,7 @@ self.addEventListener('fetch', (event) => {
           // Offline → try cache in order of preference
           const cached = await caches.match(request);
           if (cached) return cached;
-          const dashboard = await caches.match('/dashboard');
+          const dashboard = await caches.match('/profile');
           if (dashboard) return dashboard;
           const login = await caches.match('/login');
           if (login) return login;
@@ -184,14 +184,14 @@ self.addEventListener('push', (event) => {
       icon: '/icons/icon-192x192.png',
       badge: '/icons/icon-96x96.png',
       tag: data.tag || 'general',
-      data: { url: data.url || '/dashboard' },
+      data: { url: data.url || '/profile' },
     })
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || '/dashboard';
+  const url = event.notification.data?.url || '/profile';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {

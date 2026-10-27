@@ -1,4 +1,4 @@
-import { requirePermission } from "@/lib/auth/require-permission";
+import { requireSuperAdmin } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -47,7 +47,7 @@ function yearWeekToDateRange(yearWeek: string): { start: Date; end: Date } | nul
 
 export async function GET(req: NextRequest) {
   try {
-    await requirePermission("Dashboard", "view");
+    await requireSuperAdmin();
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });

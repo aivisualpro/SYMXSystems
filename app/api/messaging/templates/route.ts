@@ -1,9 +1,11 @@
+import { requireAnyPermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import MessagingTemplate from "@/lib/models/MessagingTemplate";
 
 // GET — fetch all templates, a specific one by ?type=, or batch by ?types=a,b,c
 export async function GET(req: NextRequest) {
+  try { await requireAnyPermission([["Scheduling", "view"], ["Dispatching", "view"]]); } catch (e: any) { return NextResponse.json({ error: e.message }, { status: e.name === "ForbiddenError" ? 403 : 401 }); }
   try {
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
@@ -38,11 +40,13 @@ export async function GET(req: NextRequest) {
 
 // PUT — upsert a template for a given type
 export async function PUT(req: NextRequest) {
+  try { await requireAnyPermission([["Scheduling", "edit"], ["Dispatching", "edit"]]); } catch (e: any) { return NextResponse.json({ error: e.message }, { status: e.name === "ForbiddenError" ? 403 : 401 }); }
   return _upsertTemplate(req);
 }
 
 // POST — alias for PUT (needed for navigator.sendBeacon which only sends POST)
 export async function POST(req: NextRequest) {
+  try { await requireAnyPermission([["Scheduling", "edit"], ["Dispatching", "edit"]]); } catch (e: any) { return NextResponse.json({ error: e.message }, { status: e.name === "ForbiddenError" ? 403 : 401 }); }
   return _upsertTemplate(req);
 }
 

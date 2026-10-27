@@ -19,6 +19,34 @@ export function isSuperAdmin(session: { id?: string; role?: string } | null | un
   return !!session && (session.id === "super-admin" || session.role === "Super Admin");
 }
 
+// Role documents change rarely but were re-read on every permission check
+// (often twice: a failed id lookup, then a name lookup). Cache briefly and
+// share in-flight lookups.
+const ROLE_TTL_MS = 60 * 1000;
+const roleCache = new Map<string, { at: number; doc: any }>();
+const roleInflight = new Map<string, Promise<any>>();
+
+async function loadRole(role: string): Promise<any> {
+  const hit = roleCache.get(role);
+  if (hit && Date.now() - hit.at < ROLE_TTL_MS) return hit.doc;
+  const pending = roleInflight.get(role);
+  if (pending) return pending;
+  const p = (async () => {
+    try {
+      await connectToDatabase();
+      const isId = /^[0-9a-fA-F]{24}$/.test(role);
+      let doc: any = isId ? await SymxAppRole.findById(role).lean().catch(() => null) : null;
+      if (!doc) doc = await SymxAppRole.findOne({ name: role }).lean();
+      roleCache.set(role, { at: Date.now(), doc });
+      return doc;
+    } finally {
+      roleInflight.delete(role);
+    }
+  })();
+  roleInflight.set(role, p);
+  return p;
+}
+
 // Core module+action check, shared by requirePermission (throws) and
 // hasPermission (returns a boolean) below so the two can never drift apart.
 async function checkPermission(
@@ -30,13 +58,7 @@ async function checkPermission(
   if (isSuperAdmin(session)) return true;
   if (!session.role) return false;
 
-  await connectToDatabase();
-
-  // Find the role either by ID (if it's an ObjectId) or by name
-  let roleDoc = await SymxAppRole.findById(session.role).lean().catch(() => null);
-  if (!roleDoc) {
-    roleDoc = await SymxAppRole.findOne({ name: session.role }).lean();
-  }
+  const roleDoc = await loadRole(session.role);
   if (!roleDoc) return false;
 
   const modulePerm = roleDoc.permissions.find((p: any) => p.module === moduleName);
@@ -84,9 +106,7 @@ export async function requireSubModulePermission(
   if (isSuperAdmin(session)) return session;
   if (!session.role) throw new ForbiddenError("Forbidden");
 
-  await connectToDatabase();
-  let roleDoc: any = await SymxAppRole.findById(session.role).lean().catch(() => null);
-  if (!roleDoc) roleDoc = await SymxAppRole.findOne({ name: session.role }).lean();
+  const roleDoc: any = await loadRole(session.role);
   const sub = roleDoc?.permissions?.find((p: any) => p.module === subModule);
   if (sub) {
     const actions = sub.actions || {};
@@ -97,6 +117,25 @@ export async function requireSubModulePermission(
   const allowed = await checkPermission(session, parentModule, action);
   if (!allowed) throw new ForbiddenError(`Missing permission: ${action} on ${subModule}`);
   return session;
+}
+
+// Super Admin ONLY. Not governed by the role matrix, so no role can be granted
+// it by accident (used for the Dashboard, Payments, and one-off admin tools).
+export async function requireSuperAdmin() {
+  const session = await getSession();
+  if (!session) throw new ForbiddenError("Not authenticated");
+  if (!isSuperAdmin(session)) throw new ForbiddenError("Super Admin only");
+  return session;
+}
+
+// Passes if the user holds ANY of the listed module/action pairs.
+export async function requireAnyPermission(checks: [string, ActionType][]) {
+  const session = await getSession();
+  if (!session) throw new ForbiddenError("Not authenticated");
+  for (const [mod, action] of checks) {
+    if (await checkPermission(session, mod, action)) return session;
+  }
+  throw new ForbiddenError(`Missing permission: ${checks.map(([m, a]) => `${a} on ${m}`).join(" or ")}`);
 }
 
 // Non-throwing variant for callers that need to soft-check access (e.g. to

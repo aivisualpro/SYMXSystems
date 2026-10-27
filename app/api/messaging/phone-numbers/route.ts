@@ -1,3 +1,4 @@
+import { requireAnyPermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -21,6 +22,7 @@ const QUO_API_BASE = "https://api.openphone.com/v1";
 // buries real errors.
 
 export async function GET(_req: NextRequest) {
+  try { await requireAnyPermission([["Scheduling", "view"], ["Dispatching", "view"]]); } catch (e: any) { return NextResponse.json({ error: e.message }, { status: e.name === "ForbiddenError" ? 403 : 401 }); }
   try {
     const session = await getSession();
     if (!session) {

@@ -1,3 +1,4 @@
+import { requireAnyPermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { v2 as cloudinary } from "cloudinary";
@@ -25,6 +26,7 @@ const ALLOWED_TYPES = [
 ];
 
 export async function POST(req: NextRequest) {
+  try { await requireAnyPermission([["Scheduling", "edit"], ["Dispatching", "edit"]]); } catch (e: any) { return NextResponse.json({ error: e.message }, { status: e.name === "ForbiddenError" ? 403 : 401 }); }
   try {
     const session = await getSession();
     if (!session) {

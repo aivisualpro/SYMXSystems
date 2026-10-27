@@ -1,3 +1,4 @@
+import { requireSuperAdminApi } from "@/lib/payments-auth";
 /**
  * ONE-TIME migration endpoint: stamps typeId onto all SYMXRoutes records.
  * Call: GET /api/admin/migrate/routes-type-id
@@ -9,6 +10,8 @@ import mongoose from "mongoose";
 import RouteType from "@/lib/models/RouteType";
 
 export async function GET() {
+  const __auth = await requireSuperAdminApi();
+  if ("response" in __auth) return __auth.response;
   await dbConnect();
 
   // Use native collection to bypass Mongoose strict-mode field stripping

@@ -3,7 +3,7 @@
   "name": "SYMX Systems",
   "short_name": "SYMX",
   "description": "SYMX Logistics Management System — Analytics, Tracking & Operations Dashboard",
-  "start_url": "/dashboard",
+  "start_url": "/profile",
   "display": "standalone",
   "display_override": [
     "standalone",

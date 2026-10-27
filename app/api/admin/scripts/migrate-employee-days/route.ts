@@ -1,3 +1,4 @@
+import { requireSuperAdminApi } from "@/lib/payments-auth";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -8,6 +9,8 @@ import mongoose from "mongoose";
  * Resets ALL employee day fields (sunday–saturday) to null (Assign Schedule).
  */
 export async function GET() {
+  const __auth = await requireSuperAdminApi();
+  if ("response" in __auth) return __auth.response;
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,3 +1,4 @@
+import { requireSuperAdminApi } from "@/lib/payments-auth";
 /**
  * Backfill routeStatus on all SymxEmployeeSchedule records.
  *
@@ -11,6 +12,8 @@ import connectToDatabase from "@/lib/db";
 import mongoose from "mongoose";
 
 export async function GET(req: NextRequest) {
+  const __auth = await requireSuperAdminApi();
+  if ("response" in __auth) return __auth.response;
   try {
     const session = await getSession();
     if (!session) {

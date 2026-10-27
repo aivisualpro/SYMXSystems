@@ -1,3 +1,4 @@
+import { requireSuperAdminApi } from "@/lib/payments-auth";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import { getRequestScope, siteFilter, resolveWriteSiteId } from "@/lib/scoped-query";
@@ -111,6 +112,8 @@ async function runMigration() {
 
 // Support both GET (browser URL bar) and POST
 export async function GET(req: NextRequest) {
+  const __auth = await requireSuperAdminApi();
+  if ("response" in __auth) return __auth.response;
     try {
         const result = await runMigration();
         return NextResponse.json(result);
@@ -121,6 +124,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const __auth = await requireSuperAdminApi();
+  if ("response" in __auth) return __auth.response;
     try {
         const result = await runMigration();
         return NextResponse.json(result);
