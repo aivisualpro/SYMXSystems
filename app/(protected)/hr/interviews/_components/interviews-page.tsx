@@ -44,6 +44,7 @@ import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import Papa from "papaparse";
 import QRCode from "qrcode";
+import { DA_INTERVIEW_QUESTIONS, type InterviewQA } from "@/lib/interview-questions";
 
 export interface Interview {
   _id: string;
@@ -54,6 +55,11 @@ export interface Interview {
   workDays?: string;
   lastEmployerInfo?: string;
   howDidYouHear?: string;
+  currentCity?: string;
+  hasDeliveryExperience?: string;
+  deliveryExperienceDetails?: string;
+  driverDescription?: string;
+  interviewQA?: { key?: string; question?: string; answer?: string }[];
   disclaimer?: string;
   status?: string;
   amazonOnboardingStatus?: string;
@@ -330,14 +336,18 @@ export function InterviewDialog({
   interview,
   onSaved,
   statusOptions,
+  initialTab = "basic",
 }: {
   open: boolean;
   onClose: () => void;
   interview: Interview | null;
   onSaved: () => void;
   statusOptions: DropdownStatus[];
+  initialTab?: "basic" | "interview" | "onboarding";
 }) {
   const [form, setForm] = useState<Record<string, string>>({});
+  const [qa, setQa] = useState<InterviewQA[]>([]);
+  const [customQ, setCustomQ] = useState("");
   const upsert = useUpsertInterview();
   const saving = upsert.isPending;
   const [activeTab, setActiveTab] = useState<"basic" | "interview" | "onboarding">("basic");
@@ -367,14 +377,42 @@ export function InterviewDialog({
         handbookStatus: interview?.handbookStatus || "",
         onboardingNotes: interview?.onboardingNotes || "",
       });
-      setActiveTab("basic");
+      setQa(
+        (interview?.interviewQA || []).map((x) => ({
+          key: x.key || "",
+          question: x.question || "",
+          answer: x.answer || "",
+        }))
+      );
+      setCustomQ("");
+      setActiveTab(initialTab);
     }
-  }, [open, interview]);
+  }, [open, interview, initialTab]);
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
+  // What the applicant told us on the public form, used to prefill answers.
+  const applicantExperience = interview
+    ? [
+        interview.hasDeliveryExperience
+          ? `${interview.hasDeliveryExperience}${interview.hasDeliveryExperience === "Yes" && interview.deliveryExperienceDetails ? ` — ${interview.deliveryExperienceDetails}` : ""}`
+          : "",
+      ].filter(Boolean).join("")
+    : "";
+
+  const toggleQuestion = (q: (typeof DA_INTERVIEW_QUESTIONS)[number]) => {
+    setQa((prev) => {
+      if (prev.some((x) => x.key === q.key)) return prev.filter((x) => x.key !== q.key);
+      const answer =
+        q.prefill === "driverDescription" ? interview?.driverDescription || ""
+        : q.prefill === "experience" ? applicantExperience
+        : "";
+      return [...prev, { key: q.key, question: q.question, answer }];
+    });
+  };
+
   const handleSave = () => {
-    upsert.mutate({ id: interview?._id, data: form });
+    upsert.mutate({ id: interview?._id, data: { ...form, interviewQA: qa } as any });
     onSaved();
     onClose();
   };
@@ -494,9 +532,134 @@ export function InterviewDialog({
 
           {activeTab === "interview" && (
             <>
-              {fieldRow("Interviewed By", "interviewedBy", { placeholder: "Manager name" })}
-              {fieldRow("Rating", "rating", { placeholder: "1-5" })}
-              {fieldRow("Interview Notes", "interviewNotes", { rows: 4, placeholder: "Assessment notes..." })}
+              {/* What the applicant already told us — visible to the interviewer */}
+              {interview && (interview.currentCity || interview.hasDeliveryExperience || interview.driverDescription || interview.lastEmployerInfo) && (
+                <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 space-y-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-blue-500">Applicant&apos;s answers</p>
+                  {interview.currentCity && (
+                    <p className="text-xs text-foreground"><span className="text-muted-foreground">Lives in:</span> {interview.currentCity}</p>
+                  )}
+                  {interview.hasDeliveryExperience && (
+                    <p className="text-xs text-foreground">
+                      <span className="text-muted-foreground">Amazon / delivery experience:</span> {interview.hasDeliveryExperience}
+                      {interview.hasDeliveryExperience === "Yes" && interview.deliveryExperienceDetails ? ` — ${interview.deliveryExperienceDetails}` : ""}
+                    </p>
+                  )}
+                  {interview.driverDescription && (
+                    <p className="text-xs text-foreground"><span className="text-muted-foreground">Describes self as a driver:</span> {interview.driverDescription}</p>
+                  )}
+                  {!interview.hasDeliveryExperience && !interview.driverDescription && !interview.currentCity && interview.lastEmployerInfo && (
+                    <p className="text-xs text-foreground whitespace-pre-line">{interview.lastEmployerInfo}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Pick which questions to ask */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Questions to ask</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allKeys = DA_INTERVIEW_QUESTIONS.map((q) => q.key);
+                      if (allKeys.every((k) => qa.some((x) => x.key === k))) {
+                        setQa((p) => p.filter((x) => !allKeys.includes(x.key)));
+                      } else {
+                        DA_INTERVIEW_QUESTIONS.forEach((q) => { if (!qa.some((x) => x.key === q.key)) toggleQuestion(q); });
+                      }
+                    }}
+                    className="text-[11px] font-semibold text-primary hover:underline"
+                  >
+                    {DA_INTERVIEW_QUESTIONS.every((q) => qa.some((x) => x.key === q.key)) ? "Clear all" : "Select all"}
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground mb-2">Tap the questions you want to ask. You don&apos;t need to use them all.</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {DA_INTERVIEW_QUESTIONS.map((q) => {
+                    const on = qa.some((x) => x.key === q.key);
+                    return (
+                      <button
+                        key={q.key}
+                        type="button"
+                        onClick={() => toggleQuestion(q)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5",
+                          on ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted/50 border border-border/50 text-muted-foreground hover:bg-muted"
+                        )}
+                      >
+                        {on && <Check className="h-3 w-3" />}
+                        {q.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Selected questions with answer boxes */}
+              {qa.length > 0 && (
+                <div className="space-y-3">
+                  {qa.map((item, idx) => (
+                    <div key={item.key || idx} className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <p className="text-xs font-semibold text-foreground leading-relaxed">{item.question}</p>
+                        <button
+                          type="button"
+                          onClick={() => setQa((p) => p.filter((_, i) => i !== idx))}
+                          className="shrink-0 h-5 w-5 rounded flex items-center justify-center hover:bg-muted/60"
+                          title="Remove question"
+                        >
+                          <X className="h-3 w-3 text-muted-foreground" />
+                        </button>
+                      </div>
+                      <textarea
+                        value={item.answer}
+                        onChange={(e) => setQa((p) => p.map((x, i) => (i === idx ? { ...x, answer: e.target.value } : x)))}
+                        placeholder="Type their answer..."
+                        rows={2}
+                        className="w-full rounded-lg border border-border/50 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 resize-y"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add your own question */}
+              <div className="flex gap-2">
+                <Input
+                  value={customQ}
+                  onChange={(e) => setCustomQ(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && customQ.trim()) {
+                      e.preventDefault();
+                      setQa((p) => [...p, { key: `custom-${Date.now()}`, question: customQ.trim(), answer: "" }]);
+                      setCustomQ("");
+                    }
+                  }}
+                  placeholder="Add your own question and press Enter"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!customQ.trim()}
+                  onClick={() => {
+                    setQa((p) => [...p, { key: `custom-${Date.now()}`, question: customQ.trim(), answer: "" }]);
+                    setCustomQ("");
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+
+              {fieldRow("Notes", "interviewNotes", { rows: 5, placeholder: "Anything else you want to remember about this candidate..." })}
+              <div className="grid grid-cols-2 gap-4">
+                {fieldRow("Interviewed By", "interviewedBy", { placeholder: "Your name" })}
+                {fieldRow("Rating", "rating", { placeholder: "1-5" })}
+              </div>
+            </>
+          )}
+
+          {activeTab === "onboarding" && (
+            <>
               <div className="grid grid-cols-2 gap-4">
                 {fieldRow("First Name", "firstName")}
                 {fieldRow("Last Name", "lastName")}
@@ -505,11 +668,6 @@ export function InterviewDialog({
                 {fieldRow("Transporter ID", "transporterId")}
                 {fieldRow("Badge Number", "badgeNumber")}
               </div>
-            </>
-          )}
-
-          {activeTab === "onboarding" && (
-            <>
               <div className="grid grid-cols-2 gap-4">
                 {fieldRow("Background Check", "backgroundCheckStatus", { placeholder: "Pending / Clear" })}
                 {fieldRow("Drug Test", "drugTestStatus", { placeholder: "Pending / Clear" })}
@@ -544,80 +702,6 @@ export function InterviewDialog({
  *  INTERVIEW NOTES RENDERER
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function parseInterviewNotes(text: string) {
-  if (!text?.trim()) return [];
-  const lines = text.split("\n");
-  const blocks: { type: "qa" | "section" | "text"; question?: string; answer?: string; content?: string }[] = [];
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i].trim();
-
-    // Skip empty lines
-    if (!line) { i++; continue; }
-
-    // Section header like "Others:"
-    if (/^(others|additional|notes|comments)\s*:/i.test(line)) {
-      const sectionContent: string[] = [];
-      i++;
-      while (i < lines.length) {
-        const sLine = lines[i].trim();
-        if (sLine) sectionContent.push(sLine);
-        i++;
-      }
-      blocks.push({ type: "section", question: line.replace(/:$/, ""), content: sectionContent.join("\n") });
-      continue;
-    }
-
-    // Line ending with "?" or multi-word line not starting with "A:" = question
-    if (line.endsWith("?") || (line.length > 20 && !line.startsWith("A:"))) {
-      const question = line;
-      let answer = "";
-      i++;
-      // Collect answer lines (starting with A: or continuation lines)
-      while (i < lines.length) {
-        const aLine = lines[i].trim();
-        if (!aLine) { i++; continue; }
-        if (aLine.startsWith("A:")) {
-          answer = aLine.replace(/^A:\s*/, "").trim();
-          i++;
-          break;
-        }
-        // If it looks like the next question, stop
-        if (aLine.endsWith("?") || (aLine.length > 20 && !aLine.startsWith("A:"))) break;
-        answer += (answer ? " " : "") + aLine;
-        i++;
-      }
-      blocks.push({ type: "qa", question, answer: answer || "\u2014" });
-      continue;
-    }
-
-    // Standalone A: line (orphan answer)
-    if (line.startsWith("A:")) {
-      blocks.push({ type: "text", content: line.replace(/^A:\s*/, "").trim() || "\u2014" });
-      i++;
-      continue;
-    }
-
-    // Plain text
-    blocks.push({ type: "text", content: line });
-    i++;
-  }
-
-  return blocks;
-}
-
-function rebuildNotes(blocks: { type: "qa" | "section" | "text"; question?: string; answer?: string; content?: string }[]): string {
-  return blocks.map((b) => {
-    if (b.type === "qa") {
-      const ans = b.answer === "\u2014" || !b.answer ? "" : b.answer;
-      return `${b.question}\nA: ${ans}`;
-    }
-    if (b.type === "section") return `${b.question}:\n${b.content || ""}`;
-    return b.content || "";
-  }).join("\n\n");
-}
-
 function InterviewNotesRenderer({
   notes,
   isEditing,
@@ -629,25 +713,11 @@ function InterviewNotesRenderer({
   onToggleEdit: () => void;
   onSave: (val: string) => void;
 }) {
-  const blocks = parseInterviewNotes(notes || "");
-  const [editingIdx, setEditingIdx] = useState<number | null>(null);
-
-  const handleInlineSave = (idx: number, newAnswer: string) => {
-    const updated = blocks.map((b, i) => {
-      if (i === idx) {
-        if (b.type === "qa") return { ...b, answer: newAnswer.trim() || "\u2014" };
-        if (b.type === "section") return { ...b, content: newAnswer.trim() };
-      }
-      return b;
-    });
-    setEditingIdx(null);
-    onSave(rebuildNotes(updated));
-  };
-
+  // Plain free text: whatever the interviewer types is shown exactly as typed.
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Interview Notes</p>
+        <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Notes</p>
         <button
           onClick={onToggleEdit}
           className={cn(
@@ -661,94 +731,29 @@ function InterviewNotesRenderer({
 
       {isEditing ? (
         <textarea
+          autoFocus
           defaultValue={notes || ""}
-          placeholder={"Add interview notes...\n\nFormat:\nQuestion?\nA: Answer\n\nOthers:\nAdditional info"}
-          rows={8}
+          placeholder="Type your notes here..."
+          rows={6}
           onBlur={(e) => {
             const val = e.target.value.trim();
             if (val !== (notes || "").trim()) onSave(val);
           }}
-          className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 text-xs text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 resize-y min-h-[120px] transition-all font-mono leading-relaxed"
+          className="w-full rounded-xl border border-border/40 bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 resize-y min-h-[120px] transition-all leading-relaxed"
         />
-      ) : blocks.length > 0 ? (
-        <div className="space-y-2">
-          {blocks.map((block, bi) => {
-            if (block.type === "qa") {
-              const isEditingThis = editingIdx === bi;
-              return (
-                <div key={bi} className="rounded-xl bg-muted/20 border border-border/30 overflow-hidden">
-                  <div className="flex gap-2 px-3 py-2 bg-gradient-to-r from-rose-500/5 to-transparent">
-                    <span className="shrink-0 mt-0.5 h-4 w-4 rounded flex items-center justify-center bg-rose-500/15 text-rose-500 text-[8px] font-black">Q</span>
-                    <p className="text-[11px] text-foreground/80 font-medium leading-relaxed">{block.question}</p>
-                  </div>
-                  <div
-                    className={cn(
-                      "flex gap-2 px-3 py-2 border-t border-border/20 cursor-text transition-colors",
-                      !isEditingThis && "hover:bg-emerald-500/5"
-                    )}
-                    onDoubleClick={() => setEditingIdx(bi)}
-                  >
-                    <span className="shrink-0 mt-0.5 h-4 w-4 rounded flex items-center justify-center bg-emerald-500/15 text-emerald-500 text-[8px] font-black">A</span>
-                    {isEditingThis ? (
-                      <input
-                        autoFocus
-                        defaultValue={block.answer === "\u2014" ? "" : block.answer}
-                        placeholder="Type answer..."
-                        onBlur={(e) => handleInlineSave(bi, e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleInlineSave(bi, (e.target as HTMLInputElement).value); } }}
-                        className="flex-1 bg-transparent text-[11px] text-foreground font-medium leading-relaxed outline-none border-b border-emerald-500/30 pb-0.5 placeholder:text-muted-foreground/30"
-                      />
-                    ) : (
-                      <p className={cn(
-                        "text-[11px] leading-relaxed flex-1",
-                        block.answer === "\u2014" ? "text-muted-foreground/30 italic" : "text-foreground font-medium"
-                      )}>
-                        {block.answer}
-                        {block.answer === "\u2014" && <span className="ml-2 text-[9px] text-muted-foreground/20 not-italic">double-click to answer</span>}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            }
-
-            if (block.type === "section") {
-              const isEditingThis = editingIdx === bi;
-              return (
-                <div key={bi} className="rounded-xl bg-amber-500/5 border border-amber-500/15 px-3 py-2">
-                  <p className="text-[9px] font-black text-amber-500/70 uppercase tracking-wider mb-1">{block.question}</p>
-                  {isEditingThis ? (
-                    <textarea
-                      autoFocus
-                      defaultValue={block.content || ""}
-                      rows={3}
-                      placeholder="Add details..."
-                      onBlur={(e) => handleInlineSave(bi, e.target.value)}
-                      className="w-full bg-transparent text-[11px] text-foreground/80 leading-relaxed outline-none border border-amber-500/20 rounded-lg px-2 py-1 resize-none placeholder:text-muted-foreground/30"
-                    />
-                  ) : (
-                    <p
-                      className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-line cursor-text hover:bg-amber-500/5 rounded px-1 -mx-1 transition-colors"
-                      onDoubleClick={() => setEditingIdx(bi)}
-                    >
-                      {block.content || <span className="text-muted-foreground/30 italic">double-click to edit</span>}
-                    </p>
-                  )}
-                </div>
-              );
-            }
-
-            return (
-              <p key={bi} className="text-[11px] text-muted-foreground leading-relaxed px-1">{block.content}</p>
-            );
-          })}
-        </div>
+      ) : notes?.trim() ? (
+        <p
+          className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap cursor-text rounded-lg px-1 -mx-1 hover:bg-muted/30 transition-colors"
+          onDoubleClick={onToggleEdit}
+        >
+          {notes}
+        </p>
       ) : (
         <button
           onClick={onToggleEdit}
-          className="w-full py-4 rounded-xl border border-dashed border-border/40 bg-muted/10 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/60 hover:border-border/60 transition-all"
+          className="w-full py-3 rounded-xl border border-dashed border-border/40 bg-muted/10 text-xs text-muted-foreground/50 hover:text-muted-foreground hover:border-border/60 transition-all"
         >
-          Click to add interview notes...
+          Click to add notes...
         </button>
       )}
     </div>
@@ -765,7 +770,7 @@ export default function HRInterviewsPage() {
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("Undecided");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [importing, setImporting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -775,6 +780,7 @@ export default function HRInterviewsPage() {
   const [showShare, setShowShare] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [editingItem, setEditingItem] = useState<Interview | null>(null);
+  const [dialogTab, setDialogTab] = useState<"basic" | "interview" | "onboarding">("basic");
   const [statusOptions, setStatusOptions] = useState<DropdownStatus[]>([]);
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
 
@@ -819,7 +825,7 @@ export default function HRInterviewsPage() {
         <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 border-rose-500/30 text-rose-500 hover:bg-rose-500/10" onClick={() => fileRef.current?.click()}>
           <Upload className="h-3.5 w-3.5" /> Import
         </Button>
-        <Button size="sm" className="h-8 text-xs gap-1.5 bg-gradient-to-r from-rose-500 to-pink-600 text-white hover:from-rose-600 hover:to-pink-700" onClick={() => { setEditingItem(null); setShowDialog(true); }}>
+        <Button size="sm" className="h-8 text-xs gap-1.5 bg-gradient-to-r from-rose-500 to-pink-600 text-white hover:from-rose-600 hover:to-pink-700" onClick={() => { setDialogTab("basic"); setEditingItem(null); setShowDialog(true); }}>
           <Plus className="h-3.5 w-3.5" /> New
         </Button>
       </div>
@@ -977,7 +983,7 @@ export default function HRInterviewsPage() {
       )}
 
       <ShareDialog open={showShare} onClose={() => setShowShare(false)} />
-      <InterviewDialog open={showDialog} onClose={() => { setShowDialog(false); setEditingItem(null); }} interview={editingItem} onSaved={fetchInterviews} statusOptions={statusOptions} />
+      <InterviewDialog open={showDialog} onClose={() => { setShowDialog(false); setEditingItem(null); }} interview={editingItem} onSaved={fetchInterviews} statusOptions={statusOptions} initialTab={dialogTab} />
 
       {/* ═══ STATUS FILTER PILLS (dynamic) ═══ */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -1042,7 +1048,7 @@ export default function HRInterviewsPage() {
           </p>
           <p className="text-xs text-muted-foreground/70 mb-4">Share the application form or create one manually</p>
           <div className="flex items-center justify-center gap-2">
-            <Button size="sm" className="gap-1.5 bg-gradient-to-r from-rose-500 to-pink-600 text-white" onClick={() => { setEditingItem(null); setShowDialog(true); }}>
+            <Button size="sm" className="gap-1.5 bg-gradient-to-r from-rose-500 to-pink-600 text-white" onClick={() => { setDialogTab("basic"); setEditingItem(null); setShowDialog(true); }}>
               <Plus className="h-3.5 w-3.5" /> New Applicant
             </Button>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowShare(true)}>
@@ -1089,7 +1095,7 @@ export default function HRInterviewsPage() {
                         {status === "Move to Next Step" ? "Amazon Onboarding" : (status || "Undecided")}
                       </div>
                       <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => { setEditingItem(item); setShowDialog(true); }} className="h-6 w-6 rounded flex items-center justify-center hover:bg-muted/50" title="Edit">
+                        <button onClick={() => { setDialogTab("basic"); setEditingItem(item); setShowDialog(true); }} className="h-6 w-6 rounded flex items-center justify-center hover:bg-muted/50" title="Edit">
                           <Pencil className="h-3 w-3 text-muted-foreground" />
                         </button>
                         <button onClick={() => handleDelete(item._id)} disabled={isDeleting} className="h-6 w-6 rounded flex items-center justify-center hover:bg-red-500/10" title="Delete">
@@ -1142,20 +1148,59 @@ export default function HRInterviewsPage() {
                   </div>
                 )}
 
-                {/* ── 6. Last Employer Info ── */}
-                {item.lastEmployerInfo && (
+                {/* ── 6. What the applicant told us (shown to the interviewer) ── */}
+                {(item.currentCity || item.hasDeliveryExperience || item.driverDescription || item.lastEmployerInfo) && (
                   <div className="px-4 pb-2">
-                    <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-0.5">Past Experience</p>
-                    <p className={cn("text-xs text-muted-foreground leading-relaxed", isExpanded ? "" : "line-clamp-2")}>
-                      {item.lastEmployerInfo}
-                    </p>
-                    {item.lastEmployerInfo.length > 100 && (
+                    <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-1">Applicant&apos;s answers</p>
+                    <div className="space-y-1 text-xs text-muted-foreground leading-relaxed">
+                      {item.currentCity && <p><span className="font-semibold text-foreground/80">Lives in:</span> {item.currentCity}</p>}
+                      {item.hasDeliveryExperience && (
+                        <p>
+                          <span className="font-semibold text-foreground/80">Amazon / delivery experience:</span>{" "}
+                          <span className={item.hasDeliveryExperience === "Yes" ? "text-emerald-500 font-semibold" : ""}>{item.hasDeliveryExperience}</span>
+                          {item.hasDeliveryExperience === "Yes" && item.deliveryExperienceDetails ? ` — ${item.deliveryExperienceDetails}` : ""}
+                        </p>
+                      )}
+                      {item.driverDescription && (
+                        <p className={isExpanded ? "" : "line-clamp-2"}><span className="font-semibold text-foreground/80">As a driver:</span> {item.driverDescription}</p>
+                      )}
+                      {!item.hasDeliveryExperience && !item.driverDescription && !item.currentCity && item.lastEmployerInfo && (
+                        <p className={cn("whitespace-pre-line", isExpanded ? "" : "line-clamp-2")}>{item.lastEmployerInfo}</p>
+                      )}
+                    </div>
+                    {((item.driverDescription || "").length > 90 || (!item.hasDeliveryExperience && (item.lastEmployerInfo || "").length > 100)) && (
                       <button onClick={() => setExpandedId(isExpanded ? null : item._id)} className="text-[10px] font-bold text-primary mt-0.5 hover:underline">
                         {isExpanded ? "Show less" : "Read more"}
                       </button>
                     )}
                   </div>
                 )}
+
+                {/* ── Interview questions asked (picked by the interviewer) ── */}
+                <div className="px-4 pb-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Interview questions</p>
+                    <button
+                      onClick={() => { setDialogTab("interview"); setEditingItem(item); setShowDialog(true); }}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-primary hover:bg-primary/10 transition-all"
+                    >
+                      <Pencil className="h-2.5 w-2.5" />
+                      {(item.interviewQA || []).length > 0 ? "Edit" : "Start interview"}
+                    </button>
+                  </div>
+                  {(item.interviewQA || []).length > 0 ? (
+                    <div className="space-y-1.5">
+                      {(item.interviewQA || []).map((x, qi) => (
+                        <div key={x.key || qi} className="text-xs leading-relaxed">
+                          <p className="text-muted-foreground">{x.question}</p>
+                          <p className={x.answer ? "text-foreground font-medium whitespace-pre-wrap" : "text-muted-foreground/40 italic"}>{x.answer || "No answer yet"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground/50">No questions picked yet.</p>
+                  )}
+                </div>
 
                 {/* ── 7. Interview Notes (premium Q&A renderer) ── */}
                 <div className="px-4 pb-2">

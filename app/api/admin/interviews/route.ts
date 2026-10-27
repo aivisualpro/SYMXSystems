@@ -1,4 +1,4 @@
-import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
+import { requireSubModulePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -7,7 +7,7 @@ import SymxInterview from "@/lib/models/SymxInterview";
 
 export async function GET(req: NextRequest) {
   try {
-    await requirePermission("HR", "view");
+    await requireSubModulePermission("HR", "Interviews", "view");
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: Request) {
   try {
-    await requirePermission("HR", "edit");
+    await requireSubModulePermission("HR", "Interviews", "edit");
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });

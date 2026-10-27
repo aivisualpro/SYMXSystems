@@ -1,4 +1,4 @@
-import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
+import { requireSubModulePermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -9,7 +9,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
-    await requirePermission("HR", "view");
+    await requireSubModulePermission("HR", "Interviews", "view");
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
   try {
-    await requirePermission("HR", "edit");
+    await requireSubModulePermission("HR", "Interviews", "edit");
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });
@@ -57,7 +57,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
   try {
-    await requirePermission("HR", "delete");
+    await requireSubModulePermission("HR", "Interviews", "delete");
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });

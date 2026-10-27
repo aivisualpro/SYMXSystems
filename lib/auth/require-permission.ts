@@ -69,6 +69,36 @@ export async function requirePermission(moduleName: string, action: ActionType =
   return session;
 }
 
+// Sub-module aware check. The roles editor saves a separate permission entry
+// for each sub-module (e.g. "Interviews" under "HR"). If the role has an
+// entry for the sub-module, THAT decides (so a Dispatch role can be given
+// Interviews edit without getting edit on all of HR); otherwise fall back to
+// the parent module, same as before.
+export async function requireSubModulePermission(
+  parentModule: string,
+  subModule: string,
+  action: ActionType = "view"
+) {
+  const session = await getSession();
+  if (!session) throw new ForbiddenError("Not authenticated");
+  if (isSuperAdmin(session)) return session;
+  if (!session.role) throw new ForbiddenError("Forbidden");
+
+  await connectToDatabase();
+  let roleDoc: any = await SymxAppRole.findById(session.role).lean().catch(() => null);
+  if (!roleDoc) roleDoc = await SymxAppRole.findOne({ name: session.role }).lean();
+  const sub = roleDoc?.permissions?.find((p: any) => p.module === subModule);
+  if (sub) {
+    const actions = sub.actions || {};
+    const ok = Object.prototype.hasOwnProperty.call(actions, action) ? !!actions[action] : true;
+    if (ok) return session;
+    // Sub-module explicitly denies; still allow if the parent grants it.
+  }
+  const allowed = await checkPermission(session, parentModule, action);
+  if (!allowed) throw new ForbiddenError(`Missing permission: ${action} on ${subModule}`);
+  return session;
+}
+
 // Non-throwing variant for callers that need to soft-check access (e.g. to
 // redact a field from a response) rather than reject the whole request.
 // Accepts an already-fetched session so callers that already called

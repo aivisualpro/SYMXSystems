@@ -43,14 +43,38 @@ export async function POST(req: NextRequest) {
       if (station) interviewSiteId = station._id;
     }
 
+    if (!body.phoneNumber?.trim() || !body.workStartDate?.trim()) {
+      return NextResponse.json(
+        { error: "Phone number and start date are required" },
+        { status: 400 }
+      );
+    }
+
+    const hasExp = body.hasDeliveryExperience === "Yes" ? "Yes" : body.hasDeliveryExperience === "No" ? "No" : "";
+    const expDetails = (body.deliveryExperienceDetails || "").toString().trim();
+    const city = (body.currentCity || "").toString().trim();
+    const driverDesc = (body.driverDescription || "").toString().trim();
+
+    // Combined summary so existing HR screens (which show "Past Experience")
+    // display the new answers without further changes.
+    const summary = [
+      hasExp ? `Amazon/delivery driving experience: ${hasExp}${hasExp === "Yes" && expDetails ? ` — ${expDetails}` : ""}` : "",
+      city ? `Lives in: ${city}` : "",
+      driverDesc ? `Describes self as a driver: ${driverDesc}` : "",
+    ].filter(Boolean).join("\n");
+
     const doc = await SymxInterview.create({
+      currentCity: city,
+      hasDeliveryExperience: hasExp,
+      deliveryExperienceDetails: expDetails,
+      driverDescription: driverDesc,
       siteId: interviewSiteId,
       fullName: body.fullName?.trim(),
       phoneNumber: body.phoneNumber?.trim(),
       workStartDate: body.workStartDate?.trim(),
       typeOfWork: body.typeOfWork?.trim(),
       workDays: body.workDays?.trim(),
-      lastEmployerInfo: body.lastEmployerInfo?.trim(),
+      lastEmployerInfo: summary || body.lastEmployerInfo?.trim(),
       howDidYouHear: body.howDidYouHear?.trim(),
       disclaimer: body.disclaimer || "",
       status: "New",

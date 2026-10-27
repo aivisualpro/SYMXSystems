@@ -12,6 +12,11 @@ export interface ISymxInterview extends Document {
   workDays?: string;
   lastEmployerInfo?: string;
   howDidYouHear?: string;
+  currentCity?: string;
+  hasDeliveryExperience?: string;
+  deliveryExperienceDetails?: string;
+  driverDescription?: string;
+  interviewQA?: { key?: string; question?: string; answer?: string }[];
   disclaimer?: string;
   status?: string;
   amazonOnboardingStatus?: string;
@@ -74,6 +79,14 @@ const SymxInterviewSchema = new Schema<ISymxInterview>(
     workDays: { type: String },
     lastEmployerInfo: { type: String },
     howDidYouHear: { type: String },
+    currentCity: { type: String },
+    hasDeliveryExperience: { type: String },
+    deliveryExperienceDetails: { type: String },
+    driverDescription: { type: String },
+    interviewQA: {
+      type: [{ key: String, question: String, answer: String, _id: false }],
+      default: undefined,
+    },
     disclaimer: { type: String },
     status: { type: String, default: "New" },
     amazonOnboardingStatus: { type: String },

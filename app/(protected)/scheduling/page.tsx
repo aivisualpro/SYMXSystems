@@ -385,6 +385,13 @@ function SchedulingPageContent() {
   const [openTypeCellKey, setOpenTypeCellKey] = useState<string | null>(null);
   const [typeFilterQuery, setTypeFilterQuery] = useState("");
   const typeFilterInputRef = useRef<HTMLInputElement>(null);
+  // ── Start-time editor (pencil in the cell popover) ──
+  // startOverrides: "YYYY-MM-DD|typeId" → start time applied to everyone on that type that day.
+  const [startOverrides, setStartOverrides] = useState<Record<string, string>>({});
+  const [editTimeKey, setEditTimeKey] = useState<string | null>(null);
+  const [editTimeValue, setEditTimeValue] = useState("");
+  const [editTimeStage, setEditTimeStage] = useState<"edit" | "choose">("edit");
+  const [savingTime, setSavingTime] = useState(false);
   // Cross-station shift picker — set when the "Other Stations" section of
   // the Change Type popover is showing the Route/Open/Close sub-menu for
   // one particular station instead of the normal type list.
@@ -1045,6 +1052,68 @@ function SchedulingPageContent() {
     }
   }, [selectedWeek, queryClient, refetchWeekData]);
 
+  // ── Start-time helpers ──
+  const timeTo24 = (v: string) => {
+    const m = (v || "").trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!m) return "";
+    let h = parseInt(m[1], 10);
+    const ap = (m[3] || "").toUpperCase();
+    if (ap === "PM" && h < 12) h += 12;
+    if (ap === "AM" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:${m[2]}`;
+  };
+  const timeTo12 = (v: string) => {
+    const [h, m] = (v || "").split(":").map((x) => parseInt(x, 10));
+    if (isNaN(h) || isNaN(m)) return "";
+    return `${String(h % 12 === 0 ? 12 : h % 12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  };
+
+  // Load the "apply to all that day" start times for the visible week.
+  const weekDatesKey = (weekData?.dates || []).map((d) => String(d).slice(0, 10)).join(",");
+  const loadStartOverrides = useCallback(async () => {
+    if (!weekDatesKey) { setStartOverrides({}); return; }
+    try {
+      const res = await fetch(`/api/schedules/start-time?dates=${weekDatesKey}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const map: Record<string, string> = {};
+      (data.overrides || []).forEach((o: any) => { map[`${o.date}|${o.typeId}`] = o.startTime; });
+      setStartOverrides(map);
+    } catch { /* non-fatal: falls back to each type's default */ }
+  }, [weekDatesKey]);
+  useEffect(() => { loadStartOverrides(); }, [loadStartOverrides]);
+
+  const saveStartTime = useCallback(async (
+    mode: "person" | "all",
+    o: { scheduleId?: string; date: string; typeId?: string; employeeName?: string; startTime: string; reset?: boolean }
+  ) => {
+    setSavingTime(true);
+    try {
+      const res = await fetch("/api/schedules/start-time", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: mode, ...o }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save start time");
+      notify.success(
+        o.reset ? "Start time reset to the type's default"
+          : mode === "all" ? `Start time set to ${o.startTime} for everyone on this type that day (${data.updated} updated)`
+          : `Start time set to ${o.startTime}`
+      );
+      setEditTimeKey(null);
+      setOpenTypeCellKey(null);
+      await loadStartOverrides();
+      queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      queryClient.invalidateQueries({ queryKey: ["dispatching"] });
+      refetchWeekData();
+    } catch (err: any) {
+      notify.error(err.message || "Failed to save start time");
+    } finally {
+      setSavingTime(false);
+    }
+  }, [queryClient, refetchWeekData, loadStartOverrides]);
+
   // Handle type change via dropdown
   const handleTypeChange = useCallback((
     scheduleId: string | undefined,
@@ -1072,9 +1141,12 @@ function SchedulingPageContent() {
       ...(matchedRT?._id ? { typeId: String(matchedRT._id) } : {}),
     };
 
-    // Only include startTime when the matched type has an explicit value
-    if (matchedRT?.startTime) {
-      payload.startTime = matchedRT.startTime;
+    // Start time: a day-specific "apply to all" time for this type wins over the type's default.
+    const dayForOverride = String(weekData?.dates?.[dayIdx] || "").slice(0, 10);
+    const dayOverride = matchedRT?._id ? startOverrides[`${dayForOverride}|${String(matchedRT._id)}`] : undefined;
+    const effectiveStart = dayOverride || matchedRT?.startTime;
+    if (effectiveStart) {
+      payload.startTime = effectiveStart;
     }
 
     if (employeeName) payload.employeeName = employeeName;
@@ -1101,7 +1173,7 @@ function SchedulingPageContent() {
       }
     });
 
-  }, [selectedWeek, weekData, updateSchedule, routeTypeConfigs, storeRouteTypes, routeTypesList]);
+  }, [selectedWeek, weekData, updateSchedule, routeTypeConfigs, storeRouteTypes, routeTypesList, startOverrides]);
 
   // Handle picking "this driver is doing Route/Open/Close at ANOTHER
   // station today" — resolves that station's OWN start time for the
@@ -2093,11 +2165,89 @@ function SchedulingPageContent() {
                                                             {chipLabel}
                                                           </div>
                                                         ) : <span />}
-                                                        {startTime && (
-                                                          <span className="text-[11px] font-bold text-blue-400 font-mono tracking-wider">{startTime}</span>
-                                                        )}
+                                                        <div className="flex items-center gap-1">
+                                                          {startTime && (
+                                                            <span className="text-[11px] font-bold text-blue-400 font-mono tracking-wider">{startTime}</span>
+                                                          )}
+                                                          {day?._id && day?.typeId && (resolvedRT?.routeStatus || "").toLowerCase() !== "off" && !crossStationCode && (
+                                                            <button
+                                                              type="button"
+                                                              title="Edit start time"
+                                                              onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setEditTimeKey(cellKey);
+                                                                setEditTimeStage("edit");
+                                                                setEditTimeValue(timeTo24(startTime) || "");
+                                                              }}
+                                                              className="p-1 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-muted/50 transition-colors"
+                                                            >
+                                                              <Pencil className="h-3 w-3" />
+                                                            </button>
+                                                          )}
+                                                        </div>
                                                       </div>
                                                     )}
+                                                    {editTimeKey === cellKey && day?._id && day?.typeId && (() => {
+                                                      const dayStr = String(weekData?.dates?.[dayIdx] || day?.date || "").slice(0, 10);
+                                                      const newLabel = timeTo12(editTimeValue);
+                                                      const hasOverride = !!startOverrides[`${dayStr}|${String(day.typeId)}`];
+                                                      const firstName = (emp.employee?.name || emp.transporterId).split(" ")[0];
+                                                      return (
+                                                        <div className="rounded-lg border border-border/50 bg-muted/30 p-2.5 flex flex-col gap-2">
+                                                          {editTimeStage === "edit" ? (
+                                                            <>
+                                                              <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-widest">New start time</span>
+                                                              <div className="flex items-center gap-2">
+                                                                <input
+                                                                  type="time"
+                                                                  autoFocus
+                                                                  value={editTimeValue}
+                                                                  onChange={(e) => setEditTimeValue(e.target.value)}
+                                                                  onKeyDown={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (e.key === "Enter" && editTimeValue) setEditTimeStage("choose");
+                                                                    if (e.key === "Escape") setEditTimeKey(null);
+                                                                  }}
+                                                                  className="flex-1 px-2 py-1 rounded-md text-[12px] bg-background border border-border/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                                                                />
+                                                                <button disabled={!editTimeValue} onClick={() => setEditTimeStage("choose")} className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-primary text-primary-foreground disabled:opacity-40">Next</button>
+                                                                <button onClick={() => setEditTimeKey(null)} className="px-2 py-1 rounded-md text-[11px] font-semibold text-muted-foreground hover:bg-muted/50">Cancel</button>
+                                                              </div>
+                                                            </>
+                                                          ) : (
+                                                            <>
+                                                              <span className="text-[11px] font-semibold text-foreground">Apply <span className="font-mono text-blue-400">{newLabel}</span> to:</span>
+                                                              <button
+                                                                disabled={savingTime}
+                                                                onClick={() => saveStartTime("person", { scheduleId: day._id, date: dayStr, typeId: String(day.typeId), employeeName: emp.employee?.name, startTime: newLabel })}
+                                                                className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-background border border-border/50 hover:bg-muted/50 disabled:opacity-50"
+                                                              >
+                                                                Just {firstName}
+                                                              </button>
+                                                              <button
+                                                                disabled={savingTime}
+                                                                onClick={() => saveStartTime("all", { scheduleId: day._id, date: dayStr, typeId: String(day.typeId), startTime: newLabel })}
+                                                                className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-background border border-border/50 hover:bg-muted/50 disabled:opacity-50"
+                                                              >
+                                                                Everyone on {displayValue} — {formatDate(dayStr)}
+                                                              </button>
+                                                              <div className="flex items-center justify-between">
+                                                                <button onClick={() => setEditTimeStage("edit")} className="text-[10px] font-semibold text-muted-foreground/70 hover:text-foreground">‹ Back</button>
+                                                                {hasOverride && (
+                                                                  <button
+                                                                    disabled={savingTime}
+                                                                    onClick={() => saveStartTime("all", { scheduleId: day._id, date: dayStr, typeId: String(day.typeId), startTime: "", reset: true })}
+                                                                    className="text-[10px] font-semibold text-amber-400 hover:underline"
+                                                                  >
+                                                                    Reset this day to default
+                                                                  </button>
+                                                                )}
+                                                              </div>
+                                                            </>
+                                                          )}
+                                                        </div>
+                                                      );
+                                                    })()}
                                                     {status && (
                                                       <div className="flex items-center gap-2">
                                                         <span className="text-[11px] text-muted-foreground/70 font-medium w-[70px] shrink-0">Confirmation</span>
@@ -2166,15 +2316,29 @@ function SchedulingPageContent() {
                                                     type="text"
                                                     value={typeFilterQuery}
                                                     onChange={e => setTypeFilterQuery(e.target.value)}
-                                                    placeholder="Type to filter…"
+                                                    onKeyDown={e => {
+                                                      if (e.key !== "Enter") return;
+                                                      e.preventDefault();
+                                                      const q = typeFilterQuery.trim().toLowerCase();
+                                                      if (!q) return;
+                                                      const matches = dynamicTypeOptions.filter(opt => opt.label.toLowerCase().includes(q));
+                                                      // Exact name wins; otherwise the first match (the highlighted row).
+                                                      const pick = matches.find(opt => opt.label.toLowerCase() === q) || matches[0];
+                                                      if (!pick) return;
+                                                      handleTypeChange(day?._id, pick.label, emp.transporterId, dayIdx, emp.employee?.name);
+                                                      setOpenTypeCellKey(null);
+                                                      setTypeFilterQuery("");
+                                                    }}
+                                                    placeholder="Type to filter, Enter to pick…"
                                                     className="w-full mb-2 px-2.5 py-1.5 rounded-lg text-[11px] bg-muted/40 border border-border/40 focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
                                                   />
                                                   <div className="max-h-[200px] overflow-y-auto flex flex-col gap-0.5 pr-1 -mr-1">
                                                     {dynamicTypeOptions
                                                       .filter(opt => !typeFilterQuery.trim() || opt.label.toLowerCase().includes(typeFilterQuery.trim().toLowerCase()))
-                                                      .map(opt => {
+                                                      .map((opt, optIdx) => {
                                                       const Icon = opt.icon;
                                                       const isActive = !crossStationCode && displayValue.toLowerCase() === opt.label.toLowerCase();
+                                                      const isEnterTarget = !!typeFilterQuery.trim() && optIdx === 0;
                                                       const optBg = opt.colorHex || "#555";
                                                       return (
                                                         <button
@@ -2183,7 +2347,8 @@ function SchedulingPageContent() {
                                                             "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all",
                                                             isActive
                                                               ? "ring-1 ring-primary/50 shadow-sm bg-accent/50"
-                                                              : "hover:bg-muted/50 opacity-80 hover:opacity-100"
+                                                              : "hover:bg-muted/50 opacity-80 hover:opacity-100",
+                                                            isEnterTarget && !isActive && "ring-1 ring-primary/40 bg-accent/30 opacity-100"
                                                           )}
                                                           onClick={() => {
                                                             handleTypeChange(day?._id, opt.label, emp.transporterId, dayIdx, emp.employee?.name);
