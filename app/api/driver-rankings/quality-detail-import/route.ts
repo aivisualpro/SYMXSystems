@@ -52,7 +52,7 @@ function identity(row: Map<string, unknown>) {
 }
 
 export async function POST(request: NextRequest) {
-  try { await requirePermission("Driver Dashboard", "edit"); }
+  try { await requirePermission("Scorecard", "edit"); }
   catch (error: any) { return NextResponse.json({ error: error.name === "ForbiddenError" ? error.message : "Unauthorized" }, { status: error.name === "ForbiddenError" ? 403 : 401 }); }
 
   const session = await getSession();

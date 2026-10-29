@@ -11,7 +11,7 @@ const mean = (values: Array<number | null>) => { const valid = values.filter((va
 function previousWeeks(week: string, count: number) { const first = datesForPerformanceWeek(week)[0]; if (!first) return []; const anchor = new Date(`${first}T12:00:00Z`); return Array.from({ length: count }, (_, index) => { const date = new Date(anchor); date.setUTCDate(date.getUTCDate() - (count - 1 - index) * 7); return weekFromDate(date.toISOString().slice(0, 10))!; }); }
 
 export async function GET(req: NextRequest) {
-  try { await requirePermission("Driver Dashboard", "view"); }
+  try { await requirePermission("Scorecard", "view"); }
   catch (error: any) { return NextResponse.json({ error: error.message || "Unauthorized" }, { status: error.name === "ForbiddenError" ? 403 : 401 }); }
   try {
     await connectToDatabase(); const scope = await getRequestScope();

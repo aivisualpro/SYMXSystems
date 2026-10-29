@@ -32,8 +32,8 @@ describe("Driver Rankings imports", () => {
   it("protects both weekly and quality-detail imports with manager edit permission", () => {
     const weekly = readFileSync("app/api/driver-rankings/weekly-scorecard-import/route.ts", "utf8");
     const quality = readFileSync("app/api/driver-rankings/quality-detail-import/route.ts", "utf8");
-    expect(weekly).toContain('requirePermission("Driver Dashboard", "edit")');
-    expect(quality).toContain('requirePermission("Driver Dashboard", "edit")');
+    expect(weekly).toContain('requirePermission("Scorecard", "edit")');
+    expect(quality).toContain('requirePermission("Scorecard", "edit")');
   });
 
   it("requires explicit Weekly Scorecard station and replacement decisions", () => {
