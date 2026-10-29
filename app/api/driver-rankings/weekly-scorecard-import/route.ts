@@ -21,7 +21,7 @@ const requestSchema = z.object({
 
 export async function POST(request: NextRequest) {
   let session: any;
-  try { session = await requirePermission("Driver Dashboard", "edit"); }
+  try { session = await requirePermission("Scorecard", "edit"); }
   catch (error: any) { return NextResponse.json({ error: error.message || "Unauthorized" }, { status: error.name === "ForbiddenError" ? 403 : 401 }); }
 
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));

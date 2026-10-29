@@ -82,7 +82,7 @@ describe("private driver performance links", () => {
   it("keeps the manager action authenticated and the public response read-only", () => {
     const managerRoute = readFileSync("app/api/driver-rankings/driver-link/route.ts", "utf8");
     const publicRoute = readFileSync("app/api/public/driver-performance/[token]/route.ts", "utf8");
-    expect(managerRoute).toContain('requirePermission("Driver Dashboard", "edit")');
+    expect(managerRoute).toContain('requirePermission("Scorecard", "edit")');
     expect(managerRoute).toContain("primarySiteId: siteId");
     expect(publicRoute).toContain("export async function GET");
     expect(publicRoute).not.toMatch(/export async function (POST|PUT|PATCH|DELETE)/);

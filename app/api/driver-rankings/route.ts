@@ -8,7 +8,7 @@ import { publicDriverPerformanceSiteEnabled } from "@/lib/driver-ranking/driver-
 export async function GET(req: NextRequest) {
   let session: any;
   try {
-    session = await requirePermission("Driver Dashboard", "view");
+    session = await requirePermission("Scorecard", "view");
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Unauthorized" }, { status: error.name === "ForbiddenError" ? 403 : 401 });
   }
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       startDate: params.get("startDate") || undefined,
       endDate: params.get("endDate") || undefined,
     });
-    const canEdit = await hasPermission(session, "Driver Dashboard", "edit");
+    const canEdit = await hasPermission(session, "Scorecard", "edit");
     const publicDriverPerformanceEnabled = canEdit && await publicDriverPerformanceSiteEnabled(scope.activeSiteIds[0]);
     return NextResponse.json({ ...result, canEdit, publicDriverPerformanceEnabled });
   } catch (error: any) {

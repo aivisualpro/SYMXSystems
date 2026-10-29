@@ -11,7 +11,7 @@ const schema = z.object({ driverId: z.string().regex(/^[a-f0-9]{24}$/i) });
 
 export async function POST(request: NextRequest) {
   let session: any;
-  try { session = await requirePermission("Driver Dashboard", "edit"); }
+  try { session = await requirePermission("Scorecard", "edit"); }
   catch (error: any) { return NextResponse.json({ error: error.message || "Unauthorized" }, { status: error.name === "ForbiddenError" ? 403 : 401 }); }
   try {
     const parsed = schema.safeParse(await request.json());
