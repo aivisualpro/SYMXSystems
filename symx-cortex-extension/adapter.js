@@ -66,7 +66,10 @@
               : []
         ).filter(
           (s) =>
-            s.routeCode === r.routeCode &&
+            // Some itinerary-detail responses omit routeCode on individual stops.
+            // Only infer the route when the response contains exactly one route.
+            (s.routeCode === r.routeCode ||
+              (!s.routeCode && kind === "detail" && routes.length === 1)) &&
             s.sequenceNumber > 1 &&
             s.tasks?.some((t) => t.taskType === "DROP_OFF"),
         );
