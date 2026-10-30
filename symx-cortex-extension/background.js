@@ -180,8 +180,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   }
   if (message.type === "collect-now" && fromOptions) {
     collect({ force: true, station: "DFO2" })
-      .then((result) => respond(result))
-      .catch((e) => respond({ ok: false, error: e.message }));
+      .then((result) => respond(result || { ok: false, error: "No collection result received" }))
+      .catch((e) => respond({ ok: false, error: e.message || "Could not start collection" }));
     return true;
   }
   if (
@@ -398,11 +398,14 @@ async function collect({ force = false, station = null } = {}) {
           lastScheduled[st.code] = Date.now();
           await chrome.storage.local.set({ jobs, health, lastScheduled });
           return { ok: true, station: st.code };
-          break; // Stagger stations; never launch a burst of navigation.
         }
     }
     await chrome.storage.local.set({ jobs, health, lastScheduled });
-    return force ? { ok: false, error: "Collection already running or station unavailable" } : undefined;
+    return force
+      ? { ok: false, error: Object.values(jobs).some((j) => j.code === station)
+          ? "A DFO2 collection is already running; check its status shortly"
+          : "DFO2 unavailable; check station detection and collection settings" }
+      : undefined;
   });
 }
 chrome.alarms.onAlarm.addListener((alarm) => {
