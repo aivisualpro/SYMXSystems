@@ -69,6 +69,8 @@ export interface WeekData {
    */
   hasSchedule?: boolean;
   prevWeekTrailing?: Record<string, number>;
+  /** Runs of 6+ consecutive worked days touching this week (can span weeks). byDate = which day of the run each date is. */
+  streaks?: Record<string, { byDate: Record<string, number>; longest: { length: number; start: string; end: string } }>;
   /** Last week's shift per driver per weekday (0=Sun) — powers the "last week" overlay. */
   prevWeekTypes?: Record<string, Record<number, { typeId: string; startTime: string; crossStationSiteId: string }>>;
   auditCounts?: Record<string, number>;
@@ -195,9 +197,25 @@ export function countWorkingDays(emp: EmployeeSchedule, routeTypeIdMap?: Map<str
   return count;
 }
 
-// Detect consecutive working days and return warnings per day index
-export function getConsecutiveWarnings(emp: EmployeeSchedule, carryOver: number = 0, routeTypeIdMap?: Map<string, any>): Map<number, { consecutive: number; type: 'caution' | 'danger' }> {
+// Consecutive-days warnings per day index. Uses the server's streak data,
+// which looks across weeks (a run can start in an earlier week and continue
+// into a later one). Falls back to counting inside the week if it's missing.
+export function getConsecutiveWarnings(
+  emp: EmployeeSchedule,
+  carryOver: number = 0,
+  routeTypeIdMap?: Map<string, any>,
+  streak?: { byDate: Record<string, number> },
+  dates?: string[]
+): Map<number, { consecutive: number; type: 'caution' | 'danger' }> {
   const warnings = new Map<number, { consecutive: number; type: 'caution' | 'danger' }>();
+
+  if (streak && dates && dates.length) {
+    for (let d = 0; d < 7; d++) {
+      const count = streak.byDate[String(dates[d] || "").slice(0, 10)];
+      if (count && count >= 6) warnings.set(d, { consecutive: count, type: count >= 7 ? 'danger' : 'caution' });
+    }
+    return warnings;
+  }
 
   let consecutive = carryOver;
   for (let d = 0; d < 7; d++) {

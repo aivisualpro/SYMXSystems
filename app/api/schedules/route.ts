@@ -142,7 +142,14 @@ export async function GET(req: NextRequest) {
       prevYearWeek = `${prevYr}-W${String(prevWk).padStart(2, "0")}`;
     }
 
-    const [employees, prevSchedules, auditCountsRaw, routeTypes, wstOptions, weekScheduleConfirmationsRaw] = await Promise.all([
+    // Window used for consecutive-days-worked detection: a streak can start
+    // weeks before this one and run weeks after it.
+    const STREAK_WINDOW_DAYS = 60;
+    const weekDatesForStreak = getWeekDates(yearWeek);
+    const streakFrom = new Date(weekDatesForStreak[0].getTime() - STREAK_WINDOW_DAYS * 86400000);
+    const streakTo = new Date(weekDatesForStreak[6].getTime() + STREAK_WINDOW_DAYS * 86400000);
+
+    const [employees, prevSchedules, auditCountsRaw, routeTypes, wstOptions, weekScheduleConfirmationsRaw, streakRowsRaw] = await Promise.all([
       // Employee info. transporterIds already came from schedules scoped to
       // THIS station (the `S`-filtered query above) — re-filtering by the
       // employee's primarySiteId here was redundant at best and, for a
@@ -174,7 +181,7 @@ export async function GET(req: NextRequest) {
         { $group: { _id: "$transporterId", count: { $sum: 1 } } },
       ]),
       // Route types
-      RouteType.find({ isActive: true }, { name: 1, theoryHrs: 1, group: 1 }).lean(),
+      RouteType.find({ isActive: true }, { name: 1, theoryHrs: 1, group: 1, routeStatus: 1 }).lean(),
       // WST Options
       SYMXWSTOption.find({ isActive: true }).lean(),
       // Week-schedule confirmation status (employee confirming next week's schedule) —
@@ -183,6 +190,15 @@ export async function GET(req: NextRequest) {
         { yearWeek, messageType: "week-schedule", transporterId: { $in: transporterIds }, ...S },
         { transporterId: 1, status: 1, createdAt: 1 }
       ).sort({ createdAt: -1 }).lean(),
+      // Every day each of these drivers is scheduled, across ALL stations
+      // (days worked at another station still count toward a streak).
+      orgWide(
+        SymxEmployeeSchedule.find(
+          { transporterId: { $in: transporterIds }, date: { $gte: streakFrom, $lte: streakTo } },
+          { transporterId: 1, date: 1, status: 1, type: 1, typeId: 1, routeStatus: 1 }
+        ),
+        "consecutive-days-worked check must count a driver's days at every station, not just this one"
+      ).lean(),
     ]);
 
     // Keep only the latest confirmation doc per employee (a resend creates a new doc)
@@ -336,6 +352,50 @@ export async function GET(req: NextRequest) {
         if (count > 0) prevWeekTrailing[tid] = count;
       }
     }
+
+    // ── Consecutive days worked (spans weeks, either direction) ──
+    // A day counts as worked when its shift type is not an "off" type —
+    // same rule the grid uses. Runs are built from calendar-adjacent days.
+    const rtStatusById = new Map<string, string>();
+    (routeTypes as any[]).forEach((rt) => rtStatusById.set(String(rt._id), (rt.routeStatus || "").trim().toLowerCase()));
+    const LEGACY_OFF = new Set(["off", "", "call out", "request off", "suspension", "stand by"]);
+    const isWorkedRow = (r: any) => {
+      const st = r.typeId ? rtStatusById.get(String(r.typeId)) : undefined;
+      if (st !== undefined) return st !== "off";
+      return !LEGACY_OFF.has((r.type || "").trim().toLowerCase());
+    };
+    const dayNum = (d: any) => Math.floor(new Date(d).getTime() / 86400000);
+    const dayStr = (n: number) => new Date(n * 86400000).toISOString().split("T")[0];
+    const workedByTid = new Map<string, Set<number>>();
+    (streakRowsRaw as any[]).forEach((r) => {
+      if (!r.date || !isWorkedRow(r)) return;
+      let set = workedByTid.get(r.transporterId);
+      if (!set) { set = new Set(); workedByTid.set(r.transporterId, set); }
+      set.add(dayNum(r.date));
+    });
+    const weekStartNum = dayNum(weekDatesForStreak[0]);
+    const weekEndNum = dayNum(weekDatesForStreak[6]);
+    const streaks: Record<string, { byDate: Record<string, number>; longest: { length: number; start: string; end: string } }> = {};
+    workedByTid.forEach((set, tid) => {
+      const nums = [...set].sort((a, b) => a - b);
+      let i = 0;
+      while (i < nums.length) {
+        let j = i;
+        while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+        const length = j - i + 1;
+        const start = nums[i], end = nums[j];
+        // Only runs of 6+ that touch this week matter.
+        if (length >= 6 && end >= weekStartNum && start <= weekEndNum) {
+          const entry = streaks[tid] || (streaks[tid] = { byDate: {}, longest: { length: 0, start: "", end: "" } });
+          for (let n = Math.max(start, weekStartNum); n <= Math.min(end, weekEndNum); n++) {
+            const count = n - start + 1; // which day of the run this is
+            if (count >= 6) entry.byDate[dayStr(n)] = count;
+          }
+          if (length > entry.longest.length) entry.longest = { length, start: dayStr(start), end: dayStr(end) };
+        }
+        i = j + 1;
+      }
+    });
 
     // Last week's shift per driver per weekday, for the Scheduling page's
     // "show last week" overlay and copy-from-last-week preview.
@@ -570,6 +630,7 @@ export async function GET(req: NextRequest) {
       employees: Object.values(activeGrouped),
       totalEmployees: Object.keys(activeGrouped).length,
       prevWeekTrailing,
+      streaks,
       prevWeekTypes,
       auditCounts,
       everydayRecords,

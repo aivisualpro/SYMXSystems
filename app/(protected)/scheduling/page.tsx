@@ -740,27 +740,43 @@ function SchedulingPageContent() {
     setCollapsedGroups(prev => ({ ...prev, [group]: !prev[group] }));
   };
 
-  // Compute warning counts for KPI card
+  // Employees on a run of 6+ consecutive worked days that touches this week.
+  // The server looks across weeks, so a run that started last week (or
+  // continues into next week) is included with its full length and dates.
   const warningCounts = useMemo(() => {
-    if (!weekData?.employees) return { caution: 0, danger: 0, cautionNames: [] as string[], dangerNames: [] as string[] };
-    let caution = 0;
-    let danger = 0;
-    const cautionNames: string[] = [];
-    const dangerNames: string[] = [];
-    weekData.employees.forEach(emp => {
-      const warnings = getConsecutiveWarnings(emp, weekData.prevWeekTrailing?.[emp.transporterId] || 0, routeTypeIdMap);
-      let hasCaution = false;
-      let hasDanger = false;
-      warnings.forEach(w => {
-        if (w.type === 'danger') hasDanger = true;
-        else if (w.type === 'caution') hasCaution = true;
+    type Entry = { name: string; length: number; start: string; end: string };
+    const cautionList: Entry[] = [];
+    const dangerList: Entry[] = [];
+    if (weekData?.employees) {
+      weekData.employees.forEach(emp => {
+        const st = weekData.streaks?.[emp.transporterId];
+        let entry: Entry | null = null;
+        if (st && st.longest.length >= 6) {
+          entry = { name: emp.employee?.name || emp.transporterId, ...st.longest };
+        } else if (!weekData.streaks) {
+          // Older response without streak data: count inside the week only.
+          const w = getConsecutiveWarnings(emp, weekData.prevWeekTrailing?.[emp.transporterId] || 0, routeTypeIdMap);
+          let max = 0;
+          w.forEach(v => { if (v.consecutive > max) max = v.consecutive; });
+          if (max >= 6) entry = { name: emp.employee?.name || emp.transporterId, length: max, start: "", end: "" };
+        }
+        if (!entry) return;
+        (entry.length >= 7 ? dangerList : cautionList).push(entry);
       });
-      const name = emp.employee?.name || emp.transporterId;
-      if (hasDanger) { danger++; dangerNames.push(name); }
-      else if (hasCaution) { caution++; cautionNames.push(name); }
-    });
-    return { caution, danger, cautionNames, dangerNames };
+    }
+    const byLen = (a: Entry, b: Entry) => b.length - a.length || a.name.localeCompare(b.name);
+    cautionList.sort(byLen);
+    dangerList.sort(byLen);
+    return {
+      caution: cautionList.length,
+      danger: dangerList.length,
+      cautionList,
+      dangerList,
+    };
   }, [weekData, routeTypeIdMap]);
+
+  const fmtStreakDate = (d: string) =>
+    d ? new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : "";
 
   // Average Days Per Employee ("Employee" type only) using typeId resolution
   const averageDays = useMemo(() => {
@@ -838,10 +854,14 @@ function SchedulingPageContent() {
                       {warningCounts.caution} × 6-day
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[280px] text-xs bg-popover text-popover-foreground border shadow-lg">
+                  <TooltipContent side="bottom" className="max-w-[340px] max-h-[60vh] overflow-y-auto text-xs bg-popover text-popover-foreground border shadow-lg">
                     <p className="font-semibold text-amber-500 mb-1">6 consecutive days:</p>
-                    {warningCounts.cautionNames.length > 0 ? (
-                      warningCounts.cautionNames.map((n, i) => <p key={i} className="text-muted-foreground">{n}</p>)
+                    {warningCounts.cautionList.length > 0 ? (
+                      warningCounts.cautionList.map((e, i) => (
+                        <p key={i} className="text-muted-foreground">
+                          {e.name} — {e.length} days{e.start ? ` (${fmtStreakDate(e.start)} – ${fmtStreakDate(e.end)})` : ""}
+                        </p>
+                      ))
                     ) : (
                       <p className="text-muted-foreground">None</p>
                     )}
@@ -864,10 +884,14 @@ function SchedulingPageContent() {
                       {warningCounts.danger} × 7+ day
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[280px] text-xs bg-popover text-popover-foreground border shadow-lg">
+                  <TooltipContent side="bottom" className="max-w-[340px] max-h-[60vh] overflow-y-auto text-xs bg-popover text-popover-foreground border shadow-lg">
                     <p className="font-semibold text-red-500 mb-1">7+ consecutive days (violation):</p>
-                    {warningCounts.dangerNames.length > 0 ? (
-                      warningCounts.dangerNames.map((n, i) => <p key={i} className="text-muted-foreground">{n}</p>)
+                    {warningCounts.dangerList.length > 0 ? (
+                      warningCounts.dangerList.map((e, i) => (
+                        <p key={i} className="text-muted-foreground">
+                          {e.name} — {e.length} days{e.start ? ` (${fmtStreakDate(e.start)} – ${fmtStreakDate(e.end)})` : ""}
+                        </p>
+                      ))
                     ) : (
                       <p className="text-muted-foreground">None</p>
                     )}
@@ -1975,7 +1999,7 @@ function SchedulingPageContent() {
                                 .map((emp) => {
                                   const workDays = countWorkingDays(emp, routeTypeIdMap);
                                   const notes = emp.employee?.ScheduleNotes || "";
-                                  const consecutiveWarnings = getConsecutiveWarnings(emp, weekData?.prevWeekTrailing?.[emp.transporterId] || 0, routeTypeIdMap);
+                                  const consecutiveWarnings = getConsecutiveWarnings(emp, weekData?.prevWeekTrailing?.[emp.transporterId] || 0, routeTypeIdMap, weekData?.streaks?.[emp.transporterId] ?? (weekData?.streaks ? { byDate: {} } : undefined), weekData?.dates);
 
                                   const isNewHire = emp.employee?.hiredDate && (Date.now() - new Date(emp.employee.hiredDate).getTime()) / 86400000 <= 30;
 
