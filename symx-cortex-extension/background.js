@@ -139,41 +139,6 @@ function drain() {
   return draining;
 }
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  if (
-    message.type === "configure" &&
-    sender.id === chrome.runtime.id &&
-    sender.url === chrome.runtime.getURL("options.html")
-  ) {
-    serial(async () => {
-      const config = message.config;
-      if (!config || typeof config.key !== "string" || !config.key ||
-          typeof config.enabled !== "boolean" || !Array.isArray(config.stations))
-        throw new Error("Invalid configuration");
-      const origin = CortexQueue.endpoint(config.origin);
-      const stations = config.stations.filter((s) =>
-        stationCodes.includes(s.code) &&
-        typeof s.serviceAreaId === "string" &&
-        s.serviceAreaId.trim().length > 0
-      );
-      if (stations.length !== config.stations.length ||
-          (config.enabled && !stations.length) ||
-          new Set(stations.map((s) => s.code)).size !== stations.length ||
-          new Set(stations.map((s) => s.serviceAreaId)).size !== stations.length)
-        throw new Error("Enter distinct authorized service areas before enabling collection");
-      const { config: prior, outbox = [], deadLetters = [] } =
-        await chrome.storage.local.get(["config", "outbox", "deadLetters"]);
-      if ((outbox.length || deadLetters.length) &&
-          prior && (prior.origin !== origin ||
-          prior.key !== config.key ||
-          JSON.stringify(prior.stations) !== JSON.stringify(stations)))
-        throw new Error("Pending captures exist; clear or deliver them before changing the destination");
-      await chrome.storage.local.set({
-        config: { origin, key: config.key, enabled: config.enabled, stations }
-      });
-    }).then(() => respond({ ok: true }))
-      .catch((e) => respond({ ok: false, error: e.message }));
-    return true;
-  }
   const fromOptions =
     sender.id === chrome.runtime.id &&
     sender.url === chrome.runtime.getURL("options.html");
@@ -181,67 +146,36 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     serial(async () => {
       const candidate = message.config || {};
       const origin = CortexQueue.endpoint(candidate.origin);
-      if (
-        typeof candidate.key !== "string" ||
-        candidate.key.length < 16 ||
-        candidate.key.length > 512
-      )
+      if (typeof candidate.key !== "string" ||
+          candidate.key.length < 16 || candidate.key.length > 512)
         throw new Error("Enter a development key of 16–512 characters");
-      if (
-        !Array.isArray(candidate.stations) ||
-        !candidate.stations.length ||
-        candidate.stations.length > 3
-      )
-        throw new Error("Enter authorized stations");
+      if (!Array.isArray(candidate.stations) || candidate.stations.length > 3)
+        throw new Error("Invalid station list");
       const stations = candidate.stations.map((s) => ({
         code: s.code,
-        serviceAreaId:
-          typeof s.serviceAreaId === "string" ? s.serviceAreaId.trim() : "",
+        serviceAreaId: typeof s.serviceAreaId === "string" ? s.serviceAreaId.trim() : "",
       }));
-      if (
-        stations.some(
-          (s) =>
-            !stationCodes.includes(s.code) ||
-            !s.serviceAreaId ||
-            s.serviceAreaId.length > 150,
-        ) ||
-        new Set(stations.map((s) => s.code)).size !== stations.length ||
-        new Set(stations.map((s) => s.serviceAreaId)).size !== stations.length
-      )
-        throw new Error("Enter distinct authorized service areas");
-      const {
-        config,
-        outbox = [],
-        deadLetters = [],
-        jobs = {},
-      } = await chrome.storage.local.get([
-        "config",
-        "outbox",
-        "deadLetters",
-        "jobs",
-      ]);
-      const changedOrigin = config && config.origin !== origin;
-      if (
-        changedOrigin &&
-        (outbox.length || deadLetters.length || Object.keys(jobs).length)
-      )
-        throw new Error(
-          "Finish pending captures and deliveries before changing environment",
-        );
+      if (stations.some((s) =>
+          !stationCodes.includes(s.code) || !s.serviceAreaId ||
+          s.serviceAreaId.length > 150) ||
+          new Set(stations.map((s) => s.code)).size !== stations.length ||
+          new Set(stations.map((s) => s.serviceAreaId)).size !== stations.length)
+        throw new Error("Invalid station mapping");
+      const { config, outbox = [], deadLetters = [], jobs = {} } =
+        await chrome.storage.local.get(["config", "outbox", "deadLetters", "jobs"]);
+      if (config && (config.origin !== origin || config.key !== candidate.key) &&
+          (outbox.length || deadLetters.length || Object.keys(jobs).length))
+        throw new Error("Finish pending captures before changing environment");
       const enabled = candidate.enabled === true;
       if (!enabled)
         for (const id of Object.keys(jobs))
           await chrome.tabs.remove(Number(id)).catch(() => {});
       await chrome.storage.local.set({
-        config: { origin, key: candidate.key, stations, enabled },
+        config: { origin, key: candidate.key, enabled, stations },
         ...(!enabled ? { jobs: {} } : {}),
-        ...(changedOrigin
-          ? { receipts: {}, health: {}, lastScheduled: {} }
-          : {}),
       });
-    })
-      .then(() => respond({ ok: true }))
-      .catch((error) => respond({ ok: false, error: error.message }));
+    }).then(() => respond({ ok: true }))
+      .catch((e) => respond({ ok: false, error: e.message }));
     return true;
   }
   if (
@@ -290,15 +224,38 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
           outbox = [],
           receipts = {},
         } = await chrome.storage.local.get(["config", "outbox", "receipts"]);
-        if (
-          !config?.enabled ||
-          !config.stations.some(
-            (s) =>
-              s.serviceAreaId === message.payload?.serviceAreaId &&
-              stationCodes.includes(s.code),
-          )
-        )
-          throw new Error("Station disabled");
+        if (!config?.enabled) throw new Error("Collection disabled");
+        const serviceAreaId = message.payload?.serviceAreaId;
+        if (typeof serviceAreaId !== "string" || !serviceAreaId ||
+            serviceAreaId.length > 150)
+          throw new Error("Missing Amazon service area identifier");
+        let station = config.stations.find((s) => s.serviceAreaId === serviceAreaId);
+        if (!station) {
+          // Ask the local SYMX server, rather than inferring a station from route codes.
+          const origin = CortexQueue.endpoint(config.origin);
+          const lookup = await fetch(
+            `${origin}/api/public/symx-cortex?serviceAreaId=${encodeURIComponent(serviceAreaId)}`,
+            { headers: { "x-extension-key": config.key },
+              signal: AbortSignal.timeout(10000), redirect: "error" },
+          );
+          if (!lookup.ok) {
+            const health = (await chrome.storage.local.get("health")).health || {};
+            health.unknown = {
+              error: `Unrecognized service area ${serviceAreaId}; local station mapping required`,
+              lastAttemptAt: new Date().toISOString(),
+            };
+            await chrome.storage.local.set({ health });
+            throw new Error("Unknown station mapping");
+          }
+          const match = await lookup.json();
+          if (!stationCodes.includes(match.code) || match.serviceAreaId !== serviceAreaId ||
+              config.stations.some((s) => s.code === match.code &&
+                s.serviceAreaId !== serviceAreaId))
+            throw new Error("Conflicting station mapping");
+          station = { code: match.code, serviceAreaId };
+          config.stations.push(station);
+          await chrome.storage.local.set({ config });
+        }
         const p = message.payload;
         if (!["overview", "detail"].includes(p.kind))
           throw new Error("Unsupported capture");
