@@ -20,21 +20,20 @@ let context;
   let worker =
     context.serviceWorkers()[0] ||
     (await context.waitForEvent("serviceworker"));
-  await worker.evaluate(
-    async (config) => {
-      await chrome.storage.local.clear();
-      await chrome.storage.local.set({
-        config,
-        lastScheduled: { DFO2: Date.now() },
-      });
-    },
-    {
-      origin: "http://127.0.0.1:3000",
-      enabled: true,
-      key: state.key,
-      stations: [{ code: "DFO2", serviceAreaId: "demo-DFO2" }],
-    },
-  );
+  await worker.evaluate(async () => {
+    await chrome.storage.local.clear();
+    await chrome.storage.local.set({ lastScheduled: { DFO2: Date.now() } });
+  });
+  const extensionId = worker.url().split("/")[2];
+  const options = await context.newPage();
+  await options.goto(`chrome-extension://${extensionId}/options.html`);
+  await options.locator("#origin").fill("http://127.0.0.1:3000");
+  await options.locator("#key").fill(state.key);
+  await options.locator("#DFO2").fill("demo-DFO2");
+  await options.locator("#enabled").check();
+  await options.getByRole("button", { name: "Save settings", exact: true }).click();
+  await options.getByText("Saved. Collection begins on the next minute tick.", { exact: true }).waitFor();
+  await options.close();
   const now = Date.now();
   const date = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",
@@ -145,7 +144,7 @@ let context;
     throw Error("Stored route detail did not reconcile");
   await context.close();
   console.log(
-    `PASS: unpacked MV3 extension, mocked authorized overview + route navigation, server acknowledgement, detail reconciliation; ${requests} synthetic GETs and zero live Amazon requests.`,
+    `PASS: unpacked MV3 extension, options → worker configuration, mocked authorized overview + route navigation, server acknowledgement, detail reconciliation; ${requests} synthetic GETs and zero live Amazon requests.`,
   );
 })().catch(async (e) => {
   console.error(e.message);
