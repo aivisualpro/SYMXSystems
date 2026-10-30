@@ -27,7 +27,7 @@ const child = spawn(
     "node_modules/next/dist/bin/next",
     "dev",
     "--hostname",
-    "0.0.0.0",
+    "127.0.0.1",
     "--port",
     "3000",
   ],
