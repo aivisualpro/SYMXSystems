@@ -195,6 +195,39 @@ describe("dedicated extension normalizer and queue policy", () => {
     expect(rows[0].inboundMinutes).toBe(15);
     expect(JSON.stringify(rows)).not.toContain("Private");
   });
+  it("reads delivered timestamps when a single-route itinerary omits stop route codes", () => {
+    const rows = context.CortexAdapter.normalize(
+      {
+        itineraryDetails: {
+          itineraryId: "i1",
+          routes: [{ routeCode: "CX70", routeDeliveryProgress: { totalStops: 190, completedStops: 2 } }],
+          stops: [
+            { sequenceNumber: 2, tasks: [{ taskType: "DROP_OFF", taskState: "DELIVERED", actualExecutionTime: 1793394000 }] },
+            { sequenceNumber: 3, tasks: [{ taskType: "DROP_OFF", taskState: "DELIVERED", actualExecutionTime: 1793394060 }] },
+          ],
+        },
+      },
+      "detail",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].firstDelivery).toBe(1793394000000);
+    expect(rows[0].lastDelivery).toBe(1793394060000);
+  });
+  it("does not attribute unassigned stops across multiple routes", () => {
+    const rows = context.CortexAdapter.normalize(
+      {
+        itineraryDetails: {
+          routes: [{ routeCode: "CX70" }, { routeCode: "CX71" }],
+          stops: [
+            { sequenceNumber: 2, tasks: [{ taskType: "DROP_OFF", taskState: "DELIVERED", actualExecutionTime: 1793394000 }] },
+          ],
+        },
+      },
+      "detail",
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r: any) => r.firstDelivery === null)).toBe(true);
+  });
   it("rejects production origins and retries with bounded backoff", () => {
     expect(() =>
       context.CortexQueue.endpoint("https://symx-systems.vercel.app"),
