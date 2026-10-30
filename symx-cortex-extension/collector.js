@@ -161,9 +161,14 @@
       clearInterval(timer);
       const origin = location.pathname + location.search;
       let completed = 0;
+      let timedOut = 0;
+      let skippedForBudget = 0;
       const page = new URL(location.href);
       for (const [id, type] of targets) {
-        if (Date.now() - started > 7 * 60000) break;
+        if (Date.now() - started > 7 * 60000) {
+          skippedForBudget = targets.size - completed - timedOut;
+          break;
+        }
         const query = new URLSearchParams({
           provider: "ALL_DRIVERS",
           selectedDay: page.searchParams.get("selectedDay"),
@@ -179,6 +184,7 @@
         while (!detailAcks.has(id) && Date.now() < until)
           await new Promise((r) => setTimeout(r, 500));
         if (detailAcks.has(id)) completed++;
+        else timedOut++;
       }
       history.pushState({}, "", origin);
       window.dispatchEvent(new PopStateEvent("popstate"));
@@ -193,8 +199,8 @@
             incomplete.length === 0,
           detail: targets.size === 0
             ? "Overview captured, but no detail targets were discovered; check Cortex route response compatibility"
-            : `${completed}/${targets.size} details acknowledged; ${incomplete.length} missing` +
-              (incomplete.length ? `; first IDs: ${incomplete.slice(0, 3).join(", ")}` : ""),
+            : `${completed}/${targets.size} details acknowledged; ${timedOut} timed out; ${skippedForBudget} not attempted due to run limit` +
+              (incomplete.length ? `; first missing IDs: ${incomplete.slice(0, 3).join(", ")}` : ""),
         },
         location.origin,
       );
