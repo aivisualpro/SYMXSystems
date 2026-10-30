@@ -64,7 +64,8 @@ async function deliver() {
       });
       const ack = await response.json().catch(() => ({}));
       if (!response.ok || !ack.ok || ack.captureId !== item.capture.captureId) {
-        permanent = [400, 403, 404, 413, 422].includes(response.status);
+        // Credentials and station authorization cannot recover through retrying the same payload.
+        permanent = [400, 401, 403, 404, 413, 422].includes(response.status);
         const retrySeconds = Number(response.headers.get("retry-after"));
         item.nextAttempt = CortexQueue.retry(
           item.attempts,
