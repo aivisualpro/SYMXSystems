@@ -179,7 +179,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       .catch((e) => respond({ ok: false, error: e.message }));
     return true;
   }
-  if (message.type === "collect-now" && sender.id === chrome.runtime.id && (fromOptions || !sender.tab)) {
+  if (message.type === "collect-now" && sender.id === chrome.runtime.id) {
     collect({ force: true, station: "DFO2" })
       .then((result) => respond(result || { ok: false, error: "No collection result received" }))
       .catch((e) => respond({ ok: false, error: e.message || "Could not start collection" }));
