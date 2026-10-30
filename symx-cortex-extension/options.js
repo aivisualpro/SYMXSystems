@@ -34,7 +34,7 @@ el("settings").addEventListener("submit", async (e) => {
       .filter((s) => s.serviceAreaId);
     if (
       new Set(stations.map((s) => s.serviceAreaId)).size !== stations.length ||
-      !stations.length
+      (el("enabled").checked && !stations.length)
     )
       throw new Error("Enter distinct authorized service areas");
     const result = await chrome.runtime.sendMessage({
