@@ -178,6 +178,12 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       .catch((e) => respond({ ok: false, error: e.message }));
     return true;
   }
+  if (message.type === "collect-now" && fromOptions) {
+    collect({ force: true, station: "DFO2" })
+      .then((result) => respond(result))
+      .catch((e) => respond({ ok: false, error: e.message }));
+    return true;
+  }
   if (
     message.type === "retry" &&
     sender.id === chrome.runtime.id &&
@@ -334,7 +340,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     respond({ ok: true });
   }
 });
-async function collect() {
+async function collect({ force = false, station = null } = {}) {
   return serial(async () => {
     const {
       config,
@@ -358,6 +364,8 @@ async function collect() {
         delete jobs[id];
       }
     }
+    if (force && (!config?.enabled || !config.stations?.some((s) => s.code === station)))
+      return { ok: false, error: "Enable collection and identify DFO2 first" };
     if (config?.enabled) {
       const hour = Number(
         new Intl.DateTimeFormat("en-US", {
@@ -366,13 +374,14 @@ async function collect() {
           hourCycle: "h23",
         }).format(new Date()),
       );
-      if (hour >= 7 && hour < 24)
+      if (force || (hour >= 7 && hour < 24))
         for (const st of config.stations || []) {
+          if (station && st.code !== station) continue;
           if (
             !stationCodes.includes(st.code) ||
             !st.serviceAreaId ||
             Object.values(jobs).some((j) => j.code === st.code) ||
-            Date.now() - (lastScheduled[st.code] || 0) < 5 * 60000
+            (!force && Date.now() - (lastScheduled[st.code] || 0) < 5 * 60000)
           )
             continue;
           const query = new URLSearchParams({
@@ -387,10 +396,13 @@ async function collect() {
           });
           jobs[tab.id] = { code: st.code, started: Date.now() };
           lastScheduled[st.code] = Date.now();
+          await chrome.storage.local.set({ jobs, health, lastScheduled });
+          return { ok: true, station: st.code };
           break; // Stagger stations; never launch a burst of navigation.
         }
     }
     await chrome.storage.local.set({ jobs, health, lastScheduled });
+    return force ? { ok: false, error: "Collection already running or station unavailable" } : undefined;
   });
 }
 chrome.alarms.onAlarm.addListener((alarm) => {
