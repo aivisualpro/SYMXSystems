@@ -36,6 +36,16 @@ export function CortexDashboard() {
   const [station, setStation] = useState("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Observation | null>(null);
+  // The details card is below a potentially long route table.
+  // Bring it into view immediately when dispatch selects a route.
+  useEffect(() => {
+    if (selected) {
+      document.getElementById("cortex-route-details")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [selected]);
   const [now, setNow] = useState(Date.now());
   const scope = activeSiteIds.join(",");
   useEffect(() => {
@@ -339,6 +349,7 @@ export function CortexDashboard() {
         </CardContent>
       </Card>
       {selected && (
+        <div id="cortex-route-details" className="scroll-mt-6">
         <Card>
           <CardHeader className="flex flex-row justify-between">
             <div>
@@ -410,6 +421,7 @@ export function CortexDashboard() {
             </div>
           </CardContent>
         </Card>
+        </div>
       )}
       <p className="text-xs text-muted-foreground">
         RTS uses observed delivery pace plus the planned inbound stem. It
