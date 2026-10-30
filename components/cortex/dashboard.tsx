@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { RefreshCw, Radio, Route, Clock3, AlertTriangle } from "lucide-react";
 
 type Data = {
@@ -36,16 +37,6 @@ export function CortexDashboard() {
   const [station, setStation] = useState("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Observation | null>(null);
-  // The details card is below a potentially long route table.
-  // Bring it into view immediately when dispatch selects a route.
-  useEffect(() => {
-    if (selected) {
-      document.getElementById("cortex-route-details")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }
-  }, [selected]);
   const [now, setNow] = useState(Date.now());
   const scope = activeSiteIds.join(",");
   useEffect(() => {
@@ -348,9 +339,11 @@ export function CortexDashboard() {
           )}
         </CardContent>
       </Card>
-      {selected && (
-        <div id="cortex-route-details" className="scroll-mt-6">
-        <Card>
+      <Dialog open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}>
+        {selected && (
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <DialogTitle className="sr-only">{selected.routeCode} route details</DialogTitle>
+            <Card className="border-0 shadow-none">
           <CardHeader className="flex flex-row justify-between">
             <div>
               <CardTitle>
@@ -420,9 +413,10 @@ export function CortexDashboard() {
               )}
             </div>
           </CardContent>
-        </Card>
-        </div>
-      )}
+            </Card>
+          </DialogContent>
+        )}
+      </Dialog>
       <p className="text-xs text-muted-foreground">
         RTS uses observed delivery pace plus the planned inbound stem. It
         excludes future breaks, traffic, rescues, and dispatch changes. Missing
