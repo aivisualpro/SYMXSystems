@@ -34,7 +34,7 @@ el("settings").addEventListener("submit", async (e) => {
       .filter((s) => s.serviceAreaId);
     if (
       new Set(stations.map((s) => s.serviceAreaId)).size !== stations.length ||
-      (el("enabled").checked && !stations.length)
+      false
     )
       throw new Error("Enter distinct authorized service areas");
     const result = await chrome.runtime.sendMessage({
@@ -49,7 +49,7 @@ el("settings").addEventListener("submit", async (e) => {
     if (!result?.ok)
       throw new Error(result?.error || "Settings could not be saved");
     el("status").textContent =
-      "Saved. Collection begins on the next minute tick.";
+      stations.length ? "Saved. Collection is configured for known stations." : "Saved. Open an authorized Amazon Cortex page to identify the station automatically.";
   } catch (e) {
     el("status").textContent = e.message;
   }
