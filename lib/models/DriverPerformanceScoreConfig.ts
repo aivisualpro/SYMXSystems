@@ -1,3 +1,4 @@
+import { siteGuard } from "./plugins/site-guard";
 import mongoose, { Schema } from "mongoose";
 import { SCORE_CATEGORIES } from "@/lib/scorecard/performance-score-config";
 
@@ -24,6 +25,8 @@ const schema = new Schema({
   createdBy: { type: String, required: true, immutable: true },
   updatedBy: { type: String, default: null, immutable: true },
 }, { timestamps: true, collection: "DriverPerformanceScoreConfigs", autoIndex: false, autoCreate: false });
+// Mixed COMPANY/SITE model: retain its existing nullable ownership semantics.
+schema.plugin(siteGuard, { modelName: "DriverPerformanceScoreConfig" });
 schema.path("siteId").validate(function(this: any, value: unknown) {
   return this.scopeType === "SITE" ? value != null : value == null;
 }, "Site scope requires one site; company scope cannot contain a site.");

@@ -1,0 +1,74 @@
+const el = (id) => document.getElementById(id);
+async function refresh() {
+  const {
+    config,
+    outbox = [],
+    health = {},
+    deadLetters = [],
+  } = await chrome.storage.local.get([
+    "config",
+    "outbox",
+    "health",
+    "deadLetters",
+  ]);
+  el("health").textContent = JSON.stringify(
+    { queued: outbox.length, failed: deadLetters.length, stations: health },
+    null,
+    2,
+  );
+  return config;
+}
+refresh().then((config) => {
+  if (!config) return;
+  el("origin").value = config.origin;
+  el("key").value = config.key;
+  el("enabled").checked = config.enabled;
+  for (const s of config.stations) el(s.code).value = s.serviceAreaId;
+});
+el("settings").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const origin = CortexQueue.endpoint(el("origin").value);
+    const stations = ["DFO2", "DXC8", "DFO3"]
+      .map((code) => ({ code, serviceAreaId: el(code).value.trim() }))
+      .filter((s) => s.serviceAreaId);
+    if (
+      new Set(stations.map((s) => s.serviceAreaId)).size !== stations.length ||
+      !stations.length
+    )
+      throw new Error("Enter distinct authorized service areas");
+    const prior = (await chrome.storage.local.get("config")).config;
+    const { outbox = [], deadLetters = [] } = await chrome.storage.local.get([
+      "outbox",
+      "deadLetters",
+    ]);
+    if (
+      prior &&
+      prior.origin !== origin &&
+      (outbox.length || deadLetters.length)
+    )
+      throw new Error(
+        "Deliver or clear pending captures before changing environment",
+      );
+    await chrome.storage.local.set({
+      config: {
+        origin,
+        key: el("key").value,
+        enabled: el("enabled").checked,
+        stations,
+      },
+    });
+    el("status").textContent =
+      "Saved. Collection begins on the next minute tick.";
+  } catch (e) {
+    el("status").textContent = e.message;
+  }
+});
+el("retry").addEventListener("click", async () => {
+  const result = await chrome.runtime.sendMessage({ type: "retry" });
+  el("status").textContent = result?.ok
+    ? "Retry queued; delivery resumes on the next minute tick."
+    : "Retry unavailable; check pending queue size.";
+  await refresh();
+});
+setInterval(refresh, 3000);

@@ -120,6 +120,7 @@ const data = {
       url: "/dispatching",
       icon: IconRoute,
       subModules: [
+        { name: "SYMX Cortex", url: "/cortex" },
         { name: "Roster", url: "/dispatching/roster" },
         { name: "Opening", url: "/dispatching/opening" },
         { name: "Attendance", url: "/dispatching/attendance" },
@@ -319,7 +320,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }, []);
 
   // Use dynamic modules from DB if available, otherwise fall back to hardcoded
-  const adminItems = dynamicModules || data.admin;
+  const adminItems = (dynamicModules || data.admin).map((item: any) => item.name === "Dispatching"
+    ? { ...item, subModules: [{ name: "SYMX Cortex", url: "/cortex" }, ...(item.subModules || []).filter((sm: any) => sm.url !== "/cortex")] }
+    : item);
 
   const filterItems = (items: any[], type: 'admin' | 'secondary') => {
     if (loadingPermissions) return [];
