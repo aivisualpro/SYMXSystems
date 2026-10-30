@@ -20,15 +20,17 @@ async function deliver() {
       outbox = [],
       health = {},
       deadLetters = [],
+      receipts = {},
     } = await chrome.storage.local.get([
       "config",
       "outbox",
       "health",
       "deadLetters",
+      "receipts",
     ]);
     if (!config?.enabled || !config.key) return;
     const origin = CortexQueue.endpoint(config.origin);
-    // A single bounded request per tick; capture messages can also trigger a delivery.
+    // One transaction per request; catch-up releases the lock between requests.
     const item = outbox.find((x) => x.nextAttempt <= Date.now());
     if (!item) return;
     const station = config.stations.find(
@@ -44,11 +46,12 @@ async function deliver() {
         outbox,
         deadLetters: deadLetters.slice(-20),
       });
-      return;
+      return "rejected";
     }
     const h = health[station] || {};
     h.lastAttemptAt = new Date().toISOString();
     let permanent = CortexQueue.expired(item, Date.now());
+    let outcome = "sent";
     try {
       if (permanent)
         throw new Error("Capture expired or retry budget exhausted");
@@ -63,7 +66,12 @@ async function deliver() {
         redirect: "error",
       });
       const ack = await response.json().catch(() => ({}));
-      if (!response.ok || !ack.ok || ack.captureId !== item.capture.captureId) {
+      if (
+        !response.ok ||
+        !ack.ok ||
+        ack.captureId !== item.capture.captureId ||
+        ack.accepted !== item.capture.routes.length
+      ) {
         // Credentials and station authorization cannot recover through retrying the same payload.
         permanent = [400, 401, 403, 404, 413, 422].includes(response.status);
         const retrySeconds = Number(response.headers.get("retry-after"));
@@ -77,13 +85,19 @@ async function deliver() {
         throw new Error(`Sync HTTP ${response.status}`);
       }
       outbox.splice(outbox.indexOf(item), 1);
+      receipts[item.capture.captureId] = Date.now();
       health[station] = {
         ...h,
         lastSuccessAt: new Date().toISOString(),
-        lastObservedAt: item.capture.observedAt,
+        lastObservedAt:
+          h.lastObservedAt &&
+          Date.parse(h.lastObservedAt) > Date.parse(item.capture.observedAt)
+            ? h.lastObservedAt
+            : item.capture.observedAt,
         error: null,
       };
     } catch (e) {
+      outcome = "retry";
       item.attempts++;
       item.nextAttempt = Math.max(
         item.nextAttempt,
@@ -94,16 +108,107 @@ async function deliver() {
         outbox.splice(outbox.indexOf(item), 1);
         // Failed payloads retain no raw responses, credentials, or customer addresses.
         deadLetters.push({ ...item, error: e.message });
+        outcome = "rejected";
       }
     }
     await chrome.storage.local.set({
       outbox,
       health,
       deadLetters: deadLetters.slice(-20),
+      receipts: Object.fromEntries(
+        Object.entries(receipts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 1000),
+      ),
     });
+    return outcome;
   });
 }
+let draining = null;
+function drain() {
+  if (draining) return draining;
+  draining = (async () => {
+    const deadline = Date.now() + 20000;
+    for (let n = 0; n < 40 && Date.now() < deadline; n++) {
+      const outcome = await deliver();
+      if (!outcome || outcome === "retry") break;
+    }
+  })().finally(() => {
+    draining = null;
+  });
+  return draining;
+}
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  const fromOptions =
+    sender.id === chrome.runtime.id &&
+    sender.url === chrome.runtime.getURL("options.html");
+  if (message.type === "configure" && fromOptions) {
+    serial(async () => {
+      const candidate = message.config || {};
+      const origin = CortexQueue.endpoint(candidate.origin);
+      if (
+        typeof candidate.key !== "string" ||
+        candidate.key.length < 16 ||
+        candidate.key.length > 512
+      )
+        throw new Error("Enter a development key of 16–512 characters");
+      if (
+        !Array.isArray(candidate.stations) ||
+        !candidate.stations.length ||
+        candidate.stations.length > 3
+      )
+        throw new Error("Enter authorized stations");
+      const stations = candidate.stations.map((s) => ({
+        code: s.code,
+        serviceAreaId:
+          typeof s.serviceAreaId === "string" ? s.serviceAreaId.trim() : "",
+      }));
+      if (
+        stations.some(
+          (s) =>
+            !stationCodes.includes(s.code) ||
+            !s.serviceAreaId ||
+            s.serviceAreaId.length > 150,
+        ) ||
+        new Set(stations.map((s) => s.code)).size !== stations.length ||
+        new Set(stations.map((s) => s.serviceAreaId)).size !== stations.length
+      )
+        throw new Error("Enter distinct authorized service areas");
+      const {
+        config,
+        outbox = [],
+        deadLetters = [],
+        jobs = {},
+      } = await chrome.storage.local.get([
+        "config",
+        "outbox",
+        "deadLetters",
+        "jobs",
+      ]);
+      const changedOrigin = config && config.origin !== origin;
+      if (
+        changedOrigin &&
+        (outbox.length || deadLetters.length || Object.keys(jobs).length)
+      )
+        throw new Error(
+          "Finish pending captures and deliveries before changing environment",
+        );
+      const enabled = candidate.enabled === true;
+      if (!enabled)
+        for (const id of Object.keys(jobs))
+          await chrome.tabs.remove(Number(id)).catch(() => {});
+      await chrome.storage.local.set({
+        config: { origin, key: candidate.key, stations, enabled },
+        ...(!enabled ? { jobs: {} } : {}),
+        ...(changedOrigin
+          ? { receipts: {}, health: {}, lastScheduled: {} }
+          : {}),
+      });
+    })
+      .then(() => respond({ ok: true }))
+      .catch((error) => respond({ ok: false, error: error.message }));
+    return true;
+  }
   if (
     message.type === "retry" &&
     sender.id === chrome.runtime.id &&
@@ -145,10 +250,11 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (message.type === "capture") {
     (async () => {
       const captureId = await serial(async () => {
-        const { config, outbox = [] } = await chrome.storage.local.get([
-          "config",
-          "outbox",
-        ]);
+        const {
+          config,
+          outbox = [],
+          receipts = {},
+        } = await chrome.storage.local.get(["config", "outbox", "receipts"]);
         if (
           !config?.enabled ||
           !config.stations.some(
@@ -193,6 +299,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         ).join("");
         const fingerprint = h;
         capture.captureId = `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+        if (receipts[capture.captureId]) return capture.captureId;
         const existing = outbox.find((x) => x.fingerprint === fingerprint);
         if (existing) return existing.capture.captureId;
         if (outbox.length >= 300)
@@ -207,13 +314,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         return capture.captureId;
       });
       await deliver();
-      const { outbox = [], deadLetters = [] } = await chrome.storage.local.get([
-        "outbox",
-        "deadLetters",
-      ]);
-      const ok = ![...outbox, ...deadLetters].some(
-        (x) => x.capture.captureId === captureId,
-      );
+      const { receipts = {} } = await chrome.storage.local.get(["receipts"]);
+      const ok = !!receipts[captureId];
       respond({ ok, queued: !ok });
     })().catch(() => respond({ ok: false }));
     return true;
@@ -300,10 +402,10 @@ async function collect() {
   });
 }
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "cortex-delivery") deliver().catch(() => {});
+  if (alarm.name === "cortex-delivery") drain().catch(() => {});
   if (alarm.name === "cortex-collection") collect().catch(() => {});
 });
 chrome.runtime.onStartup.addListener(() => {
   collect().catch(() => {});
-  deliver().catch(() => {});
+  drain().catch(() => {});
 });

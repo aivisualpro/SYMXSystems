@@ -2,14 +2,15 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { webcrypto } from "node:crypto";
-function worker(state: any, fetcher: any) {
+function worker(state: any, fetcher: any, clock: typeof Date = Date) {
   let listener: any;
+  const closedTabs: number[] = [];
   const context: any = {
     URL,
     TextEncoder,
     AbortSignal,
     crypto: webcrypto,
-    Date,
+    Date: clock,
     setTimeout,
     clearTimeout,
     fetch: fetcher,
@@ -33,7 +34,12 @@ function worker(state: any, fetcher: any) {
         },
       },
       alarms: { create() {}, onAlarm: { addListener() {} } },
-      tabs: { create: async () => ({ id: 123 }), remove: async () => {} },
+      tabs: {
+        create: async () => ({ id: 123 }),
+        remove: async (id: number) => {
+          closedTabs.push(id);
+        },
+      },
     },
   };
   vm.createContext(context);
@@ -61,6 +67,16 @@ function worker(state: any, fetcher: any) {
           resolve,
         ),
       ),
+    options: (message: any) =>
+      new Promise<any>((resolve) =>
+        listener(
+          message,
+          { id: "test", url: "chrome-extension://test/options.html" },
+          resolve,
+        ),
+      ),
+    closedTabs,
+    drain: () => vm.runInContext("drain()", context),
     deliver: () => vm.runInContext("deliver()", context),
   };
 }
@@ -91,7 +107,11 @@ const message = () => ({
 const ack = async (_url: any, init: any) => ({
   ok: true,
   status: 200,
-  json: async () => ({ ok: true, captureId: JSON.parse(init.body).captureId }),
+  json: async () => ({
+    ok: true,
+    captureId: JSON.parse(init.body).captureId,
+    accepted: JSON.parse(init.body).routes.length,
+  }),
 });
 describe("durable MV3 delivery", () => {
   it("queues on outage, survives a worker restart, and acknowledges only confirmed writes", async () => {
@@ -122,6 +142,8 @@ describe("durable MV3 delivery", () => {
     });
     const m = message();
     await Promise.all([w.send(m), w.send(m), w.send(m)]);
+    await w.send(m);
+    expect(ids).toHaveLength(1);
     expect(new Set(ids).size).toBe(1);
     expect(state.outbox).toHaveLength(0);
   });
@@ -176,5 +198,167 @@ describe("durable MV3 delivery", () => {
       ).ok,
     ).toBe(false);
     expect(requests).toBe(0);
+  });
+});
+
+function queued(count: number) {
+  return Array.from({ length: count }, (_, i) => ({
+    capture: {
+      captureId: webcrypto.randomUUID(),
+      observedAt: new Date().toISOString(),
+      serviceAreaId: "safe-dfo2",
+      routes: [{ routeCode: `CX${i}` }],
+    },
+    attempts: 0,
+    nextAttempt: 0,
+  }));
+}
+describe("outage catch-up and settings transactions", () => {
+  it("drains a bounded batch and shares concurrent drain calls", async () => {
+    const state: any = { config: config(), outbox: queued(43) };
+    let sent = 0;
+    const w = worker(state, async (...args: any[]) => {
+      sent++;
+      return ack(args[0], args[1]);
+    });
+    await Promise.all([w.drain(), w.drain()]);
+    expect(sent).toBe(40);
+    expect(state.outbox).toHaveLength(3);
+    await w.drain();
+    expect(sent).toBe(43);
+    expect(state.outbox).toHaveLength(0);
+    expect(Object.keys(state.receipts)).toHaveLength(43);
+  });
+  it("yields after the time budget even when a batch has room", async () => {
+    let tick = Date.now();
+    class Clock extends Date {
+      static now() {
+        return tick;
+      }
+    }
+    const state: any = { config: config(), outbox: queued(5) };
+    const w = worker(
+      state,
+      async (...args: any[]) => {
+        tick += 21000;
+        return ack(args[0], args[1]);
+      },
+      Clock,
+    );
+    await w.drain();
+    expect(state.outbox).toHaveLength(4);
+  });
+  it("stops catch-up immediately on transient failure", async () => {
+    const state: any = { config: config(), outbox: queued(10) };
+    let attempts = 0;
+    const w = worker(state, async () => {
+      attempts++;
+      throw new Error("offline");
+    });
+    await w.drain();
+    expect(attempts).toBe(1);
+    expect(state.outbox).toHaveLength(10);
+  });
+  it("never moves observed freshness backwards when replaying old data", async () => {
+    const latest = new Date().toISOString();
+    const state: any = {
+      config: config(),
+      outbox: queued(1),
+      health: { DFO2: { lastObservedAt: latest } },
+    };
+    state.outbox[0].capture.observedAt = new Date(
+      Date.now() - 3600000,
+    ).toISOString();
+    await worker(state, ack).deliver();
+    expect(state.health.DFO2.lastObservedAt).toBe(latest);
+  });
+  it("requires an explicit acknowledgement of every submitted route", async () => {
+    const state: any = { config: config() };
+    const w = worker(state, async (_url: any, init: any) => ({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        ok: true,
+        captureId: JSON.parse(init.body).captureId,
+        accepted: 0,
+      }),
+    }));
+    expect((await w.send(message())).ok).toBe(false);
+    expect(Object.keys(state.receipts || {})).toHaveLength(0);
+    expect(state.outbox).toHaveLength(1);
+  });
+  it("cannot redirect a capture queued concurrently with settings changes", async () => {
+    const state: any = { config: config() };
+    const w = worker(state, async () => {
+      throw new Error("offline");
+    });
+    const results = await Promise.all([
+      w.send(message()),
+      w.options({
+        type: "configure",
+        config: {
+          ...config(),
+          key: "test-development-key",
+          origin: "http://localhost:4000",
+        },
+      }),
+    ]);
+    expect(results[1].ok).toBe(false);
+    expect(state.config.origin).toBe("http://localhost:3000");
+    expect(state.outbox).toHaveLength(1);
+  });
+  it("clears environment-specific receipts after a permitted origin switch", async () => {
+    const state: any = { config: config() };
+    const origins: string[] = [];
+    const w = worker(state, async (url: any, init: any) => {
+      origins.push(url);
+      return ack(url, init);
+    });
+    const m = message();
+    expect((await w.send(m)).ok).toBe(true);
+    expect(
+      (
+        await w.options({
+          type: "configure",
+          config: {
+            ...config(),
+            key: "test-development-key",
+            origin: "http://localhost:4000",
+          },
+        })
+      ).ok,
+    ).toBe(true);
+    expect((await w.send(m)).ok).toBe(true);
+    expect(origins).toEqual([
+      "http://localhost:3000/api/public/symx-cortex",
+      "http://localhost:4000/api/public/symx-cortex",
+    ]);
+  });
+  it("closes only extension-owned jobs when disabled and rejects invalid settings", async () => {
+    const state: any = { config: config(), jobs: { 123: { code: "DFO2" } } };
+    const w = worker(state, ack);
+    expect(
+      (
+        await w.options({
+          type: "configure",
+          config: {
+            ...config(),
+            key: "test-development-key",
+            origin: "https://symx-systems.vercel.app",
+          },
+        })
+      ).ok,
+    ).toBe(false);
+    expect(
+      (
+        await w.options({
+          type: "configure",
+          config: { ...config(), key: "test-development-key", enabled: false },
+        })
+      ).ok,
+    ).toBe(true);
+    expect(state.jobs).toEqual({});
+    expect(w.closedTabs).toEqual([123]);
   });
 });

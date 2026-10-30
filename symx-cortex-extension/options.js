@@ -37,20 +37,8 @@ el("settings").addEventListener("submit", async (e) => {
       !stations.length
     )
       throw new Error("Enter distinct authorized service areas");
-    const prior = (await chrome.storage.local.get("config")).config;
-    const { outbox = [], deadLetters = [] } = await chrome.storage.local.get([
-      "outbox",
-      "deadLetters",
-    ]);
-    if (
-      prior &&
-      prior.origin !== origin &&
-      (outbox.length || deadLetters.length)
-    )
-      throw new Error(
-        "Deliver or clear pending captures before changing environment",
-      );
-    await chrome.storage.local.set({
+    const result = await chrome.runtime.sendMessage({
+      type: "configure",
       config: {
         origin,
         key: el("key").value,
@@ -58,6 +46,8 @@ el("settings").addEventListener("submit", async (e) => {
         stations,
       },
     });
+    if (!result?.ok)
+      throw new Error(result?.error || "Settings could not be saved");
     el("status").textContent =
       "Saved. Collection begins on the next minute tick.";
   } catch (e) {
