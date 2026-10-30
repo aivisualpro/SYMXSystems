@@ -182,6 +182,7 @@
       }
       history.pushState({}, "", origin);
       window.dispatchEvent(new PopStateEvent("popstate"));
+      const incomplete = [...targets.keys()].filter((id) => !detailAcks.has(id));
       window.postMessage(
         {
           source: "SYMX_CORTEX_PAGE",
@@ -189,8 +190,11 @@
           ok:
             overviewAcknowledged &&
             targets.size > 0 &&
-            completed === targets.size,
-          detail: `${completed}/${targets.size} detail captures acknowledged`,
+            incomplete.length === 0,
+          detail: targets.size === 0
+            ? "Overview captured, but no detail targets were discovered; check Cortex route response compatibility"
+            : `${completed}/${targets.size} details acknowledged; ${incomplete.length} missing` +
+              (incomplete.length ? `; first IDs: ${incomplete.slice(0, 3).join(", ")}` : ""),
         },
         location.origin,
       );
