@@ -279,6 +279,17 @@ async function runScheduled(final, slot) {
         }).then((x) => x.json());
         alerts = r.skipped ? "no Slack" : `${r.posted || 0} alerts`;
       } catch (e) { alerts = "alerts failed"; }
+      // Per-station collection health survives service-worker restarts.
+      // A successful HTTP alert request does not imply route collection succeeded.
+      const collectedAt = new Date().toISOString();
+      const ok = note === "ok";
+      const { stationCollectionHealth = {} } = await chrome.storage.local.get("stationCollectionHealth");
+      stationCollectionHealth[st.code] = {
+        date, collectedAt, status: ok ? "ok" : "warning",
+        detail: note, source: "cortex-scheduled-capture",
+        lastSuccessfulAt: ok ? collectedAt : (stationCollectionHealth[st.code]?.lastSuccessfulAt || null),
+      };
+      await chrome.storage.local.set({ stationCollectionHealth });
       log.push(`${st.code}: ${note} · ${alerts}`);
     }
   } catch (e) {
