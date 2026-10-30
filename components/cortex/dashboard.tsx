@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+
 import { RefreshCw, Radio, Route, Clock3, AlertTriangle } from "lucide-react";
 
 type Data = {
@@ -248,12 +249,22 @@ export function CortexDashboard() {
                       className="border-b last:border-0 hover:bg-muted/50"
                     >
                       <td className="p-3">
-                        <button
-                          className="font-medium underline underline-offset-4 text-left"
-                          onClick={() => setSelected(r)}
-                        >
-                          {r.routeCode}
-                        </button>
+                        <div className="group relative inline-block">
+                          <button
+                            className="font-medium underline underline-offset-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                            onClick={() => setSelected(r)}
+                            aria-label={`Open details for ${r.routeCode}, ${r.driverName}`}
+                          >
+                            {r.routeCode}
+                          </button>
+                          <div role="tooltip" className="pointer-events-none absolute bottom-full left-0 z-30 mb-2 hidden w-64 rounded-lg border bg-popover p-3 text-popover-foreground shadow-lg group-hover:block group-focus-within:block">
+                            <div className="font-semibold">{r.routeCode} · {r.driverName}</div>
+                            <div className="mt-1">{r.completedStops ?? "—"} / {r.totalStops ?? "—"} stops</div>
+                            <div>Planned return: {clock(r.plannedReturn)}</div>
+                            <div>Status: {a.risk}</div>
+                            <div className="text-xs text-muted-foreground mt-1">Click for full details</div>
+                          </div>
+                        </div>
                         <div className="text-xs text-muted-foreground mt-1">
                           {r.driverName === "Unassigned" && r.driverId
                             ? r.driverId
