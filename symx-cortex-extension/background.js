@@ -180,10 +180,33 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     return true;
   }
   if (message.type === "collect-now" && sender.id === chrome.runtime.id) {
+    // Acknowledge synchronously: popup messages must not depend on an
+    // asynchronous tab-navigation job finishing before responding.
+    respond({ ok: true, accepted: true });
     collect({ force: true, station: "DFO2" })
-      .then((result) => respond(result || { ok: false, error: "No collection result received" }))
-      .catch((e) => respond({ ok: false, error: e.message || "Could not start collection" }));
-    return true;
+      .then(async (result) => {
+        const { health = {} } = await chrome.storage.local.get("health");
+        health.DFO2 = {
+          ...health.DFO2,
+          manualRequestAt: new Date().toISOString(),
+          manualRequestStatus: result?.ok ? "started" : "not started",
+          manualRequestDetail: result?.ok
+            ? "DFO2 collection launched"
+            : (result?.error || "No collector result"),
+        };
+        await chrome.storage.local.set({ health });
+      })
+      .catch(async (e) => {
+        const { health = {} } = await chrome.storage.local.get("health");
+        health.DFO2 = {
+          ...health.DFO2,
+          manualRequestAt: new Date().toISOString(),
+          manualRequestStatus: "failed",
+          manualRequestDetail: String(e?.message || e).slice(0, 200),
+        };
+        await chrome.storage.local.set({ health });
+      });
+    return false;
   }
   if (
     message.type === "retry" &&
