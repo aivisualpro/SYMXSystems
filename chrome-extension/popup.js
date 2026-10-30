@@ -701,7 +701,7 @@ init();
     return { text: `${ago(run.at)}${bad ? " · " + bad + " issue" + (bad > 1 ? "s" : "") : " · ok"}`, cls: bad ? "warn" : "ok" };
   }
   function render() {
-    chrome.storage.local.get(["schedEnabled", "lastRun", "lastCdfRun", "lastPayRun"], (r) => {
+    chrome.storage.local.get(["schedEnabled", "lastRun", "lastCdfRun", "lastPayRun", "stationCollectionHealth"], (r) => {
       cb.checked = !!r.schedEnabled;
       const now = pacificHM();
       const next = SLOTS.find((t) => t > now) || SLOTS[0];
@@ -711,7 +711,8 @@ init();
       cdfChip.textContent = c.text; cdfChip.className = "chip " + c.cls;
       const pr = r.lastPayRun;
       if (pr) { payChip.textContent = pr.running ? "running…" : `${ago(pr.at)}${pr.bad ? " · issue" : " · ok"}`; payChip.className = "chip " + (pr.running ? "ok" : pr.bad ? "warn" : "ok"); }
-      const lines = [...((pr && pr.log) || []).map((l) => "Payments · " + l), ...((r.lastCdfRun && r.lastCdfRun.log) || []).map((l) => "Feedback · " + l), ...((r.lastRun && r.lastRun.log) || []).map((l) => "Capture · " + l)];
+      const stationLines = Object.entries(r.stationCollectionHealth || {}).sort(([a], [b]) => a.localeCompare(b)).map(([site, h]) => { const last = h.lastSuccessfulAt ? ago(h.lastSuccessfulAt) : "never"; const detail = h.status === "ok" ? "last capture ok" : `attention: ${h.detail || "unknown"}`; return `Station ${site} · ${detail} · last success ${last}`; });
+      const lines = [...stationLines, ...((pr && pr.log) || []).map((l) => "Payments · " + l), ...((r.lastCdfRun && r.lastCdfRun.log) || []).map((l) => "Feedback · " + l), ...((r.lastRun && r.lastRun.log) || []).map((l) => "Capture · " + l)];
       runLog.textContent = lines.join("\n");
       runLog.style.display = lines.length ? "block" : "none";
     });
