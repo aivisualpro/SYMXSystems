@@ -62,7 +62,9 @@ el("collect-now").addEventListener("click", async () => {
     const result = await chrome.runtime.sendMessage({ type: "collect-now" });
     el("status").textContent = result?.ok
       ? "DFO2 collection started. Reopen settings to see coverage when it finishes."
-      : (result?.error || "Collection did not start");
+      : result === undefined
+        ? "No response from extension worker. Check that the extension was reloaded after git pull."
+        : (result?.error || `Collection rejected: ${JSON.stringify(result)}`);
   } catch (e) {
     el("status").textContent = e.message;
   } finally {
