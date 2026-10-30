@@ -372,7 +372,7 @@ async function collect() {
             !stationCodes.includes(st.code) ||
             !st.serviceAreaId ||
             Object.values(jobs).some((j) => j.code === st.code) ||
-            Date.now() - (lastScheduled[st.code] || 0) < 10 * 60000
+            Date.now() - (lastScheduled[st.code] || 0) < 5 * 60000
           )
             continue;
           const query = new URLSearchParams({
