@@ -32,8 +32,7 @@ let context;
   await options.locator("#DFO2").fill("demo-DFO2");
   await options.locator("#enabled").check();
   await options.getByRole("button", { name: "Save settings", exact: true }).click();
-  await options.getByText("Saved. Collection begins on the next minute tick.", { exact: true }).waitFor();
-  await options.close();
+  await options.getByText("Saved. Collection is configured for known stations.", { exact: true }).waitFor();
   const now = Date.now();
   const date = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",
@@ -109,24 +108,36 @@ let context;
     </script></body></html>`,
     });
   });
-  const page = await context.newPage();
-  await page.goto(
-    `https://logistics.amazon.com/operations/execution/itineraries?selectedDay=${date}&serviceAreaId=demo-DFO2&symx_cortex_run=1`,
-  );
-  await page.waitForFunction(() => window.result !== null, undefined, {
-    timeout: 60000,
+  // Hold extension-created navigation at about:blank until Playwright attaches its request interception.
+  // This prevents any real Amazon request while preserving the actual tab ID registered by the worker.
+  await worker.evaluate(() => {
+    const create = chrome.tabs.create.bind(chrome.tabs);
+    chrome.tabs.create = async config => {
+      globalThis.cortexRequestedTab = config;
+      return create({ ...config, url: "about:blank" });
+    };
   });
-  const result = await page.evaluate(() => window.result);
-  if (!result.ok) throw Error(`Collector incomplete: ${result.detail}`);
-  const health = await worker.evaluate(async () =>
-    chrome.storage.local.get(["health", "outbox", "deadLetters"]),
-  );
+  const opened = context.waitForEvent("page");
+  await options.locator("#collect-now").click();
+  const collectionPage = await opened;
+  const requested = await worker.evaluate(() => globalThis.cortexRequestedTab);
+  if (!requested?.active || !requested.url?.includes("symx_cortex_run=1")) throw Error("Manual collection did not request a visible Cortex run");
+  await collectionPage.goto(requested.url);
+  await options.getByText("DFO2 collection started. Reopen settings to see coverage when it finishes.", { exact: true }).waitFor();
+  let health;
+  const until = Date.now() + 60000;
+  while (Date.now() < until) {
+    health = await options.evaluate(async () => await chrome.storage.local.get(["health", "outbox", "deadLetters"]));
+    if (health.health?.DFO2?.captureStatus === "complete") break;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  if (health.health?.DFO2?.captureStatus !== "complete") throw Error(`Manual collection incomplete: ${JSON.stringify(health.health?.DFO2 || {})}; requests=${requests}`);
   if (
     health.outbox?.length ||
     health.deadLetters?.length ||
     !health.health?.DFO2?.lastSuccessAt
   )
-    throw Error("Delivery did not acknowledge");
+    throw Error(`Delivery did not acknowledge: queued=${health.outbox?.length || 0}, failed=${health.deadLetters?.length || 0}, station=${JSON.stringify(health.health?.DFO2 || {})}; requests=${requests}`);
   const login = await context.request.post(
     "http://127.0.0.1:3000/api/auth/login",
     { data: { email: state.email, password: state.password } },
@@ -144,7 +155,7 @@ let context;
     throw Error("Stored route detail did not reconcile");
   await context.close();
   console.log(
-    `PASS: unpacked MV3 extension, options → worker configuration, mocked authorized overview + route navigation, server acknowledgement, detail reconciliation; ${requests} synthetic GETs and zero live Amazon requests.`,
+    `PASS: unpacked MV3 extension, settings-tab Collect DFO2 now → worker, mocked authorized overview + route navigation, server acknowledgement, detail reconciliation; ${requests} synthetic GETs and zero live Amazon requests.`,
   );
 })().catch(async (e) => {
   console.error(e.message);

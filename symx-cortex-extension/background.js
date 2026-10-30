@@ -173,12 +173,13 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       await chrome.storage.local.set({
         config: { origin, key: candidate.key, enabled, stations },
         ...(!enabled ? { jobs: {} } : {}),
+        ...(config && config.origin !== origin ? { receipts: {}, health: {}, lastScheduled: {} } : {}),
       });
     }).then(() => respond({ ok: true }))
       .catch((e) => respond({ ok: false, error: e.message }));
     return true;
   }
-  if (message.type === "collect-now" && sender.id === chrome.runtime.id && !sender.tab) {
+  if (message.type === "collect-now" && sender.id === chrome.runtime.id && (fromOptions || !sender.tab)) {
     collect({ force: true, station: "DFO2" })
       .then((result) => respond(result || { ok: false, error: "No collection result received" }))
       .catch((e) => respond({ ok: false, error: e.message || "Could not start collection" }));
@@ -392,7 +393,7 @@ async function collect({ force = false, station = null } = {}) {
           });
           const tab = await chrome.tabs.create({
             url: `https://logistics.amazon.com/operations/execution/itineraries?${query}`,
-            active: false,
+            active: force,
           });
           jobs[tab.id] = { code: st.code, started: Date.now() };
           lastScheduled[st.code] = Date.now();

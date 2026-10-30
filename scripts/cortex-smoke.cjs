@@ -67,7 +67,7 @@ let browser;
     .getByRole("heading", { name: "SYMX Cortex", exact: true })
     .waitFor();
   await page.getByText("Synthetic preview", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "CX101", exact: true }).waitFor();
+  await page.getByRole("button", { name: /^Open details for CX101,/ }).waitFor();
   if ((await page.locator("tbody tr").count()) !== 15)
     throw Error("Expected 15 synthetic routes");
   await page.getByLabel("Filter station").selectOption("DFO2");
@@ -76,13 +76,13 @@ let browser;
   await page.getByLabel("Search routes or drivers").fill("CX101");
   if ((await page.locator("tbody tr").count()) !== 1)
     throw Error("Search filter failed");
-  await page.getByRole("button", { name: "CX101", exact: true }).click();
+  await page.getByRole("button", { name: /^Open details for CX101,/ }).click();
   await page
     .getByText("CX101 · morning summary & driver history", { exact: true })
     .waitFor();
   if (!(await page.getByText("Return", { exact: false }).count()))
     throw Error("History missing");
-  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).first().click();
   await page.getByLabel("Search routes or drivers").fill("");
   await page.getByLabel("Filter station").selectOption("all");
   fs.mkdirSync("artifacts", { recursive: true });
@@ -166,7 +166,7 @@ let browser;
   }
   await page.setViewportSize({ width: 1512, height: 1080 });
   await page.goto("http://127.0.0.1:3000/cortex");
-  await page.getByRole("button", { name: "CX999", exact: true }).waitFor();
+  await page.getByRole("button", { name: /^Open details for CX999,/ }).waitFor();
   if ((await page.locator("tbody tr").count()) !== 1)
     throw Error("Duplicate route after retry");
   await page.screenshot({

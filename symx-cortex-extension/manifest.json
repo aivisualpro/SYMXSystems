@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SYMX Cortex MVP (Development)",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Read-only authorized Cortex collection to an explicitly configured test environment.",
   "permissions": ["storage", "alarms"],
   "host_permissions": [

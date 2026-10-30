@@ -5,8 +5,10 @@ import { webcrypto } from "node:crypto";
 function worker(state: any, fetcher: any, clock: typeof Date = Date) {
   let listener: any;
   const closedTabs: number[] = [];
+  const openedTabs: any[] = [];
   const context: any = {
     URL,
+    URLSearchParams,
     TextEncoder,
     AbortSignal,
     crypto: webcrypto,
@@ -35,7 +37,7 @@ function worker(state: any, fetcher: any, clock: typeof Date = Date) {
       },
       alarms: { create() {}, onAlarm: { addListener() {} } },
       tabs: {
-        create: async () => ({ id: 123 }),
+        create: async (options: any) => { openedTabs.push(options); return { id: 123 }; },
         remove: async (id: number) => {
           closedTabs.push(id);
         },
@@ -75,6 +77,11 @@ function worker(state: any, fetcher: any, clock: typeof Date = Date) {
           resolve,
         ),
       ),
+    manual: (sender: any) => new Promise<any>(resolve => {
+      const waiting = listener({ type: "collect-now" }, sender, resolve);
+      if (waiting !== true) resolve(null);
+    }),
+    openedTabs,
     closedTabs,
     drain: () => vm.runInContext("drain()", context),
     deliver: () => vm.runInContext("deliver()", context),
@@ -83,7 +90,7 @@ function worker(state: any, fetcher: any, clock: typeof Date = Date) {
 const config = () => ({
   origin: "http://localhost:3000",
   enabled: true,
-  key: "test-key",
+  key: "test-development-key",
   stations: [{ code: "DFO2", serviceAreaId: "safe-dfo2" }],
 });
 const message = () => ({
@@ -197,7 +204,8 @@ describe("durable MV3 delivery", () => {
         })
       ).ok,
     ).toBe(false);
-    expect(requests).toBe(0);
+    expect(requests).toBe(1); // Authoritative mapping lookup is permitted; ingestion is not.
+    expect(state.outbox || []).toHaveLength(0);
   });
 });
 
@@ -360,5 +368,23 @@ describe("outage catch-up and settings transactions", () => {
     ).toBe(true);
     expect(state.jobs).toEqual({});
     expect(w.closedTabs).toEqual([123]);
+  });
+});
+
+describe("manual collection entry points", () => {
+  it("starts DFO2 when settings are open as a normal extension tab", async () => {
+    const state: any = { config: config() }; const w = worker(state, ack);
+    const result = await w.manual({ id: "test", url: "chrome-extension://test/options.html", tab: { id: 999 } });
+    expect(result?.ok).toBe(true); expect(state.jobs[123].code).toBe("DFO2");
+    expect(w.openedTabs[0].active).toBe(true);
+  });
+  it("keeps the toolbar popup working without a sender URL", async () => {
+    const state: any = { config: config() }; const w = worker(state, ack);
+    expect((await w.manual({ id: "test" }))?.ok).toBe(true);
+  });
+  it("does not accept collect commands from the Amazon content script", async () => {
+    const state: any = { config: config() }; const w = worker(state, ack);
+    expect(await w.manual({ id: "test", url: "https://logistics.amazon.com/operations/execution/itineraries", tab: { id: 999 } })).toBeNull();
+    expect(state.jobs).toBeUndefined();
   });
 });
