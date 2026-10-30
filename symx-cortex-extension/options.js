@@ -54,6 +54,22 @@ el("settings").addEventListener("submit", async (e) => {
     el("status").textContent = e.message;
   }
 });
+el("collect-now").addEventListener("click", async () => {
+  const button = el("collect-now");
+  button.disabled = true;
+  el("status").textContent = "Starting DFO2 collection…";
+  try {
+    const result = await chrome.runtime.sendMessage({ type: "collect-now" });
+    el("status").textContent = result?.ok
+      ? "DFO2 collection started. Reopen settings to see coverage when it finishes."
+      : (result?.error || "Collection did not start");
+  } catch (e) {
+    el("status").textContent = e.message;
+  } finally {
+    button.disabled = false;
+    await refresh();
+  }
+});
 el("retry").addEventListener("click", async () => {
   const result = await chrome.runtime.sendMessage({ type: "retry" });
   el("status").textContent = result?.ok
