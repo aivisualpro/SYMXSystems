@@ -139,6 +139,41 @@ function drain() {
   return draining;
 }
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (
+    message.type === "configure" &&
+    sender.id === chrome.runtime.id &&
+    sender.url === chrome.runtime.getURL("options.html")
+  ) {
+    serial(async () => {
+      const config = message.config;
+      if (!config || typeof config.key !== "string" || !config.key ||
+          typeof config.enabled !== "boolean" || !Array.isArray(config.stations))
+        throw new Error("Invalid configuration");
+      const origin = CortexQueue.endpoint(config.origin);
+      const stations = config.stations.filter((s) =>
+        stationCodes.includes(s.code) &&
+        typeof s.serviceAreaId === "string" &&
+        s.serviceAreaId.trim().length > 0
+      );
+      if (stations.length !== config.stations.length ||
+          (config.enabled && !stations.length) ||
+          new Set(stations.map((s) => s.code)).size !== stations.length ||
+          new Set(stations.map((s) => s.serviceAreaId)).size !== stations.length)
+        throw new Error("Enter distinct authorized service areas before enabling collection");
+      const { config: prior, outbox = [], deadLetters = [] } =
+        await chrome.storage.local.get(["config", "outbox", "deadLetters"]);
+      if ((outbox.length || deadLetters.length) &&
+          prior && (prior.origin !== origin ||
+          prior.key !== config.key ||
+          JSON.stringify(prior.stations) !== JSON.stringify(stations)))
+        throw new Error("Pending captures exist; clear or deliver them before changing the destination");
+      await chrome.storage.local.set({
+        config: { origin, key: config.key, enabled: config.enabled, stations }
+      });
+    }).then(() => respond({ ok: true }))
+      .catch((e) => respond({ ok: false, error: e.message }));
+    return true;
+  }
   const fromOptions =
     sender.id === chrome.runtime.id &&
     sender.url === chrome.runtime.getURL("options.html");
