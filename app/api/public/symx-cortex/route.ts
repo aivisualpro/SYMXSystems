@@ -5,6 +5,36 @@ import Site from "@/lib/models/Site";
 import CortexObservation from "@/lib/models/CortexObservation";
 import { captureSchema, STATIONS } from "@/lib/cortex/domain";
 
+// Development-only station lookup: resolve Amazon's own identifier against SYMX's
+// authoritative Site mapping. Never guess an identity or create a Site record.
+export async function GET(req: NextRequest) {
+  if (process.env.NODE_ENV !== "development" || process.env.SYMX_CORTEX_DEMO !== "true")
+    return NextResponse.json({ error: "Unavailable" }, { status: 404 });
+  const key = process.env.SYMX_CORTEX_KEY;
+  const supplied = req.headers.get("x-extension-key") || "";
+  if (!key || Buffer.byteLength(key) !== Buffer.byteLength(supplied) ||
+      !timingSafeEqual(Buffer.from(key), Buffer.from(supplied)))
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const serviceAreaId = req.nextUrl.searchParams.get("serviceAreaId") || "";
+  if (!serviceAreaId || serviceAreaId.length > 150)
+    return NextResponse.json({ error: "Invalid service area" }, { status: 400 });
+  try {
+    await connectToDatabase();
+    const site = await Site.findOne({
+      "amazon.serviceAreaId": serviceAreaId,
+      code: { $in: [...STATIONS] },
+      status: "active",
+    }).select("code").lean();
+    if (!site)
+      return NextResponse.json({ error: "Unknown station: configure local Site mapping" }, { status: 404 });
+    return NextResponse.json({ code: site.code, serviceAreaId }, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch {
+    return NextResponse.json({ error: "Station lookup unavailable" }, { status: 503 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   // Dedicated MVP key. Never accept the legacy embedded extension credential.
   const key = process.env.SYMX_CORTEX_KEY;
