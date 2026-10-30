@@ -138,6 +138,25 @@ describe("durable MV3 delivery", () => {
     expect(state.deadLetters).toHaveLength(1);
     expect(state.health.DFO2.lastSuccessAt).toBeUndefined();
   });
+  it("does not repeatedly send captures when the ingest key is rejected", async () => {
+    const state: any = { config: config() };
+    let requests = 0;
+    const w = worker(state, async () => {
+      requests++;
+      return {
+        ok: false,
+        status: 401,
+        headers: new Headers(),
+        json: async () => ({ error: "Invalid ingest key" }),
+      };
+    });
+    expect((await w.send(message())).ok).toBe(false);
+    expect(state.outbox).toHaveLength(0);
+    expect(state.deadLetters).toHaveLength(1);
+    expect(state.health.DFO2.lastSuccessAt).toBeUndefined();
+    await w.deliver();
+    expect(requests).toBe(1);
+  });
   it("does nothing without opt-in or for an unauthorized station", async () => {
     const state: any = { config: { ...config(), enabled: false } };
     let requests = 0;
