@@ -47,11 +47,15 @@ describe("getScopingState", () => {
     // never in advance — a page marked scoped that isn't converts visible
     // confusion into invisible trust.
     expect(SCOPED_PATH_PREFIXES).toEqual([
+      "/cortex",
+      "/payments",
+      "/performance",
       "/writeups",
       "/fleet",
       "/dispatching",
       "/scheduling",
       "/scorecard",
+      "/driver-rankings",
       "/dashboard",
       "/hr",
       "/incidents",

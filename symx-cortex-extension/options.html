@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SYMX Cortex development</title>
+    <style>
+      body {
+        font: 14px system-ui;
+        width: 380px;
+        margin: 24px;
+        color: #152238;
+      }
+      label {
+        display: block;
+        margin: 14px 0;
+      }
+      input:not([type="checkbox"]) {
+        display: block;
+        padding: 8px;
+        width: 95%;
+      }
+      button {
+        padding: 10px;
+        background: #123e68;
+        color: white;
+        border: 0;
+        border-radius: 6px;
+      }
+      pre {
+        white-space: pre-wrap;
+        font-size: 12px;
+      }
+      small {
+        color: #526477;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>SYMX Cortex · MVP</h2>
+    <p>
+      Read-only collection to your isolated test environment. Production sync is
+      disabled.
+    </p>
+    <form id="settings">
+      <label
+        >Preview origin<input
+          id="origin"
+          type="url"
+          value="http://localhost:3000"
+          required /></label
+      ><label
+        >Development ingest key<input
+          id="key"
+          type="password"
+          required
+          autocomplete="off"
+      /></label>
+      <p><small>Station IDs are discovered from Amazon and verified against the local SYMX database. Manual mappings are optional:</small></p><label>DFO2 service area ID<input id="DFO2" /></label
+      ><label>DXC8 service area ID<input id="DXC8" /></label
+      ><label>DFO3 service area ID<input id="DFO3" /></label>
+      <label
+        ><input id="enabled" type="checkbox" /> Enable authorized collection
+        (every 5 minutes, 07:00–24:00 Pacific)</label
+      >
+      <small
+        >Use a signed-in Chrome profile authorized for these stations. Do not
+        run this collector with the legacy SYMX collector enabled. The partner
+        extension is not changed.</small
+      >
+      <p><button>Save settings</button></p>
+    </form>
+    <p id="status" role="status"></p>
+    <button id="collect-now" type="button">Collect DFO2 now</button>
+    <button id="retry" type="button">Retry failed deliveries</button>
+    <pre id="health"></pre>
+    <script src="queue.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>
