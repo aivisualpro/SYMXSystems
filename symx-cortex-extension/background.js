@@ -165,18 +165,21 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
           new Set(stations.map((s) => s.code)).size !== stations.length ||
           new Set(stations.map((s) => s.serviceAreaId)).size !== stations.length)
         throw new Error("Invalid station mapping");
-      const { config, outbox = [], deadLetters = [], jobs = {} } =
-        await chrome.storage.local.get(["config", "outbox", "deadLetters", "jobs"]);
+      const { config, outbox = [], deadLetters = [], jobs = {}, health = {} } =
+        await chrome.storage.local.get(["config", "outbox", "deadLetters", "jobs", "health"]);
       if (config && (config.origin !== origin || config.key !== candidate.key) &&
           (outbox.length || deadLetters.length || Object.keys(jobs).length))
         throw new Error("Finish pending captures before changing environment");
       const enabled = candidate.enabled === true;
       if (!enabled)
-        for (const id of Object.keys(jobs))
+        for (const [id, job] of Object.entries(jobs)) {
           await chrome.tabs.remove(Number(id)).catch(() => {});
+          health[job.code] = { ...health[job.code], captureStatus: "cancelled",
+            captureDetail: "Collection disabled before completion" };
+        }
       await chrome.storage.local.set({
         config: { origin, key: candidate.key, enabled, stations },
-        ...(!enabled ? { jobs: {} } : {}),
+        ...(!enabled ? { jobs: {}, health } : {}),
         ...(config && config.origin !== origin ? { receipts: {}, health: {}, lastScheduled: {} } : {}),
       });
     }).then(() => respond({ ok: true }))

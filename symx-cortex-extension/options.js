@@ -5,11 +5,13 @@ async function refresh() {
     outbox = [],
     health = {},
     deadLetters = [],
+    jobs = {},
   } = await chrome.storage.local.get([
     "config",
     "outbox",
     "health",
     "deadLetters",
+    "jobs",
   ]);
   el("health").textContent = JSON.stringify(
     { queued: outbox.length, failed: deadLetters.length, stations: health },
@@ -41,7 +43,7 @@ async function refresh() {
     for (const line of lines) { const p = document.createElement("p"); p.textContent = line; card.append(p); }
     panel.append(card);
   }
-  el("collect-now").disabled = health.DFO2?.captureStatus === "collecting";
+  el("collect-now").disabled = Object.values(jobs).some(job => job.code === "DFO2");
   return config;
 }
 refresh().then((config) => {

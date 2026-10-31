@@ -368,6 +368,7 @@ describe("outage catch-up and settings transactions", () => {
     ).toBe(true);
     expect(state.jobs).toEqual({});
     expect(w.closedTabs).toEqual([123]);
+    expect(state.health.DFO2.captureStatus).toBe("cancelled");
   });
 });
 
