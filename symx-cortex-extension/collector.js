@@ -36,6 +36,19 @@
     }
   });
   const detailAcks = new Set();
+  let blocked = false;
+  const started = Date.now();
+  let timedOut = 0, skippedForBudget = 0;
+  const progress = (type, reason) => window.postMessage({
+    source: "SYMX_CORTEX_PAGE", type, reason,
+    ok: overviewAcknowledged && targets.size > 0 && [...targets.keys()].every(id => detailAcks.has(id)),
+    coverage: {
+      expected: targets.size,
+      acknowledged: [...targets.keys()].filter(id => detailAcks.has(id)).length,
+      timedOut, skipped: skippedForBudget,
+      overviewAcknowledged, durationMs: Date.now() - started,
+    },
+  }, location.origin);
   async function observe(rawUrl, data) {
     try {
       const url = new URL(rawUrl, location.origin);
@@ -106,6 +119,7 @@
       typeof args[0] === "string" || args[0] instanceof URL
         ? String(args[0])
         : args[0]?.url;
+    if (/\/execution\/api\//.test(url || "") && [401, 403, 429].includes(response.status)) blocked = true;
     if (response.ok && /\/execution\/api\//.test(url || ""))
       response
         .clone()
@@ -119,6 +133,7 @@
     this.addEventListener(
       "load",
       () => {
+        if (/\/execution\/api\//.test(String(url)) && [401, 403, 429].includes(this.status)) blocked = true;
         if (
           this.status < 200 ||
           this.status >= 300 ||
@@ -139,36 +154,31 @@
     return open.call(this, method, url, ...rest);
   };
   if (run) {
-    const started = Date.now();
     const timer = setInterval(async () => {
       if (driving) return;
+      if (blocked) { clearInterval(timer); progress("done", "access"); return; }
       if (!lastOverview || Date.now() - lastOverview < 5000) {
         if (Date.now() - started > 90000) {
           clearInterval(timer);
-          window.postMessage(
-            {
-              source: "SYMX_CORTEX_PAGE",
-              type: "done",
-              ok: false,
-              detail: "No overview: sign in or review API compatibility",
-            },
-            location.origin,
-          );
+          progress("done", "no_overview");
         }
         return;
       }
       driving = true;
       clearInterval(timer);
       const origin = location.pathname + location.search;
-      let completed = 0;
-      let timedOut = 0;
-      let skippedForBudget = 0;
+      let consecutiveTimeouts = 0;
+      let reason = "finished";
+      progress("progress");
       const page = new URL(location.href);
       for (const [id, type] of targets) {
-        if (Date.now() - started > 7 * 60000) {
-          skippedForBudget = targets.size - completed - timedOut;
+        if (blocked || consecutiveTimeouts >= 3 || Date.now() - started > 7 * 60000) {
+          skippedForBudget = Math.max(0, targets.size - [...targets.keys()].filter(id => detailAcks.has(id)).length - timedOut);
+          reason = blocked ? "access" : consecutiveTimeouts >= 3 ? "stalled" : "finished";
           break;
         }
+        if (detailAcks.has(id)) continue; // Passive captures already acknowledged need no repeat navigation.
+        const navigationStarted = Date.now();
         const query = new URLSearchParams({
           provider: "ALL_DRIVERS",
           selectedDay: page.searchParams.get("selectedDay"),
@@ -181,29 +191,19 @@
         );
         window.dispatchEvent(new PopStateEvent("popstate"));
         const until = Date.now() + 30000;
-        while (!detailAcks.has(id) && Date.now() < until)
+        while (!blocked && !detailAcks.has(id) && Date.now() < until)
           await new Promise((r) => setTimeout(r, 500));
-        if (detailAcks.has(id)) completed++;
-        else timedOut++;
+        if (detailAcks.has(id)) consecutiveTimeouts = 0;
+        else { timedOut++; consecutiveTimeouts++; }
+        progress("progress");
+        // At most one navigation per second, one outstanding route at a time.
+        await new Promise(r => setTimeout(r, Math.max(0, 1000 - (Date.now() - navigationStarted))));
       }
-      history.pushState({}, "", origin);
-      window.dispatchEvent(new PopStateEvent("popstate"));
-      const incomplete = [...targets.keys()].filter((id) => !detailAcks.has(id));
-      window.postMessage(
-        {
-          source: "SYMX_CORTEX_PAGE",
-          type: "done",
-          ok:
-            overviewAcknowledged &&
-            targets.size > 0 &&
-            incomplete.length === 0,
-          detail: targets.size === 0
-            ? "Overview captured, but no detail targets were discovered; check Cortex route response compatibility"
-            : `${completed}/${targets.size} details acknowledged; ${timedOut} timed out; ${skippedForBudget} not attempted due to run limit` +
-              (incomplete.length ? `; first missing IDs: ${incomplete.slice(0, 3).join(", ")}` : ""),
-        },
-        location.origin,
-      );
+      if (!blocked) {
+        history.pushState({}, "", origin);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }
+      progress("done", blocked ? "access" : targets.size ? reason : "no_targets");
     }, 1000);
   }
 })();

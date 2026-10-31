@@ -5,11 +5,12 @@ const path = require("node:path");
 let context;
 (async () => {
   const state = JSON.parse(
-    fs.readFileSync("/tmp/symx-cortex-preview.json", "utf8"),
+    fs.readFileSync(process.env.CORTEX_PREVIEW_STATE || "/tmp/symx-cortex-preview.json", "utf8"),
   );
   const extension = path.resolve("symx-cortex-extension");
   context = await chromium.launchPersistentContext("", {
     channel: "chromium",
+    executablePath: process.env.CORTEX_CHROMIUM_EXECUTABLE || undefined,
     headless: true,
     args: [
       "--no-sandbox",
@@ -85,15 +86,35 @@ let context;
       },
     ],
   };
+  const routeCount = 40;
+  overview.routeSummaries = Array.from({ length: routeCount }, (_, i) => ({
+    ...overview.routeSummaries[0], routeCode: `CX${800 + i}`, routeId: `mock-route-${i}`,
+  }));
+  const detailFor = (i) => ({
+    ...detail,
+    itineraryDetails: {
+      ...detail.itineraryDetails, itineraryId: `mock-route-${i}`,
+      routes: [{ ...detail.itineraryDetails.routes[0], routeCode: `CX${800 + i}` }],
+      transporterTimeAttributes: { ...detail.itineraryDetails.transporterTimeAttributes, plannedRtsTime: now + 6 * 3600000 },
+    },
+    stops: Array.from({ length: 100 }, (_, n) => ({
+      routeCode: `CX${800 + i}`, sequenceNumber: n + 2,
+      expectedStartTime: now - 2 * 3600000 + n * 4 * 60000,
+      tasks: [{ taskType: "DROP_OFF", taskState: n < 25 ? "DELIVERED" : "PENDING",
+        actualExecutionTime: n < 25 ? now - (120 - n * 5) * 60000 : null }],
+    })),
+  });
   let requests = 0;
+  const navigations = [];
   await context.route("https://logistics.amazon.com/**", async (route) => {
     requests++;
     if (route.request().method() !== "GET")
       throw Error("Unexpected Amazon write request");
+    if (route.request().url().includes("/execution/api/itineraries/")) navigations.push(Date.now());
     if (route.request().url().includes("/execution/api/")) {
       await route.fulfill({
         json: route.request().url().includes("/itineraries/")
-          ? detail
+          ? detailFor(Number(route.request().url().match(/mock-route-(\d+)/)?.[1] || 0))
           : overview,
       });
       return;
@@ -103,7 +124,7 @@ let context;
       body: `<html><body><h1>Synthetic Cortex fixture</h1><script>
       window.result = null;
       window.addEventListener('message', e => { if (e.data?.source === 'SYMX_CORTEX_PAGE' && e.data.type === 'done') window.result = e.data; });
-      const load = () => fetch('/execution/api/' + (location.pathname.includes('/documentType/') ? 'itineraries/mock-route' : 'summaries') + '?selectedDay=${date}&serviceAreaId=demo-DFO2');
+      const load = () => fetch('/execution/api/' + (location.pathname.includes('/documentType/') ? 'itineraries/' + location.pathname.split('/itineraries/')[1].split('/')[0] : 'summaries') + '?selectedDay=${date}&serviceAreaId=demo-DFO2');
       window.addEventListener('popstate', load); load();
     </script></body></html>`,
     });
@@ -123,9 +144,9 @@ let context;
   const requested = await worker.evaluate(() => globalThis.cortexRequestedTab);
   if (!requested?.active || !requested.url?.includes("symx_cortex_run=1")) throw Error("Manual collection did not request a visible Cortex run");
   await collectionPage.goto(requested.url);
-  await options.getByText("DFO2 collection started. Reopen settings to see coverage when it finishes.", { exact: true }).waitFor();
+  await options.getByText("DFO2 collection started. Coverage updates below while it runs.", { exact: true }).waitFor();
   let health;
-  const until = Date.now() + 60000;
+  const until = Date.now() + 120000;
   while (Date.now() < until) {
     health = await options.evaluate(async () => await chrome.storage.local.get(["health", "outbox", "deadLetters"]));
     if (health.health?.DFO2?.captureStatus === "complete") break;
@@ -138,6 +159,12 @@ let context;
     !health.health?.DFO2?.lastSuccessAt
   )
     throw Error(`Delivery did not acknowledge: queued=${health.outbox?.length || 0}, failed=${health.deadLetters?.length || 0}, station=${JSON.stringify(health.health?.DFO2 || {})}; requests=${requests}`);
+  if (health.health.DFO2.coverage?.expected !== routeCount || health.health.DFO2.coverage?.acknowledged !== routeCount)
+    throw Error("Structured route coverage does not match the 40-route fixture");
+  if (navigations.length !== routeCount || navigations.some((at, i) => i > 0 && at - navigations[i - 1] < 900))
+    throw Error("Route navigation count or pacing was outside its limit");
+  await options.getByText("40 / 40 itinerary details acknowledged", { exact: true }).waitFor();
+  await options.screenshot({ path: "artifacts/cortex-extension-status.png", fullPage: true });
   const login = await context.request.post(
     "http://127.0.0.1:3000/api/auth/login",
     { data: { email: state.email, password: state.password } },
@@ -146,16 +173,22 @@ let context;
   const routes = await (
     await context.request.get("http://127.0.0.1:3000/api/cortex")
   ).json();
-  const captured = routes.routes.find((r) => r.routeCode === "CX998");
+  const captured = routes.routes.find((r) => r.routeCode === "CX800");
   if (
     !captured?.detail ||
     captured.completedStops !== 25 ||
-    !captured.firstDelivery
+    !captured.firstDelivery || captured.timingEvidence?.timestampedStops !== 25
   )
     throw Error("Stored route detail did not reconcile");
+  const page = await context.newPage();
+  await page.goto("http://127.0.0.1:3000/cortex");
+  await page.getByRole("button", { name: /^Open details for CX800,/ }).click();
+  await page.getByText("Timing evidence & RTS confidence", { exact: true }).waitFor();
+  await page.getByText("Explicit planned inbound stem", { exact: false }).waitFor();
+  await page.screenshot({ path: "artifacts/cortex-timing-evidence.png", fullPage: true });
   await context.close();
   console.log(
-    `PASS: unpacked MV3 extension, settings-tab Collect DFO2 now → worker, mocked authorized overview + route navigation, server acknowledgement, detail reconciliation; ${requests} synthetic GETs and zero live Amazon requests.`,
+    `PASS: unpacked MV3 extension, settings-tab Collect DFO2 now → worker, 40 synthetic DFO2 routes + paced navigation + structured coverage + timing evidence, server acknowledgement, detail reconciliation; ${requests} synthetic GETs and zero live Amazon requests.`,
   );
 })().catch(async (e) => {
   console.error(e.message);

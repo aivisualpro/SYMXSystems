@@ -20,6 +20,17 @@ const schema = new Schema(
     firstDelivery: Number,
     lastDelivery: Number,
     inboundMinutes: Number,
+    firstStopCompleted: Number,
+    lastStopCompleted: Number,
+    timingEvidence: {
+      type: new Schema({
+        inboundSource: String, inboundField: String,
+        plannedRtsPresent: Boolean, completePlan: Boolean,
+        deliveryStops: Number, deliveredTasks: Number, timestampedTasks: Number,
+        timestampedStops: Number, rejectedTimestamps: Number,
+      }, { _id: false }),
+      default: undefined,
+    },
     detail: Boolean,
     observedAt: { type: Date, required: true },
     receivedAt: { type: Date, default: Date.now },

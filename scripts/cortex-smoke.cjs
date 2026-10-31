@@ -5,7 +5,7 @@ let browser;
 (async () => {
   if (process.env.NODE_ENV === "production") throw Error("Local preview only");
   const state = JSON.parse(
-    fs.readFileSync("/tmp/symx-cortex-preview.json", "utf8"),
+    fs.readFileSync(process.env.CORTEX_PREVIEW_STATE || "/tmp/symx-cortex-preview.json", "utf8"),
   );
   if (!/^mongodb:\/\/(127\.0\.0\.1|localhost):/.test(state.uri))
     throw Error("Refusing a non-local database");
@@ -50,7 +50,7 @@ let browser;
         { upsert: true },
       );
   await mongoose.disconnect();
-  browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+  browser = await chromium.launch({ executablePath: process.env.CORTEX_CHROMIUM_EXECUTABLE || undefined, headless: true, args: ["--no-sandbox"] });
   const context = await browser.newContext({
     viewport: { width: 1512, height: 1080 },
   });

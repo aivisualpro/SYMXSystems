@@ -5,15 +5,16 @@ window.addEventListener("message", async (event) => {
     event.data?.source !== "SYMX_CORTEX_PAGE"
   )
     return;
-  const { type, id, payload, ok, detail } = event.data;
-  if (!["capture", "done"].includes(type)) return;
+  const { type, id, payload, ok, coverage, reason } = event.data;
+  if (!["capture", "progress", "done"].includes(type)) return;
   try {
     const result = await chrome.runtime.sendMessage({
       type,
       id,
       payload,
       ok,
-      detail,
+      coverage,
+      reason,
     });
     if (type === "capture")
       window.postMessage(

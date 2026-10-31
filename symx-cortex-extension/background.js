@@ -13,7 +13,7 @@ const day = () =>
 chrome.alarms.create("cortex-delivery", { periodInMinutes: 1 });
 chrome.alarms.create("cortex-collection", { periodInMinutes: 1 });
 
-async function deliver() {
+async function deliver(preferredCaptureId) {
   return serial(async () => {
     const {
       config,
@@ -31,7 +31,8 @@ async function deliver() {
     if (!config?.enabled || !config.key) return;
     const origin = CortexQueue.endpoint(config.origin);
     // One transaction per request; catch-up releases the lock between requests.
-    const item = outbox.find((x) => x.nextAttempt <= Date.now());
+    const item = outbox.find(x => x.capture.captureId === preferredCaptureId && x.nextAttempt <= Date.now()) ||
+      outbox.find((x) => x.nextAttempt <= Date.now());
     if (!item) return;
     const station = config.stations.find(
       (s) => s.serviceAreaId === item.capture.serviceAreaId,
@@ -52,6 +53,7 @@ async function deliver() {
     h.lastAttemptAt = new Date().toISOString();
     let permanent = CortexQueue.expired(item, Date.now());
     let outcome = "sent";
+    const requestStarted = Date.now();
     try {
       if (permanent)
         throw new Error("Capture expired or retry budget exhausted");
@@ -95,6 +97,8 @@ async function deliver() {
             ? h.lastObservedAt
             : item.capture.observedAt,
         error: null,
+        lastRoundTripMs: Date.now() - requestStarted,
+        observedToAckMs: Date.now() - Date.parse(item.capture.observedAt),
       };
     } catch (e) {
       outcome = "retry";
@@ -179,34 +183,14 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       .catch((e) => respond({ ok: false, error: e.message }));
     return true;
   }
-  if (message.type === "collect-now" && sender.id === chrome.runtime.id) {
-    // Acknowledge synchronously: popup messages must not depend on an
-    // asynchronous tab-navigation job finishing before responding.
-    respond({ ok: true, accepted: true });
+  if (message.type === "collect-now" && sender.id === chrome.runtime.id &&
+      (fromOptions || (!sender.url && !sender.tab))) {
+    // Return the actual launch result, not a premature accepted flag. Never
+    // allow an Amazon page's content script to issue manual collection commands.
     collect({ force: true, station: "DFO2" })
-      .then(async (result) => {
-        const { health = {} } = await chrome.storage.local.get("health");
-        health.DFO2 = {
-          ...health.DFO2,
-          manualRequestAt: new Date().toISOString(),
-          manualRequestStatus: result?.ok ? "started" : "not started",
-          manualRequestDetail: result?.ok
-            ? "DFO2 collection launched"
-            : (result?.error || "No collector result"),
-        };
-        await chrome.storage.local.set({ health });
-      })
-      .catch(async (e) => {
-        const { health = {} } = await chrome.storage.local.get("health");
-        health.DFO2 = {
-          ...health.DFO2,
-          manualRequestAt: new Date().toISOString(),
-          manualRequestStatus: "failed",
-          manualRequestDetail: String(e?.message || e).slice(0, 200),
-        };
-        await chrome.storage.local.set({ health });
-      });
-    return false;
+      .then(result => respond(result || { ok: false, error: "Collection unavailable" }))
+      .catch(() => respond({ ok: false, error: "Could not open a collection tab" }));
+    return true;
   }
   if (
     message.type === "retry" &&
@@ -289,7 +273,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         const p = message.payload;
         if (!["overview", "detail"].includes(p.kind))
           throw new Error("Unsupported capture");
-        const routes = CortexAdapter.normalize(p.data, p.kind);
+        const routes = CortexAdapter.normalize(p.data, p.kind, p.observedAt);
         if (!routes.length || routes.length > 500)
           throw new Error("No compatible routes");
         const capture = {
@@ -335,14 +319,14 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         await chrome.storage.local.set({ outbox });
         return capture.captureId;
       });
-      await deliver();
+      await deliver(captureId);
       const { receipts = {} } = await chrome.storage.local.get(["receipts"]);
       const ok = !!receipts[captureId];
       respond({ ok, queued: !ok });
     })().catch(() => respond({ ok: false }));
     return true;
   }
-  if (message.type === "done") {
+  if (["progress", "done"].includes(message.type)) {
     serial(async () => {
       const { jobs = {}, health = {} } = await chrome.storage.local.get([
         "jobs",
@@ -350,18 +334,31 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       ]);
       const job = jobs[sender.tab.id];
       if (job) {
+        const input = message.coverage || {};
+        const coverage = Object.fromEntries(["expected", "acknowledged", "timedOut", "skipped", "durationMs"].map(key =>
+          [key, Number.isSafeInteger(input[key]) && input[key] >= 0 ? Math.min(input[key], key === "durationMs" ? 600000 : 500) : 0]));
+        coverage.overviewAcknowledged = input.overviewAcknowledged === true;
+        const complete = message.ok === true && coverage.overviewAcknowledged && coverage.expected > 0 && coverage.acknowledged === coverage.expected;
+        // Only fixed reasons and numeric coverage enter diagnostics, never page text or IDs.
+        const reasons = {
+          no_overview: "No overview: sign in or review response compatibility",
+          no_targets: "Overview found no itinerary targets",
+          access: "Amazon denied or throttled collection; use the authorized session later",
+          stalled: "Stopped after three consecutive detail timeouts",
+          finished: "Collection finished",
+        };
         health[job.code] = {
-          ...health[job.code],
-          captureStatus: message.ok ? "complete" : "partial",
-          captureDetail: String(message.detail || "").slice(0, 200),
+          ...health[job.code], coverage,
+          captureStatus: message.type === "progress" ? "collecting" : complete ? "complete" : "partial",
+          captureDetail: Object.hasOwn(reasons, message.reason) ? reasons[message.reason] : "Collecting itinerary details",
           lastCollectionAt: new Date().toISOString(),
         };
-        delete jobs[sender.tab.id];
+        if (message.type === "done") delete jobs[sender.tab.id];
         await chrome.storage.local.set({ jobs, health });
-        await chrome.tabs.remove(sender.tab.id).catch(() => {});
+        if (message.type === "done") await chrome.tabs.remove(sender.tab.id).catch(() => {});
       }
-    });
-    respond({ ok: true });
+    }).then(() => respond({ ok: true })).catch(() => respond({ ok: false }));
+    return true;
   }
 });
 async function collect({ force = false, station = null } = {}) {
@@ -399,7 +396,7 @@ async function collect({ force = false, station = null } = {}) {
         }).format(new Date()),
       );
       if (force || (hour >= 7 && hour < 24))
-        for (const st of config.stations || []) {
+        for (const st of [...(config.stations || [])].sort((a, b) => stationCodes.indexOf(a.code) - stationCodes.indexOf(b.code))) {
           if (station && st.code !== station) continue;
           if (
             !stationCodes.includes(st.code) ||
@@ -419,6 +416,8 @@ async function collect({ force = false, station = null } = {}) {
             active: force,
           });
           jobs[tab.id] = { code: st.code, started: Date.now() };
+          health[st.code] = { ...health[st.code], captureStatus: "collecting",
+            captureDetail: "Waiting for authorized overview", coverage: null };
           lastScheduled[st.code] = Date.now();
           await chrome.storage.local.set({ jobs, health, lastScheduled });
           return { ok: true, station: st.code };

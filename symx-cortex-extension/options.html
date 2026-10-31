@@ -30,6 +30,8 @@
         white-space: pre-wrap;
         font-size: 12px;
       }
+      .station { padding: 12px; margin: 12px 0; border: 1px solid #cad4df; border-radius: 8px; }
+      .station p { margin: 6px 0; }
       small {
         color: #526477;
       }
@@ -72,7 +74,8 @@
     <p id="status" role="status"></p>
     <button id="collect-now" type="button">Collect DFO2 now</button>
     <button id="retry" type="button">Retry failed deliveries</button>
-    <pre id="health"></pre>
+    <section id="collection-health" aria-label="Collection health" aria-live="polite"></section>
+    <details><summary>Technical status</summary><pre id="health"></pre></details>
     <script src="queue.js"></script>
     <script src="options.js"></script>
   </body>

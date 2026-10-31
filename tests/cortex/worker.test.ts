@@ -388,3 +388,38 @@ describe("manual collection entry points", () => {
     expect(state.jobs).toBeUndefined();
   });
 });
+
+describe("collection health and delivery scheduling", () => {
+  it("acknowledges a current capture without waiting for an older backlog", async () => {
+    const state: any = { config: config(), outbox: queued(5) };
+    expect((await worker(state, ack).send(message())).ok).toBe(true);
+    expect(state.outbox).toHaveLength(5);
+    expect(state.health.DFO2.lastRoundTripMs).toBeGreaterThanOrEqual(0);
+    expect(state.health.DFO2.observedToAckMs).toBeGreaterThanOrEqual(0);
+  });
+  it("stores numeric coverage and fixed reasons, excluding page diagnostics", async () => {
+    const state: any = { config: config(), jobs: { 1: { code: "DFO2", started: Date.now() } } };
+    const w = worker(state, ack);
+    await w.send({ type: "progress", coverage: { expected: 40, acknowledged: 12, durationMs: 16000 },
+      detail: "PRIVATE CUSTOMER ADDRESS", reason: "PRIVATE CUSTOMER ADDRESS" });
+    expect(state.health.DFO2.captureStatus).toBe("collecting");
+    expect(state.health.DFO2.coverage.acknowledged).toBe(12);
+    expect(JSON.stringify(state.health)).not.toContain("PRIVATE");
+    expect(w.closedTabs).toHaveLength(0);
+    await w.send({ type: "done", ok: true, reason: "finished", coverage: { expected: 40, acknowledged: 12, overviewAcknowledged: true } });
+    expect(state.health.DFO2.captureStatus).toBe("partial");
+    expect(w.closedTabs).toEqual([1]);
+  });
+  it("does not let progress from a non-owned page overwrite a collection", async () => {
+    const state: any = { config: config(), jobs: { 123: { code: "DFO2" } } };
+    await worker(state, ack).send({ type: "done", ok: true, coverage: { expected: 1, acknowledged: 1 } });
+    expect(state.jobs[123]).toBeTruthy();
+    expect(state.health).toBeUndefined();
+  });
+  it("does not open a second manual DFO2 job", async () => {
+    const state: any = { config: config(), jobs: { 123: { code: "DFO2", started: Date.now() } } };
+    const w = worker(state, ack);
+    expect((await w.manual({ id: "test" })).ok).toBe(false);
+    expect(w.openedTabs).toHaveLength(0);
+  });
+});
