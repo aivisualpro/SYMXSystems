@@ -9,19 +9,19 @@ const clock = (t: number) => new Intl.DateTimeFormat("en-US", { timeZone: "Ameri
 
 export function AttentionPanel({ queue, onOpen }: { queue: ReturnType<typeof attentionQueue>; onOpen: (r: Observation) => void }) {
   const [expanded, setExpanded] = useState(false);
-  return <section aria-label="DFO2 driver attention" className="rounded-xl border p-4 space-y-3">
+  return <section aria-label="DFO2 driver attention" className="rounded-xl border bg-card p-4 space-y-3">
     <div className="flex flex-wrap justify-between gap-2">
       <h2 className="font-semibold">DFO2 · dispatcher attention</h2>
-      <span className="text-xs text-muted-foreground">One card per driver · dashboard only</span>
+      <span className="text-xs text-muted-foreground">{queue.length} to review</span>
     </div>
-    <p className="text-sm text-muted-foreground">Watch = first signal. Check-in = repeated across captures at least 5 minutes apart. Verify breaks, travel, and route conditions before interpreting pace.</p>
-    {!queue.length && <p className="text-sm">No current driver signals in this selection. Missing or stale data can prevent detection.</p>}
+
+    {!queue.length && <p className="rounded-lg bg-emerald-50/70 px-3 py-2 text-sm text-emerald-800">No current driver signals. Alerts depend on the available observations.</p>}
     <div className="grid gap-3 lg:grid-cols-3">
-      {(expanded ? queue : queue.slice(0, 3)).map(({ route, analysis, routes }) => <article key={`${route.station}:${route.driverId}`} className="rounded-lg border bg-muted/20 p-4 space-y-2">
-        <div className="flex justify-between gap-2"><strong className="text-sm">{route.driverName === "Unassigned" ? route.routeCode : route.driverName}</strong><Badge variant="outline">{analysis.priority === "check-in" ? "Check-in" : "Watch"}</Badge></div>
+      {(expanded ? queue : queue.slice(0, 3)).map(({ route, analysis, routes }) => <article key={`${route.station}:${route.driverId}`} className="rounded-lg border border-border bg-background p-3 space-y-2 shadow-sm">
+        <div className="flex justify-between gap-2"><strong className="text-sm">{route.driverName === "Unassigned" ? route.routeCode : route.driverName}</strong><Badge variant="outline" className={analysis.priority === "check-in" ? "bg-amber-50 border-amber-300 text-amber-800" : "bg-blue-50 border-blue-200 text-blue-700"}>{analysis.priority === "check-in" ? "Check-in" : "Watch"}</Badge></div>
         <p className="text-xs text-muted-foreground">{routes.slice(0, 3).join(" · ")}{routes.length > 3 ? ` · +${routes.length - 3} routes` : ""}</p>
-        <p className="text-sm">{analysis.candidates.map(s => s.title).join(" · ")}</p>
-        <p className="text-xs text-muted-foreground">{analysis.candidates[0].evidence}</p>
+        <p className="text-sm font-medium">{analysis.candidates.map(s => s.title).join(" · ")}</p>
+        <details className="text-xs text-muted-foreground"><summary className="cursor-pointer focus-visible:outline-2 focus-visible:outline-primary">Why this is flagged</summary><p className="mt-2">{analysis.candidates[0].evidence}</p><p className="mt-1">Verify breaks, travel and route conditions before deciding what to do.</p></details>
         <Button variant="outline" size="sm" onClick={() => onOpen(route)} aria-label={`Review driver ${route.routeCode}`}>Review evidence</Button>
       </article>)}
     </div>
