@@ -5,17 +5,45 @@ async function refresh() {
     outbox = [],
     health = {},
     deadLetters = [],
+    jobs = {},
   } = await chrome.storage.local.get([
     "config",
     "outbox",
     "health",
     "deadLetters",
+    "jobs",
   ]);
   el("health").textContent = JSON.stringify(
     { queued: outbox.length, failed: deadLetters.length, stations: health },
     null,
     2,
   );
+  const panel = el("collection-health");
+  panel.replaceChildren();
+  const summary = document.createElement("p");
+  summary.textContent = `${outbox.length} queued · ${deadLetters.length} failed deliveries`;
+  panel.append(summary);
+  for (const code of ["DFO2", "DXC8", "DFO3"]) {
+    const h = health[code];
+    if (!h && !config?.stations?.some(s => s.code === code)) continue;
+    const card = document.createElement("article"); card.className = "station";
+    const heading = document.createElement("strong"); heading.textContent = `${code} · ${h?.captureStatus || "Not collected"}`; card.append(heading);
+    const lines = [];
+    if (h?.coverage) {
+      const c = h.coverage;
+      lines.push(`${c.acknowledged} / ${c.expected} itinerary details acknowledged`);
+      lines.push(`${c.timedOut} timed out · ${c.skipped} not attempted · ${Math.round(c.durationMs / 1000)}s elapsed`);
+      lines.push(`Overview ${c.overviewAcknowledged ? "acknowledged" : "not acknowledged"}`);
+    }
+    if (h?.captureDetail) lines.push(h.captureDetail);
+    if (h?.lastObservedAt) lines.push(`Latest observation: ${Math.max(0, Math.floor((Date.now() - Date.parse(h.lastObservedAt)) / 60000))} min ago`);
+    if (h?.observedToAckMs != null) lines.push(`Observation → acknowledgement: ${(h.observedToAckMs / 1000).toFixed(1)}s`);
+    if (h?.lastRoundTripMs != null) lines.push(`Last sync round trip: ${(h.lastRoundTripMs / 1000).toFixed(1)}s`);
+    if (h?.error) lines.push(`Sync error: ${h.error}`);
+    for (const line of lines) { const p = document.createElement("p"); p.textContent = line; card.append(p); }
+    panel.append(card);
+  }
+  el("collect-now").disabled = Object.values(jobs).some(job => job.code === "DFO2");
   return config;
 }
 refresh().then((config) => {
@@ -61,10 +89,10 @@ el("collect-now").addEventListener("click", async () => {
   try {
     const result = await chrome.runtime.sendMessage({ type: "collect-now" });
     el("status").textContent = result?.ok
-      ? "Request received. Check DFO2 manualRequestStatus below for the actual result."
+      ? "DFO2 collection started. Coverage updates below while it runs."
       : result === undefined
         ? "No response from extension worker. Check that the extension was reloaded after git pull."
-        : (result?.error || `Collection rejected: ${JSON.stringify(result)}`);
+        : (result?.error || "Collection unavailable");
   } catch (e) {
     el("status").textContent = e.message;
   } finally {

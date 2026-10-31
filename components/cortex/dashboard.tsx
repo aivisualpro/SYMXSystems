@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useSiteContext } from "@/components/providers/site-context-provider";
 import {
   assessRoute,
+  summarizeCoverage,
   businessDate,
   type Observation,
 } from "@/lib/cortex/domain";
@@ -87,6 +88,7 @@ export function CortexDashboard() {
     ["delay", "late departure"].includes(assessRoute(r, now).risk),
   ).length;
   const stale = rows.filter((r) => assessRoute(r, now).stale).length;
+  const coverage = summarizeCoverage(rows, now);
   return (
     <main className="space-y-6 max-w-[1600px] mx-auto">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -212,6 +214,17 @@ export function CortexDashboard() {
           </Card>
         ))}
       </div>
+      <div className="rounded-lg border p-4 text-sm space-y-2" aria-label="Collection completeness">
+        <div className="font-medium">Collection completeness · {coverage.routes} observed routes</div>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          <span>Fresh itinerary detail: {coverage.freshDetails} / {coverage.routes}</span>
+          <span>Delivery timestamps: {coverage.withDeliveryEvents} / {coverage.routes}</span>
+          <span>Explicit inbound travel: {coverage.explicitInbound} / {coverage.routes}</span>
+          <span>Planned return allowance: {coverage.plannedAllowance} / {coverage.routes}</span>
+          <span>RTS available: {coverage.forecasts} / {coverage.routes}</span>
+        </div>
+        <p className="text-xs text-muted-foreground">Coverage is against observed routes, not the station roster. Check extension status for discovered itinerary targets and acknowledgements. Event age is time since the last recorded delivery, not Amazon publishing latency.</p>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Delivery operations overview</CardTitle>
@@ -301,7 +314,7 @@ export function CortexDashboard() {
                           {r.actualReturn
                             ? "Actual return"
                             : a.forecast
-                              ? "Low confidence"
+                              ? a.confidence
                               : a.missingForecastInputs.length
                                 ? `Missing: ${a.missingForecastInputs.join(", ")}`
                                 : a.confidence}
@@ -332,9 +345,10 @@ export function CortexDashboard() {
                             ? `Detail${r.detailObservedAt ? ` · ${Math.floor(Math.max(0, now - Date.parse(r.detailObservedAt)) / 60000)} min` : ""}`
                             : "Overview only"}
                         </div>
+                        <div className="text-xs text-muted-foreground">Last delivery: {a.eventAgeMinutes == null ? "unknown" : `${Math.floor(Math.max(0, a.eventAgeMinutes))} min ago`}</div>
                         {!demo && r.receivedAt && Number.isFinite(Date.parse(r.receivedAt)) && Number.isFinite(Date.parse(r.observedAt)) && (
                           <div className="text-xs text-muted-foreground mt-1" title="Time from extension observation to SYMX database receipt; does not measure when Amazon first learned of the delivery">
-                            SYMX transfer: {Math.max(0, Math.round((Date.parse(r.receivedAt) - Date.parse(r.observedAt)) / 1000))}s
+                            SYMX transfer: {Date.parse(r.receivedAt) < Date.parse(r.observedAt) ? "clock difference" : `${Math.round((Date.parse(r.receivedAt) - Date.parse(r.observedAt)) / 1000)}s`}
                           </div>
                         )}
                       </td>
@@ -397,6 +411,17 @@ export function CortexDashboard() {
                 </strong>
               </p>
             </div>
+            <div className="rounded-lg bg-muted/40 p-4 mb-6 text-sm space-y-2">
+              <h3 className="font-semibold">Timing evidence & RTS confidence</h3>
+              <p>{selected.actualReturn ? "Actual return recorded" : assessRoute(selected, now).confidence}</p>
+              {!selected.actualReturn && <p>Missing inputs: {assessRoute(selected, now).missingForecastInputs.join(", ") || "None"}</p>}
+              <p>First delivery: {clock(selected.firstDelivery)} · Last delivery: {clock(selected.lastDelivery)}</p>
+              <p>Inbound: {selected.inboundMinutes == null ? "Unavailable" : `${Math.round(selected.inboundMinutes)} min`} · {selected.timingEvidence?.inboundSource === "planned_return_gap" ? "Planned last-stop-to-station allowance, including final-stop service; not live travel" : selected.timingEvidence?.inboundSource === "explicit_stem" ? "Explicit planned inbound stem" : "Source not verified; recollect detail"}</p>
+              {selected.timingEvidence && <>
+                <p>Inbound field: {selected.timingEvidence.inboundField} · Planned RTS timestamp: {selected.timingEvidence.plannedRtsPresent ? "present" : "absent"} · Complete planned delivery list: {selected.timingEvidence.completePlan ? "yes" : "no"}</p>
+                <p>Delivery task timestamps: {selected.timingEvidence.timestampedTasks} / {selected.timingEvidence.deliveredTasks} · Fully timestamped stops: {selected.timingEvidence.timestampedStops} / {selected.timingEvidence.deliveryStops} · Rejected timestamps: {selected.timingEvidence.rejectedTimestamps}</p>
+              </>}
+            </div>
             <div className="space-y-2">
               {selected.driverId &&
                 data?.history
@@ -436,7 +461,7 @@ export function CortexDashboard() {
         )}
       </Dialog>
       <p className="text-xs text-muted-foreground">
-        RTS uses observed delivery pace plus the planned inbound stem. It
+        RTS uses observed delivery pace plus an explicit planned inbound stem or a labeled planned return allowance. It
         excludes future breaks, traffic, rescues, and dispatch changes. Missing
         or stale observations produce no forecast. This view never changes
         Amazon assignments.

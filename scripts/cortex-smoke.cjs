@@ -1,11 +1,12 @@
 const { chromium } = require("playwright");
+const { expect } = require("playwright/test");
 const fs = require("node:fs");
 const mongoose = require("mongoose");
 let browser;
 (async () => {
   if (process.env.NODE_ENV === "production") throw Error("Local preview only");
   const state = JSON.parse(
-    fs.readFileSync("/tmp/symx-cortex-preview.json", "utf8"),
+    fs.readFileSync(process.env.CORTEX_PREVIEW_STATE || "/tmp/symx-cortex-preview.json", "utf8"),
   );
   if (!/^mongodb:\/\/(127\.0\.0\.1|localhost):/.test(state.uri))
     throw Error("Refusing a non-local database");
@@ -50,7 +51,7 @@ let browser;
         { upsert: true },
       );
   await mongoose.disconnect();
-  browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+  browser = await chromium.launch({ executablePath: process.env.CORTEX_CHROMIUM_EXECUTABLE || undefined, headless: true, args: ["--no-sandbox"] });
   const context = await browser.newContext({
     viewport: { width: 1512, height: 1080 },
   });
@@ -63,19 +64,22 @@ let browser;
   const errors = [];
   page.on("pageerror", (err) => errors.push(err.message));
   await page.goto("http://127.0.0.1:3000/cortex?demo=1");
+  // The existing PWA claims a new browser profile and reloads it once.
+  // Finish that real lifecycle before interacting with a route dialog.
+  await page.waitForFunction(() => !!navigator.serviceWorker.controller, undefined, { timeout: 30000 });
+  await page.waitForLoadState("networkidle", { timeout: 30000 });
   await page
     .getByRole("heading", { name: "SYMX Cortex", exact: true })
     .waitFor();
   await page.getByText("Synthetic preview", { exact: true }).waitFor();
   await page.getByRole("button", { name: /^Open details for CX101,/ }).waitFor();
-  if ((await page.locator("tbody tr").count()) !== 15)
-    throw Error("Expected 15 synthetic routes");
+  // Site context can refresh after the first route mounts. Wait for the final
+  // rendered collection rather than sampling a transient loading state.
+  await expect(page.locator("tbody tr")).toHaveCount(15, { timeout: 15000 });
   await page.getByLabel("Filter station").selectOption("DFO2");
-  if ((await page.locator("tbody tr").count()) !== 5)
-    throw Error("Station filter failed");
+  await expect(page.locator("tbody tr")).toHaveCount(5, { timeout: 15000 });
   await page.getByLabel("Search routes or drivers").fill("CX101");
-  if ((await page.locator("tbody tr").count()) !== 1)
-    throw Error("Search filter failed");
+  await expect(page.locator("tbody tr")).toHaveCount(1, { timeout: 15000 });
   await page.getByRole("button", { name: /^Open details for CX101,/ }).click();
   await page
     .getByText("CX101 · morning summary & driver history", { exact: true })
@@ -85,6 +89,7 @@ let browser;
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).first().click();
   await page.getByLabel("Search routes or drivers").fill("");
   await page.getByLabel("Filter station").selectOption("all");
+  await expect(page.locator("tbody tr")).toHaveCount(15, { timeout: 15000 });
   fs.mkdirSync("artifacts", { recursive: true });
   await page.screenshot({
     path: "artifacts/cortex-desktop.png",
@@ -167,8 +172,7 @@ let browser;
   await page.setViewportSize({ width: 1512, height: 1080 });
   await page.goto("http://127.0.0.1:3000/cortex");
   await page.getByRole("button", { name: /^Open details for CX999,/ }).waitFor();
-  if ((await page.locator("tbody tr").count()) !== 1)
-    throw Error("Duplicate route after retry");
+  await expect(page.locator("tbody tr")).toHaveCount(1, { timeout: 15000 });
   await page.screenshot({
     path: "artifacts/cortex-ingested-route.png",
     fullPage: true,
@@ -177,6 +181,7 @@ let browser;
   const denied = await unauth.request.get("http://127.0.0.1:3000/api/cortex");
   if (denied.status() !== 401)
     throw Error("Unauthenticated access was not denied");
+  if (errors.length) throw Error(errors.join("\n"));
   await browser.close();
   console.log(
     "PASS: authenticated preview, 15 routes, station/search filters, route summary, driver history, desktop/mobile screenshots, live empty state, extension normalization → ingest → storage → dashboard, retry deduplication, unauthenticated API denial; no browser errors.",

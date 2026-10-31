@@ -137,6 +137,23 @@ describe("Cortex storage and security", () => {
     const result = await (await get()).json();
     expect(result.history).toHaveLength(1);
   });
+  it("persists allowlisted timing evidence and strips customer fields", async () => {
+    const c = capture({ kind: "detail" });
+    const timingEvidence = {
+      inboundSource: "explicit_stem", inboundField: "valid", plannedRtsPresent: true,
+      completePlan: true, deliveryStops: 159, deliveredTasks: 108,
+      timestampedTasks: 108, timestampedStops: 66, rejectedTimestamps: 0,
+      customerAddress: "PRIVATE CUSTOMER ADDRESS",
+    };
+    c.routes = [{ ...c.routes[0], timingEvidence, customerPhone: "PRIVATE PHONE" } as any];
+    expect((await post(c)).status).toBe(200);
+    const stored = await Observation.findOne({ siteId: site._id }).lean();
+    expect((stored as any).timingEvidence.timestampedStops).toBe(66);
+    expect(JSON.stringify(stored)).not.toContain("PRIVATE");
+    const result = await (await get()).json();
+    expect(result.routes[0].timingEvidence.inboundSource).toBe("explicit_stem");
+    expect(result.routes[0].fieldObservedAt.inboundMinutes).toBe(c.observedAt);
+  });
   it("cannot expose demo fixtures in production or tests", async () => {
     process.env.SYMX_CORTEX_DEMO = "true";
     expect((await get("?demo=1")).status).toBe(404);

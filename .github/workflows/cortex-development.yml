@@ -1,0 +1,51 @@
+name: Cortex development validation
+on:
+  push:
+    branches: [codex/cortex-evidence-quality]
+  pull_request:
+    branches: [feature/symx-cortex-mvp]
+permissions:
+  contents: read
+concurrency:
+  group: cortex-validation-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  isolated-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NODE_OPTIONS: --max-old-space-size=6144
+      # Build-only placeholder; tests and preview use disposable loopback databases.
+      MONGODB_URI: mongodb://127.0.0.1:27017/cortex-build-placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Isolated authenticated preview and synthetic browser smoke
+        shell: bash
+        run: |
+          node scripts/cortex-dev.mjs > /tmp/cortex-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in {1..60}; do
+            if curl -fsS http://127.0.0.1:3000/login > /dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          node scripts/cortex-smoke.cjs
+          node scripts/cortex-extension-smoke.cjs
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: cortex-synthetic-preview
+          path: artifacts/cortex-*.png
+          retention-days: 14

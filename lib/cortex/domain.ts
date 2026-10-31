@@ -28,6 +28,19 @@ export const routeSchema = z.object({
   firstDelivery: time,
   lastDelivery: time,
   inboundMinutes: z.number().min(0).max(240).nullable().default(null),
+  firstStopCompleted: time.optional(),
+  lastStopCompleted: time.optional(),
+  timingEvidence: z.object({
+    inboundSource: z.enum(["explicit_stem", "planned_return_gap", "missing"]),
+    inboundField: z.enum(["absent", "invalid", "valid"]),
+    plannedRtsPresent: z.boolean(),
+    completePlan: z.boolean(),
+    deliveryStops: count,
+    deliveredTasks: count,
+    timestampedTasks: count,
+    timestampedStops: count,
+    rejectedTimestamps: count,
+  }).optional(),
   detail: z.boolean().default(false),
 });
 export type CortexRoute = z.infer<typeof routeSchema>;
@@ -71,6 +84,7 @@ export type Observation = CortexRoute & {
   observedAt: string;
   receivedAt?: string;
   detailObservedAt?: string;
+  fieldObservedAt?: Partial<Record<keyof CortexRoute, string>>;
 };
 export function businessDate(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -83,34 +97,51 @@ export function businessDate(now = new Date()) {
 export function assessRoute(route: Observation, now = Date.now()) {
   const ageMinutes = Math.max(0, (now - Date.parse(route.observedAt)) / 60000);
   const stale = ageMinutes > 20;
-  const detailStale =
-    !!route.detailObservedAt &&
-    now - Date.parse(route.detailObservedAt) > 20 * 60000;
-  const remaining =
-    route.totalStops == null || route.completedStops == null
-      ? null
-      : Math.max(0, route.totalStops - route.completedStops);
-  // No false precision: require five completed stops and 30 minutes of actual work.
-  const elapsedHours = route.firstDelivery
-    ? (Date.parse(route.observedAt) - route.firstDelivery) / 3600000
-    : 0;
-  const pace =
-    route.completedStops != null &&
-    route.completedStops >= 5 &&
-    elapsedHours >= 0.5
-      ? route.completedStops / elapsedHours
-      : null;
-  const forecast =
-    !stale &&
-    !detailStale &&
-    !route.actualReturn &&
-    pace &&
-    remaining != null &&
-    route.inboundMinutes != null
-      ? Date.parse(route.observedAt) +
-        (remaining / pace) * 3600000 +
-        route.inboundMinutes * 60000
-      : null;
+  const detailAt = route.detailObservedAt || (route.detail ? route.observedAt : undefined);
+  const detailStale = !detailAt || now - Date.parse(detailAt) > 20 * 60000;
+  const remaining = route.totalStops == null || route.completedStops == null
+    ? null : Math.max(0, route.totalStops - route.completedStops);
+  const evidence = route.timingEvidence;
+  const observed = Date.parse(route.observedAt);
+  const elapsedHours = route.firstDelivery ? (observed - route.firstDelivery) / 3600000 : 0;
+  const stopHours = route.firstStopCompleted && route.lastStopCompleted
+    ? (route.lastStopCompleted - route.firstStopCompleted) / 3600000 : 0;
+  const pace = evidence
+    ? evidence.timestampedStops >= 5 && stopHours >= 0.5
+      ? (evidence.timestampedStops - 1) / stopHours : null
+    : route.completedStops != null && route.completedStops >= 5 && elapsedHours >= 0.5
+      ? route.completedStops / elapsedHours : null;
+  const eventAgeMinutes = route.lastDelivery ? (now - route.lastDelivery) / 60000 : null;
+  const missingForecastInputs: string[] = [];
+  if (stale) missingForecastInputs.push("route observation stale");
+  if (detailStale) missingForecastInputs.push("recent itinerary detail");
+  if (route.firstDelivery == null) missingForecastInputs.push("first delivery timestamp");
+  if (eventAgeMinutes == null) missingForecastInputs.push("last delivery timestamp");
+  else if (eventAgeMinutes < -2) missingForecastInputs.push("valid delivery timestamps");
+  else if (eventAgeMinutes > 20 && remaining !== 0) missingForecastInputs.push("recent delivery event");
+  if (evidence) {
+    if (evidence.timestampedTasks < evidence.deliveredTasks || evidence.rejectedTimestamps > 0)
+      missingForecastInputs.push("complete delivered-task timestamps");
+    if (route.totalStops != null && evidence.deliveryStops < route.totalStops)
+      missingForecastInputs.push("complete delivery stop list");
+    if (evidence.timestampedStops < 5) missingForecastInputs.push("five timestamped completed stops");
+    if (stopHours < 0.5) missingForecastInputs.push("30 minutes between completed stops");
+  } else {
+    if (elapsedHours < 0.5) missingForecastInputs.push("at least 30 minutes of delivery history");
+    if (route.completedStops == null || route.completedStops < 5) missingForecastInputs.push("at least five completed stops");
+  }
+  if (remaining == null) missingForecastInputs.push("remaining stop count");
+  if (route.inboundMinutes == null) missingForecastInputs.push("inbound travel estimate");
+  const staleFields = ["firstDelivery", "lastDelivery", "inboundMinutes", "totalStops", "completedStops"] as const;
+  if (staleFields.some(field => route.fieldObservedAt?.[field] &&
+    now - Date.parse(route.fieldObservedAt[field]!) > 20 * 60000))
+    missingForecastInputs.push("fresh forecast inputs");
+  const forecastBase = remaining === 0 ? (route.lastStopCompleted || route.lastDelivery || observed) : observed;
+  const candidateForecast = !route.actualReturn && !missingForecastInputs.length && pace && remaining != null
+    ? forecastBase + remaining / pace * 3600000 + route.inboundMinutes! * 60000 : null;
+  if (candidateForecast != null && candidateForecast <= now)
+    missingForecastInputs.push("return confirmation or refreshed travel estimate");
+  const forecast = missingForecastInputs.length ? null : candidateForecast;
   const delayMinutes =
     forecast && route.plannedReturn
       ? Math.max(0, (forecast - route.plannedReturn) / 60000)
@@ -134,22 +165,10 @@ export function assessRoute(route: Observation, now = Date.now()) {
             : !route.actualDeparture
               ? "planned"
               : "on road";
-  const missingForecastInputs: string[] = [];
-  if (stale) missingForecastInputs.push("route observation stale");
-  if (!route.detailObservedAt || detailStale)
-    missingForecastInputs.push("recent itinerary detail");
-  if (route.firstDelivery == null)
-    missingForecastInputs.push("first delivery timestamp");
-  else if (elapsedHours < 0.5)
-    missingForecastInputs.push("at least 30 minutes of delivery history");
-  if (route.completedStops == null || route.completedStops < 5)
-    missingForecastInputs.push("at least five completed stops");
-  if (remaining == null)
-    missingForecastInputs.push("remaining stop count");
-  if (route.inboundMinutes == null)
-    missingForecastInputs.push("inbound travel estimate");
   return {
     ageMinutes,
+    eventAgeMinutes,
+    detailStale,
     stale,
     remaining,
     pace,
@@ -158,7 +177,9 @@ export function assessRoute(route: Observation, now = Date.now()) {
     delayMinutes,
     risk,
     confidence: forecast
-      ? "low · pace extrapolation"
+      ? evidence?.inboundSource === "planned_return_gap"
+        ? "low · pace + planned return allowance"
+        : "low · pace extrapolation"
       : "insufficient current data",
   };
 }
@@ -182,23 +203,28 @@ export function latestRoutes(rows: Observation[]) {
       const compatible = group.filter(
         (r) => !r.driverId || r.driverId === latest.driverId,
       );
-      const detail = compatible.find((r) => r.detail);
+      const detail = compatible.find((r) => r.detail && r.driverId === latest.driverId);
+      latest.fieldObservedAt = {};
+      // Event evidence is one coherent detail sample. A new detail missing data
+      // must not silently inherit an older sample or its diagnostic counts.
+      for (const field of ["firstDelivery", "lastDelivery", "firstStopCompleted", "lastStopCompleted", "inboundMinutes"] as const) {
+        latest[field] = detail?.[field] ?? null;
+        if (detail) latest.fieldObservedAt[field] = detail.observedAt;
+      }
+      latest.timingEvidence = detail?.timingEvidence;
       for (const field of [
         "plannedDeparture",
         "actualDeparture",
         "plannedReturn",
         "actualReturn",
-        "firstDelivery",
-        "lastDelivery",
-        "inboundMinutes",
         "totalStops",
         "completedStops",
         "totalPackages",
         "completedPackages",
       ] as const) {
-        if (latest[field] == null)
-          latest[field] =
-            compatible.find((r) => r[field] != null)?.[field] ?? null;
+        const source = compatible.find((r) => r[field] != null);
+        latest[field] = source?.[field] ?? null;
+        if (source) latest.fieldObservedAt[field] = source.observedAt;
       }
       if (
         (!latest.driverName || latest.driverName === "Unassigned") &&
@@ -211,4 +237,16 @@ export function latestRoutes(rows: Observation[]) {
       return latest;
     })
     .sort((a, b) => a.routeCode.localeCompare(b.routeCode));
+}
+
+/** Coverage denominator is observed routes, never an inferred station roster. */
+export function summarizeCoverage(rows: Observation[], now = Date.now()) {
+  return {
+    routes: rows.length,
+    freshDetails: rows.filter(r => !assessRoute(r, now).detailStale).length,
+    withDeliveryEvents: rows.filter(r => r.firstDelivery != null && r.lastDelivery != null).length,
+    explicitInbound: rows.filter(r => r.inboundMinutes != null && r.timingEvidence?.inboundSource === "explicit_stem").length,
+    plannedAllowance: rows.filter(r => r.inboundMinutes != null && r.timingEvidence?.inboundSource === "planned_return_gap").length,
+    forecasts: rows.filter(r => assessRoute(r, now).forecast != null).length,
+  };
 }
