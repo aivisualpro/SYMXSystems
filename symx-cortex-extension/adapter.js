@@ -1,6 +1,13 @@
 /* Shared pure normalizer, also exercised in Vitest. No addresses, phone numbers, or raw stops leave Chrome. */
 (function (root) {
   const epoch = (v) => {
+    if (v == null || v === "") return null;
+    // Cortex timestamps can be epoch seconds, milliseconds, microseconds,
+    // or ISO-8601 strings. Do not treat a date-only string as a timestamp.
+    if (typeof v === "string" && /[Tt]/.test(v) && /(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(v)) {
+      const parsed = Date.parse(v);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }
     const n = Number(v);
     return Number.isFinite(n) && n > 0
       ? Math.round(n >= 1e14 ? n / 1000 : n >= 1e11 ? n : n * 1000)
