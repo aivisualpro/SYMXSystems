@@ -13,6 +13,7 @@ import { connectTestDb, disconnectTestDb, clearTestDb } from "../helpers/db";
 import Site from "@/lib/models/Site";
 import Observation from "@/lib/models/CortexObservation";
 import { demoData } from "@/lib/cortex/fixtures";
+import { intelligenceFixture } from "@/lib/cortex/intelligence-fixtures";
 const auth = vi.hoisted(() => ({ allowed: true, siteId: "" }));
 vi.mock("@/lib/auth/require-permission", () => ({
   requirePermission: async () => {
@@ -157,5 +158,51 @@ describe("Cortex storage and security", () => {
   it("cannot expose demo fixtures in production or tests", async () => {
     process.env.SYMX_CORTEX_DEMO = "true";
     expect((await get("?demo=1")).status).toBe(404);
+  });
+  it("persists only numeric stop events and derives signals on the server", async () => {
+    const r = intelligenceFixture("slowdown");
+    const c = capture({ kind: "detail", routes: [{ ...r, driverSignals: ["fake-client-signal"],
+      deliveryEvents: r.deliveryEvents!.map(e => ({ ...e, address: "PRIVATE ADDRESS", trackingId: "PRIVATE TRACKING" })) }] });
+    expect((await post(c)).status).toBe(200);
+    const stored = await Observation.findOne({ siteId: site._id }).lean() as any;
+    expect(stored.deliveryEvents).toHaveLength(r.deliveryEvents!.length);
+    expect(stored.driverSignals).toContain("pace_drop");
+    expect(JSON.stringify(stored)).not.toMatch(/PRIVATE|fake-client-signal/);
+  });
+  it("preserves recovered historical signals while sending compact daily pace", async () => {
+    const at = Date.now() - 86400000;
+    const slow = intelligenceFixture("slowdown", at);
+    const recovered = { ...intelligenceFixture("steady", at + 10 * 60000), date: slow.date };
+    for (const r of [slow, recovered]) expect((await post(capture({ date: r.date, observedAt: r.observedAt, kind: "detail", routes: [r] }))).status).toBe(200);
+    const result = await (await get()).json();
+    expect(result.history).toHaveLength(1);
+    expect(result.history[0].recordedSignals).toContain("pace_drop");
+    expect(result.history[0].historicalPace.rate).toBeCloseTo(12);
+    expect(result.history[0].deliveryEvents).toBeUndefined();
+    expect(result.history[0].signalSamples).toBeUndefined();
+  });
+  it("keeps confirmation samples ordered despite late-arriving captures and scopes them", async () => {
+    const at = Date.now();
+    for (const m of [0, 6, 12]) {
+      const r = intelligenceFixture("slowdown", at - m * 60000);
+      expect((await post(capture({ date: r.date, observedAt: r.observedAt, kind: "detail", routes: [r] }))).status).toBe(200);
+    }
+    const result = await (await get()).json();
+    const samples = result.routes[0].signalSamples;
+    expect(samples).toHaveLength(3);
+    expect(Date.parse(samples[0].observedAt)).toBe(at);
+    expect(samples[1].codes).toContain("pace_drop");
+    auth.siteId = new mongoose.Types.ObjectId().toString();
+    expect((await (await get()).json()).routes).toEqual([]);
+  });
+  it("marks driver reassignment without borrowing another driver's history", async () => {
+    const at = Date.now();
+    const old = intelligenceFixture("steady", at - 60000);
+    const next = { ...intelligenceFixture("steady", at), driverId: "replacement-driver" };
+    for (const r of [old, next]) await post(capture({ observedAt: r.observedAt, date: r.date, kind: "detail", routes: [r] }));
+    const result = await (await get()).json();
+    expect(result.routes).toHaveLength(1);
+    expect(result.routes[0].driverId).toBe("replacement-driver");
+    expect(result.routes[0].assignmentChanged).toBe(true);
   });
 });

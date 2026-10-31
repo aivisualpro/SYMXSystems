@@ -100,11 +100,14 @@
         const delivered = stops.flatMap(s => s.tasks.filter(t => t?.taskType === "DROP_OFF" && t.taskState === "DELIVERED"));
         const actuals = delivered.map(t => actual(t.actualExecutionTime)).filter(t => t != null);
         // Count completed stops, never packages; a partially completed multi-package stop is not complete.
-        const completionTimes = stops.flatMap(s => {
+        const deliveryEvents = stops.flatMap(s => {
           const drops = s.tasks.filter(t => t?.taskType === "DROP_OFF");
           const times = drops.map(t => t.taskState === "DELIVERED" ? actual(t.actualExecutionTime) : null);
-          return times.length && times.every(t => t != null) ? [Math.max(...times)] : [];
+          return times.length && times.every(t => t != null)
+            ? [{ completedAt: Math.max(...times), plannedAt: epoch(s.expectedStartTime) }] : [];
         });
+        deliveryEvents.sort((a, b) => a.completedAt - b.completedAt);
+        const completionTimes = deliveryEvents.map(e => e.completedAt);
         const totalStops = count(p.totalStops ?? sp.total ?? r.totalStops);
         const explicitInbound = routes.length === 1 ? duration(times.plannedInboundStemTime) : null;
         // Only a complete single-route stop list can establish the last planned delivery.
@@ -155,6 +158,7 @@
           lastStopCompleted: completionTimes.length ? Math.max(...completionTimes) : null,
           inboundMinutes,
           timingEvidence,
+          ...(deliveryEvents.length <= 1000 ? { deliveryEvents } : {}),
           detail: kind === "detail",
         };
       })

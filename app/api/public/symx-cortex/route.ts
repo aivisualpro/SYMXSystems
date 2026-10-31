@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import connectToDatabase from "@/lib/db";
 import Site from "@/lib/models/Site";
 import CortexObservation from "@/lib/models/CortexObservation";
+import { analyzeDriver } from "@/lib/cortex/intelligence";
 import { captureSchema, STATIONS } from "@/lib/cortex/domain";
 
 // Development-only station lookup: resolve Amazon's own identifier against SYMX's
@@ -103,6 +104,8 @@ export async function POST(req: NextRequest) {
         update: {
           $setOnInsert: {
             ...route,
+            driverSignals: analyzeDriver({ ...route, station: site.code, date: capture.date,
+              observedAt: capture.observedAt }, Date.parse(capture.observedAt)).candidates.map(s => s.code),
             siteId: site._id,
             station: site.code,
             date: capture.date,

@@ -4,6 +4,8 @@ Development branch: `feature/symx-cortex-mvp`, based on draft PR #12. No product
 
 See [collector 0.1.3 evidence findings and current validation limits](SYMX_CORTEX_EVIDENCE_VALIDATION.md) for the latest development follow-up.
 
+See [Phase 2 DFO2 driver intelligence](SYMX_CORTEX_DRIVER_INTELLIGENCE.md) for the isolated 0.2.0 follow-up and review instructions.
+
 ## What works
 
 - `/cortex` adds a read-only delivery operations dashboard under Dispatching → SYMX Cortex, using existing office authentication, Dispatching view permission, and server-side station scoping.

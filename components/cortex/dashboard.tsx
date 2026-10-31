@@ -1,5 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { analyzeDriver, attentionQueue } from "@/lib/cortex/intelligence";
+import { AttentionPanel, DriverEvidence } from "./driver-intelligence";
 import { useSiteContext } from "@/components/providers/site-context-provider";
 import {
   assessRoute,
@@ -44,11 +46,10 @@ export function CortexDashboard() {
   useEffect(() => {
     setDemo(new URLSearchParams(location.search).get("demo") === "1");
   }, []);
+  useEffect(() => { setData(null); setSelected(null); }, [date, demo, scope, switching]);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    setData(null);
-    setSelected(null);
     setError("");
     fetch(`/api/cortex?date=${date}${demo ? "&demo=1" : ""}`, {
       signal: controller.signal,
@@ -59,7 +60,11 @@ export function CortexDashboard() {
         if (!r.ok) throw new Error(d.error || "Could not load Cortex");
         return d;
       })
-      .then(setData)
+      .then(d => {
+        if (controller.signal.aborted) return;
+        setData(d);
+        setSelected(current => current ? d.routes.find((r: Observation) => r.routeCode === current.routeCode && r.station === current.station && r.driverId === current.driverId) || null : null);
+      })
       .catch((e) => {
         if (e.name !== "AbortError") setError(e.message);
       })
@@ -84,9 +89,9 @@ export function CortexDashboard() {
   );
   const stops = rows.reduce((n, r) => n + (r.totalStops || 0), 0);
   const completed = rows.reduce((n, r) => n + (r.completedStops || 0), 0);
-  const risks = rows.filter((r) =>
-    ["delay", "late departure"].includes(assessRoute(r, now).risk),
-  ).length;
+  const queue = useMemo(() => attentionQueue((data?.routes || []).filter(r =>
+    (station === "all" || r.station === station) && `${r.routeCode} ${r.driverName}`.toLowerCase().includes(search.toLowerCase())), now), [data, station, search, now]);
+  const risks = queue.length;
   const stale = rows.filter((r) => assessRoute(r, now).stale).length;
   const coverage = summarizeCoverage(rows, now);
   return (
@@ -100,7 +105,7 @@ export function CortexDashboard() {
             SYMX Cortex
           </h1>
           <p className="text-muted-foreground mt-1">
-            Morning readiness, route progress, and an earlier view of delays.
+            Routes, pace and driver alerts.
           </p>
         </div>
         <Button
@@ -172,29 +177,29 @@ export function CortexDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           {
-            title: "Routes captured",
+            title: "Routes",
             value: rows.length,
-            text: `${rows.filter((r) => !r.actualDeparture).length} awaiting departure`,
+            text: `${rows.filter((r) => !r.actualDeparture).length} not departed`,
             icon: Route,
           },
           {
-            title: "Stops completed",
+            title: "Stops",
             value: `${completed} / ${stops}`,
             text: stops
-              ? `${Math.round((completed / stops) * 100)}% of captured workload`
+              ? `${Math.round((completed / stops) * 100)}% delivered`
               : "Waiting for overview",
             icon: Radio,
           },
           {
-            title: "Early attention",
+            title: "Needs review",
             value: risks,
-            text: "Late departures or forecast ≥30 min late",
+            text: "Drivers to check",
             icon: AlertTriangle,
           },
           {
-            title: "Stale routes",
+            title: "Stale",
             value: stale,
-            text: "Forecasts suppressed until refreshed",
+            text: "Outdated data",
             icon: Clock3,
           },
         ].map((c) => (
@@ -215,23 +220,19 @@ export function CortexDashboard() {
         ))}
       </div>
       <div className="rounded-lg border p-4 text-sm space-y-2" aria-label="Collection completeness">
-        <div className="font-medium">Collection completeness · {coverage.routes} observed routes</div>
+        <div className="font-medium">Data coverage · {coverage.routes} routes</div>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
-          <span>Fresh itinerary detail: {coverage.freshDetails} / {coverage.routes}</span>
-          <span>Delivery timestamps: {coverage.withDeliveryEvents} / {coverage.routes}</span>
-          <span>Explicit inbound travel: {coverage.explicitInbound} / {coverage.routes}</span>
-          <span>Planned return allowance: {coverage.plannedAllowance} / {coverage.routes}</span>
-          <span>RTS available: {coverage.forecasts} / {coverage.routes}</span>
+          <span>Route details: {coverage.freshDetails} / {coverage.routes}</span>
+          <span>Timestamps: {coverage.withDeliveryEvents} / {coverage.routes}</span>
+          <span>Return travel: {coverage.explicitInbound} / {coverage.routes}</span>
+          <span>Return allowance: {coverage.plannedAllowance} / {coverage.routes}</span>
+          <span>RTS forecasts: {coverage.forecasts} / {coverage.routes}</span>
         </div>
-        <p className="text-xs text-muted-foreground">Coverage is against observed routes, not the station roster. Check extension status for discovered itinerary targets and acknowledgements. Event age is time since the last recorded delivery, not Amazon publishing latency.</p>
       </div>
+      <AttentionPanel queue={queue} onOpen={setSelected} />
       <Card>
         <CardHeader>
-          <CardTitle>Delivery operations overview</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Select a route for its morning plan and driver history. Estimates
-            support dispatcher review.
-          </p>
+          <CardTitle>Routes overview</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-auto">
@@ -239,13 +240,14 @@ export function CortexDashboard() {
               <thead className="border-b text-muted-foreground">
                 <tr>
                   {[
-                    "Route / driver",
+                    "Driver / route",
                     "Station",
                     "Progress",
-                    "Departure · plan / actual",
-                    "Approx. RTS",
+                    "Pace / hr",
+                    "Departure",
+                    "Est. RTS",
                     "Attention",
-                    "Data age",
+                    "Updated",
                   ].map((h) => (
                     <th key={h} className="p-3 font-medium whitespace-nowrap">
                       {h}
@@ -255,7 +257,8 @@ export function CortexDashboard() {
               </thead>
               <tbody>
                 {rows.map((r) => {
-                  const a = assessRoute(r, now);
+                  const a = analyzeDriver(r, now);
+                  const attributable = r.driverId && !r.assignmentChanged && !r.identityUncertain;
                   return (
                     <tr
                       key={`${r.station}:${r.routeCode}:${r.driverId}`}
@@ -275,6 +278,7 @@ export function CortexDashboard() {
                             <div className="mt-1">{r.completedStops ?? "—"} / {r.totalStops ?? "—"} stops</div>
                             <div>Planned return: {clock(r.plannedReturn)}</div>
                             <div>Status: {a.risk}</div>
+                            <div>Recent route pace: {a.paceWindows.recent?.rate.toFixed(1) || "Unknown"} stops/h</div>
                             <div className="text-xs text-muted-foreground mt-1">Click for full details</div>
                           </div>
                         </div>
@@ -305,18 +309,27 @@ export function CortexDashboard() {
                           {r.totalPackages ?? "—"} packages
                         </div>
                       </td>
+                      <td className="p-3 min-w-28">
+                        <strong>{attributable ? a.paceWindows.recent?.rate.toFixed(1) || "—" : "—"}</strong>
+                        <div className="text-xs text-muted-foreground">Earlier {attributable ? a.paceWindows.earlier?.rate.toFixed(1) || "—" : "—"}</div>
+                        {attributable && a.paceWindows.changePercent != null && <div className="text-xs">{Math.abs(a.paceWindows.changePercent).toFixed(0)}% {a.paceWindows.changePercent < 0 ? "lower" : "higher"}</div>}
+                        {!attributable && <div className="text-xs text-muted-foreground">Driver attribution unavailable</div>}
+                        {a.paceWindows.overall && (a.stale || a.detailStale) && <div className="text-xs text-muted-foreground">Stale sample</div>}
+                        {!r.deliveryEvents && <div className="text-xs text-muted-foreground">Awaiting stop timestamps</div>}
+                      </td>
                       <td className="p-3 whitespace-nowrap">
                         {clock(r.plannedDeparture)} / {clock(r.actualDeparture)}
                       </td>
                       <td className="p-3 whitespace-nowrap">
                         {clock(r.actualReturn || a.forecast)}
+                        {a.forecastDeltaMinutes != null && <div className="text-xs">{Math.abs(Math.round(a.forecastDeltaMinutes))} min {a.forecastDeltaMinutes < 0 ? "before" : "past"} plan</div>}
                         <div className="text-xs text-muted-foreground max-w-72 whitespace-normal">
                           {r.actualReturn
                             ? "Actual return"
                             : a.forecast
                               ? a.confidence
                               : a.missingForecastInputs.length
-                                ? `Missing: ${a.missingForecastInputs.join(", ")}`
+                                ? `Missing: ${a.missingForecastInputs.slice(0, 2).join(", ")}${a.missingForecastInputs.length > 2 ? " · see details" : ""}`
                                 : a.confidence}
                         </div>
                       </td>
@@ -330,7 +343,7 @@ export function CortexDashboard() {
                               : "secondary"
                           }
                         >
-                          {a.risk}
+                          {a.candidates.length ? a.priority : a.risk}
                         </Badge>
                         {a.delayMinutes != null && a.delayMinutes >= 30 && (
                           <div className="text-xs mt-1">
@@ -391,7 +404,7 @@ export function CortexDashboard() {
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="grid sm:grid-cols-3 gap-4 mb-6">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <p>
                 Planned stops{" "}
                 <strong className="block text-xl">
@@ -410,11 +423,17 @@ export function CortexDashboard() {
                   {clock(selected.plannedReturn)}
                 </strong>
               </p>
+              <p>
+                {selected.actualReturn ? "Actual return" : "Projected return"}
+                <strong className="block text-xl">{clock(selected.actualReturn || assessRoute(selected, now).forecast)}</strong>
+                <span className="text-xs text-muted-foreground">{selected.actualReturn ? "Recorded timestamp" : assessRoute(selected, now).confidence}</span>
+              </p>
             </div>
             <div className="rounded-lg bg-muted/40 p-4 mb-6 text-sm space-y-2">
               <h3 className="font-semibold">Timing evidence & RTS confidence</h3>
               <p>{selected.actualReturn ? "Actual return recorded" : assessRoute(selected, now).confidence}</p>
               {!selected.actualReturn && <p>Missing inputs: {assessRoute(selected, now).missingForecastInputs.join(", ") || "None"}</p>}
+              {assessRoute(selected, now).planComparisonNote && <p>{assessRoute(selected, now).planComparisonNote}</p>}
               <p>First delivery: {clock(selected.firstDelivery)} · Last delivery: {clock(selected.lastDelivery)}</p>
               <p>Inbound: {selected.inboundMinutes == null ? "Unavailable" : `${Math.round(selected.inboundMinutes)} min`} · {selected.timingEvidence?.inboundSource === "planned_return_gap" ? "Planned last-stop-to-station allowance, including final-stop service; not live travel" : selected.timingEvidence?.inboundSource === "explicit_stem" ? "Explicit planned inbound stem" : "Source not verified; recollect detail"}</p>
               {selected.timingEvidence && <>
@@ -422,6 +441,8 @@ export function CortexDashboard() {
                 <p>Delivery task timestamps: {selected.timingEvidence.timestampedTasks} / {selected.timingEvidence.deliveredTasks} · Fully timestamped stops: {selected.timingEvidence.timestampedStops} / {selected.timingEvidence.deliveryStops} · Rejected timestamps: {selected.timingEvidence.rejectedTimestamps}</p>
               </>}
             </div>
+            <DriverEvidence route={selected} history={data?.history || []} now={now} />
+            <details><summary className="cursor-pointer text-sm font-medium mb-3">Captured route records</summary>
             <div className="space-y-2">
               {selected.driverId &&
                 data?.history
@@ -455,6 +476,7 @@ export function CortexDashboard() {
                 </p>
               )}
             </div>
+            </details>
           </CardContent>
             </Card>
           </DialogContent>

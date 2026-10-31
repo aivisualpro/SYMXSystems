@@ -1,9 +1,9 @@
 name: Cortex development validation
 on:
   push:
-    branches: [codex/cortex-evidence-quality]
+    branches: [codex/cortex-evidence-quality, codex/cortex-driver-intelligence]
   pull_request:
-    branches: [feature/symx-cortex-mvp]
+    branches: [feature/symx-cortex-mvp, codex/cortex-evidence-quality]
 permissions:
   contents: read
 concurrency:
@@ -43,6 +43,7 @@ jobs:
           test "$ready" = 1
           node scripts/cortex-smoke.cjs
           node scripts/cortex-extension-smoke.cjs
+          node scripts/cortex-intelligence-smoke.cjs
       - uses: actions/upload-artifact@v4
         if: success()
         with:
