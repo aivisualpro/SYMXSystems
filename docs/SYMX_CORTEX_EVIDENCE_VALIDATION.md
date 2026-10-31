@@ -31,15 +31,15 @@ git fetch origin
 git switch codex/cortex-evidence-quality
 npm ci
 npx playwright install chromium
+npm test
+npm run typecheck
+NODE_OPTIONS=--max-old-space-size=6144 MONGODB_URI=mongodb://127.0.0.1:27017/cortex-build-placeholder npm run build
 node scripts/cortex-dev.mjs
 ```
 
 In another terminal:
 
 ```sh
-npm test
-npm run typecheck
-NODE_OPTIONS=--max-old-space-size=6144 MONGODB_URI=mongodb://127.0.0.1:27017/cortex-build-placeholder npm run build
 node scripts/cortex-smoke.cjs
 node scripts/cortex-extension-smoke.cjs
 ```
@@ -53,7 +53,7 @@ For manual live development collection, load `symx-cortex-extension/` or unpack 
 ## Checks in this assignment
 
 - Focused normalizer, forecast, worker, and collector tests: **74 passed**, including a fake-clock 40-target collector run. This is not a browser result.
-- TypeScript and production build: tracked in the follow-up PR alongside the final validation result.
+- TypeScript and optimized production build passed locally and in the isolated GitHub runner. The runner also passed the full MongoDB-backed suite; see PR #14 for the final browser result.
 - Full suite attempted: local MongoDB exits during startup with `open: Operation not permitted`; database suites cannot execute in this environment. No database test failure is represented as a pass.
 - Browser installation attempted: the official Chromium archive URL returned a 195-byte “Site Unavailable” HTML page. The real browser smoke and fresh screenshots could not run locally. Existing `artifacts/cortex-*.png` screenshots predate this change.
 - `.github/workflows/cortex-development.yml` reproduces full tests, typecheck, production build, disposable preview, and both synthetic browser smoke scripts in an isolated GitHub runner. It references no production secrets and cannot deploy. CI status must be checked on the follow-up PR; workflow presence alone is not a passing result.
