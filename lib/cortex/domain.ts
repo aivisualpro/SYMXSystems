@@ -134,12 +134,27 @@ export function assessRoute(route: Observation, now = Date.now()) {
             : !route.actualDeparture
               ? "planned"
               : "on road";
+  const missingForecastInputs: string[] = [];
+  if (stale) missingForecastInputs.push("route observation stale");
+  if (!route.detailObservedAt || detailStale)
+    missingForecastInputs.push("recent itinerary detail");
+  if (route.firstDelivery == null)
+    missingForecastInputs.push("first delivery timestamp");
+  else if (elapsedHours < 0.5)
+    missingForecastInputs.push("at least 30 minutes of delivery history");
+  if (route.completedStops == null || route.completedStops < 5)
+    missingForecastInputs.push("at least five completed stops");
+  if (remaining == null)
+    missingForecastInputs.push("remaining stop count");
+  if (route.inboundMinutes == null)
+    missingForecastInputs.push("inbound travel estimate");
   return {
     ageMinutes,
     stale,
     remaining,
     pace,
     forecast,
+    missingForecastInputs,
     delayMinutes,
     risk,
     confidence: forecast
