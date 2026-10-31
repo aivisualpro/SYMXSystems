@@ -171,9 +171,11 @@ export function assessRoute(route: Observation, now = Date.now()) {
   if (candidateForecast != null && candidateForecast <= now)
     missingForecastInputs.push("return confirmation or refreshed travel estimate");
   const forecast = missingForecastInputs.length ? null : candidateForecast;
+  const comparablePlan = route.plannedReturn != null && (!evidence || evidence.plannedRtsPresent) &&
+    (!route.fieldObservedAt?.plannedReturn || now - Date.parse(route.fieldObservedAt.plannedReturn) <= 20 * 60000);
   const delayMinutes =
-    forecast && route.plannedReturn
-      ? Math.max(0, (forecast - route.plannedReturn) / 60000)
+    forecast && comparablePlan
+      ? Math.max(0, (forecast - route.plannedReturn!) / 60000)
       : null;
   const lateDeparture =
     route.plannedDeparture &&
@@ -206,7 +208,8 @@ export function assessRoute(route: Observation, now = Date.now()) {
     delayMinutes,
     risk,
     paceWindows: measured,
-    forecastDeltaMinutes: forecast && route.plannedReturn ? (forecast - route.plannedReturn) / 60000 : null,
+    forecastDeltaMinutes: forecast && comparablePlan ? (forecast - route.plannedReturn!) / 60000 : null,
+    planComparisonNote: comparablePlan ? null : "Current Amazon planned RTS is missing or unverified; delay comparison withheld.",
     forecastRange: forecast && remaining != null && remaining > 0 && measured.recent && measured.earlier
       ? [Math.min(measured.recent.rate, measured.earlier.rate), Math.max(measured.recent.rate, measured.earlier.rate)]
         .reverse().map(rate => forecastBase + remaining / rate * 3600000 + route.inboundMinutes! * 60000)

@@ -1,4 +1,4 @@
-import { intelligenceFixture } from "./intelligence-fixtures";
+import { completedHistoryFixture, intelligenceFixture } from "./intelligence-fixtures";
 import { routeSchema, businessDate, type Observation } from "./domain";
 /** Synthetic operational data only. Never imported by the live ingest path. */
 export function demoData(now = Date.now(), withIntelligence = false) {
@@ -32,13 +32,14 @@ export function demoData(now = Date.now(), withIntelligence = false) {
       }),
   );
   if (withIntelligence) routes.forEach((r, i) => {
-    if (i % 5 === 0) return;
+    if (i % 5 === 0 || r.station !== "DFO2") return;
     const shape = intelligenceFixture(i % 5 === 1 ? "slowdown" : i % 5 === 2 ? "gap" : "steady", now - (i % 5 === 4 ? 45 : 0) * 60000);
     const identity = { routeCode: r.routeCode, routeId: r.routeId, driverId: r.driverId, driverName: r.driverName, station: r.station };
     Object.assign(r, shape, identity);
   });
   const history = routes.flatMap((r) =>
     [1, 2, 3].map((days) => {
+      if (withIntelligence && r.station === "DFO2" && r.deliveryEvents?.length) return completedHistoryFixture(r, days);
       const d = new Date(`${date}T00:00:00Z`);
       d.setUTCDate(d.getUTCDate() - days);
       return {

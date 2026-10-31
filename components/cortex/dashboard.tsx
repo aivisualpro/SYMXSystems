@@ -263,6 +263,7 @@ export function CortexDashboard() {
               <tbody>
                 {rows.map((r) => {
                   const a = analyzeDriver(r, now);
+                  const attributable = r.driverId && !r.assignmentChanged && !r.identityUncertain;
                   return (
                     <tr
                       key={`${r.station}:${r.routeCode}:${r.driverId}`}
@@ -282,7 +283,7 @@ export function CortexDashboard() {
                             <div className="mt-1">{r.completedStops ?? "—"} / {r.totalStops ?? "—"} stops</div>
                             <div>Planned return: {clock(r.plannedReturn)}</div>
                             <div>Status: {a.risk}</div>
-                            <div>Recent pace: {a.paceWindows.recent?.rate.toFixed(1) || "Unknown"} stops/h</div>
+                            <div>Recent route pace: {a.paceWindows.recent?.rate.toFixed(1) || "Unknown"} stops/h</div>
                             <div className="text-xs text-muted-foreground mt-1">Click for full details</div>
                           </div>
                         </div>
@@ -314,10 +315,12 @@ export function CortexDashboard() {
                         </div>
                       </td>
                       <td className="p-3 min-w-28">
-                        <strong>{a.paceWindows.recent?.rate.toFixed(1) || "—"}</strong>
-                        <div className="text-xs text-muted-foreground">Earlier {a.paceWindows.earlier?.rate.toFixed(1) || "—"}</div>
-                        {a.paceWindows.changePercent != null && <div className="text-xs">{Math.abs(a.paceWindows.changePercent).toFixed(0)}% {a.paceWindows.changePercent < 0 ? "lower" : "higher"}</div>}
-                        {(a.stale || a.detailStale) && <div className="text-xs text-muted-foreground">Stale sample</div>}
+                        <strong>{attributable ? a.paceWindows.recent?.rate.toFixed(1) || "—" : "—"}</strong>
+                        <div className="text-xs text-muted-foreground">Earlier {attributable ? a.paceWindows.earlier?.rate.toFixed(1) || "—" : "—"}</div>
+                        {attributable && a.paceWindows.changePercent != null && <div className="text-xs">{Math.abs(a.paceWindows.changePercent).toFixed(0)}% {a.paceWindows.changePercent < 0 ? "lower" : "higher"}</div>}
+                        {!attributable && <div className="text-xs text-muted-foreground">Driver attribution unavailable</div>}
+                        {a.paceWindows.overall && (a.stale || a.detailStale) && <div className="text-xs text-muted-foreground">Stale sample</div>}
+                        {!r.deliveryEvents && <div className="text-xs text-muted-foreground">Awaiting stop timestamps</div>}
                       </td>
                       <td className="p-3 whitespace-nowrap">
                         {clock(r.plannedDeparture)} / {clock(r.actualDeparture)}
@@ -406,7 +409,7 @@ export function CortexDashboard() {
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="grid sm:grid-cols-3 gap-4 mb-6">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <p>
                 Planned stops{" "}
                 <strong className="block text-xl">
@@ -425,11 +428,17 @@ export function CortexDashboard() {
                   {clock(selected.plannedReturn)}
                 </strong>
               </p>
+              <p>
+                {selected.actualReturn ? "Actual return" : "Projected return"}
+                <strong className="block text-xl">{clock(selected.actualReturn || assessRoute(selected, now).forecast)}</strong>
+                <span className="text-xs text-muted-foreground">{selected.actualReturn ? "Recorded timestamp" : assessRoute(selected, now).confidence}</span>
+              </p>
             </div>
             <div className="rounded-lg bg-muted/40 p-4 mb-6 text-sm space-y-2">
               <h3 className="font-semibold">Timing evidence & RTS confidence</h3>
               <p>{selected.actualReturn ? "Actual return recorded" : assessRoute(selected, now).confidence}</p>
               {!selected.actualReturn && <p>Missing inputs: {assessRoute(selected, now).missingForecastInputs.join(", ") || "None"}</p>}
+              {assessRoute(selected, now).planComparisonNote && <p>{assessRoute(selected, now).planComparisonNote}</p>}
               <p>First delivery: {clock(selected.firstDelivery)} · Last delivery: {clock(selected.lastDelivery)}</p>
               <p>Inbound: {selected.inboundMinutes == null ? "Unavailable" : `${Math.round(selected.inboundMinutes)} min`} · {selected.timingEvidence?.inboundSource === "planned_return_gap" ? "Planned last-stop-to-station allowance, including final-stop service; not live travel" : selected.timingEvidence?.inboundSource === "explicit_stem" ? "Explicit planned inbound stem" : "Source not verified; recollect detail"}</p>
               {selected.timingEvidence && <>

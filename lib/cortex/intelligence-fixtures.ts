@@ -24,3 +24,26 @@ export function intelligenceFixture(kind: "slowdown" | "gap" | "steady" | "plan_
   route.recordedSignals = codes;
   return route;
 }
+
+/** Complete a labeled synthetic day using its already-defined final pace. */
+export function completedHistoryFixture(route: Observation, days: number): Observation {
+  const offset = days * 86400000;
+  const events = route.deliveryEvents!.map(e => ({ completedAt: e.completedAt - offset,
+    plannedAt: e.plannedAt == null ? null : e.plannedAt - offset }));
+  const step = events.at(-1)!.completedAt - events.at(-2)!.completedAt;
+  const plannedStep = events.at(-1)!.plannedAt! - events.at(-2)!.plannedAt!;
+  while (events.length < route.totalStops!) {
+    const last = events.at(-1)!;
+    events.push({ completedAt: last.completedAt + step, plannedAt: last.plannedAt == null ? null : last.plannedAt + plannedStep });
+  }
+  const actualReturn = events.at(-1)!.completedAt + route.inboundMinutes! * 60000;
+  const date = new Date(`${route.date}T00:00:00Z`); date.setUTCDate(date.getUTCDate() - days);
+  return { ...route, date: date.toISOString().slice(0, 10), deliveryEvents: events,
+    completedStops: events.length, firstDelivery: events[0].completedAt, firstStopCompleted: events[0].completedAt,
+    lastDelivery: events.at(-1)!.completedAt, lastStopCompleted: events.at(-1)!.completedAt,
+    plannedDeparture: route.plannedDeparture! - offset, actualDeparture: route.actualDeparture! - offset,
+    plannedReturn: route.plannedReturn! - offset, actualReturn, observedAt: new Date(actualReturn + 60000).toISOString(),
+    timingEvidence: { ...route.timingEvidence!, timestampedStops: events.length, timestampedTasks: events.length, deliveredTasks: events.length },
+    signalSamples: undefined,
+  };
+}

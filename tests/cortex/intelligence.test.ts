@@ -76,6 +76,12 @@ describe("driver pace evidence", () => {
     expect(attentionQueue([row(), { ...row(), routeCode: "CX102" }], now)).toHaveLength(1);
     expect(attentionQueue([row(), { ...row(), station: "DXC8" }], now)[0].routes).toEqual(["CX101"]);
   });
+  it("prioritizes repeated signals and the larger developing delay", () => {
+    const a = row();
+    const b = { ...row(), routeCode: "CX999", driverId: "second-driver", plannedReturn: now + 60000 };
+    expect(attentionQueue([a, b], now)[0].route.routeCode).toBe("CX999");
+    expect(attentionQueue([a, { ...b, signalSamples: [] }], now)[0].route.routeCode).toBe("CX101");
+  });
   it("detects reassignment and never inherits an older driver's event series", () => {
     const r = row(); const next = { ...r, driverId: "rescue-driver", observedAt: new Date(now + 60000).toISOString() };
     const merged = latestRoutes([r, next])[0];
@@ -97,6 +103,19 @@ describe("RTS and history", () => {
     expect(assessRoute({ ...row(), inboundMinutes: null }, now).forecast).toBeNull();
     expect(assessRoute({ ...row(), detailObservedAt: new Date(now - 21 * 60000).toISOString() }, now).forecast).toBeNull();
     expect(assessRoute({ ...row(), completedStops: 60 }, now).forecast).toBeNull();
+  });
+  it("can estimate RTS while withholding a stale or unverified planned comparison", () => {
+    const r = row();
+    for (const invalid of [
+      { ...r, fieldObservedAt: { plannedReturn: new Date(now - 21 * 60000).toISOString() } },
+      { ...r, timingEvidence: { ...r.timingEvidence!, plannedRtsPresent: false } },
+    ]) {
+      const a = assessRoute(invalid, now);
+      expect(a.forecast).not.toBeNull();
+      expect(a.forecastDeltaMinutes).toBeNull();
+      expect(a.delayMinutes).toBeNull();
+      expect(analyzeDriver(invalid, now).candidates.map(s => s.code)).not.toContain("rts_delay");
+    }
   });
   it("deduplicates workdays and separates captured experience from tenure", () => {
     const r = row();

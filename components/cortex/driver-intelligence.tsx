@@ -34,6 +34,7 @@ export function DriverEvidence({ route, history, now }: { route: Observation; hi
   const h = driverHistory(route, history);
   return <section aria-label="Driver intelligence details" className="space-y-4 mb-6">
     <h3 className="font-semibold">Driver pace & early warning</h3>
+    {(route.assignmentChanged || route.identityUncertain || !route.driverId) && <p className="text-sm">Route-level intervals only; driver attribution is withheld.</p>}
     <div className="grid grid-cols-3 gap-3 rounded-lg border p-3">
       {[["Recent", a.paceWindows.recent], ["Earlier", a.paceWindows.earlier], ["Route overall", a.paceWindows.overall]].map(([label, value]) => {
         const w = typeof value === "object" ? value : null;

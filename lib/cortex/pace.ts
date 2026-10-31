@@ -18,10 +18,10 @@ function windowPace(events: DeliveryEvent[]): PaceWindow | null {
   const hours = (events.at(-1)!.completedAt - events[0].completedAt) / 3600000;
   if (hours < 0.5 || hours > 18) return null;
   const planned = events.map(e => e.plannedAt);
-  const plannedHours = planned.every((v, i) => v != null && (!i || v > planned[i - 1]!))
+  const plannedHours = planned.every((v, i) => v != null && Math.abs(v - events[i].completedAt) <= 36 * 3600000 && (!i || v > planned[i - 1]!))
     ? (planned.at(-1)! - planned[0]!) / 3600000 : 0;
   return { stops: events.length - 1, hours, rate: (events.length - 1) / hours,
-    plannedRate: plannedHours >= 0.25 ? (events.length - 1) / plannedHours : null };
+    plannedRate: plannedHours >= 0.25 && plannedHours <= 18 ? (events.length - 1) / plannedHours : null };
 }
 function anchor(events: DeliveryEvent[], cutoff: number) {
   const i = events.findIndex(e => e.completedAt > cutoff);

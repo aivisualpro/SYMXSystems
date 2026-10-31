@@ -51,6 +51,7 @@ export function analyzeDriver(route: Observation, now = Date.now()) {
         ["Are the remaining stops and return travel inputs still accurate?", "Are there remaining breaks, access issues, rescues, or route changes that affect the return plan?"]);
     }
   }
+  candidates.sort((a, b) => Number(b.confirmed) - Number(a.confirmed));
   const confirmed = candidates.some(s => s.confirmed);
   const priority = !candidates.length ? problems.length ? "data" : "clear"
     : confirmed ? "check-in" : "watch";
@@ -58,6 +59,9 @@ export function analyzeDriver(route: Observation, now = Date.now()) {
     candidates, priority, problems, limitations, planAligned,
     observationNote: planAligned ? "Recent planned stop spacing is also slower; the pace change alone does not trigger an alert." : null };
 }
+
+const attentionScore = (a: ReturnType<typeof analyzeDriver>) =>
+  (a.priority === "check-in" ? 1000 : 0) + a.candidates.length * 100 + Math.min(99, Math.max(a.delayMinutes || 0, a.gapMinutes || 0) / 10);
 
 /** One card per identified driver, even when the driver has multiple routes. */
 export function attentionQueue(rows: Observation[], now = Date.now()) {
@@ -67,16 +71,14 @@ export function attentionQueue(rows: Observation[], now = Date.now()) {
     if (!analysis.candidates.length || !route.driverId) continue;
     const key = `${route.station}|${route.date}|${route.driverId}`;
     const current = drivers.get(key);
-    const score = (a: typeof analysis) => (a.priority === "check-in" ? 1000 : 0) + a.candidates.length * 100 + Math.min(99, a.delayMinutes || a.gapMinutes || 0);
     if (!current) drivers.set(key, { route, analysis, routes: [route.routeCode] });
     else {
       current.routes.push(route.routeCode);
-      if (score(analysis) > score(current.analysis)) { current.route = route; current.analysis = analysis; }
+      if (attentionScore(analysis) > attentionScore(current.analysis)) { current.route = route; current.analysis = analysis; }
     }
   }
   return [...drivers.values()].sort((a, b) =>
-    Number(b.analysis.priority === "check-in") - Number(a.analysis.priority === "check-in") ||
-    b.analysis.candidates.length - a.analysis.candidates.length || a.route.routeCode.localeCompare(b.route.routeCode));
+    attentionScore(b.analysis) - attentionScore(a.analysis) || a.route.routeCode.localeCompare(b.route.routeCode));
 }
 
 export function driverHistory(route: Observation, history: Observation[]) {
