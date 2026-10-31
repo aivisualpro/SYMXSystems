@@ -297,12 +297,14 @@ export function CortexDashboard() {
                       </td>
                       <td className="p-3 whitespace-nowrap">
                         {clock(r.actualReturn || a.forecast)}
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground max-w-72 whitespace-normal">
                           {r.actualReturn
                             ? "Actual return"
                             : a.forecast
                               ? "Low confidence"
-                              : a.confidence}
+                              : a.missingForecastInputs.length
+                                ? `Missing: ${a.missingForecastInputs.join(", ")}`
+                                : a.confidence}
                         </div>
                       </td>
                       <td className="p-3">
