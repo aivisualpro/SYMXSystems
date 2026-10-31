@@ -4,7 +4,7 @@
     if (v == null || v === "") return null;
     // Cortex timestamps can be epoch seconds, milliseconds, microseconds,
     // or ISO-8601 strings. Do not treat a date-only string as a timestamp.
-    if (typeof v === "string" && /[Tt]/.test(v) && /(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(v)) {
+    if (typeof v === "string" && /[Tt]/.test(v) && /(?:Z|[+-]\d{2}:?\d{2})$/i.test(v)) {
       const parsed = Date.parse(v);
       return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     }
