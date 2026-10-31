@@ -182,6 +182,10 @@ let context;
     throw Error("Stored route detail did not reconcile");
   const page = await context.newPage();
   await page.goto("http://127.0.0.1:3000/cortex");
+  // The existing PWA claims a new browser profile and reloads it once.
+  // Finish that real lifecycle before interacting with a route dialog.
+  await page.waitForFunction(() => !!navigator.serviceWorker.controller, undefined, { timeout: 30000 });
+  await page.waitForLoadState("networkidle", { timeout: 30000 });
   await page.getByRole("button", { name: /^Open details for CX800,/ }).click();
   await page.getByText("Timing evidence & RTS confidence", { exact: true }).waitFor();
   await page.getByRole("dialog").getByText("Explicit planned inbound stem", { exact: false }).waitFor();

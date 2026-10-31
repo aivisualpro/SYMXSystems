@@ -64,6 +64,10 @@ let browser;
   const errors = [];
   page.on("pageerror", (err) => errors.push(err.message));
   await page.goto("http://127.0.0.1:3000/cortex?demo=1");
+  // The existing PWA claims a new browser profile and reloads it once.
+  // Finish that real lifecycle before interacting with a route dialog.
+  await page.waitForFunction(() => !!navigator.serviceWorker.controller, undefined, { timeout: 30000 });
+  await page.waitForLoadState("networkidle", { timeout: 30000 });
   await page
     .getByRole("heading", { name: "SYMX Cortex", exact: true })
     .waitFor();
