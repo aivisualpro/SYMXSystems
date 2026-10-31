@@ -109,7 +109,8 @@ describe("evidence-backed forecasts", () => {
     expect(latestRoutes([old, fresh])[0].inboundMinutes).toBeNull();
   });
   it("does not continually move the return forecast forward after deliveries finish", () => {
-    const route = { ...observation(), completedStops: 6, inboundMinutes: 20 };
+    const route = { ...observation(), totalStops: 5, completedStops: 5, inboundMinutes: 20 };
+    route.timingEvidence!.deliveryStops = 5;
     const estimate = assessRoute(route, now).forecast;
     expect(estimate).toBe(route.lastStopCompleted! + 20 * 60000);
     expect(assessRoute({ ...route, observedAt: new Date(now + 60000).toISOString() }, now + 60000).forecast).toBe(estimate);

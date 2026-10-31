@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hasCompleteTimeline, measurePace } from "./pace";
 
 export const STATIONS = ["DFO2", "DXC8", "DFO3"] as const;
 export const dateSchema = z
@@ -41,6 +42,10 @@ export const routeSchema = z.object({
     timestampedStops: count,
     rejectedTimestamps: count,
   }).optional(),
+  deliveryEvents: z.array(z.object({
+    completedAt: z.number().int().min(946684800000).max(4102444800000),
+    plannedAt: time,
+  })).max(1000).optional(),
   detail: z.boolean().default(false),
 });
 export type CortexRoute = z.infer<typeof routeSchema>;
@@ -54,6 +59,15 @@ export const captureSchema = z
     routes: z.array(routeSchema).min(1).max(500),
   })
   .superRefine((v, ctx) => {
+    const observed = Date.parse(v.observedAt);
+    for (const [i, r] of v.routes.entries()) {
+      if (r.deliveryEvents && (r.deliveryEvents.some((e, n) =>
+        e.completedAt > observed + 120000 || e.completedAt < observed - 36 * 3600000 ||
+        (n > 0 && e.completedAt < r.deliveryEvents![n - 1].completedAt)) ||
+        (r.timingEvidence && r.deliveryEvents.length !== r.timingEvidence.timestampedStops)))
+        ctx.addIssue({ code: "custom", message: "Invalid completion timeline", path: ["routes", i, "deliveryEvents"] });
+    }
+
     if (
       new Set(v.routes.map((r) => `${r.routeCode}|${r.driverId}`)).size !==
       v.routes.length
@@ -83,6 +97,11 @@ export type Observation = CortexRoute & {
   date: string;
   observedAt: string;
   receivedAt?: string;
+  recordedSignals?: string[];
+  assignmentChanged?: boolean;
+  identityUncertain?: boolean;
+  historicalPace?: { stops: number; hours: number; rate: number };
+  signalSamples?: { observedAt: string; codes: string[]; routeId?: string }[];
   detailObservedAt?: string;
   fieldObservedAt?: Partial<Record<keyof CortexRoute, string>>;
 };
@@ -106,7 +125,8 @@ export function assessRoute(route: Observation, now = Date.now()) {
   const elapsedHours = route.firstDelivery ? (observed - route.firstDelivery) / 3600000 : 0;
   const stopHours = route.firstStopCompleted && route.lastStopCompleted
     ? (route.lastStopCompleted - route.firstStopCompleted) / 3600000 : 0;
-  const pace = evidence
+  const measured = measurePace(route.deliveryEvents);
+  const pace = route.deliveryEvents ? measured.recent?.rate || measured.overall?.rate || null : evidence
     ? evidence.timestampedStops >= 5 && stopHours >= 0.5
       ? (evidence.timestampedStops - 1) / stopHours : null
     : route.completedStops != null && route.completedStops >= 5 && elapsedHours >= 0.5
@@ -119,6 +139,15 @@ export function assessRoute(route: Observation, now = Date.now()) {
   if (eventAgeMinutes == null) missingForecastInputs.push("last delivery timestamp");
   else if (eventAgeMinutes < -2) missingForecastInputs.push("valid delivery timestamps");
   else if (eventAgeMinutes > 20 && remaining !== 0) missingForecastInputs.push("recent delivery event");
+  if (route.deliveryEvents?.length && (route.firstDelivery == null || route.firstDelivery > route.deliveryEvents[0].completedAt ||
+    route.lastDelivery == null || route.lastDelivery < route.deliveryEvents.at(-1)!.completedAt))
+    missingForecastInputs.push("consistent delivery and stop timestamps");
+  if (route.deliveryEvents && !hasCompleteTimeline(route))
+    missingForecastInputs.push("complete and consistent stop timeline");
+  if (route.deliveryEvents && route.deliveryEvents.length !== route.completedStops)
+    missingForecastInputs.push("matching completed-stop count and timestamps");
+  if (route.deliveryEvents && !measured.overall)
+    missingForecastInputs.push("distinct stop timestamps spanning 30 minutes");
   if (evidence) {
     if (evidence.timestampedTasks < evidence.deliveredTasks || evidence.rejectedTimestamps > 0)
       missingForecastInputs.push("complete delivered-task timestamps");
@@ -176,6 +205,12 @@ export function assessRoute(route: Observation, now = Date.now()) {
     missingForecastInputs,
     delayMinutes,
     risk,
+    paceWindows: measured,
+    forecastDeltaMinutes: forecast && route.plannedReturn ? (forecast - route.plannedReturn) / 60000 : null,
+    forecastRange: forecast && remaining != null && remaining > 0 && measured.recent && measured.earlier
+      ? [Math.min(measured.recent.rate, measured.earlier.rate), Math.max(measured.recent.rate, measured.earlier.rate)]
+        .reverse().map(rate => forecastBase + remaining / rate * 3600000 + route.inboundMinutes! * 60000)
+      : null,
     confidence: forecast
       ? evidence?.inboundSource === "planned_return_gap"
         ? "low · pace + planned return allowance"
@@ -195,6 +230,8 @@ export function latestRoutes(rows: Observation[]) {
     .map((group) => {
       group.sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt));
       const latest = { ...group[0] };
+      latest.assignmentChanged = group.some(r => r.assignmentChanged) || new Set(group.map(r => r.driverId).filter(Boolean)).size > 1;
+      latest.identityUncertain = !group[0].driverId;
       const identity = group.find((r) => r.driverId);
       if (!latest.driverId && latest.detail && identity) {
         latest.driverId = identity.driverId;
@@ -212,6 +249,10 @@ export function latestRoutes(rows: Observation[]) {
         if (detail) latest.fieldObservedAt[field] = detail.observedAt;
       }
       latest.timingEvidence = detail?.timingEvidence;
+      latest.deliveryEvents = detail?.deliveryEvents;
+      latest.signalSamples = detail?.signalSamples;
+      latest.recordedSignals = [...new Set(compatible.filter(r => r.driverId === latest.driverId)
+        .flatMap(r => r.recordedSignals || []))];
       for (const field of [
         "plannedDeparture",
         "actualDeparture",

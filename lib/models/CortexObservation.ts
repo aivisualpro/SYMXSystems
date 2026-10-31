@@ -31,6 +31,9 @@ const schema = new Schema(
       }, { _id: false }),
       default: undefined,
     },
+    deliveryEvents: { type: [new Schema({ completedAt: Number, plannedAt: Number }, { _id: false })], default: undefined },
+    // Derived on the server, never trusted from an extension payload.
+    driverSignals: { type: [String], default: [] },
     detail: Boolean,
     observedAt: { type: Date, required: true },
     receivedAt: { type: Date, default: Date.now },

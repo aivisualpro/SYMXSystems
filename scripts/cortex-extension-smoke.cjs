@@ -177,7 +177,7 @@ let context;
   if (
     !captured?.detail ||
     captured.completedStops !== 25 ||
-    !captured.firstDelivery || captured.timingEvidence?.timestampedStops !== 25
+    !captured.firstDelivery || captured.timingEvidence?.timestampedStops !== 25 || captured.deliveryEvents?.length !== 25
   )
     throw Error("Stored route detail did not reconcile");
   const page = await context.newPage();

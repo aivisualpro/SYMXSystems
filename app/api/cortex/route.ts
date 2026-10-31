@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { getRequestScope, siteFilter } from "@/lib/scoped-query";
 import connectToDatabase from "@/lib/db";
 import CortexObservation from "@/lib/models/CortexObservation";
+import { hasCompleteTimeline, measurePace } from "@/lib/cortex/pace";
 import { demoData } from "@/lib/cortex/fixtures";
 import {
   dateSchema,
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
       process.env.SYMX_CORTEX_DEMO !== "true"
     )
       return NextResponse.json({ error: "Demo disabled" }, { status: 404 });
-    return NextResponse.json(demoData(), {
+    return NextResponse.json(demoData(Date.now(), true), {
       headers: { "Cache-Control": "private, no-store" },
     });
   }
@@ -57,8 +58,14 @@ export async function GET(req: NextRequest) {
             detail: "$detail",
           },
           row: { $first: "$$ROOT" },
+          recordedSignals: { $addToSet: { $ifNull: ["$driverSignals", []] } },
+          signalSamples: { $push: { observedAt: "$observedAt", routeId: "$routeId", codes: { $ifNull: ["$driverSignals", []] } } },
         },
       },
+      { $set: {
+        "row.recordedSignals": { $reduce: { input: "$recordedSignals", initialValue: [], in: { $setUnion: ["$$value", "$$this"] } } },
+        "row.signalSamples": { $slice: ["$signalSamples", 12] },
+      } },
       { $replaceRoot: { newRoot: "$row" } },
       { $project: { _id: 0, siteId: 0, captureId: 0, __v: 0 } },
     ]);
@@ -66,13 +73,26 @@ export async function GET(req: NextRequest) {
       ...r,
       observedAt: new Date(r.observedAt).toISOString(),
       receivedAt: new Date(r.receivedAt).toISOString(),
+      signalSamples: (r.signalSamples || []).map((s: any) => ({ ...s, observedAt: new Date(s.observedAt).toISOString() })),
     }));
+    const identities = new Map<string, Set<string>>();
+    for (const row of observations) {
+      const key = `${row.station}|${row.date}|${row.routeCode}`;
+      const drivers = identities.get(key) || new Set<string>();
+      if (row.driverId) drivers.add(row.driverId);
+      identities.set(key, drivers);
+    }
+    for (const row of observations) row.assignmentChanged = identities.get(`${row.station}|${row.date}|${row.routeCode}`)!.size > 1;
     const historyGroups = new Map<string, Observation[]>();
     for (const row of observations.filter((r) => r.date < date)) {
       const key = `${row.station}|${row.date}|${row.driverId}`;
       historyGroups.set(key, [...(historyGroups.get(key) || []), row]);
     }
-    const history = [...historyGroups.values()].flatMap(latestRoutes);
+    const history = [...historyGroups.values()].flatMap(latestRoutes).map(row => {
+      const pace = !row.assignmentChanged && hasCompleteTimeline(row) ? measurePace(row.deliveryEvents).overall : null;
+      return { ...row, historicalPace: pace ? { stops: pace.stops, hours: pace.hours, rate: pace.rate } : undefined,
+        deliveryEvents: undefined, signalSamples: undefined };
+    });
     return NextResponse.json(
       {
         date,
