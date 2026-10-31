@@ -189,7 +189,7 @@ let context;
   await page.getByRole("button", { name: /^Open details for CX800,/ }).click();
   await page.getByText("Timing evidence & RTS confidence", { exact: true }).waitFor();
   await page.getByRole("dialog").getByText("Explicit planned inbound stem", { exact: false }).waitFor();
-  await page.screenshot({ path: "artifacts/cortex-timing-evidence.png", fullPage: true });
+  await page.screenshot({ path: "artifacts/cortex-timing-evidence.png", fullPage: true, animations: "disabled" });
   await context.close();
   console.log(
     `PASS: unpacked MV3 extension, settings-tab Collect DFO2 now → worker, 40 synthetic DFO2 routes + paced navigation + structured coverage + timing evidence, server acknowledgement, detail reconciliation; ${requests} synthetic GETs and zero live Amazon requests.`,
@@ -199,4 +199,3 @@ let context;
   if (context) await context.close();
   process.exitCode = 1;
 });
-
