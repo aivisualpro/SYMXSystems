@@ -105,7 +105,7 @@ export function CortexDashboard() {
             SYMX Cortex
           </h1>
           <p className="text-muted-foreground mt-1">
-            Driver pace, return forecasts, and evidence for earlier support.
+            Routes, pace and driver alerts.
           </p>
         </div>
         <Button
@@ -177,29 +177,29 @@ export function CortexDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           {
-            title: "Routes captured",
+            title: "Routes",
             value: rows.length,
-            text: `${rows.filter((r) => !r.actualDeparture).length} awaiting departure`,
+            text: `${rows.filter((r) => !r.actualDeparture).length} not departed`,
             icon: Route,
           },
           {
-            title: "Stops completed",
+            title: "Stops",
             value: `${completed} / ${stops}`,
             text: stops
-              ? `${Math.round((completed / stops) * 100)}% of captured workload`
+              ? `${Math.round((completed / stops) * 100)}% delivered`
               : "Waiting for overview",
             icon: Radio,
           },
           {
-            title: "Early attention",
+            title: "Needs review",
             value: risks,
-            text: "DFO2 drivers with a developing signal",
+            text: "Drivers to check",
             icon: AlertTriangle,
           },
           {
-            title: "Stale routes",
+            title: "Stale",
             value: stale,
-            text: "Forecasts suppressed until refreshed",
+            text: "Outdated data",
             icon: Clock3,
           },
         ].map((c) => (
@@ -220,24 +220,19 @@ export function CortexDashboard() {
         ))}
       </div>
       <div className="rounded-lg border p-4 text-sm space-y-2" aria-label="Collection completeness">
-        <div className="font-medium">Collection completeness · {coverage.routes} observed routes</div>
+        <div className="font-medium">Data coverage · {coverage.routes} routes</div>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
-          <span>Fresh itinerary detail: {coverage.freshDetails} / {coverage.routes}</span>
-          <span>Delivery timestamps: {coverage.withDeliveryEvents} / {coverage.routes}</span>
-          <span>Explicit inbound travel: {coverage.explicitInbound} / {coverage.routes}</span>
-          <span>Planned return allowance: {coverage.plannedAllowance} / {coverage.routes}</span>
-          <span>RTS available: {coverage.forecasts} / {coverage.routes}</span>
+          <span>Route details: {coverage.freshDetails} / {coverage.routes}</span>
+          <span>Timestamps: {coverage.withDeliveryEvents} / {coverage.routes}</span>
+          <span>Return travel: {coverage.explicitInbound} / {coverage.routes}</span>
+          <span>Return allowance: {coverage.plannedAllowance} / {coverage.routes}</span>
+          <span>RTS forecasts: {coverage.forecasts} / {coverage.routes}</span>
         </div>
-        <p className="text-xs text-muted-foreground">Coverage is against observed routes, not the station roster. Check extension status for discovered itinerary targets and acknowledgements. Event age is time since the last recorded delivery, not Amazon publishing latency.</p>
       </div>
       <AttentionPanel queue={queue} onOpen={setSelected} />
       <Card>
         <CardHeader>
-          <CardTitle>Delivery operations overview</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Select a route for its morning plan and driver history. Estimates
-            support dispatcher review.
-          </p>
+          <CardTitle>Routes overview</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-auto">
@@ -245,14 +240,14 @@ export function CortexDashboard() {
               <thead className="border-b text-muted-foreground">
                 <tr>
                   {[
-                    "Route / driver",
+                    "Driver / route",
                     "Station",
                     "Progress",
-                    "Pace · stops/h",
-                    "Departure · plan / actual",
-                    "Approx. RTS",
+                    "Pace / hr",
+                    "Departure",
+                    "Est. RTS",
                     "Attention",
-                    "Data age",
+                    "Updated",
                   ].map((h) => (
                     <th key={h} className="p-3 font-medium whitespace-nowrap">
                       {h}
