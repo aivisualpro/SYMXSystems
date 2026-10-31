@@ -4,7 +4,7 @@ This is an isolated follow-up to PR #13 on `codex/cortex-evidence-quality`, targ
 
 ## What the source review established
 
-The previous adapter only read `transporterTimeAttributes.plannedInboundStemTime`, dividing it by 60,000. The existing `app/api/public/cortex-sync/route.ts` instead derives a planned inbound allowance from `plannedRtsTime - lastStop.expectedStartTime`. `lib/cortex-time.ts` documents mixed epoch units and numeric millisecond durations. The new adapter also previously omitted `plannedRtsTime` and used the work-block end (`scheduleEndTime`) as a planned station return.
+The previous adapter only read `transporterTimeAttributes.plannedInboundStemTime`, dividing it by 60,000. The existing `app/api/public/cortex-sync/route.ts` instead derives a planned inbound allowance from `plannedRtsTime - lastStop.expectedStartTime`. `lib/cortex-time.ts` documents mixed epoch units and numeric millisecond durations. The collector also previously omitted `plannedRtsTime` and used the work-block end (`scheduleEndTime`) as a planned station return.
 
 These are verified code findings, not a fresh inspection of a signed-in Amazon response. No authenticated Amazon session or raw live customer payload was available for this assignment. They explain a likely compatibility gap; they do not prove every live DFO2 route has the required inputs.
 
@@ -48,15 +48,31 @@ Run the production build before starting the dev server if both share the same `
 
 The dashboard smoke verifies authentication, station/search filtering, history, ingestion, retry deduplication, and desktop/mobile UI. The extension smoke uses the actual unpacked MV3 extension against **40 synthetic DFO2 routes**, checks 40/40 detail acknowledgements and navigation pacing, verifies persisted timing evidence and its route dialog, and writes screenshots. Every Amazon request is intercepted with synthetic data. These scripts do not validate real Amazon compatibility.
 
+After the smoke scripts finish, keep the preview runner open. Visit `http://127.0.0.1:3000/login` and sign in with the generated credentials read privately from the state file. Open `/cortex?demo=1` for the labeled 15-route sample, or `/cortex` for the ingested synthetic observations. The smoke scripts seed synthetic station mappings; do not use `demo-DFO2` as a live mapping.
+
 For manual live development collection, load `symx-cortex-extension/` or unpack `artifacts/symx-cortex-extension-0.1.3.zip`, reload only the development extension, confirm version 0.1.3, enter the local test key and verified DFO2 service-area mapping, enable collection, sign in normally, and choose **Collect DFO2 now**. The partner extension remains untouched.
 
-## Checks in this assignment
+## Verified results and preview
 
-- Focused normalizer, forecast, worker, and collector tests: **74 passed**, including a fake-clock 40-target collector run. This is not a browser result.
-- TypeScript and optimized production build passed locally and in the isolated GitHub runner. The runner also passed the full MongoDB-backed suite; see PR #14 for the final browser result.
-- Full suite attempted: local MongoDB exits during startup with `open: Operation not permitted`; database suites cannot execute in this environment. No database test failure is represented as a pass.
-- Browser installation attempted: the official Chromium archive URL returned a 195-byte “Site Unavailable” HTML page. The real browser smoke and fresh screenshots could not run locally. Existing `artifacts/cortex-*.png` screenshots predate this change.
-- `.github/workflows/cortex-development.yml` reproduces full tests, typecheck, production build, disposable preview, and both synthetic browser smoke scripts in an isolated GitHub runner. It references no production secrets and cannot deploy. CI status must be checked on the follow-up PR; workflow presence alone is not a passing result.
+[GitHub Actions validation](https://github.com/aivisualpro/SYMXSystems/actions/runs/41155747790) passed on commit `2b84b9d0689f25df62e558b7f756c37f5cb663de`:
+
+- **347 tests passed across 25 files**, including MongoDB-backed integration tests and the fake-clock collector cases.
+- TypeScript checks and the optimized production build passed.
+- The dashboard browser smoke passed authentication, filtering, driver history, normalization → ingestion → storage → display, retry deduplication, and unauthenticated-access denial, with no browser errors.
+- The actual unpacked MV3 extension acknowledged **40/40 synthetic DFO2 itinerary details**, verified paced navigation and timing evidence through database readback and the route dialog, and made **43 intercepted GET requests with zero live Amazon requests**.
+- The screenshots below come from the isolated disposable preview. The 15-route sample dashboard and 40-route extension fixture are different scenarios. Running both scripts leaves 41 ingested routes: one ingestion case plus the 40-route extension fixture. The extension screenshot's run duration is a synthetic test measurement, not a live Amazon performance benchmark.
+
+| Preview | Screenshot |
+| --- | --- |
+| Desktop sample dashboard | [Desktop](../artifacts/cortex-desktop.png) |
+| Mobile sample dashboard | [Mobile](../artifacts/cortex-mobile.png) |
+| Captured observation in the dashboard | [Ingested route](../artifacts/cortex-ingested-route.png) |
+| Completed extension collection | [Extension status](../artifacts/cortex-extension-status.png) |
+| Route timestamp evidence and confidence | [Timing details](../artifacts/cortex-timing-evidence.png) |
+
+The local workspace passed focused tests, typecheck, and production build, but could not start MongoDB (`open: Operation not permitted`) or download Chromium (the archive endpoint returned an HTML block page). The full database and browser results above were obtained in the GitHub runner. A persistent interactive preview is not hosted by this workflow; use the local reproduction commands above.
+
+`.github/workflows/cortex-development.yml` reproduces the full suite, typecheck, production build, disposable preview, and both synthetic browser smoke scripts. It uses no production secrets and contains no deployment step. The development extension archive is [symx-cortex-extension-0.1.3.zip](../artifacts/symx-cortex-extension-0.1.3.zip).
 
 ## Remaining authorized DFO2 validation
 
