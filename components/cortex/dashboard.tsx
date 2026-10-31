@@ -330,6 +330,11 @@ export function CortexDashboard() {
                             ? `Detail${r.detailObservedAt ? ` · ${Math.floor(Math.max(0, now - Date.parse(r.detailObservedAt)) / 60000)} min` : ""}`
                             : "Overview only"}
                         </div>
+                        {!demo && r.receivedAt && Number.isFinite(Date.parse(r.receivedAt)) && Number.isFinite(Date.parse(r.observedAt)) && (
+                          <div className="text-xs text-muted-foreground mt-1" title="Time from extension observation to SYMX database receipt; does not measure when Amazon first learned of the delivery">
+                            SYMX transfer: {Math.max(0, Math.round((Date.parse(r.receivedAt) - Date.parse(r.observedAt)) / 1000))}s
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
