@@ -298,7 +298,7 @@ export function CortexDashboard() {
                         </div>
                         <div className="h-1.5 bg-muted rounded mt-2 overflow-hidden">
                           <div
-                            className={`h-full ${r.totalStops && (r.completedStops || 0) >= r.totalStops ? "bg-emerald-600" : "bg-primary"} transition-[width]`
+                            className={`h-full ${r.totalStops && (r.completedStops || 0) >= r.totalStops ? "bg-emerald-600" : "bg-primary"} transition-[width]`}
                             style={{
                               width: `${r.totalStops ? Math.min(100, ((r.completedStops || 0) / r.totalStops) * 100) : 0}%`,
                             }}
