@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
-import { RefreshCw, Radio, Route, Clock3, AlertTriangle } from "lucide-react";
+import { RefreshCw, Route, Clock3, AlertTriangle, PackageCheck, Info } from "lucide-react";
 
 type Data = {
   routes: Observation[];
@@ -95,18 +95,16 @@ export function CortexDashboard() {
   const stale = rows.filter((r) => assessRoute(r, now).stale).length;
   const coverage = summarizeCoverage(rows, now);
   return (
-    <main className="space-y-6 max-w-[1600px] mx-auto">
+    <main className="space-y-4 max-w-[1600px] mx-auto">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Radio className="h-4 w-4" /> DELIVERY OPERATIONS · PACIFIC TIME
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight mt-2">
+          <h1 className="text-2xl font-semibold tracking-tight mt-1">
             SYMX Cortex
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Routes, pace and driver alerts.
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">Live route visibility and dispatcher priorities</p>
         </div>
         <Button
           variant="outline"
@@ -174,7 +172,7 @@ export function CortexDashboard() {
           </Button>
         </div>
       )}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
         {[
           {
             title: "Routes",
@@ -188,68 +186,73 @@ export function CortexDashboard() {
             text: stops
               ? `${Math.round((completed / stops) * 100)}% delivered`
               : "Waiting for overview",
-            icon: Radio,
+            icon: PackageCheck,
           },
           {
-            title: "Needs review",
+            title: "Needs Review",
             value: risks,
             text: "Drivers to check",
             icon: AlertTriangle,
           },
           {
-            title: "Stale",
+            title: "Stale Data",
             value: stale,
             text: "Outdated data",
             icon: Clock3,
           },
         ].map((c) => (
           <Card key={c.title}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-1">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 {c.title}
               </CardTitle>
               <c.icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold tabular-nums">
+              <div className="text-2xl font-semibold tabular-nums tracking-tight">
                 {loading ? "…" : c.value}
               </div>
-              <p className="text-xs text-muted-foreground mt-2">{c.text}</p>
+              <p className="text-xs text-muted-foreground mt-1">{c.text}</p>
             </CardContent>
           </Card>
         ))}
       </div>
-      <div className="rounded-lg border p-4 text-sm space-y-2" aria-label="Collection completeness">
-        <div className="font-medium">Data coverage · {coverage.routes} routes</div>
-        <div className="flex flex-wrap gap-x-6 gap-y-2">
-          <span>Route details: {coverage.freshDetails} / {coverage.routes}</span>
-          <span>Timestamps: {coverage.withDeliveryEvents} / {coverage.routes}</span>
-          <span>Return travel: {coverage.explicitInbound} / {coverage.routes}</span>
-          <span>Return allowance: {coverage.plannedAllowance} / {coverage.routes}</span>
-          <span>RTS forecasts: {coverage.forecasts} / {coverage.routes}</span>
+      <details className="rounded-lg border bg-card px-4 py-3 text-sm" aria-label="Collection completeness">
+        <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 font-medium focus-visible:outline-2 focus-visible:outline-primary">
+          <span className="flex items-center gap-2"><Info className="h-4 w-4 text-primary" /> Data health <span className="text-xs font-normal text-muted-foreground">· {coverage.routes} routes</span></span>
+          <span className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-normal text-muted-foreground">
+            <span>Details {coverage.freshDetails}/{coverage.routes}</span>
+            <span>Events {coverage.withDeliveryEvents}/{coverage.routes}</span>
+            <span>RTS {coverage.forecasts}/{coverage.routes}</span>
+          </span>
+        </summary>
+        <div className="mt-3 grid gap-3 border-t pt-3 sm:grid-cols-2 lg:grid-cols-4 text-xs text-muted-foreground">
+          <span>Route details <strong className="block text-sm text-foreground">{coverage.freshDetails} / {coverage.routes}</strong></span>
+          <span>Delivery timestamps <strong className="block text-sm text-foreground">{coverage.withDeliveryEvents} / {coverage.routes}</strong></span>
+          <span>Return travel <strong className="block text-sm text-foreground">{coverage.explicitInbound} / {coverage.routes}</strong></span>
+          <span>RTS availability <strong className="block text-sm text-foreground">{coverage.forecasts} / {coverage.routes}</strong></span>
+          <p className="sm:col-span-2 lg:col-span-4">Planned return allowances available: {coverage.plannedAllowance}. Missing or stale information can suppress forecasts; review route evidence before making decisions.</p>
         </div>
-      </div>
+      </details>
       <AttentionPanel queue={queue} onOpen={setSelected} />
       <Card>
         <CardHeader>
-          <CardTitle>Routes overview</CardTitle>
+          <CardTitle className="text-base">Routes overview <span className="ml-2 text-sm font-normal text-muted-foreground">({rows.length})</span></CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-auto">
-            <table className="w-full text-sm text-left">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left tabular-nums">
               <thead className="border-b text-muted-foreground">
                 <tr>
                   {[
                     "Driver / route",
-                    "Station",
                     "Progress",
                     "Pace / hr",
-                    "Departure",
                     "Est. RTS",
                     "Attention",
                     "Updated",
                   ].map((h) => (
-                    <th key={h} className="p-3 font-medium whitespace-nowrap">
+                    <th key={h} className="px-3 py-2.5 font-medium whitespace-nowrap bg-muted/30">
                       {h}
                     </th>
                   ))}
@@ -262,7 +265,7 @@ export function CortexDashboard() {
                   return (
                     <tr
                       key={`${r.station}:${r.routeCode}:${r.driverId}`}
-                      className="border-b last:border-0 hover:bg-muted/50"
+                      className="border-b last:border-0 hover:bg-primary/5 transition-colors"
                     >
                       <td className="p-3">
                         <div className="group relative inline-block">
@@ -285,11 +288,8 @@ export function CortexDashboard() {
                         <div className="text-xs text-muted-foreground mt-1">
                           {r.driverName === "Unassigned" && r.driverId
                             ? r.driverId
-                            : r.driverName}
+                            : r.driverName} · {r.station}
                         </div>
-                      </td>
-                      <td className="p-3">
-                        <Badge variant="outline">{r.station}</Badge>
                       </td>
                       <td className="p-3 min-w-36">
                         <div>
@@ -298,7 +298,7 @@ export function CortexDashboard() {
                         </div>
                         <div className="h-1.5 bg-muted rounded mt-2 overflow-hidden">
                           <div
-                            className="h-full bg-primary"
+                            className={`h-full ${r.totalStops && (r.completedStops || 0) >= r.totalStops ? "bg-emerald-600" : "bg-primary"} transition-[width]`
                             style={{
                               width: `${r.totalStops ? Math.min(100, ((r.completedStops || 0) / r.totalStops) * 100) : 0}%`,
                             }}
@@ -309,61 +309,48 @@ export function CortexDashboard() {
                           {r.totalPackages ?? "—"} packages
                         </div>
                       </td>
-                      <td className="p-3 min-w-28">
-                        <strong>{attributable ? a.paceWindows.recent?.rate.toFixed(1) || "—" : "—"}</strong>
-                        <div className="text-xs text-muted-foreground">Earlier {attributable ? a.paceWindows.earlier?.rate.toFixed(1) || "—" : "—"}</div>
-                        {attributable && a.paceWindows.changePercent != null && <div className="text-xs">{Math.abs(a.paceWindows.changePercent).toFixed(0)}% {a.paceWindows.changePercent < 0 ? "lower" : "higher"}</div>}
-                        {!attributable && <div className="text-xs text-muted-foreground">Driver attribution unavailable</div>}
-                        {a.paceWindows.overall && (a.stale || a.detailStale) && <div className="text-xs text-muted-foreground">Stale sample</div>}
-                        {!r.deliveryEvents && <div className="text-xs text-muted-foreground">Awaiting stop timestamps</div>}
+                      <td className="p-3 min-w-24">
+                        <span className="font-semibold">{attributable ? a.paceWindows.recent?.rate.toFixed(1) || "—" : "—"}</span>
+                        <span className="text-xs text-muted-foreground"> /hr</span>
+                        <span tabIndex={0} aria-label="Pace evidence" className="ml-2 relative group inline-flex cursor-help rounded focus-visible:outline-2 focus-visible:outline-primary">
+                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span role="tooltip" className="pointer-events-none absolute z-30 bottom-full left-0 mb-2 hidden w-64 rounded border bg-popover p-3 text-left text-xs font-normal text-popover-foreground shadow-lg group-hover:block group-focus-within:block">
+                            Recent: {attributable ? a.paceWindows.recent?.rate.toFixed(1) || "Unknown" : "Attribution unavailable"} stops/hr.
+                            Earlier: {attributable ? a.paceWindows.earlier?.rate.toFixed(1) || "Unknown" : "Attribution unavailable"} stops/hr.
+                            {a.paceWindows.changePercent != null && attributable ? ` Change: ${Math.abs(a.paceWindows.changePercent).toFixed(0)}% ${a.paceWindows.changePercent < 0 ? "lower" : "higher"}.` : ""}
+                            {a.stale || a.detailStale ? " Sample may be stale." : ""}
+                            {!r.deliveryEvents ? " Delivery timestamps unavailable." : ""}
+                            Actual stop-completion evidence only; breaks and traffic are not verified.
+                          </span>
+                        </span>
                       </td>
                       <td className="p-3 whitespace-nowrap">
-                        {clock(r.plannedDeparture)} / {clock(r.actualDeparture)}
-                      </td>
-                      <td className="p-3 whitespace-nowrap">
-                        {clock(r.actualReturn || a.forecast)}
-                        {a.forecastDeltaMinutes != null && <div className="text-xs">{Math.abs(Math.round(a.forecastDeltaMinutes))} min {a.forecastDeltaMinutes < 0 ? "before" : "past"} plan</div>}
-                        <div className="text-xs text-muted-foreground max-w-72 whitespace-normal">
-                          {r.actualReturn
-                            ? "Actual return"
-                            : a.forecast
-                              ? a.confidence
-                              : a.missingForecastInputs.length
-                                ? `Missing: ${a.missingForecastInputs.slice(0, 2).join(", ")}${a.missingForecastInputs.length > 2 ? " · see details" : ""}`
-                                : a.confidence}
-                        </div>
+                        <div className="font-medium">{r.actualReturn ? clock(r.actualReturn) : a.forecast ? clock(a.forecast) : "No Forecast"}</div>
+                        <span tabIndex={0} className="group relative inline-flex cursor-help text-xs text-muted-foreground focus-visible:outline-2 focus-visible:outline-primary">
+                          {r.actualReturn ? "Actual return" : a.forecast ? a.confidence : "Limited data"}
+                          <span role="tooltip" className="pointer-events-none absolute z-30 bottom-full left-0 mb-2 hidden w-72 whitespace-normal rounded border bg-popover p-3 text-xs text-popover-foreground shadow-lg group-hover:block group-focus-within:block">
+                            {a.missingForecastInputs.length ? `Missing inputs: ${a.missingForecastInputs.join(", ")}. ` : ""}
+                            {a.forecastDeltaMinutes != null ? `Projected difference from plan: ${Math.round(a.forecastDeltaMinutes)} minutes. ` : ""}
+                            RTS is an estimate based on available evidence, not a confirmed return time.
+                          </span>
+                        </span>
                       </td>
                       <td className="p-3">
-                        <Badge
-                          variant={
-                            ["delay", "late departure", "stale"].includes(
-                              a.risk,
-                            )
-                              ? "destructive"
-                              : "secondary"
-                          }
-                        >
-                          {a.candidates.length ? a.priority : a.risk}
+                        <Badge variant="outline" className={a.stale ? "border-slate-300 bg-slate-100 text-slate-700" : a.candidates.length && a.priority === "check-in" ? "border-amber-300 bg-amber-50 text-amber-800" : a.candidates.length ? "border-blue-200 bg-blue-50 text-blue-700" : r.totalStops && (r.completedStops || 0) >= r.totalStops ? "border-emerald-200 bg-emerald-50 text-emerald-700" : ""}>
+                          {a.stale ? "Stale" : a.candidates.length ? (a.priority === "check-in" ? "Check-in" : "Watch") : r.totalStops && (r.completedStops || 0) >= r.totalStops ? "Complete" : r.actualDeparture ? "On Road" : "Updating"}
                         </Badge>
-                        {a.delayMinutes != null && a.delayMinutes >= 30 && (
-                          <div className="text-xs mt-1">
-                            ~{Math.round(a.delayMinutes)} min past plan
-                          </div>
-                        )}
                       </td>
                       <td className="p-3 whitespace-nowrap">
-                        {Math.floor(a.ageMinutes)} min
-                        <div className="text-xs text-muted-foreground">
-                          {r.detail
-                            ? `Detail${r.detailObservedAt ? ` · ${Math.floor(Math.max(0, now - Date.parse(r.detailObservedAt)) / 60000)} min` : ""}`
-                            : "Overview only"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">Last delivery: {a.eventAgeMinutes == null ? "unknown" : `${Math.floor(Math.max(0, a.eventAgeMinutes))} min ago`}</div>
-                        {!demo && r.receivedAt && Number.isFinite(Date.parse(r.receivedAt)) && Number.isFinite(Date.parse(r.observedAt)) && (
-                          <div className="text-xs text-muted-foreground mt-1" title="Time from extension observation to SYMX database receipt; does not measure when Amazon first learned of the delivery">
-                            SYMX transfer: {Date.parse(r.receivedAt) < Date.parse(r.observedAt) ? "clock difference" : `${Math.round((Date.parse(r.receivedAt) - Date.parse(r.observedAt)) / 1000)}s`}
-                          </div>
-                        )}
+                        <span>{Math.floor(a.ageMinutes)} min ago</span>
+                        <span tabIndex={0} className="group relative ml-2 inline-flex cursor-help focus-visible:outline-2 focus-visible:outline-primary" aria-label="Update evidence">
+                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span role="tooltip" className="pointer-events-none absolute z-30 bottom-full right-0 mb-2 hidden w-72 whitespace-normal rounded border bg-popover p-3 text-xs text-popover-foreground shadow-lg group-hover:block group-focus-within:block">
+                            {r.detail ? "Detail captured. " : "Overview only. "}
+                            Last delivery: {a.eventAgeMinutes == null ? "unknown" : `${Math.floor(Math.max(0, a.eventAgeMinutes))} min ago`}.
+                            {r.detailObservedAt ? ` Detail updated ${Math.floor(Math.max(0, now - Date.parse(r.detailObservedAt)) / 60000)} minutes ago.` : ""}
+                            {!demo && r.receivedAt && Number.isFinite(Date.parse(r.receivedAt)) && Number.isFinite(Date.parse(r.observedAt)) ? ` SYMX transfer: ${Date.parse(r.receivedAt) < Date.parse(r.observedAt) ? "clock difference" : `${Math.round((Date.parse(r.receivedAt) - Date.parse(r.observedAt)) / 1000)} seconds`}.` : ""}
+                          </span>
+                        </span>
                       </td>
                     </tr>
                   );
@@ -386,7 +373,7 @@ export function CortexDashboard() {
       </Card>
       <Dialog open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}>
         {selected && (
-          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
             <DialogTitle className="sr-only">{selected.routeCode} route details</DialogTitle>
             <Card className="border-0 shadow-none">
           <CardHeader className="flex flex-row justify-between">
@@ -399,9 +386,7 @@ export function CortexDashboard() {
                 last 14 days
               </p>
             </div>
-            <Button variant="outline" onClick={() => setSelected(null)}>
-              Close
-            </Button>
+
           </CardHeader>
           <CardContent>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -482,12 +467,7 @@ export function CortexDashboard() {
           </DialogContent>
         )}
       </Dialog>
-      <p className="text-xs text-muted-foreground">
-        RTS uses observed delivery pace plus an explicit planned inbound stem or a labeled planned return allowance. It
-        excludes future breaks, traffic, rescues, and dispatch changes. Missing
-        or stale observations produce no forecast. This view never changes
-        Amazon assignments.
-      </p>
+
     </main>
   );
 }
