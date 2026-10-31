@@ -160,6 +160,28 @@ describe("dedicated extension normalizer and queue policy", () => {
     expect(context.CortexAdapter.epoch(1793394000)).toBe(1793394000000);
     expect(context.CortexAdapter.epoch(1793394000000000)).toBe(1793394000000);
   });
+  it("normalizes timezone-qualified ISO delivery timestamps without leaking stop details", () => {
+    const iso = "2026-10-30T12:30:20-07:00";
+    expect(context.CortexAdapter.epoch(iso)).toBe(Date.parse(iso));
+    expect(context.CortexAdapter.epoch("not-a-timestamp")).toBeNull();
+    const rows = context.CortexAdapter.normalize({
+      itineraryDetails: {
+        routes: [{ routeCode: "CX70" }],
+        stops: [{
+          sequenceNumber: 2,
+          address: "Private customer address",
+          tasks: [{
+            taskType: "DROP_OFF",
+            taskState: "DELIVERED",
+            actualExecutionTime: iso,
+          }],
+        }],
+      },
+    }, "detail");
+    expect(rows[0].firstDelivery).toBe(Date.parse(iso));
+    expect(rows[0].lastDelivery).toBe(Date.parse(iso));
+    expect(JSON.stringify(rows)).not.toContain("Private customer address");
+  });
   it("extracts delivery times and never returns customer addresses or phone fields", () => {
     const rows = context.CortexAdapter.normalize(
       {
