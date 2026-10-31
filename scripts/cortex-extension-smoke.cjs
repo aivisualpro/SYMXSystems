@@ -184,7 +184,7 @@ let context;
   await page.goto("http://127.0.0.1:3000/cortex");
   await page.getByRole("button", { name: /^Open details for CX800,/ }).click();
   await page.getByText("Timing evidence & RTS confidence", { exact: true }).waitFor();
-  await page.getByText("Explicit planned inbound stem", { exact: false }).waitFor();
+  await page.getByRole("dialog").getByText("Explicit planned inbound stem", { exact: false }).waitFor();
   await page.screenshot({ path: "artifacts/cortex-timing-evidence.png", fullPage: true });
   await context.close();
   console.log(
@@ -195,3 +195,4 @@ let context;
   if (context) await context.close();
   process.exitCode = 1;
 });
+
