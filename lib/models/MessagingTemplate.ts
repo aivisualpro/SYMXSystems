@@ -2,6 +2,8 @@ import mongoose, { Schema, Document } from "mongoose";
 // Hot reload trigger: ensure route-itinerary is loaded
 
 export interface IMessagingTemplate extends Document {
+  /** Owning station. Absent on legacy org-wide templates (kept only as a fallback seed). */
+  siteId?: mongoose.Types.ObjectId;
   type: string; // future-shift, shift, off-tomorrow, week-schedule, route-itinerary
   template: string;
   updatedAt: Date;
@@ -10,10 +12,10 @@ export interface IMessagingTemplate extends Document {
 
 const MessagingTemplateSchema = new Schema<IMessagingTemplate>(
   {
+    siteId: { type: Schema.Types.ObjectId, ref: "Site" },
     type: {
       type: String,
       required: true,
-      unique: true,
       enum: ["future-shift", "shift", "off-tomorrow", "week-schedule", "route-itinerary", "flyer", "training-reminder"],
     },
     template: {
@@ -24,21 +26,15 @@ const MessagingTemplateSchema = new Schema<IMessagingTemplate>(
   { timestamps: true }
 );
 
-// ── Multi-site ──
-// Station that owns these records. Immutable: a later transfer does
-// not move history. Optional during the migration window; required
-// after the Phase 5 contract step.
-// ── Organization-level, NOT site-owned ────────────────────────────────
-// Message wording is the same at every station — the station-specific
-// parts (start times, route names) come from the data merged into the
-// template, not from the template itself. Keeping one copy means editing
-// a template once rather than three times and drifting.
+// ── Per station ──
+// Each station keeps its OWN compose wording, so editing DFO2's morning
+// message no longer changes DXC8's. Each station also has a saved default per
+// type (Site.messageDefaults); compose wording is reset to that default every
+// night at 11 PM Pacific (see lib/messaging/template-store.ts).
 //
-// Deliberately reclassified out of siteOwned after the Phase 2 backfill,
-// which had stamped these to DFO2. scripts/migrate/06 clears that.
-//
-// Contrast with SYMXSetting / RouteType / SYMXWSTOption, which stay
-// site-owned: those carry per-station start times and rates.
+// One document per (station, type). Legacy documents with no siteId (from
+// when wording was shared org-wide) are only read as a fallback seed.
+MessagingTemplateSchema.index({ siteId: 1, type: 1 }, { unique: true });
 
 delete mongoose.models.MessagingTemplate;
 

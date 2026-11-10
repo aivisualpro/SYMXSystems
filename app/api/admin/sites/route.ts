@@ -1,3 +1,4 @@
+import { MESSAGE_TEMPLATE_TYPES } from "@/lib/messaging-template-defs";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { isSuperAdmin } from "@/lib/auth/require-permission";
@@ -54,6 +55,7 @@ export async function GET() {
       trainingAddress: s.trainingAddress || "",
       slackWebhookUrl: s.slackWebhookUrl || "",
       slackAlertsEnabled: s.slackAlertsEnabled !== false,
+      messageDefaults: s.messageDefaults || {},
       messaging: {
         quoPhoneNumberId: s.messaging?.quoPhoneNumberId || "",
         quoPhoneNumber: s.messaging?.quoPhoneNumber || "",
@@ -139,6 +141,18 @@ export async function PUT(req: NextRequest) {
     updates.slackWebhookUrl = u;
   }
   if (body.slackAlertsEnabled !== undefined) updates.slackAlertsEnabled = !!body.slackAlertsEnabled;
+  // Default wording per message type. Compose resets to these every night at
+  // 11 PM Pacific. Saving them restarts the reset clock so the new defaults
+  // don't wipe today's wording the moment they are saved.
+  if (body.messageDefaults !== undefined && body.messageDefaults && typeof body.messageDefaults === "object") {
+    const clean: Record<string, string> = {};
+    for (const t of MESSAGE_TEMPLATE_TYPES) {
+      const v = (body.messageDefaults as any)[t];
+      if (typeof v === "string" && v.trim()) clean[t] = v;
+    }
+    updates.messageDefaults = clean;
+    updates.messageTemplatesResetAt = new Date();
+  }
   if (body.siteType !== undefined) updates.siteType = body.siteType === "seasonal" ? "seasonal" : "permanent";
   // Per-station Quo number. Both forms are stored because the two sides of
   // the integration speak different ones: the API wants OpenPhone's PNxxxx

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { MESSAGE_TEMPLATE_DEFS, DEFAULT_MESSAGES } from "@/lib/messaging-template-defs";
 import { Building2, Globe, Loader2, Plus, Snowflake, Users } from "lucide-react";
 
 interface QuoNumber {
@@ -30,6 +31,7 @@ interface SiteRow {
   trainingAddress?: string;
   slackWebhookUrl?: string;
   slackAlertsEnabled?: boolean;
+  messageDefaults?: Record<string, string>;
   messaging?: { quoPhoneNumberId?: string; quoPhoneNumber?: string };
   amazon?: { serviceAreaId?: string };
   status: "active" | "inactive";
@@ -68,6 +70,7 @@ export default function SitesPage() {
     trainingAddress: "",
     slackWebhookUrl: "",
     slackAlertsEnabled: true,
+    messageDefaults: {} as Record<string, string>,
     siteType: "permanent",
     status: "active",
     quoPhoneNumberId: "",
@@ -143,6 +146,7 @@ export default function SitesPage() {
       trainingAddress: s.trainingAddress || "",
       slackWebhookUrl: s.slackWebhookUrl || "",
       slackAlertsEnabled: s.slackAlertsEnabled !== false,
+      messageDefaults: { ...(s.messageDefaults || {}) },
       siteType: s.siteType,
       status: s.status,
       quoPhoneNumberId: s.messaging?.quoPhoneNumberId || "",
@@ -389,6 +393,46 @@ export default function SitesPage() {
                   </button>
                   {slackTestMsg && <span className="text-xs text-muted-foreground">{slackTestMsg}</span>}
                 </div>
+              </div>
+
+              {/* ── Default messages ──
+                  Each station has its own Compose wording. These are the
+                  station's defaults: Compose starts from them and goes back
+                  to them every night at 11 PM Pacific. A type left blank is
+                  not reset (the wording stays as last edited). */}
+              <div className="rounded-lg border border-border/60 p-3 space-y-3">
+                <div>
+                  <Label className="text-xs font-semibold">Default messages</Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {editing.code}&apos;s own wording for each message. Edits made in Compose only affect this
+                    station, and reset to these defaults every night at 11 PM Pacific. Leave a message blank to
+                    keep whatever was last typed in Compose.
+                  </p>
+                </div>
+                {MESSAGE_TEMPLATE_DEFS.filter((d) => d.id !== "flyer").map((d) => (
+                  <div key={d.id} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[11px]">{d.label}</Label>
+                      <button
+                        type="button"
+                        className="text-[10px] text-primary hover:underline"
+                        onClick={() => setEditForm({ ...editForm, messageDefaults: { ...editForm.messageDefaults, [d.id]: DEFAULT_MESSAGES[d.id] } })}
+                      >
+                        Fill with standard wording
+                      </button>
+                    </div>
+                    <textarea
+                      rows={4}
+                      value={editForm.messageDefaults[d.id] || ""}
+                      placeholder="Not set — Compose is not reset for this message"
+                      onChange={(e) => setEditForm({ ...editForm, messageDefaults: { ...editForm.messageDefaults, [d.id]: e.target.value } })}
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Fields you can use: {d.variables.map((v) => `{${v}}`).join(" ")}
+                    </p>
+                  </div>
+                ))}
               </div>
 
               {/* ── Messaging (Quo / OpenPhone) ──

@@ -38,6 +38,10 @@ export interface ISite extends Document {
   /** Watchdog state: the capture slot we already alerted about (e.g. "2026-10-17 15:00"), cleared on recovery. */
   watchdogAlertedSlot?: string;
   watchdogAlertedAt?: Date | null;
+  /** This station's default wording per message type; Compose resets to it nightly at 11 PM PT. */
+  messageDefaults?: Record<string, string>;
+  /** When Compose wording was last reset to the defaults (or the defaults were last saved). */
+  messageTemplatesResetAt?: Date | null;
   status: "active" | "inactive";
   isDefault: boolean;
   messaging?: {
@@ -78,6 +82,8 @@ const SiteSchema: Schema = new Schema(
     // (late departures, behind pace, low efficiency, daily summary) post here.
     slackWebhookUrl: { type: String, default: "" },
     slackAlertsEnabled: { type: Boolean, default: true },
+    messageDefaults: { type: Schema.Types.Mixed, default: {} },
+    messageTemplatesResetAt: { type: Date, default: null },
     lastCaptureAt: { type: Date, default: null },
     watchdogAlertedSlot: { type: String, default: "" },
     watchdogAlertedAt: { type: Date, default: null },

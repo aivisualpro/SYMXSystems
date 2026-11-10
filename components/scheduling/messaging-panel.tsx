@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_MESSAGES } from "@/lib/messaging-template-defs";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -371,7 +372,7 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-emerald-500",
     borderColor: "border-emerald-500/30",
     defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou have a shift scheduled today @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease confirm here: {confirmationLink}\n\nThank you!",
+      DEFAULT_MESSAGES["shift"],
     variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
   },
   {
@@ -383,7 +384,7 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-blue-500",
     borderColor: "border-blue-500/30",
     defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease confirm here: {confirmationLink}\n\nSee you tomorrow!",
+      DEFAULT_MESSAGES["future-shift"],
     variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
   },
   {
@@ -395,7 +396,7 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-rose-500",
     borderColor: "border-rose-500/30",
     defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYour route itinerary has been updated. Please review your assigned route for today.\nRoute: {routeNumber}\nVan: {van}\nStaging: {stagingLocation}\nPad: {pad}\nWave Time: {waveTime}\nFirst Stop Time: {firstStopTime} (be at your first stop by then)\n\nPlease confirm here: {confirmationLink}\n\nThank you!",
+      DEFAULT_MESSAGES["route-itinerary"],
     variables: ["name", "dayOfWeek", "date", "van", "stagingLocation", "routeNumber", "pad", "waveTime", "firstStopTime", "confirmationLink"],
   },
   {
@@ -407,7 +408,7 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-violet-500",
     borderColor: "border-violet-500/30",
     defaultMessage:
-      "Hi {name}\n\nHere is your schedule for next week {yearWeek}\n----------------------\n\n{weekSchedule}\n\n----------------------\nPlease confirm here: {confirmationLink}\n\nPlease check your start times!",
+      DEFAULT_MESSAGES["week-schedule"],
     variables: ["name", "yearWeek", "weekSchedule", "confirmationLink"],
   },
   {
@@ -419,7 +420,7 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-sky-500",
     borderColor: "border-sky-500/30",
     defaultMessage:
-      "Hello {name}\n\nTraining Reminder\n\n{dayOfWeek} {date}\n\nYou have training tomorrow. Training starts at 8:00 AM.\n\nLocation: {trainingAddress}\n\nPlease arrive on time. Thank you!",
+      DEFAULT_MESSAGES["training-reminder"],
     variables: ["name", "dayOfWeek", "date", "trainingAddress"],
   },
   {
@@ -430,7 +431,7 @@ const SUB_TABS: SubTab[] = [
     gradient: "from-orange-500/15 to-amber-500/15",
     iconColor: "text-orange-500",
     borderColor: "border-orange-500/30",
-    defaultMessage: "",
+    defaultMessage: DEFAULT_MESSAGES["flyer"],
     variables: ["name"],
   },
   {
@@ -442,7 +443,7 @@ const SUB_TABS: SubTab[] = [
     iconColor: "text-amber-500",
     borderColor: "border-amber-500/30",
     defaultMessage:
-      "Hello {name}\n\n{dayOfWeek} {date}\n\nYou are off today. Reminder: you are on schedule to work tomorrow @ {startTime}\n\nStand-up will be at {standupTime}\n\nPlease confirm here: {confirmationLink}\n\nSee you tomorrow!",
+      DEFAULT_MESSAGES["off-tomorrow"],
     variables: ["name", "dayOfWeek", "date", "startTime", "standupTime", "confirmationLink"],
     hidden: true,
   },

@@ -1,3 +1,4 @@
+import { resetDueTemplatesForAllSites } from "@/lib/messaging/template-store";
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import Site from "@/lib/models/Site";
@@ -56,6 +57,10 @@ export async function GET(req: NextRequest) {
             await postSlack(s.slackWebhookUrl, `:white_check_mark: *${s.code}* — SYMX Slack connection test. Alerts and capture-watchdog messages will appear here.`);
             return NextResponse.json({ ok: true, tested: s.code });
         }
+
+        // Piggyback: the nightly 11 PM reset of Compose wording to each station's default.
+        // (Also runs lazily whenever a station loads its messages.)
+        await resetDueTemplatesForAllSites().catch((e) => console.error("[watchdog] template reset", e));
 
         const now = pacificNow();
         const nowMs = Date.now();

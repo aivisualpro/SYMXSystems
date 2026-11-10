@@ -193,8 +193,36 @@ export default function DefaultRoutesPage() {
         return <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
     }
 
+    const hasFlightRisk = routes.some((r) => (r.name || "").trim().toLowerCase() === "flight risk");
+    const [addingFlightRisk, setAddingFlightRisk] = useState(false);
+    const addFlightRisk = async () => {
+        setAddingFlightRisk(true);
+        try {
+            const res = await fetch("/api/admin/settings/route-types/flight-risk", { method: "POST" });
+            const j = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(j.error || "Failed to add Flight Risk");
+            notify.success("Flight Risk added — it's now available on the schedule at every station.");
+            await fetchRoutes();
+        } catch (e: any) {
+            notify.error(e.message || "Failed to add Flight Risk");
+        } finally {
+            setAddingFlightRisk(false);
+        }
+    };
+
     return (
         <div className="space-y-4">
+            {!loading && !hasFlightRisk && (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3">
+                    <p className="text-xs text-muted-foreground">
+                        <span className="font-semibold text-red-500">Flight Risk</span> isn&apos;t set up yet. It works exactly like Route
+                        but marks someone we&apos;re planning may not show up tomorrow.
+                    </p>
+                    <Button size="sm" variant="outline" onClick={addFlightRisk} disabled={addingFlightRisk}>
+                        {addingFlightRisk ? "Adding…" : "Add Flight Risk"}
+                    </Button>
+                </div>
+            )}
             {isMounted ? (
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}>
                     <div className="rounded-lg border border-border overflow-hidden">
