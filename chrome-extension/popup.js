@@ -723,3 +723,50 @@ init();
   chrome.storage.onChanged.addListener(render);
   render();
 })();
+
+
+// ── Backfill past days ──
+(function () {
+  const sel = document.getElementById("bfStation");
+  if (!sel) return;
+  const from = document.getElementById("bfFrom");
+  const to = document.getElementById("bfTo");
+  const startBtn = document.getElementById("bfStart");
+  const cancelBtn = document.getElementById("bfCancel");
+  const logEl = document.getElementById("bfLog");
+  let stations = [];
+
+  const pt = (offsetDays) => {
+    const d = new Date(Date.now() + offsetDays * 86400000);
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(d);
+  };
+  from.value = pt(-21);
+  to.value = pt(-1);
+
+  chrome.runtime.sendMessage({ type: "GET_STATIONS" }, (res) => {
+    stations = (res && res.stations) || [];
+    sel.innerHTML = stations.map((s) => `<option value="${s.code}">${s.code}${s.serviceAreaId ? "" : " (no Amazon service area)"}</option>`).join("") || "<option>No stations loaded</option>";
+    const dfo3 = stations.find((s) => s.code === "DFO3");
+    if (dfo3) sel.value = "DFO3";
+  });
+
+  function render() {
+    chrome.storage.local.get(["lastBackfill"], (r) => {
+      const b = r.lastBackfill;
+      if (!b) { logEl.style.display = "none"; return; }
+      const head = b.running ? `Running… ${b.done || 0} of ${b.total || "?"} days` : `Finished — ${b.done || 0} of ${b.total || "?"} days`;
+      logEl.textContent = [`${b.station || ""} ${b.from || ""} → ${b.to || ""} · ${head}`, ...(b.log || [])].join("\n");
+      logEl.style.display = "block";
+    });
+  }
+  startBtn.addEventListener("click", () => {
+    const st = stations.find((s) => s.code === sel.value);
+    if (!st || !st.serviceAreaId) { logEl.textContent = "That station has no Amazon service area set."; logEl.style.display = "block"; return; }
+    if (!from.value || !to.value || from.value > to.value) { logEl.textContent = "Pick a valid date range."; logEl.style.display = "block"; return; }
+    chrome.runtime.sendMessage({ type: "BACKFILL_START", code: st.code, serviceAreaId: st.serviceAreaId, from: from.value, to: to.value });
+    logEl.textContent = "Backfill started — windows open and close by themselves…"; logEl.style.display = "block";
+  });
+  cancelBtn.addEventListener("click", () => chrome.runtime.sendMessage({ type: "BACKFILL_CANCEL" }));
+  chrome.storage.onChanged.addListener(render);
+  render();
+})();

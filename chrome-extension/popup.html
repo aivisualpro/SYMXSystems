@@ -70,6 +70,24 @@
       <div class="run-log" id="runLog"></div>
     </section>
 
+    <!-- ── Backfill past days ── -->
+    <details class="manual" id="backfillBox">
+      <summary>Backfill past days</summary>
+      <div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:11px;opacity:.75;">Captures one station for earlier days (route list + every driver) and saves it to SYMX. Runs newest first, one day at a time, in windows that open and close by themselves. Keep Chrome open and signed in to Cortex.</div>
+        <select id="bfStation" style="padding:6px;border-radius:6px;"></select>
+        <div style="display:flex;gap:8px;">
+          <label style="flex:1;font-size:11px;">From<input type="date" id="bfFrom" style="width:100%;padding:6px;border-radius:6px;" /></label>
+          <label style="flex:1;font-size:11px;">To<input type="date" id="bfTo" style="width:100%;padding:6px;border-radius:6px;" /></label>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" id="bfStart">Start backfill</button>
+          <button class="btn btn-secondary" id="bfCancel">Cancel</button>
+        </div>
+        <div class="run-log" id="bfLog" style="display:none;"></div>
+      </div>
+    </details>
+
     <details class="manual" id="manualBox">
       <summary>Manual capture &amp; sync</summary>
     <!-- ── Date Info (single row) ── -->

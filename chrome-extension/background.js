@@ -237,6 +237,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     runCdfScheduled();
     sendResponse({ ok: true });
   }
+  if (message.type === "BACKFILL_START") {
+    runBackfill(message.code, message.serviceAreaId, message.from, message.to);
+    sendResponse({ ok: true });
+  }
+  if (message.type === "BACKFILL_CANCEL") {
+    backfillCancel = true;
+    if (runWaiter) runWaiter.resolve("cancelled");
+    sendResponse({ ok: true });
+  }
   if (message.type === "RUN_NOW") {
     runScheduled(!!message.final, pacificNow().hm);
     sendResponse({ ok: true });
@@ -347,4 +356,50 @@ async function runPaymentsScheduled() {
   if (win) chrome.windows.remove(win.id).catch(() => {});
   await set({ log: [note, `saved ${payStats.saved}, audited ${payStats.audited}${payStats.err ? " · server error: " + payStats.err : ""}`], bad: !!payStats.err || /error|no invoice|timeout/.test(note) });
   payRunning = false;
+}
+
+
+// ── Backfill: capture ONE station for a range of PAST days ──
+// Same capture as the scheduled run (route list + every driver's itinerary,
+// synced to SYMX by content.js), pointed at an earlier date via the page's
+// selectedDay. Runs newest → oldest, one day at a time, in a background
+// window. Does not post Slack alerts. Needs Chrome signed in to Cortex.
+let backfillRunning = false;
+let backfillCancel = false;
+async function runBackfill(code, serviceAreaId, from, to) {
+  if (backfillRunning || running || cdfRunning || payRunning) {
+    chrome.storage.local.set({ lastBackfill: { at: new Date().toISOString(), running: false, log: ["another capture is running — try again in a few minutes"] } });
+    return;
+  }
+  if (!serviceAreaId || !/^\d{4}-\d{2}-\d{2}$/.test(from || "") || !/^\d{4}-\d{2}-\d{2}$/.test(to || "") || from > to) {
+    chrome.storage.local.set({ lastBackfill: { at: new Date().toISOString(), running: false, log: ["invalid station or dates"] } });
+    return;
+  }
+  backfillRunning = true; backfillCancel = false; running = true; // `running` blocks scheduled captures meanwhile
+  const dates = [];
+  for (let d = new Date(to + "T12:00:00Z"); d.toISOString().slice(0, 10) >= from; d.setUTCDate(d.getUTCDate() - 1)) dates.push(d.toISOString().slice(0, 10));
+  const log = [];
+  const save = (extra) => chrome.storage.local.set({ lastBackfill: Object.assign({ at: new Date().toISOString(), station: code, from, to, total: dates.length, done: log.length, running: true, log: log.slice() }, extra || {}) });
+  await save();
+  try {
+    for (const date of dates) {
+      if (backfillCancel) { log.push("cancelled"); break; }
+      let note = "timeout", win = null;
+      try {
+        const url = `https://logistics.amazon.com/operations/execution/itineraries?provider=ALL_DRIVERS&selectedDay=${date}&serviceAreaId=${encodeURIComponent(serviceAreaId)}&symx_run=1`;
+        win = await chrome.windows.create({ url, type: "normal", focused: false, width: 1280, height: 800 });
+        const tabId = win.tabs && win.tabs[0] && win.tabs[0].id;
+        note = await new Promise((resolve) => {
+          runWaiter = { tabId, resolve };
+          setTimeout(() => resolve("timeout"), RUN_TIMEOUT_MS);
+        });
+      } catch (e) { note = "error: " + e.message; }
+      runWaiter = null;
+      if (win) chrome.windows.remove(win.id).catch(() => {});
+      log.push(`${date}: ${note}`);
+      await save();
+    }
+  } catch (e) { log.push("failed: " + e.message); }
+  await save({ running: false, done: log.length });
+  backfillRunning = false; running = false;
 }
