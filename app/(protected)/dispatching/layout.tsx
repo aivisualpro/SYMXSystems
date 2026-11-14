@@ -432,7 +432,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                     ) : (
                         <Plus className="h-3.5 w-3.5" />
                     )}
-                    {generatingRoutes ? "Generating..." : routesGenerated ? "Regenerate" : "Generate Routes"}
+                    <span className="hidden sm:inline">{generatingRoutes ? "Generating..." : routesGenerated ? "Regenerate" : "Generate Routes"}</span>
                 </Button>
             </div>
         );
@@ -450,7 +450,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                 rawRouteData, rawRouteDataLoading,
             }}
         >
-            <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden gap-2 sm:gap-3">
+            <div className="flex flex-col h-[calc(100dvh-80px)] overflow-hidden gap-2 sm:gap-3">
                 {/* ── Tab Bar + Date Tabs (inline) ── */}
                 <div className="shrink-0 overflow-x-auto scrollbar-none">
                     <div data-tab-nav className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border min-w-max">

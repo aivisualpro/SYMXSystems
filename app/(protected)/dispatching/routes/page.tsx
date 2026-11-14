@@ -6,6 +6,7 @@ import { useDispatching } from "../_components/dispatching-context";
 import { useVehicles, useWst, useDropdowns, useRouteTypes } from "@/lib/query/hooks/useShared";
 import { useUpdateRouteStatus } from "@/lib/query/hooks/useDispatching";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { MessageStatusBadge } from "@/components/ui-elements/message-status-badge";
 import {
     Users,
@@ -86,6 +87,7 @@ import {
 
 export default function RoutesPage() {
     const queryClient = useQueryClient();
+    const isMobile = useIsMobile();
     const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, refreshRoutes, refreshKey, setStats } = useDispatching();
     const { data: dropdowns = [] } = useDropdowns();
 
@@ -856,7 +858,182 @@ export default function RoutesPage() {
             )}
             <div className="flex flex-col h-full">
                 <div className="flex-1 min-h-0 rounded-xl border border-border/50 bg-card overflow-hidden flex flex-col">
-                    {/* Scrollable table container */}
+                    {/* ── Phone layout: one card per driver instead of the wide table ── */}
+                    {isMobile ? (
+                        <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-2">
+                            {groups.length === 0 && (
+                                <p className="text-center py-12 text-sm text-muted-foreground">No employees found for this date</p>
+                            )}
+                            {groups.map((group) => {
+                                const isCollapsed = collapsedGroups[group.type] ?? false;
+                                const firstRow = group.rows[0];
+                                const rtForGroup = firstRow?.typeId
+                                    ? routeTypeIdMap.get(firstRow.typeId)
+                                    : routeTypeNameMap.get(group.type.toLowerCase());
+                                const groupColor = rtForGroup?.color || getTypeStyle(group.type).colorHex || null;
+                                const GroupIconName = rtForGroup?.icon;
+                                const GroupIcon = GroupIconName ? (LucideIcons as any)[GroupIconName] : (TYPE_MAP.get(group.type.toLowerCase())?.icon || null);
+                                return (
+                                    <div key={group.type} className="space-y-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleGroup(group.type)}
+                                            className="sticky top-0 z-10 flex w-full items-center gap-2 rounded-lg bg-muted px-3 py-2.5 text-left"
+                                        >
+                                            <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", !isCollapsed && "rotate-90")} />
+                                            <span
+                                                className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold border"
+                                                style={{ backgroundColor: groupColor || undefined, color: groupColor ? getContrastText(groupColor) : undefined, borderColor: groupColor ? "transparent" : undefined }}
+                                            >
+                                                {GroupIcon && <GroupIcon className="h-3.5 w-3.5" />}
+                                                {group.type || "Unassigned"}
+                                            </span>
+                                            <span className="rounded-full bg-background/60 px-2 py-0.5 text-xs font-semibold text-muted-foreground">{group.count}</span>
+                                        </button>
+
+                                        {!isCollapsed && group.rows.map((row) => {
+                                            const rt = resolveRT(row);
+                                            const rtColor = rt?.color || getTypeStyle(row.type).colorHex || undefined;
+                                            const att = getAttendanceStyle(row.attendance || "");
+                                            const pu = (row.onRoadPickups || 0) > 0 ? pickupStatus(row) : null;
+                                            const isNew = row.hiredDate && (Date.now() - new Date(row.hiredDate).getTime()) / 86400000 <= 30;
+                                            const openDetails = (e: React.MouseEvent) => {
+                                                if (dispatchingDetailsEnabled) {
+                                                    setDetailModal({ open: true, routeId: row._id, employeeName: row.employeeName, profileImage: row.profileImage });
+                                                } else {
+                                                    setTypeMenu({ open: true, routeId: row._id, transporterId: row.transporterId, x: e.clientX, y: e.clientY });
+                                                }
+                                            };
+                                            const info: [string, React.ReactNode][] = [
+                                                ["Route", row.routeNumber || "—"],
+                                                ["Van", row.van || "—"],
+                                                ["Wave", row.waveTime || "—"],
+                                                ["Pad", row.pad || "—"],
+                                                ["Stops", row.stopCount ?? "—"],
+                                                ["Pkgs", row.packageCount ?? "—"],
+                                            ];
+                                            return (
+                                                <div key={row._id} className="rounded-xl border border-border/50 bg-card p-3 shadow-sm">
+                                                    <div className="flex items-center gap-2">
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <button className="shrink-0 h-9 w-9 flex items-center justify-center focus:outline-none" aria-label="Set confirmation">
+                                                                    {row.confirmationStatus ? (
+                                                                        <MessageStatusBadge
+                                                                            status={row.confirmationStatus.status}
+                                                                            createdAt={row.confirmationStatus.updatedAt}
+                                                                            changeRemarks={row.confirmationStatus.changeRemarks}
+                                                                            history={row.confirmationStatus.history}
+                                                                            iconOnly
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-muted-foreground/40">
+                                                                            <Plus className="h-3.5 w-3.5 text-muted-foreground/60" />
+                                                                        </span>
+                                                                    )}
+                                                                </button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="start" className="min-w-[200px]">
+                                                                <DropdownMenuLabel className="text-[12px] text-muted-foreground uppercase tracking-wider">Set Confirmation</DropdownMenuLabel>
+                                                                <DropdownMenuSeparator />
+                                                                {[
+                                                                    { value: "confirmed", label: "Confirmed", icon: CheckCircle2, color: "text-emerald-400" },
+                                                                    { value: "change_requested", label: "Change Requested", icon: RefreshCw, color: "text-amber-400" },
+                                                                    { value: "pending", label: "Pending", icon: Clock, color: "text-blue-400" },
+                                                                ].map((opt) => (
+                                                                    <DropdownMenuItem
+                                                                        key={opt.value}
+                                                                        className="gap-2 py-2.5"
+                                                                        disabled={row.confirmationStatus?.status === opt.value}
+                                                                        onClick={() => {
+                                                                            if (opt.value === "change_requested") {
+                                                                                setRemarksTarget({ rowData: row, status: "change_requested" });
+                                                                                setRemarksInput("");
+                                                                                setRemarksModalOpen(true);
+                                                                            } else {
+                                                                                handleUpdateConfirmation(row, opt.value);
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        <opt.icon className={cn("h-4 w-4", opt.color)} />
+                                                                        <span className="text-sm font-medium">{opt.label}</span>
+                                                                        {row.confirmationStatus?.status === opt.value && <Check className="h-3.5 w-3.5 ml-auto text-primary" />}
+                                                                    </DropdownMenuItem>
+                                                                ))}
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                        <button type="button" onClick={openDetails} className="min-w-0 flex-1 text-left">
+                                                            <span className="block truncate text-[15px] font-bold" style={{ color: rtColor }}>{row.employeeName}</span>
+                                                        </button>
+                                                        {isNew && <Baby className="h-4 w-4 shrink-0 text-pink-500" />}
+                                                        {att.displayLabel !== "Clear" && att.label && (
+                                                            <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold", att.bg, att.text, att.border)}>{att.label}</span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1.5">
+                                                        {info.map(([label, value]) => (
+                                                            <div key={label} className="min-w-0">
+                                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+                                                                <div className="truncate text-sm font-semibold">{value}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+
+                                                    {(row.stagingLocation || row.wst || pu || row.vinMismatch) && (
+                                                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                                            {row.stagingLocation && (
+                                                                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium">Staging {row.stagingLocation}</span>
+                                                            )}
+                                                            {row.wst && (
+                                                                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium">{row.wst}</span>
+                                                            )}
+                                                            {pu && (
+                                                                <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", pu.cls)}>PU {row.onRoadPickups}</span>
+                                                            )}
+                                                            {row.vinMismatch && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (row.cortexVan) handleVanChange(row._id, row.cortexVan, row.transporterId);
+                                                                        else notify.error(`Cortex has VIN …${(row.cortexVin || "").slice(-6)}, which isn't in your fleet. Add that van in Fleet first.`);
+                                                                    }}
+                                                                    className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-bold text-red-400 ring-1 ring-red-500/30"
+                                                                >
+                                                                    <AlertCircle className="h-3 w-3" />
+                                                                    {row.cortexVan ? `Use ${row.cortexVan}` : "VIN ≠"}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    <div className="mt-2.5 flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => setTypeMenu({ open: true, routeId: row._id, transporterId: row.transporterId, x: e.clientX, y: e.clientY })}
+                                                            className="flex-1 rounded-lg border border-border/60 py-2 text-xs font-semibold"
+                                                        >
+                                                            Change type
+                                                        </button>
+                                                        {dispatchingDetailsEnabled && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={openDetails}
+                                                                className="flex-1 rounded-lg bg-primary py-2 text-xs font-semibold text-primary-foreground"
+                                                            >
+                                                                Details
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                    /* Scrollable table container */
                     <div className="flex-1 overflow-auto">
                         <table className="w-full border-collapse" style={{ minWidth: 1200 }}>
                             {/* Explicit column widths — prevents misalignment from colSpan group rows */}
@@ -1455,6 +1632,7 @@ export default function RoutesPage() {
                             </tbody>
                         </table>
                     </div>
+                    )}
 
 
                 </div>
