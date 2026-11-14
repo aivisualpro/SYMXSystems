@@ -57,7 +57,7 @@ const FALLBACK_MODULES: any[] = [
     items: [
       { name: "Dashboard" },
       { name: "Owner", subModules: ["App Users", "Roles & Permissions"] },
-      { name: "Fleet", subModules: ["Overview", "Vehicles", "Repairs", "Inspections", "Rental Agreements"] },
+      { name: "Fleet", subModules: ["Overview", "Vehicles", "Repairs", "Inspections", "Rental Agreements", "Fuel Claims"] },
       { name: "Scheduling", subModules: ["Messaging"] },
       { name: "Dispatching", subModules: ["Roster", "Opening", "Attendance", "Repairs", "Time", "Closing", "Efficiency", "Routes"] },
       { name: "Everyday" },

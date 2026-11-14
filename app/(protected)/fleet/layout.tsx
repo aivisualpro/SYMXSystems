@@ -9,7 +9,7 @@ import { useFleetDashboard, useFleetVehicles, useFleetRepairs, useFleetInspectio
 import { sidebarCache } from "@/components/app-sidebar";
 import {
   IconChartDonut, IconCar, IconTool, IconClipboardCheck,
-  IconFileInvoice, IconSearch, IconPlus, IconRotate2, IconCheck,
+  IconFileInvoice, IconGasStation, IconSearch, IconPlus, IconRotate2, IconCheck,
 } from "@tabler/icons-react";
 import { FleetContext } from "./components/fleet-context";
 
@@ -31,6 +31,7 @@ const tabs = [
   { id: "repairs", label: "Repairs", permModule: "Repairs", icon: IconTool, href: "/fleet/repairs" },
   { id: "inspections", label: "Inspections", permModule: "Inspections", icon: IconClipboardCheck, href: "/fleet/inspections" },
   { id: "rentals", label: "Rental Agreements", permModule: "Rental Agreements", icon: IconFileInvoice, href: "/fleet/rentals" },
+  { id: "fuel-claims", label: "Fuel Claims", permModule: "Fuel Claims", icon: IconGasStation, href: "/fleet/fuel-claims" },
 ];
 
 // ── Layout ────────────────────────────────────────────────────────────
