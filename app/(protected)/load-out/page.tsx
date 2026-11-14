@@ -1,5 +1,6 @@
 "use client";
 
+import { pkgsPerStop, pkgsPerStopRange, pkgsPerStopStyle } from "@/lib/pkgs-per-stop";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useLoadOut as useDispatching } from "./_components/load-out-context";
 import { useVehicles, useWst } from "@/lib/query/hooks/useShared";
@@ -183,7 +184,8 @@ const COLUMNS: ColumnDef[] = [
     { key: "van", label: "Van", minW: 54, sticky: false },
     { key: "stagingLocation", label: "Staging", minW: 56, sticky: false },
     { key: "waveTime", label: "Wave", minW: 50, sticky: false },
-    { key: "stopsPerHour", label: "Min / Stop", minW: 56, sticky: false },
+    { key: "pkgsPerStop", label: "Pkg/Stop", minW: 58, sticky: false },
+    { key: "stopsPerHour", label: "Stops / Hr", minW: 56, sticky: false },
     { key: "attendance", label: "Attendance", minW: 50, sticky: false },
     { key: "paycomInDay", label: "Paycom In", minW: 56, sticky: false },
     { key: "type", label: "Type", minW: 90, align: "center", sticky: false },
@@ -218,6 +220,7 @@ interface RouteRow {
     routeNumber: string;
     stopCount: number;
     packageCount: number;
+    pkgsPerStop?: number;
     routeDuration: string;
     waveTime: string;
     pad: string;
@@ -709,6 +712,7 @@ export default function RoutesPage() {
                 regHrs: Math.round(regHrs * 100) / 100,
                 otHrs: Math.round(otHrs * 100) / 100,
                 totalCost, regPay, otPay,
+                pkgsPerStop: pkgsPerStop(r.stopCount, r.packageCount),
                 hoursWorkedLast7Days: 0, // computed below
             };
         });
@@ -800,7 +804,7 @@ export default function RoutesPage() {
         }
 
         const numericKeys = new Set([
-            "driverEfficiency", "routesCompleted", "stopCount", "packageCount",
+            "driverEfficiency", "routesCompleted", "stopCount", "packageCount", "pkgsPerStop",
             "wstDuration", "wstRevenue", "stopsPerHour", "regHrs", "otHrs",
             "totalCost", "regPay", "otPay", "hoursWorkedLast7Days",
         ]);
@@ -956,6 +960,9 @@ export default function RoutesPage() {
     }
 
     // ── Routes Table ──
+    // Colour scale for Pkg/Stop: relative to the routes shown for this day.
+    const pkgRange = pkgsPerStopRange(groups.flatMap((g) => g.rows.map((r) => r.pkgsPerStop || 0)));
+
     return (
         <TooltipProvider delayDuration={200}>
             <div className="flex flex-col h-full">
@@ -1085,7 +1092,20 @@ export default function RoutesPage() {
                                                         {/* 5. Wave */}
                                                         <td className="px-1 py-1.5">{renderCell(row, "waveTime", row.waveTime)}</td>
 
-                                                        {/* 6. Min/Stop */}
+                                                        {/* 5b. Pkg/Stop — route difficulty (green easy → red hard) */}
+                                                        <td className="px-1 py-1.5">
+                                                            {(row.pkgsPerStop || 0) > 0 ? (
+                                                                <span
+                                                                    title={`${row.packageCount} packages ÷ ${row.stopCount} stops`}
+                                                                    className="inline-block rounded px-1.5 py-0.5 text-[11px] font-bold tabular-nums"
+                                                                    style={pkgsPerStopStyle(row.pkgsPerStop!, pkgRange.min, pkgRange.max)}
+                                                                >
+                                                                    {row.pkgsPerStop!.toFixed(2)}
+                                                                </span>
+                                                            ) : <span className="text-[11px] text-muted-foreground/30 font-semibold">—</span>}
+                                                        </td>
+
+                                                        {/* 6. Stops / Hr */}
                                                         <td className="px-1 py-1.5">
                                                             {row.stopsPerHour > 0 ? (
                                                                 <span className="text-[11px] font-semibold text-foreground whitespace-nowrap">{row.stopsPerHour}</span>

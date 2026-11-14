@@ -113,6 +113,7 @@ export const COLUMNS: ColumnDef[] = [
   { key: "waveTime", label: "Wave", minW: 56, sticky: false },
   { key: "pad", label: "PAD", minW: 42, sticky: false },
   { key: "wst", label: "WST", minW: 50, sticky: false },
+  { key: "pkgsPerStop", label: "Pkg/Stop", minW: 58, sticky: false },
   { key: "serviceType", label: "Service", minW: 64, sticky: false },
   { key: "routesCompleted", label: "Routes", minW: 50, sticky: false },
   { key: "wstDuration", label: "WST Dur", minW: 52, sticky: false },
@@ -160,6 +161,8 @@ export interface RouteRow {
   routeNumber: string;
   stopCount: number;
   packageCount: number;
+  /** packages ÷ stops (difficulty indicator) */
+  pkgsPerStop?: number;
   routeDuration: string;
   waveTime: string;
   pad: string;

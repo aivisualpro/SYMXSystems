@@ -7,6 +7,7 @@ import { useVehicles, useWst, useDropdowns, useRouteTypes } from "@/lib/query/ho
 import { useUpdateRouteStatus } from "@/lib/query/hooks/useDispatching";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { pkgsPerStop, pkgsPerStopRange, pkgsPerStopStyle } from "@/lib/pkgs-per-stop";
 import { MessageStatusBadge } from "@/components/ui-elements/message-status-badge";
 import {
     Users,
@@ -594,6 +595,7 @@ export default function RoutesPage() {
                 regHrs: Math.round(regHrs * 100) / 100,
                 otHrs: Math.round(otHrs * 100) / 100,
                 totalCost, regPay, otPay,
+                pkgsPerStop: pkgsPerStop(r.stopCount, r.packageCount),
                 hoursWorkedLast7Days: 0, // computed below
             };
         });
@@ -685,7 +687,7 @@ export default function RoutesPage() {
         }
 
         const numericKeys = new Set([
-            "driverEfficiency", "routesCompleted", "stopCount", "packageCount",
+            "driverEfficiency", "routesCompleted", "stopCount", "packageCount", "pkgsPerStop",
             "wstDuration", "wstRevenue", "stopsPerHour", "regHrs", "otHrs",
             "totalCost", "regPay", "otPay", "hoursWorkedLast7Days",
         ]);
@@ -802,6 +804,9 @@ export default function RoutesPage() {
         );
     }
 
+    // Colour scale for Pkg/Stop: relative to the routes shown for this day.
+    const pkgRange = pkgsPerStopRange(groups.flatMap((g) => g.rows.map((r) => r.pkgsPerStop || 0)));
+
     // ── Routes Table ──
     return (
         <TooltipProvider delayDuration={200}>
@@ -911,6 +916,9 @@ export default function RoutesPage() {
                                                 ["Pad", row.pad || "—"],
                                                 ["Stops", row.stopCount ?? "—"],
                                                 ["Pkgs", row.packageCount ?? "—"],
+                                                ["Pkg/Stop", (row.pkgsPerStop || 0) > 0
+                                                    ? <span className="rounded px-1.5" style={pkgsPerStopStyle(row.pkgsPerStop!, pkgRange.min, pkgRange.max)}>{row.pkgsPerStop!.toFixed(2)}</span>
+                                                    : "—"],
                                             ];
                                             return (
                                                 <div key={row._id} className="rounded-xl border border-border/50 bg-card p-3 shadow-sm">
@@ -1406,6 +1414,19 @@ export default function RoutesPage() {
                                                             ) : (
                                                                 <span className="text-[13px] text-muted-foreground/30 font-semibold">—</span>
                                                             )}
+                                                        </td>
+
+                                                        {/* 9b. Pkg/Stop — route difficulty (green easy → red hard) */}
+                                                        <td className="px-2 py-1.5">
+                                                            {(row.pkgsPerStop || 0) > 0 ? (
+                                                                <span
+                                                                    title={`${row.packageCount} packages ÷ ${row.stopCount} stops`}
+                                                                    className="inline-block rounded px-1.5 py-0.5 text-[13px] font-bold tabular-nums"
+                                                                    style={pkgsPerStopStyle(row.pkgsPerStop!, pkgRange.min, pkgRange.max)}
+                                                                >
+                                                                    {row.pkgsPerStop!.toFixed(2)}
+                                                                </span>
+                                                            ) : <span className="text-[13px] text-muted-foreground/30 font-semibold">—</span>}
                                                         </td>
 
                                                         {/* 13. Service Type (auto from Van) */}
