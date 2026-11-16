@@ -329,6 +329,7 @@ export default function RoutesPage() {
                 stagingLocation: rec.stagingLocation || "",
                 onRoadPickups: rec.onRoadPickups || 0,
                 vinMismatch: !!rec.vinMismatch,
+                loanedIn: !!rec.loanedIn,
                 cortexVan: rec.cortexVan || "",
                 cortexVin: rec.cortexVin || "",
                 workPhone: rec.workPhone || "",
@@ -973,6 +974,9 @@ export default function RoutesPage() {
                                                         <button type="button" onClick={openDetails} className="min-w-0 flex-1 text-left">
                                                             <span className="block truncate text-[15px] font-bold" style={{ color: rtColor }}>{row.employeeName}</span>
                                                         </button>
+                                                        {row.loanedIn && (
+                                                            <span className="shrink-0 rounded-full border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] font-semibold text-sky-600">Loaned in</span>
+                                                        )}
                                                         {isNew && <Baby className="h-4 w-4 shrink-0 text-pink-500" />}
                                                         {att.displayLabel !== "Clear" && att.label && (
                                                             <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold", att.bg, att.text, att.border)}>{att.label}</span>
@@ -1219,6 +1223,9 @@ export default function RoutesPage() {
                                                                         >
                                                                             {row.employeeName}
                                                                         </span>
+                                                                        {row.loanedIn && (
+                                                                            <span title="Scheduled from another station" className="shrink-0 rounded-full border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-600">Loaned in</span>
+                                                                        )}
                                                                     </>);
                                                                 })()}
                                                                 {row.hiredDate && (Date.now() - new Date(row.hiredDate).getTime()) / 86400000 <= 30 && (

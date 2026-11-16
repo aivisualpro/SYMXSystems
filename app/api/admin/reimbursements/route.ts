@@ -1,4 +1,4 @@
-import { requirePermission, ForbiddenError } from "@/lib/auth/require-permission";
+import { requirePermission, requireAnyPermission, ForbiddenError } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
@@ -133,7 +133,10 @@ export async function GET(req: NextRequest) {
 // that path), so this is how a manager or HR staffer enters one directly.
 export async function POST(req: NextRequest) {
   try {
-    await requirePermission("HR", "edit");
+    // Dispatch staff enter gas/EV reimbursements on behalf of drivers, so
+    // Dispatching edit is enough to CREATE one (they still can't approve/pay —
+    // those routes keep their own HR checks).
+    await requireAnyPermission([["HR", "edit"], ["Dispatching", "edit"]]);
   } catch (e: any) {
     if (e.name === "ForbiddenError") {
       return NextResponse.json({ error: e.message }, { status: 403 });

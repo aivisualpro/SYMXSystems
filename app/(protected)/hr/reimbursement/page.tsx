@@ -646,13 +646,16 @@ function NewReimbursementDialog({ open, onClose, onCreated }: { open: boolean; o
       files.forEach((f) => formData.append("file", f));
 
       const res = await fetch("/api/admin/reimbursements", { method: "POST", body: formData });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `Request failed (${res.status})`);
+      }
       const created = await res.json();
       notify.success("Reimbursement request created");
       onCreated({ ...created, employeeName, profileImage });
       onClose();
-    } catch {
-      notify.error("Failed to create reimbursement");
+    } catch (e: any) {
+      notify.error(`Failed to create reimbursement${e?.message ? `: ${e.message}` : ""}`);
     } finally {
       setSaving(false);
     }

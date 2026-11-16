@@ -174,6 +174,8 @@ export interface RouteRow {
   stagingLocation: string;
   onRoadPickups?: number;
   vinMismatch?: boolean;
+  /** Driver scheduled from another station but working at this one. */
+  loanedIn?: boolean;
   cortexVan?: string;
   cortexVin?: string;
   workPhone?: string;

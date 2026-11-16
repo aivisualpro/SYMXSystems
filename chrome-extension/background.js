@@ -198,21 +198,53 @@ function pacificNow() {
 }
 
 chrome.alarms.create("symx-tick", { periodInMinutes: 1 });
+
+// A run that was interrupted (computer slept, Chrome restarted, the service
+// worker was stopped) leaves "running" stuck in storage, which the popup then
+// shows forever. Anything marked running for over 20 minutes is cleared.
+async function clearStaleRunState() {
+  const keys = ["lastRun", "lastCdfRun", "lastPayRun", "lastBackfill"];
+  const got = await chrome.storage.local.get(keys);
+  const patch = {};
+  for (const k of keys) {
+    const r = got[k];
+    if (r && r.running && Date.now() - new Date(r.at).getTime() > 20 * 60 * 1000) {
+      patch[k] = Object.assign({}, r, { running: false, log: [...(r.log || []), "interrupted (computer asleep or Chrome restarted)"] });
+    }
+  }
+  if (Object.keys(patch).length) await chrome.storage.local.set(patch);
+}
+clearStaleRunState();
+chrome.runtime.onStartup.addListener(clearStaleRunState);
+chrome.runtime.onInstalled.addListener(clearStaleRunState);
+
+const toMin = (hm) => { const [h, m] = hm.split(":").map(Number); return h * 60 + m; };
+const CATCH_UP_MIN = 25; // still run a slot this late if the computer was asleep at the exact minute
+
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== "symx-tick") return;
   const { schedEnabled, schedDone = {} } = await chrome.storage.local.get(["schedEnabled", "schedDone"]);
   if (!schedEnabled) return;
+  // Wait while something else is running; the slot stays due for the catch-up window.
+  if (running || cdfRunning || payRunning || backfillRunning) return;
   const { date, hm } = pacificNow();
-  if (!SCHEDULE_TIMES.includes(hm) && !PAY_TIMES.includes(hm)) return;
-  const key = `${date}|${hm}`;
-  if (schedDone[key]) return;
-  schedDone[key] = true;
+
+  // Newest slot that is due now (on time, or up to CATCH_UP_MIN late) and not yet run today.
+  const now = toMin(hm);
+  const due = [...SCHEDULE_TIMES, ...PAY_TIMES]
+    .map((t) => ({ t, late: now - toMin(t) }))
+    .filter((x) => x.late >= 0 && x.late <= CATCH_UP_MIN && !schedDone[`${date}|${x.t}`])
+    .sort((a, b) => a.late - b.late)[0];
+  if (!due) return;
+  const slotHm = due.t;
+
+  schedDone[`${date}|${slotHm}`] = true;
   // keep only today's keys
   Object.keys(schedDone).forEach((k) => { if (!k.startsWith(date)) delete schedDone[k]; });
   await chrome.storage.local.set({ schedDone });
-  if (hm === CDF_TIME) runCdfScheduled();
-  else if (PAY_TIMES.includes(hm)) runPaymentsScheduled();
-  else runScheduled(hm === SCHEDULE_TIMES[SCHEDULE_TIMES.length - 1], hm);
+  if (slotHm === CDF_TIME) runCdfScheduled();
+  else if (PAY_TIMES.includes(slotHm)) runPaymentsScheduled();
+  else runScheduled(slotHm === SCHEDULE_TIMES[SCHEDULE_TIMES.length - 1], slotHm);
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
