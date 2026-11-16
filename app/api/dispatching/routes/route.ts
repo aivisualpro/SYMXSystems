@@ -152,43 +152,18 @@ export async function GET(req: NextRequest) {
 
         // Build query — only show routes whose typeId is a Dispatching-partOf, non-Off RouteType
         // Match both string AND ObjectId stored values (handles pre-migration records)
-        // Drivers loaned IN: a schedule row stays with the driver's home station
-        // but can be labelled for another station (crossStationSiteId). Those
-        // drivers must also appear on the station they're working at, so pull
-        // in the routes generated from such schedule rows.
+        // Loaned-in drivers have their own route entry at this station (loanedFromSiteId).
         const activeSiteIdStrs = scope.activeSiteIds.map(String);
-        const loanedScheduleDocs: any[] = activeSiteIdStrs.length > 0
-            ? await orgWide(
-                SymxEmployeeSchedule.find(
-                    {
-                        yearWeek,
-                        crossStationSiteId: { $in: activeSiteIdStrs },
-                        siteId: { $nin: scope.activeSiteIds.map((id) => new mongoose.Types.ObjectId(id)) },
-                    },
-                    { _id: 1 }
-                ),
-                "finding drivers whose home-station schedule is labelled for a station now in view — a driver loaned in from another station must appear on this station's dispatch screen"
-            ).lean()
-            : [];
-        const loanedScheduleIds = loanedScheduleDocs.map((s) => String(s._id));
-
-        const query: any = { yearWeek };
-        query.$and = [
-            loanedScheduleIds.length > 0
-                ? { $or: [S, { scheduleId: { $in: loanedScheduleIds } }] }
-                : S,
-        ];
+        const query: any = { yearWeek, ...S };
         if (date) query.date = new Date(date);
         if (dispatchingTypeIds.length > 0) {
             const asObjectIds = dispatchingTypeIds
                 .map(id => { try { return new mongoose.Types.ObjectId(id); } catch { return null; } })
                 .filter(Boolean);
-            query.$and.push({
-                $or: [
-                    { typeId: { $in: dispatchingTypeIds } },        // stored as string
-                    { typeId: { $in: asObjectIds } },               // stored as ObjectId
-                ],
-            });
+            query.$or = [
+                { typeId: { $in: dispatchingTypeIds } },        // stored as string
+                { typeId: { $in: asObjectIds } },               // stored as ObjectId
+            ];
         } else {
             // No valid dispatching types configured — return nothing
             query.typeId = { $in: [] };
@@ -196,12 +171,7 @@ export async function GET(req: NextRequest) {
 
         // ── PHASE 1: Fetch routes + completion setting in parallel ──
         const [routes, completionSetting] = await Promise.all([
-            // The query is explicitly station-scoped (S) plus routes of drivers
-            // loaned in from another station, whose siteId is their home station.
-            orgWide(
-                SYMXRoute.find(query),
-                "this station's routes plus routes of drivers loaned in from another station — the loaned routes carry their home station's siteId"
-            ).sort({ date: 1, transporterId: 1 }).lean(),
+            SYMXRoute.find(query).sort({ date: 1, transporterId: 1 }).lean(),
             SYMXSetting.findOne({ key: "routes_completion_types", ...S }).lean(),
         ]);
 
@@ -424,7 +394,7 @@ export async function GET(req: NextRequest) {
             return {
                 ...r,
                 vinMismatch,
-                loanedIn: !!r.siteId && !activeSiteIdStrs.includes(String(r.siteId)),
+                loanedIn: !!r.loanedFromSiteId && !activeSiteIdStrs.includes(String(r.loanedFromSiteId)),
                 cortexVan: cVanName,
                 type: resolvedType,
                 vin: resolvedVin,
@@ -573,22 +543,7 @@ export async function PUT(req: NextRequest) {
 
         // Fetch existing route BEFORE updating (for audit old values)
         const putScope = await getRequestScope();
-        let existing = await findScopedById<any>(SYMXRoute, routeId, putScope) as any;
-        if (!existing) {
-            // A driver loaned in from another station: the route belongs to
-            // their home station, but dispatch at the station they're working
-            // at may edit it when the schedule row is labelled for that station.
-            const raw: any = await SYMXRoute.findById(routeId);
-            if (raw?.scheduleId) {
-                const sched: any = await orgWide(
-                    SymxEmployeeSchedule.findOne({ _id: raw.scheduleId }, { crossStationSiteId: 1 }),
-                    "checking whether a route's schedule is loaned to a station the caller can reach"
-                ).lean();
-                if (sched?.crossStationSiteId && putScope.allowedSiteIds.includes(String(sched.crossStationSiteId))) {
-                    existing = raw;
-                }
-            }
-        }
+        const existing = await findScopedById<any>(SYMXRoute, routeId, putScope) as any;
         if (!existing) {
             console.error(`[PUT /api/dispatching/routes] Route not found for ID: ${routeId}`);
             return NextResponse.json({ error: "Route not found" }, { status: 404 });

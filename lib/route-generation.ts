@@ -6,6 +6,49 @@ import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import Vehicle from "@/lib/models/Vehicle";
 import RouteType from "@/lib/models/RouteType";
+import { orgWide } from "@/lib/scoped-query";
+
+/**
+ * Create/refresh the route entry for a driver loaned IN to `targetSiteId`
+ * (their schedule row stays with the home station, labelled for the target).
+ * Only schedule-level fields are $set; dispatcher-entered data is preserved.
+ */
+export async function upsertLoanedRoute(schedule: any, targetSiteId: string) {
+    const target = new mongoose.Types.ObjectId(targetSiteId);
+    await mongoose.connection.db!.collection("SYMXRoutes").updateOne(
+        { transporterId: schedule.transporterId, date: schedule.date, siteId: target },
+        {
+            $set: {
+                scheduleId: String(schedule._id),
+                weekDay: schedule.weekDay || "",
+                yearWeek: schedule.yearWeek,
+                typeId: schedule.typeId ? String(schedule.typeId) : "",
+            },
+            $setOnInsert: {
+                siteId: target,
+                loanedFromSiteId: schedule.siteId,
+                van: "",
+                serviceType: "",
+                dashcam: "",
+            },
+        },
+        { upsert: true }
+    );
+}
+
+/** Remove a loaned route entry that was never filled in (no van / route #). */
+export async function removeEmptyLoanedRoute(schedule: any, targetSiteId: string) {
+    await mongoose.connection.db!.collection("SYMXRoutes").deleteOne({
+        transporterId: schedule.transporterId,
+        date: schedule.date,
+        siteId: new mongoose.Types.ObjectId(targetSiteId),
+        loanedFromSiteId: { $exists: true },
+        $and: [
+            { $or: [{ van: "" }, { van: { $exists: false } }] },
+            { $or: [{ routeNumber: "" }, { routeNumber: { $exists: false } }] },
+        ],
+    });
+}
 
 export interface GenerateRoutesResult {
     message: string;
@@ -55,10 +98,28 @@ export async function generateRoutesForWeek(
     }
 
     // Fetch all schedules for this week — only fields needed for route generation
-    const schedules = await SymxEmployeeSchedule.find(
+    const ownSchedules: any[] = await SymxEmployeeSchedule.find(
         { yearWeek, ...S },
         { _id: 1, transporterId: 1, date: 1, weekDay: 1, typeId: 1, van: 1 }
     ).lean();
+
+    // Drivers loaned IN: another station's schedule row labelled for this
+    // station (crossStationSiteId). They get their own route entry here.
+    const loanedSchedules: any[] = await orgWide(
+        SymxEmployeeSchedule.find(
+            { yearWeek, crossStationSiteId: String(siteId), siteId: { $ne: new mongoose.Types.ObjectId(siteId) } },
+            { _id: 1, transporterId: 1, date: 1, weekDay: 1, typeId: 1, van: 1, siteId: 1 }
+        ),
+        "drivers scheduled at another station but labelled for this one — they need a route entry here"
+    ).lean();
+    const ownKeys = new Set(ownSchedules.map((s) => `${s.transporterId}|${new Date(s.date).toISOString()}`));
+    // Loaned rows first so a driver's own row for the same day wins on dedupe.
+    const schedules: any[] = [
+        ...loanedSchedules
+            .filter((s) => !ownKeys.has(`${s.transporterId}|${new Date(s.date).toISOString()}`))
+            .map((s) => ({ ...s, loanedFromSiteId: s.siteId })),
+        ...ownSchedules,
+    ];
 
     console.log(`[Generate Routes] Found ${schedules.length} schedule records for ${yearWeek}`);
 
@@ -147,6 +208,7 @@ export async function generateRoutesForWeek(
                 // Only set these on NEW inserts — never overwrite existing data
                 $setOnInsert: {
                     siteId: siteObjectId,
+                    ...(s.loanedFromSiteId ? { loanedFromSiteId: s.loanedFromSiteId } : {}),
                     van: s.van || "",
                     serviceType: "",
                     dashcam: "",

@@ -18,6 +18,7 @@ import { authorizeAction } from "@/lib/rbac";
 import { z } from "zod";
 import { validateBody, validateSearchParams } from "@/lib/validations";
 import { canViewCompensation } from "@/lib/compensation-visibility";
+import { upsertLoanedRoute, removeEmptyLoanedRoute } from "@/lib/route-generation";
 
 const schedulesQuerySchema = z.object({
   yearWeek: z.string().optional().nullable(),
@@ -863,6 +864,35 @@ export async function PATCH(req: NextRequest) {
         throw e;
       } finally {
         await dbSession.endSession();
+      }
+
+      // Loaned driver → give the target station its own route entry (and
+      // drop the one at a station they're no longer loaned to, if unused).
+      // Best-effort: the schedule save above already succeeded.
+      try {
+        if (crossStationSiteId !== undefined && updated) {
+          const prevTarget = String(existing?.crossStationSiteId || "");
+          const newTarget = String(crossStationSiteId || "");
+          const working = !!updated.typeId && updated.status !== "Off";
+          const reach = (id: string) => !!id && editScope.allowedSiteIds.includes(id) && id !== String(updated.siteId || "");
+
+          if (prevTarget && prevTarget !== newTarget && reach(prevTarget)) {
+            await removeEmptyLoanedRoute(updated, prevTarget);
+          }
+          if (newTarget && working && reach(newTarget)) {
+            // Only when that station already generated routes for the week —
+            // otherwise its own Generate Routes click picks this driver up.
+            const hasRoutes = await orgWide(
+              SYMXRoute.countDocuments({ yearWeek: updated.yearWeek, siteId: new mongoose.Types.ObjectId(newTarget) }),
+              "checking whether the station a driver is loaned to has generated routes for the week"
+            );
+            if (hasRoutes > 0) await upsertLoanedRoute(updated, newTarget);
+          } else if (newTarget && !working && reach(newTarget)) {
+            await removeEmptyLoanedRoute(updated, newTarget);
+          }
+        }
+      } catch (e: any) {
+        console.error("[schedules PUT] loaned route sync failed:", e?.message);
       }
 
       return NextResponse.json({ success: true, schedule: updated });

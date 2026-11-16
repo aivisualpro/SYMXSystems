@@ -248,7 +248,12 @@ export async function GET(req: NextRequest) {
 
           const extraRoutes: any[] = await orgWide(
             SYMXRoute.find(
-              { scheduleId: { $in: added.map((r) => String(r._id)) } },
+              {
+                $or: [
+                  { scheduleId: { $in: added.map((r) => String(r._id)) } },
+                  ...added.map((r) => ({ transporterId: r.transporterId, date: r.date })),
+                ],
+              },
               { transporterId: 1, date: 1, routeNumber: 1, stagingLocation: 1, pad: 1, waveTime: 1, van: 1, plannedFirstStop: 1 }
             ),
             "routes of loaned-in drivers, generated at their home station"
