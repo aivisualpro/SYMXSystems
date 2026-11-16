@@ -196,7 +196,12 @@ export async function GET(req: NextRequest) {
 
         // ── PHASE 1: Fetch routes + completion setting in parallel ──
         const [routes, completionSetting] = await Promise.all([
-            SYMXRoute.find(query).sort({ date: 1, transporterId: 1 }).lean(),
+            // The query is explicitly station-scoped (S) plus routes of drivers
+            // loaned in from another station, whose siteId is their home station.
+            orgWide(
+                SYMXRoute.find(query),
+                "this station's routes plus routes of drivers loaned in from another station — the loaned routes carry their home station's siteId"
+            ).sort({ date: 1, transporterId: 1 }).lean(),
             SYMXSetting.findOne({ key: "routes_completion_types", ...S }).lean(),
         ]);
 

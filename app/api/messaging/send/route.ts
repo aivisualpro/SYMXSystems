@@ -1,7 +1,7 @@
 import { requireAnyPermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getRequestScope, siteFilter } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, orgWide } from "@/lib/scoped-query";
 import { resolveSendingNumber, getSendableNumbers } from "@/lib/messaging/station-numbers";
 import connectToDatabase from "@/lib/db";
 import MessageLog from "@/lib/models/MessageLog";
@@ -224,7 +224,20 @@ export async function POST(req: NextRequest) {
                 scheduleQuery.date = { $gte: dayStart, $lte: dayEnd };
               }
 
-              const targetSchedule = await SymxEmployeeSchedule.findOne(scheduleQuery).sort({ date: -1 });
+              let targetSchedule = await SymxEmployeeSchedule.findOne(scheduleQuery).sort({ date: -1 });
+
+              // Loaned-in driver: no row of their own at the sending station,
+              // but their home-station row is labelled for this station.
+              if (!targetSchedule) {
+                const { siteId: _omit, ...loanedQuery } = scheduleQuery;
+                targetSchedule = await orgWide(
+                  SymxEmployeeSchedule.findOne({
+                    ...loanedQuery,
+                    crossStationSiteId: String(sendingNumber.siteId),
+                  }).sort({ date: -1 }),
+                  "loaned-in driver: schedule row lives at the home station but is labelled for the station sending the message"
+                );
+              }
 
               if (targetSchedule) {
                 const entryData: Record<string, any> = {

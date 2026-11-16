@@ -2,7 +2,8 @@ import { requireAnyPermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
-import { getRequestScope, siteFilter, findScopedById } from "@/lib/scoped-query";
+import mongoose from "mongoose";
+import { getRequestScope, siteFilter, findScopedById, orgWide } from "@/lib/scoped-query";
 import SymxEmployee from "@/lib/models/SymxEmployee";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import SYMXRoute from "@/lib/models/SYMXRoute";
@@ -191,12 +192,71 @@ export async function GET(req: NextRequest) {
     // ── Messaging status — read directly from schedule arrays (single source of truth) ──
     const scheduleField = filter ? TAB_TO_SCHEDULE_FIELD[filter] : null;
 
-    const [employees, schedules, routes, routeTypesList] = await Promise.all([
+    const [employeesBase, schedulesBase, routesBase, routeTypesList] = await Promise.all([
       employeePromise,
       schedulePromise,
       routePromise,
       routeTypePromise,
     ]);
+
+    let employees: any[] = employeesBase as any[];
+    let schedules: any[] | null = schedulesBase as any[] | null;
+    let routes: any[] | null = routesBase as any[] | null;
+
+    // ── Drivers loaned IN from another station ──
+    // Their schedule row stays with the home station but is labelled for a
+    // station now in view (crossStationSiteId). They must be messageable from
+    // the station they're working at: add their rows, their employee record
+    // (primarySiteId points home), and their routes.
+    if (scheduleQuery && scope.activeSiteIds.length > 0) {
+      const loanedRows: any[] = await orgWide(
+        SymxEmployeeSchedule.find(
+          {
+            ...scheduleQuery,
+            crossStationSiteId: { $in: scope.activeSiteIds.map(String) },
+            siteId: { $nin: scope.activeSiteIds.map((id) => new mongoose.Types.ObjectId(id)) },
+          },
+          { transporterId: 1, date: 1, weekDay: 1, type: 1, typeId: 1, subType: 1, status: 1, routeStatus: 1, startTime: 1, van: 1, shiftNotification: 1, futureShift: 1, routeItinerary: 1, trainingReminder: 1, siteId: 1, crossStationSiteId: 1 }
+        ),
+        "drivers whose home-station schedule is labelled for a station now in view — a loaned-in driver must be messageable from the station they work at"
+      ).lean();
+
+      if (loanedRows.length > 0) {
+        // A driver who already has their own row here for that day keeps it.
+        const ownKeys = new Set((schedules || []).map((s: any) => `${s.transporterId}|${toPacificDate(s.date)}`));
+        const added = loanedRows
+          .filter((r) => !ownKeys.has(`${r.transporterId}|${toPacificDate(r.date)}`))
+          .map((r) => ({ ...r, siteId: r.crossStationSiteId, loanedIn: true }));
+
+        if (added.length > 0) {
+          schedules = [...(schedules || []), ...added];
+
+          const have = new Set(employees.map((e: any) => e.transporterId));
+          const missing = Array.from(new Set(added.map((r) => r.transporterId))).filter((t) => !have.has(t));
+          if (missing.length > 0) {
+            const extra: any[] = await orgWide(
+              SymxEmployee.find(
+                { status: "Active", phoneNumber: { $exists: true, $ne: "" }, transporterId: { $in: missing } },
+                { _id: 1, firstName: 1, lastName: 1, transporterId: 1, phoneNumber: 1, type: 1, status: 1, email: 1 }
+              ),
+              "loaned-in drivers belong to another home station but are scheduled at a station now in view"
+            ).lean();
+            employees = [...employees, ...extra].sort((a: any, b: any) =>
+              `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+            );
+          }
+
+          const extraRoutes: any[] = await orgWide(
+            SYMXRoute.find(
+              { scheduleId: { $in: added.map((r) => String(r._id)) } },
+              { transporterId: 1, date: 1, routeNumber: 1, stagingLocation: 1, pad: 1, waveTime: 1, van: 1, plannedFirstStop: 1 }
+            ),
+            "routes of loaned-in drivers, generated at their home station"
+          ).lean();
+          routes = [...(routes || []), ...extraRoutes];
+        }
+      }
+    }
 
     // Build lookup maps from RouteType: typeId → { name, partOf, routeStatus } and name.lower → same
     const typeIdToMeta = new Map<string, { name: string; partOf: string[]; routeStatus: string }>();

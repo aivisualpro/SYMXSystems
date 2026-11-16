@@ -2,7 +2,7 @@ import { requireAnyPermission } from "@/lib/auth/require-permission";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import connectToDatabase from "@/lib/db";
-import { getRequestScope, siteFilter } from "@/lib/scoped-query";
+import { getRequestScope, siteFilter, orgWide } from "@/lib/scoped-query";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
 import ScheduleConfirmation from "@/lib/models/ScheduleConfirmation";
 import { TAB_TO_SCHEDULE_FIELD, entriesInWindow, messageWindowForTab } from "@/lib/messaging-constants";
@@ -85,9 +85,17 @@ export async function GET(req: NextRequest) {
       scheduleQuery.yearWeek = yearWeek;
     }
 
-    const schedules = await SymxEmployeeSchedule.find(
-      { ...scheduleQuery, ...S },
-      { transporterId: 1, [scheduleField]: 1 }
+    const schedules = await orgWide(
+      SymxEmployeeSchedule.find(
+        {
+          ...scheduleQuery,
+          // This station's rows, plus rows of drivers loaned in from another
+          // station (home-station row labelled for a station in view).
+          $or: [S, { crossStationSiteId: { $in: scope.activeSiteIds.map(String) } }],
+        },
+        { transporterId: 1, [scheduleField]: 1 }
+      ),
+      "this station's schedule rows plus loaned-in drivers whose row is owned by their home station"
     ).lean() as any[];
 
     // Build status map keyed by transporterId
