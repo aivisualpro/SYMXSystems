@@ -6,7 +6,7 @@ import { useDispatching } from "../_components/dispatching-context";
 import { useVehicles, useWst, useDropdowns, useRouteTypes } from "@/lib/query/hooks/useShared";
 import { useUpdateRouteStatus } from "@/lib/query/hooks/useDispatching";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useMobileView } from "@/hooks/use-mobile-view";
 import { pkgsPerStop, pkgsPerStopRange, pkgsPerStopStyle } from "@/lib/pkgs-per-stop";
 import { MessageStatusBadge } from "@/components/ui-elements/message-status-badge";
 import {
@@ -88,7 +88,7 @@ import {
 
 export default function RoutesPage() {
     const queryClient = useQueryClient();
-    const isMobile = useIsMobile();
+    const { mobileView: isMobile } = useMobileView();
     const { selectedWeek, selectedDate, searchQuery, routesGenerated, routesLoading, refreshRoutes, refreshKey, setStats } = useDispatching();
     const { data: dropdowns = [] } = useDropdowns();
 
