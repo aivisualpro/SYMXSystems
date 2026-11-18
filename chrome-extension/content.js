@@ -418,7 +418,9 @@
       const todo = buildChecklist().filter((x) => x.state !== "done" && x.state !== "no-route").map((x) => x.id);
       try { await runInPageVisit(todo); } catch (e) {}
       await new Promise((r) => setTimeout(r, 3000));
-      finish("ok");
+      const checklist = buildChecklist();
+      const incomplete = checklist.filter((x) => x.state !== "done" && x.state !== "no-route");
+      finish(incomplete.length ? `partial: ${incomplete.length} itineraries incomplete` : "ok");
     }, 1000);
   }
 
