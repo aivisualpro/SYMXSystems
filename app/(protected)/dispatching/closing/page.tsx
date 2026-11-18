@@ -90,6 +90,8 @@ function ClosingPageContent() {
     const [loading, setLoading] = useState(false);
     const [sortKey, setSortKey] = useState<SortKey>("employee");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+    // Awaiting Inspection list has its own sort: route # (default) or name.
+    const [pendingSort, setPendingSort] = useState<"route" | "name">("route");
 
     // Modal & Highlight State
     const [inspectingRoute, setInspectingRoute] = useState<RouteRow | null>(null);
@@ -248,17 +250,26 @@ function ClosingPageContent() {
             if (typeof aVal === "number" && typeof bVal === "number") {
                 return sortDir === "asc" ? aVal - bVal : bVal - aVal;
             }
+            // numeric: true → natural order (CX2 before CX10)
             return sortDir === "asc"
-                ? String(aVal).localeCompare(String(bVal))
-                : String(bVal).localeCompare(String(aVal));
+                ? String(aVal).localeCompare(String(bVal), undefined, { numeric: true })
+                : String(bVal).localeCompare(String(aVal), undefined, { numeric: true });
         });
 
         // Split into pending and done — require BOTH inspectionTime AND inspectionId
-        const pending = sorted.filter(r => !r.inspectionTime || r.inspectionTime.trim() === "" || !r.inspectionId);
+        const pendingUnsorted = sorted.filter(r => !r.inspectionTime || r.inspectionTime.trim() === "" || !r.inspectionId);
+        const pending = [...pendingUnsorted].sort((a, b) => {
+            if (pendingSort === "name") return (a.employeeName || "").localeCompare(b.employeeName || "");
+            const ar = (a.routeNumber || "").trim(), br = (b.routeNumber || "").trim();
+            if (!ar && !br) return (a.employeeName || "").localeCompare(b.employeeName || "");
+            if (!ar) return 1;   // no route # → bottom
+            if (!br) return -1;
+            return ar.localeCompare(br, undefined, { numeric: true }) || (a.employeeName || "").localeCompare(b.employeeName || "");
+        });
         const done = sorted.filter(r => r.inspectionTime && r.inspectionTime.trim() !== "" && !!r.inspectionId);
 
         return { pendingRows: pending, doneRows: done, totalFiltered: sorted.length };
-    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir]);
+    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir, pendingSort]);
 
     // ── Push stats to layout ──
     useEffect(() => {
@@ -316,9 +327,27 @@ function ClosingPageContent() {
                         <Clock className="h-4 w-4 text-amber-500" />
                         <h2 className="text-sm font-bold tracking-tight">Awaiting Inspection</h2>
                     </div>
-                    <span className="text-[10px] font-bold bg-amber-500/20 text-amber-500 px-2.5 py-1 rounded-full ring-1 ring-amber-500/30">
-                        {pendingRows.length}
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <div className="inline-flex rounded-md border border-border/50 overflow-hidden text-[10px] font-bold" role="group" aria-label="Sort awaiting inspection">
+                            {([["route", "Route #"], ["name", "Name"]] as const).map(([k, label]) => (
+                                <button
+                                    key={k}
+                                    type="button"
+                                    onClick={() => setPendingSort(k)}
+                                    aria-pressed={pendingSort === k}
+                                    className={cn(
+                                        "px-2 py-1 transition-colors",
+                                        pendingSort === k ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted/50"
+                                    )}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        <span className="text-[10px] font-bold bg-amber-500/20 text-amber-500 px-2.5 py-1 rounded-full ring-1 ring-amber-500/30">
+                            {pendingRows.length}
+                        </span>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -366,20 +395,25 @@ function ClosingPageContent() {
                                     </h3>
                                     <div className="flex items-center gap-2 mt-1 text-[10px] font-medium text-muted-foreground/80">
                                         {row.type && <span className="truncate">{row.type}</span>}
-                                        {row.routeNumber && (
-                                            <>
-                                                <span className="opacity-50">•</span>
-                                                <span className="text-foreground/70">{row.routeNumber}</span>
-                                            </>
-                                        )}
                                         {row.van && (
                                             <>
-                                                <span className="opacity-50">•</span>
+                                                {row.type && <span className="opacity-50">•</span>}
                                                 <span>{vehicleNamesMap[row.van] || `Van ${row.van}`}</span>
                                             </>
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Route # — the main thing dispatch looks for */}
+                                {row.routeNumber ? (
+                                    <div className="shrink-0 min-w-[56px] text-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30 px-2.5 py-1.5 text-xl leading-none font-extrabold tabular-nums tracking-tight">
+                                        {row.routeNumber}
+                                    </div>
+                                ) : (
+                                    <div className="shrink-0 min-w-[56px] text-center rounded-lg bg-muted/40 text-muted-foreground/60 ring-1 ring-border/40 px-2.5 py-1.5 text-sm leading-none font-bold">
+                                        —
+                                    </div>
+                                )}
 
                                 {/* Action Buttons */}
                                 <div className="flex items-center gap-2 pr-1 opacity-0 group-hover:opacity-100 transition-opacity">

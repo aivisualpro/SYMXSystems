@@ -11,13 +11,19 @@ import RouteType from "@/lib/models/RouteType";
  * Safe to call repeatedly and concurrently: it checks first, then upserts on
  * the exact name, so at most one is ever created.
  */
+const FLIGHT_RISK_COLOR = "#FCA5A5"; // light red
+const OLD_DEFAULT_COLORS = ["#DC2626", "#FF0000"];
 let ensured = false;
 
 export async function ensureFlightRiskType(): Promise<{ created: boolean; id?: string; error?: string }> {
   if (ensured) return { created: false };
 
-  const existing: any = await RouteType.findOne({ name: { $regex: "^\\s*flight risk\\s*$", $options: "i" } }, { _id: 1 }).lean();
+  const existing: any = await RouteType.findOne({ name: { $regex: "^\\s*flight risk\\s*$", $options: "i" } }, { _id: 1, color: 1 }).lean();
   if (existing) {
+    // Upgrade the earlier default reds; a colour someone picked themselves is left alone.
+    if (OLD_DEFAULT_COLORS.includes(String(existing.color || "").toUpperCase())) {
+      await RouteType.updateOne({ _id: existing._id }, { $set: { color: FLIGHT_RISK_COLOR } });
+    }
     ensured = true;
     return { created: false, id: String(existing._id) };
   }
@@ -32,7 +38,7 @@ export async function ensureFlightRiskType(): Promise<{ created: boolean; id?: s
     {
       $setOnInsert: {
         name: "Flight Risk",
-        color: "#DC2626",
+        color: FLIGHT_RISK_COLOR,
         icon: "Flag",
         startTime: route.startTime || "",
         theoryHrs: route.theoryHrs || 0,

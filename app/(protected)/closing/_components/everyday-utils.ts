@@ -6,7 +6,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Navigation, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap,
-  TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, Clock,
+  TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, Clock, Flag,
 } from "lucide-react";
 
 /** Business timezone — all date computations use Pacific Time */
@@ -55,6 +55,7 @@ export const TYPE_OPTIONS: TypeOption[] = [
   { label: "Suspension", icon: Ban, bg: "bg-rose-700", text: "text-white", border: "border-rose-800" },
   { label: "Modified Duty", icon: ShieldAlert, bg: "bg-amber-600", text: "text-white", border: "border-amber-700" },
   { label: "Stand by", icon: Clock, bg: "bg-cyan-600", text: "text-white", border: "border-cyan-700" },
+  { label: "Flight Risk", icon: Flag, bg: "bg-red-300", text: "text-red-950", border: "border-red-400" },
 ];
 
 export const TYPE_MAP = new Map(TYPE_OPTIONS.map(opt => [opt.label.toLowerCase(), opt]));

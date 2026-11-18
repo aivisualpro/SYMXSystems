@@ -1,6 +1,6 @@
 import {
     Navigation, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap,
-    TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, Clock, AlertTriangle, Minus, type LucideIcon
+    TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, Clock, AlertTriangle, Minus, Flag, type LucideIcon
 } from "lucide-react";
 
 export interface TypeOption {
@@ -43,7 +43,8 @@ export const TYPE_OPTIONS: TypeOption[] = [
     { label: "Modified Duty", icon: ShieldAlert, bg: "bg-amber-600", text: "text-white", border: "border-amber-700", dotColor: "bg-amber-500", colorHex: "#4D4646" },
     { label: "Stand by", icon: Clock, bg: "bg-cyan-600", text: "text-white", border: "border-cyan-700", dotColor: "bg-cyan-500", colorHex: "#F29727" },
     { label: "Request Off", icon: CalendarOff, bg: "bg-purple-600", text: "text-white", border: "border-purple-700", dotColor: "bg-purple-500", colorHex: "#9AA6B2" },
-    { label: "TCO", icon: DoorOpen, bg: "bg-pink-600", text: "text-white", border: "border-pink-700", dotColor: "bg-pink-600", colorHex: "#CA6180" }
+    { label: "TCO", icon: DoorOpen, bg: "bg-pink-600", text: "text-white", border: "border-pink-700", dotColor: "bg-pink-600", colorHex: "#CA6180" },
+    { label: "Flight Risk", icon: Flag, bg: "bg-red-300", text: "text-red-950", border: "border-red-400", dotColor: "bg-red-300", colorHex: "#FCA5A5" }
 ];
 
 export const TYPE_MAP = new Map(TYPE_OPTIONS.map(opt => [opt.label.toLowerCase(), opt]));
