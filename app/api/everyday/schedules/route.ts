@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
 
         const schedules = (await SymxEmployeeSchedule.find(
             { date: { $gte: startOfDay, $lte: endOfDay }, ...S },
-            { transporterId: 1, dayBeforeConfirmation: 1 }
+            { transporterId: 1, dayBeforeConfirmation: 1, startTime: 1, typeId: 1 }
         ).lean()) as any[];
 
         // "Tomorrow's shift" (future-shift / off-tomorrow) messages are recorded on the

@@ -390,7 +390,9 @@ function SchedulingPageContent() {
   const [startOverrides, setStartOverrides] = useState<Record<string, string>>({});
   const [editTimeKey, setEditTimeKey] = useState<string | null>(null);
   const [editTimeValue, setEditTimeValue] = useState("");
-  const [editTimeStage, setEditTimeStage] = useState<"edit" | "choose">("edit");
+  const [editTimeStage, setEditTimeStage] = useState<"edit" | "choose" | "pick">("edit");
+  const [editPickIds, setEditPickIds] = useState<string[]>([]);
+  const [editPickSearch, setEditPickSearch] = useState("");
   const [savingTime, setSavingTime] = useState(false);
   // Cross-station shift picker — set when the "Other Stations" section of
   // the Change Type popover is showing the Route/Open/Close sub-menu for
@@ -1108,8 +1110,8 @@ function SchedulingPageContent() {
   useEffect(() => { loadStartOverrides(); }, [loadStartOverrides]);
 
   const saveStartTime = useCallback(async (
-    mode: "person" | "all",
-    o: { scheduleId?: string; date: string; typeId?: string; employeeName?: string; startTime: string; reset?: boolean }
+    mode: "person" | "all" | "selected",
+    o: { scheduleId?: string; scheduleIds?: string[]; date: string; typeId?: string; employeeName?: string; startTime: string; reset?: boolean }
   ) => {
     setSavingTime(true);
     try {
@@ -1123,6 +1125,7 @@ function SchedulingPageContent() {
       notify.success(
         o.reset ? "Start time reset to the type's default"
           : mode === "all" ? `Start time set to ${o.startTime} for everyone on this type that day (${data.updated} updated)`
+          : mode === "selected" ? `Start time set to ${o.startTime} for ${data.updated} employee${data.updated === 1 ? "" : "s"}`
           : `Start time set to ${o.startTime}`
       );
       setEditTimeKey(null);
@@ -2238,7 +2241,74 @@ function SchedulingPageContent() {
                                                                 <button onClick={() => setEditTimeKey(null)} className="px-2 py-1 rounded-md text-[11px] font-semibold text-muted-foreground hover:bg-muted/50">Cancel</button>
                                                               </div>
                                                             </>
-                                                          ) : (
+                                                          ) : editTimeStage === "pick" ? (() => {
+                                                            const q = editPickSearch.trim().toLowerCase();
+                                                            const candidates = (weekData?.employees || [])
+                                                              .map((e: any) => {
+                                                                const d = e.days?.[dayIdx];
+                                                                if (!d?._id || !d?.typeId || d?.crossStationSiteId) return null;
+                                                                const rt = routeTypeIdMap.get(String(d.typeId));
+                                                                if ((rt?.routeStatus || "").toLowerCase() === "off") return null;
+                                                                return { id: String(d._id), name: e.employee?.name || e.transporterId, type: rt?.name || d.type || "", start: d.startTime || "" };
+                                                              })
+                                                              .filter(Boolean)
+                                                              .sort((a: any, b: any) => a.name.localeCompare(b.name)) as { id: string; name: string; type: string; start: string }[];
+                                                            const shown = q ? candidates.filter((c) => c.name.toLowerCase().includes(q) || c.type.toLowerCase().includes(q)) : candidates;
+                                                            const allShownSelected = shown.length > 0 && shown.every((c) => editPickIds.includes(c.id));
+                                                            return (
+                                                              <>
+                                                                <span className="text-[11px] font-semibold text-foreground">Apply <span className="font-mono text-blue-400">{newLabel}</span> to these employees:</span>
+                                                                <input
+                                                                  value={editPickSearch}
+                                                                  onChange={(e) => setEditPickSearch(e.target.value)}
+                                                                  onKeyDown={(e) => e.stopPropagation()}
+                                                                  placeholder="Search name or type…"
+                                                                  className="w-full px-2 py-1 rounded-md text-[11px] bg-background border border-border/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                                                                />
+                                                                <div className="flex items-center justify-between">
+                                                                  <button
+                                                                    type="button"
+                                                                    onClick={() => setEditPickIds((prev) => allShownSelected
+                                                                      ? prev.filter((id) => !shown.some((c) => c.id === id) || id === String(day._id))
+                                                                      : Array.from(new Set([...prev, ...shown.map((c) => c.id)])))}
+                                                                    className="text-[10px] font-semibold text-muted-foreground/70 hover:text-foreground"
+                                                                  >
+                                                                    {allShownSelected ? "Clear shown" : "Select all shown"}
+                                                                  </button>
+                                                                  <span className="text-[10px] font-semibold text-muted-foreground/70">{editPickIds.length} selected</span>
+                                                                </div>
+                                                                <div className="max-h-44 overflow-y-auto rounded-md border border-border/40 bg-background divide-y divide-border/30">
+                                                                  {shown.length === 0 && <div className="px-2 py-3 text-center text-[11px] text-muted-foreground/70">No one else is working this day</div>}
+                                                                  {shown.map((c) => {
+                                                                    const checked = editPickIds.includes(c.id);
+                                                                    return (
+                                                                      <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-muted/40">
+                                                                        <input
+                                                                          type="checkbox"
+                                                                          checked={checked}
+                                                                          onChange={() => setEditPickIds((prev) => checked ? prev.filter((id) => id !== c.id) : [...prev, c.id])}
+                                                                          className="h-3.5 w-3.5 accent-primary"
+                                                                        />
+                                                                        <span className="flex-1 min-w-0 truncate text-[11px] font-semibold">{c.name}</span>
+                                                                        <span className="shrink-0 text-[10px] text-muted-foreground/70">{c.type}</span>
+                                                                        <span className="shrink-0 text-[10px] font-mono text-blue-400 w-[62px] text-right">{c.start || "—"}</span>
+                                                                      </label>
+                                                                    );
+                                                                  })}
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                  <button onClick={() => setEditTimeStage("choose")} className="px-2 py-1 rounded-md text-[11px] font-semibold text-muted-foreground hover:bg-muted/50">‹ Back</button>
+                                                                  <button
+                                                                    disabled={savingTime || editPickIds.length === 0}
+                                                                    onClick={() => saveStartTime("selected", { scheduleIds: editPickIds, date: dayStr, typeId: String(day.typeId), startTime: newLabel })}
+                                                                    className="ml-auto px-3 py-1.5 rounded-md text-[11px] font-bold bg-primary text-primary-foreground disabled:opacity-40"
+                                                                  >
+                                                                    Apply to {editPickIds.length}
+                                                                  </button>
+                                                                </div>
+                                                              </>
+                                                            );
+                                                          })() : (
                                                             <>
                                                               <span className="text-[11px] font-semibold text-foreground">Apply <span className="font-mono text-blue-400">{newLabel}</span> to:</span>
                                                               <button
@@ -2254,6 +2324,13 @@ function SchedulingPageContent() {
                                                                 className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-background border border-border/50 hover:bg-muted/50 disabled:opacity-50"
                                                               >
                                                                 Everyone on {displayValue} — {formatDate(dayStr)}
+                                                              </button>
+                                                              <button
+                                                                disabled={savingTime}
+                                                                onClick={() => { setEditPickIds([String(day._id)]); setEditPickSearch(""); setEditTimeStage("pick"); }}
+                                                                className="w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-background border border-border/50 hover:bg-muted/50 disabled:opacity-50"
+                                                              >
+                                                                Select employees…
                                                               </button>
                                                               <div className="flex items-center justify-between">
                                                                 <button onClick={() => setEditTimeStage("edit")} className="text-[10px] font-semibold text-muted-foreground/70 hover:text-foreground">‹ Back</button>

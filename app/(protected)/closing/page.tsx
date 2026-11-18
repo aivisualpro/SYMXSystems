@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSchedulingWeeks } from "@/lib/query/hooks/useSchedules";
 import { useQueryClient } from "@tanstack/react-query";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
-import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, Edit2, Phone, Timer, Package, Hash, ThumbsUp, type LucideIcon , Paperclip, ImagePlus, Plus } from "lucide-react";
+import { Loader2, Save, MapPin, Check, X, FileText, Activity, AlertCircle, Clock, CheckCircle2, ChevronRight, ChevronLeft, Navigation, FileDown, DoorOpen, DoorClosed, Coffee, PhoneOff, GraduationCap, TruckIcon, CalendarOff, UserCheck, BookOpen, Ban, ShieldAlert, PackageX, LifeBuoy, Search, ChevronDown, Edit2, Phone, Timer, Package, Hash, ThumbsUp, type LucideIcon , Paperclip, ImagePlus, Plus, Copy } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +40,150 @@ import {
   type TypeOption,
 } from "./_components/everyday-utils";
 
+
+// ── Start-time helpers (labels look like "10:50 AM") ──
+const timeTo24 = (v: string) => {
+    const m = (v || "").trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!m) return "";
+    let h = parseInt(m[1], 10);
+    const ap = (m[3] || "").toUpperCase();
+    if (ap === "PM" && h < 12) h += 12;
+    if (ap === "AM" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:${m[2]}`;
+};
+const timeTo12 = (v: string) => {
+    const [h, m] = (v || "").split(":").map((x) => parseInt(x, 10));
+    if (isNaN(h) || isNaN(m)) return "";
+    return `${String(h % 12 === 0 ? 12 : h % 12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+};
+const timeMinutes = (v: string) => {
+    const t = timeTo24(v);
+    if (!t) return Number.MAX_SAFE_INTEGER;
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+};
+
+/** Click-to-edit start time for one Roster Plan row: just them, or a hand-picked set. */
+function StartTimeCell({ row, allRows, onSave }: {
+    row: RoutesTableRow;
+    allRows: RoutesTableRow[];
+    onSave: (mode: "person" | "selected", rows: RoutesTableRow[], label: string) => Promise<boolean>;
+}) {
+    const [open, setOpen] = useState(false);
+    const [val, setVal] = useState("");
+    const [saving, setSaving] = useState(false);
+    const [picking, setPicking] = useState(false);
+    const [picked, setPicked] = useState<string[]>([]);
+    const [search, setSearch] = useState("");
+    const firstName = String(row.employeeName || "").split(" ")[0];
+
+    const candidates = useMemo(
+        () => allRows.filter(r => r.scheduleId).sort((a, b) => String(a.employeeName).localeCompare(String(b.employeeName))),
+        [allRows]
+    );
+    const q = search.trim().toLowerCase();
+    const shown = q ? candidates.filter(r => String(r.employeeName).toLowerCase().includes(q) || String(r.type).toLowerCase().includes(q)) : candidates;
+    const allShownPicked = shown.length > 0 && shown.every(r => picked.includes(r.scheduleId));
+
+    const save = async (mode: "person" | "selected") => {
+        const label = timeTo12(val);
+        if (!label) return;
+        setSaving(true);
+        const rows = mode === "person" ? [row] : candidates.filter(r => picked.includes(r.scheduleId));
+        const ok = await onSave(mode, rows, label);
+        setSaving(false);
+        if (ok) setOpen(false);
+    };
+
+    return (
+        <div className="w-full flex items-center justify-center">
+            <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) { setVal(timeTo24(row.startTime || "")); setPicking(false); setSearch(""); setPicked([row.scheduleId]); } }}>
+                <PopoverTrigger asChild>
+                    <button
+                        type="button"
+                        disabled={!row.scheduleId}
+                        onClick={(e) => e.stopPropagation()}
+                        title={row.scheduleId ? "Change start time" : "No schedule entry for tomorrow"}
+                        className={cn(
+                            "px-2 py-1 rounded-[4px] text-[11px] font-mono font-bold tracking-wide whitespace-nowrap border transition-colors",
+                            row.startTime
+                                ? "bg-sky-500/10 text-sky-500 border-sky-500/20 hover:bg-sky-500/20"
+                                : "bg-amber-500/10 text-amber-500 border-amber-500/30 hover:bg-amber-500/20",
+                            !row.scheduleId && "opacity-40 cursor-not-allowed"
+                        )}
+                    >
+                        {row.startTime || "Set time"}
+                    </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-3 space-y-2" align="center" onClick={(e) => e.stopPropagation()}>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Start time — {row.employeeName}</div>
+                    <input
+                        type="time"
+                        autoFocus
+                        value={val}
+                        onChange={(e) => setVal(e.target.value)}
+                        className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm font-mono"
+                    />
+                    {!picking ? (
+                        <>
+                            <Button size="sm" className="w-full" disabled={!val || saving} onClick={() => save("person")}>
+                                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : `Just ${firstName}`}
+                            </Button>
+                            <Button size="sm" variant="outline" className="w-full" disabled={!val || saving} onClick={() => setPicking(true)}>
+                                Select employees…
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <input
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                placeholder="Search name or type…"
+                                className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs"
+                            />
+                            <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground">
+                                <button
+                                    type="button"
+                                    className="hover:text-foreground"
+                                    onClick={() => setPicked(prev => allShownPicked
+                                        ? prev.filter(id => !shown.some(r => r.scheduleId === id) || id === row.scheduleId)
+                                        : Array.from(new Set([...prev, ...shown.map(r => r.scheduleId)])))}
+                                >
+                                    {allShownPicked ? "Clear shown" : "Select all shown"}
+                                </button>
+                                <span>{picked.length} selected</span>
+                            </div>
+                            <div className="max-h-52 overflow-y-auto rounded-md border border-border/50 divide-y divide-border/30">
+                                {shown.map(r => {
+                                    const checked = picked.includes(r.scheduleId);
+                                    return (
+                                        <label key={r.scheduleId} className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-muted/40">
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={() => setPicked(prev => checked ? prev.filter(id => id !== r.scheduleId) : [...prev, r.scheduleId])}
+                                                className="h-3.5 w-3.5 accent-primary"
+                                            />
+                                            <span className="flex-1 min-w-0 truncate text-[11px] font-semibold">{r.employeeName}</span>
+                                            <span className="shrink-0 text-[10px] text-muted-foreground">{r.type}</span>
+                                            <span className="shrink-0 w-[60px] text-right text-[10px] font-mono text-sky-500">{r.startTime || "—"}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button size="sm" variant="ghost" onClick={() => setPicking(false)}>‹ Back</Button>
+                                <Button size="sm" className="ml-auto" disabled={!val || saving || picked.length === 0} onClick={() => save("selected")}>
+                                    {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : `Apply to ${picked.length}`}
+                                </Button>
+                            </div>
+                        </>
+                    )}
+                </PopoverContent>
+            </Popover>
+        </div>
+    );
+}
 
 const HeaderIcon = ({ icon: Icon, title, className, strokeWidth }: any) => (
     <TooltipProvider delayDuration={0}>
@@ -973,6 +1117,9 @@ export default function EverydayAfterDispatchingPage() {
                 profileImage: r.profileImage || empFromMap.profileImage || "",
                 phone: r.phone || empFromMap.phoneNumber || empFromMap.phone || "",
                 dayBeforeConfirmation: schedule.dayBeforeConfirmation === "true" || schedule.futureShiftConfirmed === true,
+                scheduleId: schedule._id ? String(schedule._id) : "",
+                startTime: schedule.startTime || "",
+                typeId: schedule.typeId ? String(schedule.typeId) : "",
                 deliveryCompletionTime: r.deliveryCompletionTime || "",
                 routeNumber: r.routeNumber || "",
                 routeDuration: r.routeDuration || "",
@@ -994,6 +1141,75 @@ export default function EverydayAfterDispatchingPage() {
                 return a.type.localeCompare(b.type);
             });
     }, [tomorrowRoutes, tomorrowSchedulesMap, employeesMap, routeTypeConfigs]);
+
+    // ── Tomorrow's start times ──
+    const tomorrowDateStr = useMemo(() => {
+        const t = new Date(date + "T12:00:00Z");
+        t.setUTCDate(t.getUTCDate() + 1);
+        return t.toISOString().split("T")[0];
+    }, [date]);
+
+    const saveStartTime = useCallback(async (mode: "person" | "selected", rows: RoutesTableRow[], label: string): Promise<boolean> => {
+        try {
+            const res = await fetch("/api/schedules/start-time", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(
+                    mode === "selected"
+                        ? { scope: "selected", scheduleIds: rows.map(r => r.scheduleId), startTime: label }
+                        : { scope: "person", scheduleId: rows[0].scheduleId, employeeName: rows[0].employeeName, startTime: label }
+                ),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || "Failed to save start time");
+            const changed = new Set(rows.map(r => r.transporterId));
+            setTomorrowSchedulesMap(prev => {
+                const next = { ...prev };
+                Object.entries(prev).forEach(([tid, s]: [string, any]) => {
+                    if (changed.has(tid)) next[tid] = { ...s, startTime: label };
+                });
+                return next;
+            });
+            notify.success(rows.length === 1 ? `${rows[0].employeeName}: start time ${label}` : `Start time ${label} set for ${rows.length} employees`);
+            queryClient.invalidateQueries({ queryKey: ["schedules"] });
+            queryClient.invalidateQueries({ queryKey: ["dispatching"] });
+            return true;
+        } catch (err: any) {
+            notify.error(err.message || "Failed to save start time");
+            return false;
+        }
+    }, [queryClient]);
+
+    // Every roster row with a schedule entry — the pick-list for "Select employees…".
+    const rosterRowsFlat = useMemo(
+        () => groupedTomorrowRoutes.flatMap(g => g.rows as RoutesTableRow[]),
+        [groupedTomorrowRoutes]
+    );
+
+    // Everyone working tomorrow, grouped by start time (what Amazon's planning app needs).
+    const startTimeGroups = useMemo(() => {
+        const m = new Map<string, string[]>();
+        groupedTomorrowRoutes.forEach(g => g.rows.forEach(r => {
+            const k = (r.startTime as string) || "";
+            if (!m.has(k)) m.set(k, []);
+            m.get(k)!.push(r.employeeName);
+        }));
+        return Array.from(m.entries())
+            .map(([time, names]) => ({ time, names: names.sort((a, b) => a.localeCompare(b)) }))
+            .sort((a, b) => timeMinutes(a.time) - timeMinutes(b.time));
+    }, [groupedTomorrowRoutes]);
+
+    const copyStartTimeGroups = useCallback(async () => {
+        const text = startTimeGroups
+            .map(g => `${g.time || "NO START TIME"} (${g.names.length})\n${g.names.map(n => `  ${n}`).join("\n")}`)
+            .join("\n\n");
+        try {
+            await navigator.clipboard.writeText(`Start times for ${tomorrowDateStr}\n\n${text}`);
+            notify.success("Start-time groups copied");
+        } catch {
+            notify.error("Couldn't copy to the clipboard");
+        }
+    }, [startTimeGroups, tomorrowDateStr]);
 
     // ── Search: filter both grouped tables ──
     const normalizedSearch = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
@@ -1453,11 +1669,32 @@ export default function EverydayAfterDispatchingPage() {
                                 </div>
                             </div>
                         </div>
+                        {startTimeGroups.length > 0 && (
+                            <div className="shrink-0 px-3 py-2 border-b border-border/50 flex flex-wrap items-center gap-1.5">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mr-1">Start times</span>
+                                {startTimeGroups.map(g => (
+                                    <span
+                                        key={g.time || "none"}
+                                        title={g.names.join(", ")}
+                                        className={cn(
+                                            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold font-mono",
+                                            g.time ? "bg-sky-500/10 text-sky-500 border-sky-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                                        )}
+                                    >
+                                        {g.time || "No time"} <span className="text-foreground/80">{g.names.length}</span>
+                                    </span>
+                                ))}
+                                <Button variant="ghost" size="sm" className="h-6 px-2 ml-auto text-[11px]" onClick={copyStartTimeGroups} title="Copy everyone grouped by start time">
+                                    <Copy className="h-3 w-3 mr-1" /> Copy
+                                </Button>
+                            </div>
+                        )}
                         <RoutesTable
                             groups={filteredGroupedTomorrowRoutes}
                             loading={loading}
                             columns={[
                                 { key: "employee", label: "Employee", minW: 100, className: "w-[160px] max-w-[160px]", sticky: true },
+                                { key: "startTime", label: <HeaderIcon title="Start time (click to change)" icon={Clock} className="h-[18px] w-[18px] text-sky-500" strokeWidth={1.5} />, minW: 100, align: "center" },
                                 { key: "dayBeforeConfirmation", label: <HeaderIcon title="Day Before Confirmation" icon={ThumbsUp} className="h-[18px] w-[18px] text-emerald-500" strokeWidth={1.5} />, minW: 46, align: "center" },
                                 { key: "phone", label: <HeaderIcon title="Phone Number" icon={Phone} className="h-[18px] w-[18px] text-blue-500" strokeWidth={1.5} />, minW: 105, align: "center" },
                             ]}
@@ -1515,6 +1752,9 @@ export default function EverydayAfterDispatchingPage() {
                                             </DropdownMenu>
                                         </div>
                                     );
+                                }
+                                if (key === "startTime") {
+                                    return <StartTimeCell row={row} allRows={rosterRowsFlat} onSave={saveStartTime} />;
                                 }
                                 if (key === "phone") {
                                     const val = row.phone;

@@ -32,7 +32,8 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST { scope: "person" | "all", date, typeId, startTime, scheduleId?, reset? }
+ * POST { scope: "person" | "selected" | "all", date, typeId, startTime, scheduleId?, scheduleIds?, reset? }
+ *  - selected: the same start time for the schedule rows in scheduleIds only.
  *  - person: change this one schedule row's start time only.
  *  - all:    set the start time for everyone on that type that day AND remember it,
  *            so later assignments to that type that day use it. reset=true removes the
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
     const S = siteFilter(scope, { includeUnassigned: true });
 
     const body = await req.json().catch(() => ({}));
-    const mode = body.scope === "all" ? "all" : "person";
+    const mode = body.scope === "all" ? "all" : body.scope === "selected" ? "selected" : "person";
     const startTime = String(body.startTime || "").trim();
     const reset = !!body.reset;
     const performedBy = (auth as any).session?.email || (auth as any).session?.user?.email || "";
@@ -78,6 +79,34 @@ export async function POST(req: NextRequest) {
         performedByName: performedBy,
       });
       return NextResponse.json({ success: true, updated: 1 });
+    }
+
+    if (mode === "selected") {
+      // Apply one start time to a hand-picked set of schedule rows.
+      const ids: string[] = Array.isArray(body.scheduleIds) ? Array.from(new Set(body.scheduleIds.map(String))) : [];
+      if (!startTime) return NextResponse.json({ error: "Enter a start time" }, { status: 400 });
+      if (ids.length === 0) return NextResponse.json({ error: "Pick at least one employee" }, { status: 400 });
+      if (ids.length > 300) return NextResponse.json({ error: "Too many employees selected" }, { status: 400 });
+      // Scoped fetch: rows outside the caller's stations are silently dropped.
+      const rows = (await SymxEmployeeSchedule.find({ _id: { $in: ids }, ...S } as any)) as any[];
+      if (rows.length === 0) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+      await SymxEmployeeSchedule.updateMany({ _id: { $in: rows.map((r) => r._id) }, ...S } as any, { $set: { startTime } });
+      await ScheduleAuditLog.insertMany(
+        rows.map((r) => ({
+          yearWeek: r.yearWeek || "",
+          transporterId: r.transporterId,
+          employeeName: "",
+          action: "start_time_changed",
+          field: "startTime",
+          oldValue: r.startTime || "",
+          newValue: startTime,
+          date: r.date,
+          dayOfWeek: r.date ? FULL_DAY_NAMES[new Date(r.date).getUTCDay()] : "",
+          performedBy,
+          performedByName: performedBy,
+        }))
+      );
+      return NextResponse.json({ success: true, updated: rows.length, ids: rows.map((r) => String(r._id)) });
     }
 
     // mode === "all"
