@@ -90,8 +90,8 @@ function ClosingPageContent() {
     const [loading, setLoading] = useState(false);
     const [sortKey, setSortKey] = useState<SortKey>("employee");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-    // Awaiting Inspection list has its own sort: route # (default) or name.
-    const [pendingSort, setPendingSort] = useState<"route" | "name">("route");
+    // Awaiting Inspection list has its own sort: van # (default) or name.
+    const [pendingSort, setPendingSort] = useState<"van" | "name">("van");
 
     // Modal & Highlight State
     const [inspectingRoute, setInspectingRoute] = useState<RouteRow | null>(null);
@@ -260,16 +260,17 @@ function ClosingPageContent() {
         const pendingUnsorted = sorted.filter(r => !r.inspectionTime || r.inspectionTime.trim() === "" || !r.inspectionId);
         const pending = [...pendingUnsorted].sort((a, b) => {
             if (pendingSort === "name") return (a.employeeName || "").localeCompare(b.employeeName || "");
-            const ar = (a.routeNumber || "").trim(), br = (b.routeNumber || "").trim();
+            const vanLabel = (r: RouteRow) => ((r.van && vehicleNamesMap[r.van]) || r.van || "").trim();
+            const ar = vanLabel(a), br = vanLabel(b);
             if (!ar && !br) return (a.employeeName || "").localeCompare(b.employeeName || "");
-            if (!ar) return 1;   // no route # → bottom
+            if (!ar) return 1;   // no van → bottom
             if (!br) return -1;
             return ar.localeCompare(br, undefined, { numeric: true }) || (a.employeeName || "").localeCompare(b.employeeName || "");
         });
         const done = sorted.filter(r => r.inspectionTime && r.inspectionTime.trim() !== "" && !!r.inspectionId);
 
         return { pendingRows: pending, doneRows: done, totalFiltered: sorted.length };
-    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir, pendingSort]);
+    }, [allRoutes, selectedDate, searchQuery, sortKey, sortDir, pendingSort, vehicleNamesMap]);
 
     // ── Push stats to layout ──
     useEffect(() => {
@@ -329,7 +330,7 @@ function ClosingPageContent() {
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="inline-flex rounded-md border border-border/50 overflow-hidden text-[10px] font-bold" role="group" aria-label="Sort awaiting inspection">
-                            {([["route", "Route #"], ["name", "Name"]] as const).map(([k, label]) => (
+                            {([["van", "Van #"], ["name", "Name"]] as const).map(([k, label]) => (
                                 <button
                                     key={k}
                                     type="button"
@@ -395,19 +396,19 @@ function ClosingPageContent() {
                                     </h3>
                                     <div className="flex items-center gap-2 mt-1 text-[10px] font-medium text-muted-foreground/80">
                                         {row.type && <span className="truncate">{row.type}</span>}
-                                        {row.van && (
+                                        {row.routeNumber && (
                                             <>
                                                 {row.type && <span className="opacity-50">•</span>}
-                                                <span>{vehicleNamesMap[row.van] || `Van ${row.van}`}</span>
+                                                <span className="text-foreground/70">{row.routeNumber}</span>
                                             </>
                                         )}
                                     </div>
                                 </div>
 
-                                {/* Route # — the main thing dispatch looks for */}
-                                {row.routeNumber ? (
-                                    <div className="shrink-0 min-w-[56px] text-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30 px-2.5 py-1.5 text-xl leading-none font-extrabold tabular-nums tracking-tight">
-                                        {row.routeNumber}
+                                {/* Van # — the main thing dispatch looks for */}
+                                {row.van ? (
+                                    <div className="shrink-0 min-w-[56px] max-w-[110px] truncate text-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30 px-2.5 py-1.5 text-xl leading-none font-extrabold tabular-nums tracking-tight" title={`Van ${vehicleNamesMap[row.van] || row.van}`}>
+                                        {vehicleNamesMap[row.van] || row.van}
                                     </div>
                                 ) : (
                                     <div className="shrink-0 min-w-[56px] text-center rounded-lg bg-muted/40 text-muted-foreground/60 ring-1 ring-border/40 px-2.5 py-1.5 text-sm leading-none font-bold">
