@@ -6,6 +6,7 @@ import connectToDatabase from "@/lib/db";
 import { getRequestScope, siteFilter, findScopedById, resolveWriteSiteId } from "@/lib/scoped-query";
 import RouteType, { routeTypeStartTime, routeTypeTheoryHrs } from "@/lib/models/RouteType";
 import SymxEmployeeSchedule from "@/lib/models/SymxEmployeeSchedule";
+import { ensureFlightRiskType } from "@/lib/ensure-flight-risk";
 
 /** "OFF" days carry no shift — a start time on one is meaningless. */
 function isOffStatus(routeStatus: string | undefined | null): boolean {
@@ -35,6 +36,9 @@ export async function GET(req: NextRequest) {
         // has no single station to resolve for, so the shared field itself
         // is shown — that is genuinely what's being edited in that view.
         const writeSiteId = resolveWriteSiteId(scope, requestedSiteId);
+        // Flight Risk is a built-in shift type; create it on first load so it
+        // is always a selectable option on the schedule. Never blocks the list.
+        try { await ensureFlightRiskType(); } catch (e: any) { console.error("[route-types] ensure Flight Risk failed:", e?.message); }
         const routes = await RouteType.find({}).sort({ sortOrder: 1, name: 1 }).lean();
         const resolved = (routes as any[]).map((r) => ({
             ...r,
