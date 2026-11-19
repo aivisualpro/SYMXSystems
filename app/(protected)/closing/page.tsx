@@ -250,6 +250,8 @@ export default function EverydayAfterDispatchingPage() {
     const [tomorrowSchedulesMap, setTomorrowSchedulesMap] = useState<Record<string, any>>({});
     const [routeTypeConfigs, setRouteTypeConfigs] = useState<Record<string, any>>({});
     const [pdfLoading, setPdfLoading] = useState(false);
+    // Phones show one panel at a time; md+ shows them all.
+    const [mobilePanel, setMobilePanel] = useState<"routes" | "roster" | "rescue">("routes");
     const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
     // ── Global Search ──
@@ -1339,11 +1341,11 @@ export default function EverydayAfterDispatchingPage() {
     const formattedTomorrow = parsedTomorrow.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     return (
-        <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-background">
+        <div className="flex flex-col h-[calc(100dvh-80px)] overflow-hidden bg-background">
             {/* Top row: Horizontal Date Selector, Search & Notes inline */}
-            <div className="mb-2 shrink-0 flex items-center gap-1.5">
+            <div className="mb-2 shrink-0 flex flex-wrap md:flex-nowrap items-center gap-1.5">
                 {/* Scrollable Date Pills + PDF */}
-                <div className="overflow-x-auto scrollbar-none shrink min-w-0">
+                <div className="overflow-x-auto scrollbar-none shrink min-w-0 max-md:w-full">
                     <div className="flex items-stretch gap-1 p-1 rounded-xl bg-muted/50 border border-border min-w-max">
                         {weekDates.length > 0 && weekDates.map((dateStr) => {
                         const isActive = date === dateStr;
@@ -1408,8 +1410,8 @@ export default function EverydayAfterDispatchingPage() {
 
                 {/* ── Global Indexed Search ── */}
                 <div className={cn(
-                    "relative flex items-center shrink-0 h-[42px] transition-all duration-300 ease-out",
-                    searchFocused || searchQuery ? "w-[220px] sm:w-[260px]" : "w-[180px] sm:w-[200px]"
+                    "relative flex items-center shrink-0 h-[42px] transition-all duration-300 ease-out max-md:w-full",
+                    searchFocused || searchQuery ? "md:w-[260px]" : "md:w-[200px]"
                 )}>
                     <Search className={cn(
                         "absolute left-2.5 h-3.5 w-3.5 pointer-events-none transition-colors duration-200 z-10",
@@ -1463,14 +1465,14 @@ export default function EverydayAfterDispatchingPage() {
                 </div>
 
                 {/* Notes Input inline */}
-                <div className="flex-1 flex items-center relative group min-w-0 h-[42px]">
+                <div className="flex-1 flex items-center relative group min-w-0 h-[42px] max-md:basis-full">
                     <FileText className="absolute left-3 h-4 w-4 text-muted-foreground/50 pointer-events-none" />
                     <input
                         type="text"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Notes"
-                        className="w-full h-full bg-background border border-primary ring-1 ring-primary rounded-lg pl-9 pr-[85px] text-sm font-medium placeholder:text-muted-foreground/40 placeholder:font-bold placeholder:text-base focus:outline-none transition-all shadow-sm"
+                        className="w-full h-full bg-background border border-primary ring-1 ring-primary rounded-lg pl-9 pr-[120px] md:pr-[85px] text-sm font-medium placeholder:text-muted-foreground/40 placeholder:font-bold placeholder:text-base focus:outline-none transition-all shadow-sm"
                     />
                     <div className="absolute right-1 flex items-center gap-1.5 pointer-events-auto">
                         <Button 
@@ -1479,8 +1481,8 @@ export default function EverydayAfterDispatchingPage() {
                             size="sm" 
                             className="h-8 relative border-border/50 hover:bg-muted bg-background"
                         >
-                            <Paperclip className="h-4 w-4 mr-1.5 text-muted-foreground" />
-                            Attachments
+                            <Paperclip className="h-4 w-4 sm:mr-1.5 text-muted-foreground" />
+                            <span className="hidden sm:inline">Attachments</span>
                             {attachments.length > 0 && (
                                 <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-primary text-[10px] font-bold text-primary-foreground flex items-center justify-center ring-2 ring-background">
                                     {attachments.length}
@@ -1516,11 +1518,33 @@ export default function EverydayAfterDispatchingPage() {
                 </div>
             </div>
 
-            <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4 lg:gap-5">
+            {/* Phone only: one panel at a time */}
+            <div className="md:hidden shrink-0 mb-2 grid grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1 border border-border">
+                {([
+                    ["routes", "Routes", filteredGroupedRoutes.reduce((n, g) => n + g.count, 0)],
+                    ["roster", "Roster", filteredGroupedTomorrowRoutes.reduce((n, g) => n + g.count, 0)],
+                    ["rescue", "Rescue", filteredRescueEntries.length],
+                ] as const).map(([key, label, count]) => (
+                    <button
+                        key={key}
+                        type="button"
+                        onClick={() => setMobilePanel(key)}
+                        aria-pressed={mobilePanel === key}
+                        className={cn(
+                            "rounded-lg py-2 text-xs font-bold transition-all select-none",
+                            mobilePanel === key ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        {label} <span className="opacity-70 font-semibold">{count}</span>
+                    </button>
+                ))}
+            </div>
+
+            <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4 lg:gap-5 max-md:grid-rows-[minmax(0,1fr)] max-xl:overflow-y-auto">
                 {/* Middle Left: Tables */}
                 <div className="contents xl:grid xl:col-span-9 xl:grid-cols-[2.1fr_1fr] gap-4 lg:gap-5 min-h-0">
                     {/* Routes Overview */}
-                    <Card className="md:col-span-2 xl:col-span-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-[400px] xl:min-h-0">
+                    <Card className={cn("md:col-span-2 xl:col-span-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-[400px] max-md:min-h-0 xl:min-h-0", mobilePanel !== "routes" && "max-md:hidden")}>
                         <div className="py-2.5 px-3.5 border-b border-border/50 bg-muted/20 shrink-0">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
@@ -1654,7 +1678,7 @@ export default function EverydayAfterDispatchingPage() {
                     </Card>
 
                     {/* Roster Plan */}
-                    <Card className="md:col-span-1 xl:col-span-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-[400px] xl:min-h-0">
+                    <Card className={cn("md:col-span-1 xl:col-span-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-lg flex flex-col overflow-hidden p-0 gap-0 min-h-[400px] max-md:min-h-0 xl:min-h-0", mobilePanel !== "roster" && "max-md:hidden")}>
                         <div className="py-2.5 px-3.5 border-b border-border/50 bg-muted/20 shrink-0">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
@@ -1673,23 +1697,25 @@ export default function EverydayAfterDispatchingPage() {
                             </div>
                         </div>
                         {startTimeGroups.length > 0 && (
-                            <div className="shrink-0 px-3 py-2 border-b border-border/50 flex flex-wrap items-center gap-1.5">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mr-1">Start times</span>
-                                {startTimeGroups.map(g => (
-                                    <span
-                                        key={g.time || "none"}
-                                        title={g.names.join(", ")}
-                                        className={cn(
-                                            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold font-mono",
-                                            g.time ? "bg-sky-500/10 text-sky-500 border-sky-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/30"
-                                        )}
-                                    >
-                                        {g.time || "No time"} <span className="text-foreground/80">{g.names.length}</span>
-                                    </span>
-                                ))}
-                                <Button variant="ghost" size="sm" className="h-6 px-2 ml-auto text-[11px]" onClick={copyStartTimeGroups} title="Copy everyone grouped by start time">
+                            <div className="shrink-0 px-3 py-2 border-b border-border/50 flex items-center gap-2">
+                                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Start times</span>
+                                <Button variant="ghost" size="sm" className="h-6 px-2 shrink-0 text-[11px]" onClick={copyStartTimeGroups} title="Copy everyone grouped by start time">
                                     <Copy className="h-3 w-3 mr-1" /> Copy
                                 </Button>
+                                <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none min-w-0 flex-1">
+                                    {startTimeGroups.map(g => (
+                                        <span
+                                            key={g.time || "none"}
+                                            title={g.names.join(", ")}
+                                            className={cn(
+                                                "shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold font-mono",
+                                                g.time ? "bg-sky-500/10 text-sky-500 border-sky-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                                            )}
+                                        >
+                                            {g.time || "No time"} <span className="text-foreground/80">{g.names.length}</span>
+                                        </span>
+                                    ))}
+                                </div>
                             </div>
                         )}
                         <RoutesTable
@@ -1905,17 +1931,17 @@ export default function EverydayAfterDispatchingPage() {
                 {/* Right Side: 3 Stacked Boxes */}
                 <div className="contents xl:flex xl:col-span-3 xl:flex-col gap-4 min-h-0">
                     {/* Fix Punches */}
-                    <Card className="md:col-span-1 xl:col-auto xl:flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-[250px] xl:min-h-0">
+                    <Card className="max-md:hidden md:col-span-1 xl:col-auto xl:flex-none border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-[140px] xl:min-h-0">
                         <div className="py-2.5 px-3.5 border-b border-border/50 bg-muted/20 shrink-0">
                             <h3 className="text-sm font-bold tracking-wide">Fix Punches</h3>
                         </div>
-                        <div className="flex-1 flex items-center justify-center bg-background/40">
+                        <div className="flex-1 flex items-center justify-center bg-background/40 py-5">
                             <span className="text-muted-foreground/40 text-sm font-medium border border-dashed border-border/60 rounded-xl px-4 py-2 bg-muted/10">Module pending implementation</span>
                         </div>
                     </Card>
 
                     {/* Rescue */}
-                    <Card className="md:col-span-1 xl:col-auto xl:flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-[300px] auto-rows-max xl:min-h-0">
+                    <Card className={cn("md:col-span-1 xl:col-auto xl:flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-[300px] max-md:min-h-0 auto-rows-max xl:min-h-0", mobilePanel !== "rescue" && "max-md:hidden")}>
                         <div className="py-2.5 px-3.5 border-b border-border/50 bg-muted/20 shrink-0">
                             <h3 className="text-sm font-bold tracking-wide flex items-center">
                                 Rescue
@@ -2001,7 +2027,7 @@ export default function EverydayAfterDispatchingPage() {
 
                     {/* RTS */}
                     {everydayRtsEnabled && (
-                        <Card className="md:col-span-1 xl:col-auto xl:flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-[300px] auto-rows-max xl:min-h-0">
+                        <Card className={cn("md:col-span-1 xl:col-auto xl:flex-1 border border-border/50 bg-card/60 backdrop-blur-xl shadow-md flex flex-col overflow-hidden relative group/box p-0 gap-0 min-h-[300px] max-md:min-h-0 auto-rows-max xl:min-h-0", mobilePanel !== "rescue" && "max-md:hidden")}>
                             <div className="py-2.5 px-3.5 border-b border-border/50 bg-muted/20 shrink-0">
                                 <h3 className="text-sm font-bold tracking-wide">RTS</h3>
                             </div>
