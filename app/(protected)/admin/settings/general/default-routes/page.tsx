@@ -76,6 +76,8 @@ export default function DefaultRoutesPage() {
         }
     };
 
+    const [addingFlightRisk, setAddingFlightRisk] = useState(false);
+
     const fetchRoutes = useCallback(async () => {
         try {
             const res = await fetch("/api/admin/settings/route-types");
@@ -194,7 +196,6 @@ export default function DefaultRoutesPage() {
     }
 
     const hasFlightRisk = routes.some((r) => (r.name || "").trim().toLowerCase() === "flight risk");
-    const [addingFlightRisk, setAddingFlightRisk] = useState(false);
     const addFlightRisk = async () => {
         setAddingFlightRisk(true);
         try {

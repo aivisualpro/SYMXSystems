@@ -1144,7 +1144,10 @@ export default function EverydayAfterDispatchingPage() {
 
     // ── Tomorrow's start times ──
     const tomorrowDateStr = useMemo(() => {
+        // `date` is empty until the page has loaded; an invalid Date would throw in toISOString().
+        if (!date) return "";
         const t = new Date(date + "T12:00:00Z");
+        if (isNaN(t.getTime())) return "";
         t.setUTCDate(t.getUTCDate() + 1);
         return t.toISOString().split("T")[0];
     }, [date]);
