@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -22,7 +22,10 @@ import {
     TableProperties,
     FileDown,
     Wand2,
+    Maximize2,
+    Minimize2,
 } from "lucide-react";
+import { useMobileView } from "@/hooks/use-mobile-view";
 import { useHeaderActions } from "@/components/providers/header-actions-provider";
 import { useSchedulingWeeks } from "@/lib/query/hooks/useSchedules";
 import { useDispatchingRoutes } from "@/lib/query/hooks/useDispatching";
@@ -223,6 +226,31 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
     const { data: fullWeekData, isLoading: weekLoading } = useDispatchingRoutes(selectedWeek);
 
     const rawRouteData = fullWeekData || dayData || null;
+
+    // ── Touch tablet (iPad / unfolded foldable): wrapped top bar + optional "fit to screen" ──
+    const { tabletView, fitToScreen, setFitToScreen, width: viewportW } = useMobileView();
+    const fitActive = tabletView && fitToScreen;
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [fitZoom, setFitZoom] = useState(1);
+    const routeCount = rawRouteData?.routes?.length ?? 0;
+    useEffect(() => {
+        setFitZoom(1);
+        if (!fitActive) return;
+        let raf1 = 0, raf2 = 0, tries = 0;
+        // Shrink until nothing overflows sideways. Re-measure a couple of times: browsers
+        // round, and the table may still be loading on the first pass.
+        const measure = () => {
+            const el = scrollRef.current;
+            if (!el) return;
+            if (el.scrollWidth - el.clientWidth > 2 && tries < 4) {
+                tries++;
+                setFitZoom((z) => Math.max(0.4, +(z * el.clientWidth / el.scrollWidth).toFixed(3)));
+                raf2 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(measure); });
+            }
+        };
+        raf1 = requestAnimationFrame(() => requestAnimationFrame(measure));
+        return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
+    }, [fitActive, pathname, selectedDate, selectedWeek, viewportW, routeCount]);
     const rawRouteDataLoading = dayLoading && weekLoading;
 
     React.useEffect(() => {
@@ -453,7 +481,7 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
             <div className="flex flex-col h-[calc(100dvh-80px)] overflow-hidden gap-2 sm:gap-3">
                 {/* ── Tab Bar + Date Tabs (inline) ── */}
                 <div className="shrink-0 overflow-x-auto scrollbar-none">
-                    <div data-tab-nav className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border min-w-max">
+                    <div data-tab-nav className={cn("flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border", tabletView ? "flex-wrap" : "min-w-max")}>
                         {DISPATCHING_TABS.map((tab) => {
                             const Icon = tab.icon;
                             const isActive = tab.id === "efficiency" ? (pathname.startsWith(tab.href) && !pathname.startsWith("/dispatching/efficiency-v2")) : pathname.startsWith(tab.href);
@@ -637,6 +665,26 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                             </>
                         )}
 
+                        {/* Touch tablet: fit the whole table on screen */}
+                        {tabletView && (
+                            <>
+                                <div className="flex-1" />
+                                <button
+                                    type="button"
+                                    onClick={() => setFitToScreen(!fitToScreen)}
+                                    aria-pressed={fitToScreen}
+                                    title={fitToScreen ? "Showing everything — tap for full-size" : "Full size — tap to fit everything on screen"}
+                                    className={cn(
+                                        "flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-semibold whitespace-nowrap select-none transition-all",
+                                        fitToScreen ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                    )}
+                                >
+                                    {fitToScreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                                    Fit
+                                </button>
+                            </>
+                        )}
+
                         {/* Spacer + Stats badges on right */}
                         {(stats.employeeCount !== undefined || stats.groupCount !== undefined) && (
                             <>
@@ -659,8 +707,10 @@ export default function DispatchingLayout({ children }: { children: React.ReactN
                 </div>
 
                 {/* ── Tab Content ── */}
-                <div className={cn("flex-1 min-h-0 overflow-auto transition-opacity duration-200", rawRouteDataLoading && "opacity-50 pointer-events-none")}>
-                    {children}
+                <div ref={scrollRef} className={cn("flex-1 min-h-0 overflow-auto transition-opacity duration-200", rawRouteDataLoading && "opacity-50 pointer-events-none")}>
+                    <div style={fitActive && fitZoom < 1 ? { zoom: fitZoom } : undefined} className="min-h-full">
+                        {children}
+                    </div>
                 </div>
             </div>
 

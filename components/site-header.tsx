@@ -5,7 +5,7 @@ import { useIsFetching, useIsMutating } from "@tanstack/react-query";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, RefreshCw, DownloadCloud, Smartphone, Monitor } from "lucide-react";
+import { ChevronLeft, RefreshCw, DownloadCloud, Smartphone, Monitor, Tablet } from "lucide-react";
 import { useMobileView } from "@/hooks/use-mobile-view";
 
 import { ModeSwitcher } from "./mode-switcher";
@@ -19,7 +19,8 @@ export function SiteHeader() {
   const segments = pathname.split("/").filter(Boolean);
   const showBackButton = pathname !== "/dashboard" && pathname !== "/profile" && segments.length > 0;
 
-  const { isPhone, mobileView, setMobileView } = useMobileView();
+  const { isPhone, isTablet, mobileView, tabletView, setMobileView } = useMobileView();
+  const touchLayoutOn = mobileView || tabletView;
   const [mounted, setMounted] = useState(false);
   const [updateWorker, setUpdateWorker] = useState<ServiceWorker | null>(null);
 
@@ -82,17 +83,17 @@ export function SiteHeader() {
           className="mx-1 sm:mx-2 data-[orientation=vertical]:h-4"
         />
 
-        {mounted && isPhone && pathname.startsWith("/dispatching") && (
+        {mounted && (isPhone || isTablet) && pathname.startsWith("/dispatching") && (
           <Button
-            variant={mobileView ? "secondary" : "ghost"}
+            variant={touchLayoutOn ? "secondary" : "ghost"}
             size="icon"
             className="h-7 w-7 flex-shrink-0"
-            onClick={() => setMobileView(!mobileView)}
-            title={mobileView ? "Mobile view on — tap for full table view" : "Full table view — tap for mobile view"}
-            aria-label={mobileView ? "Turn off mobile view" : "Turn on mobile view"}
-            aria-pressed={mobileView}
+            onClick={() => setMobileView(!touchLayoutOn)}
+            title={touchLayoutOn ? "Touch layout on — tap for the regular desktop layout" : "Desktop layout — tap for the touch layout"}
+            aria-label={touchLayoutOn ? "Turn off touch layout" : "Turn on touch layout"}
+            aria-pressed={touchLayoutOn}
           >
-            {mobileView ? <Smartphone className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
+            {touchLayoutOn ? (isPhone ? <Smartphone className="w-4 h-4" /> : <Tablet className="w-4 h-4" />) : <Monitor className="w-4 h-4" />}
           </Button>
         )}
 
